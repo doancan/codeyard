@@ -866,6 +866,46 @@ fn scm_providers_claim_folders_by_marker_and_start_the_extension_there() {
     assert_eq!(codes(&with(&format!("{code}[[scm]]\nid = \"hg\"\nmarkers = [\".hg\"]\n"))), vec![Code::Syntax]);
 }
 
+#[test]
+fn a_denial_no_entry_can_lift_names_its_reason() {
+    let line = crate::ungrantable_line("read file:///etc/passwd", "the file is outside the workspace");
+    assert_eq!(line, "read file:///etc/passwd (cannot be granted: the file is outside the workspace)");
+    assert_eq!(crate::parse_ungrantable_line(&line), Some(("read file:///etc/passwd", "the file is outside the workspace")));
+    assert_eq!(crate::parse_ungrantable_line("net = [\"api.example.com\"]"), None);
+    for ip in ["127.0.0.1", "[::1]", "::1", "127.1", "2130706433", "0x7f.1", "0x7f.0x1", "10.0.0.256"] {
+        assert!(crate::is_ip_address(ip), "{ip}");
+    }
+    for name in ["api.example.com", "1password.com", "x1.example.org", "a.b.c0m"] {
+        assert!(!crate::is_ip_address(name), "{name}");
+    }
+}
+
+/// `net-from-setting`: a string setting names the server; the sheet says so, and it counts as sending.
+#[test]
+fn net_from_setting_names_a_string_setting() {
+    let code = "[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n";
+    let setting = "[settings.server]\ntype = \"string\"\ndescription = \"Your GitHub Enterprise host\"\n";
+    let m = parse(&with(&format!("{code}[permissions]\nnet-from-setting = \"server\"\n{setting}"))).unwrap();
+    assert_eq!(m.permissions.net_from_setting.as_deref(), Some("server"));
+    assert_eq!(m.permissions.describe(), ["Connect to a server you allow, named in its “server” setting"]);
+    assert_eq!(risk(&m.permissions).sends, ["net"]);
+    // With secrets it can send what it reads: high risk, so `why` is required.
+    assert!(codes(&with(&format!("{code}[permissions]\nnet-from-setting = \"server\"\nsecrets = true\n{setting}"))).contains(&Code::WhyRequired));
+    // The setting must exist and hold a string.
+    let missing = errors(&with(&format!("{code}[permissions]\nnet-from-setting = \"host\"\n{setting}")));
+    assert!(missing.iter().any(|d| d.message.contains("net-from-setting 'host' is not one of the extension's settings")), "{missing:?}");
+    let number = errors(&with(&format!("{code}[permissions]\nnet-from-setting = \"n\"\n[settings.n]\ntype = \"number\"\ndescription = \"N\"\n")));
+    assert!(number.iter().any(|d| d.message.contains("is not a string setting")), "{number:?}");
+    // An update that adds it asks; one that keeps it does not.
+    let old = Permissions::default();
+    assert_eq!(m.permissions.added_since(&old).describe(), m.permissions.describe());
+    assert!(m.permissions.added_since(&m.permissions).is_empty());
+    assert_eq!(
+        crate::user_host_fix(&crate::user_host_line("ghe.example.com")).unwrap(),
+        "the user has not allowed \"ghe.example.com\": they add it on the extension page with Allow Host…"
+    );
+}
+
 /// Key bindings name real modifiers and keys (e2e trial: "hyper-banana" passed `cyx check` and never fired).
 #[test]
 fn key_bindings_name_real_keys() {

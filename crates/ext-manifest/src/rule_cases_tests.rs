@@ -92,6 +92,8 @@ fn urls() -> Value {
         "HTTP://api.example.com/",
         "file:///etc/passwd",
         "https://127.0.0.1/",
+        "https://[::1]:8443/x",
+        "https://10.1/",
         "https://[::1]/",
         "https://2130706433/",
         "https://0x7f.1/",
@@ -102,6 +104,7 @@ fn urls() -> Value {
         "https://api.example.com:/",
         "https://api.example.com:99999/",
         "https://bad_host.example.com/",
+        "https://a.example.com../",
         "https://ıstanbul.example.com/",
         "api.example.com/x",
         "javascript:alert(1)",
@@ -115,7 +118,7 @@ fn urls() -> Value {
                     UrlProblem::IpLiteral => "ip-literal",
                     UrlProblem::Invalid => "invalid",
                 };
-                json!({ "url": u, "problem": problem, "message": e.message })
+                json!({ "url": u, "problem": problem, "message": e.message, "host": e.host, "denied": e.refusal().err() })
             }
         })
         .collect()
@@ -172,6 +175,10 @@ fn cases() -> Value {
         "urls": urls(),
         "statusItems": status_items(),
         "results": results(),
+        "outside": [
+            { "kind": "read", "path": "file:///etc/passwd", "line": crate::outside_line("read", "file:///etc/passwd") },
+            { "kind": "write", "path": "file:///work/../x", "line": crate::outside_line("write", "file:///work/../x") },
+        ],
     })
 }
 

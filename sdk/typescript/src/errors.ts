@@ -41,7 +41,8 @@ export class DeniedError extends CodeyardError {
       "untrusted-workspace": "this folder is not trusted, which rules out",
       "revoked-extension": "this version was revoked, which rules out",
     }[why];
-    super("denied", `denied: ${what} ${permission}\n   = fix: ${fixFor(permission, why)}`);
+    const call = ungrantable(permission)?.[0];
+    super("denied", `denied: ${call ?? `${what} ${permission}`}\n   = fix: ${fixFor(permission, why)}`);
     this.name = "DeniedError";
     this.permission = permission;
     this.why = why;
@@ -59,9 +60,28 @@ function oauthHost(permission: string): [string, string] | undefined {
   return m ? [m[1]!, m[2]!] : undefined;
 }
 
+/**
+ * The call and the reason of a refusal no manifest entry can lift (a file outside the workspace, an IP address):
+ * `read file:///etc/passwd (cannot be granted: <reason>)`.
+ */
+function ungrantable(permission: string): [string, string] | undefined {
+  const at = permission.indexOf(" (cannot be granted: ");
+  if (at < 0 || !permission.endsWith(")")) return undefined;
+  return [permission.slice(0, at), permission.slice(at + " (cannot be granted: ".length, -1)];
+}
+
+/** The host of a refused fetch to a host the user has not allowed for `net-from-setting`: `net-from-setting host = "h"`. */
+function userHost(permission: string): string | undefined {
+  return /^net-from-setting host = "(.*)"$/.exec(permission)?.[1];
+}
+
 function fixFor(permission: string, why: Why): string {
+  const cannot = ungrantable(permission);
+  if (cannot) return `none: this cannot be granted, ${cannot[1]}`;
   switch (why) {
     case "not-declared": {
+      const h = userHost(permission);
+      if (h !== undefined) return `the user has not allowed "${h}": they add it on the extension page with Allow Host…`;
       const o = oauthHost(permission);
       if (o?.[0] === "github") return `the built-in github account signs requests only to its own API hosts; send the request to ${o[1]} with fetch (net) instead`;
       if (o) return `add "${o[1]}" to hosts in the [[oauth]] table with id = "${o[0]}"`;

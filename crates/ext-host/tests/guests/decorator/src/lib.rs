@@ -110,4 +110,11 @@ impl Guest for Decorator {
     fn event(_: Ticket, _: StreamEvent) {}
 }
 
+// Watches nothing; API 1.1 components export `events` all the same.
+impl exports::codeyard::api::events::Guest for Decorator {
+    fn documents(_: u64, _: Vec<exports::codeyard::api::events::DocumentEvent>) {}
+
+    fn files(_: u64, _: Vec<exports::codeyard::api::events::FileEvent>) {}
+}
+
 export!(Decorator);

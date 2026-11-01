@@ -84,6 +84,7 @@ pub fn handle(req: Request) -> Response {
         | Request::ReadLines { .. } => Err(Error::Unsupported("streaming request outside a session".into())),
         Request::ListFiles { root, limit } => list_files(&expand(&root), limit as usize).map(|(paths, truncated)| Response::Files { paths, truncated }),
         Request::ListShells => Ok(Response::Shells(pty::shells())),
+        Request::RealPaths { paths } => Ok(Response::RealPaths(paths.iter().map(|p| real_path(&expand(p))).collect())),
     };
     result.unwrap_or_else(Response::Error)
 }
@@ -576,6 +577,42 @@ fn read_dir(path: &Path) -> Result<Vec<DirEntry>, Error> {
     Ok(out)
 }
 
+/// Symbolic links followed in one path before giving up, as `ELOOP` does.
+const MAX_LINKS: u32 = 40;
+
+/// Where `path` really is: every symbolic link followed, also a dangling one at the end (writing through it would create
+/// its target), and parts that do not exist yet appended to their nearest existing folder. `path` is absolute.
+fn real_path(path: &Path) -> Result<String, Error> {
+    resolve(path, 0).map(|p| plain(&p).to_string_lossy().into_owned())
+}
+
+fn resolve(path: &Path, links: u32) -> Result<PathBuf, Error> {
+    if links > MAX_LINKS {
+        return Err(Error::Other(format!("{}: too many levels of symbolic links", path.display())));
+    }
+    match fs::canonicalize(path) {
+        Ok(p) => return Ok(p),
+        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(map_err(path, e)),
+        Err(_) => {}
+    }
+    let parent = path.parent().ok_or_else(|| Error::NotFound(path.display().to_string()))?;
+    if let Ok(target) = fs::read_link(path) {
+        return resolve(&parent.join(target), links + 1);
+    }
+    let name = path.file_name().ok_or_else(|| Error::NotFound(path.display().to_string()))?;
+    Ok(resolve(parent, links)?.join(name))
+}
+
+/// `C:\x` for Windows' `\\?\C:\x`, as paths are written everywhere else; elsewhere the path itself.
+fn plain(path: &Path) -> PathBuf {
+    let s = path.to_string_lossy();
+    match s.strip_prefix(r"\\?\") {
+        Some(rest) if rest.starts_with("UNC\\") => PathBuf::from(format!(r"\\{}", &rest[4..])),
+        Some(rest) => PathBuf::from(rest),
+        None => path.to_path_buf(),
+    }
+}
+
 fn stat(path: &Path) -> Result<Meta, Error> {
     let m = fs::metadata(path).map_err(|e| map_err(path, e))?;
     let mtime_ms = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as i64);
@@ -1014,6 +1051,36 @@ mod tests {
         fs::write(dir.join("other.txt"), "other").unwrap();
         assert!(matches!(rename(&to, &dir.join("other.txt")), Err(Error::AlreadyExists(_))));
         assert_eq!(fs::read_to_string(dir.join("other.txt")).unwrap(), "other");
+    }
+
+    /// What an extension's file call reaches is checked on these: a link inside a folder can lead anywhere.
+    #[cfg(unix)]
+    #[test]
+    fn real_paths_follow_every_link_and_resolve_missing_parts() {
+        use std::os::unix::fs::symlink;
+        let d = fs::canonicalize(tmpdir("real-paths şü")).unwrap();
+        fs::create_dir_all(d.join("ws/src")).unwrap();
+        fs::write(d.join("ws/.env"), "SECRET=1").unwrap();
+        fs::write(d.join("outside.txt"), "x").unwrap();
+        symlink("/etc", d.join("ws/src/link-out")).unwrap();
+        symlink("../.env", d.join("ws/src/settings.txt")).unwrap();
+        symlink(d.join("nowhere/new.txt"), d.join("ws/src/dangling")).unwrap();
+        symlink(d.join("outside.txt"), d.join("ws/src/out-file")).unwrap();
+        symlink("loop", d.join("ws/src/loop")).unwrap();
+        let ask = |rel: &[&str]| {
+            let paths = rel.iter().map(|r| s(&d.join(r))).collect();
+            let Response::RealPaths(list) = handle(Request::RealPaths { paths }) else { panic!() };
+            list
+        };
+        let etc = s(&fs::canonicalize("/etc/passwd").unwrap());
+        let got = ask(&["ws/src/link-out/passwd", "ws/src/settings.txt", "ws/src/dangling", "ws/src/out-file", "ws/src/new/dir/file.txt", "ws/src"]);
+        assert_eq!(got[0], Ok(etc));
+        assert_eq!(got[1], Ok(s(&d.join("ws/.env"))));
+        assert_eq!(got[2], Ok(s(&d.join("nowhere/new.txt"))), "a dangling link leads where a write would create the file");
+        assert_eq!(got[3], Ok(s(&d.join("outside.txt"))));
+        assert_eq!(got[4], Ok(s(&d.join("ws/src/new/dir/file.txt"))), "parts that do not exist yet are kept");
+        assert_eq!(got[5], Ok(s(&d.join("ws/src"))));
+        assert!(ask(&["ws/src/loop"])[0].is_err(), "a link loop is an error, not a path");
     }
 
     #[test]

@@ -199,14 +199,24 @@ extension's package carries its component as `extension.wasm`.
   runs in the background and shows progress. `ctx.spawn(program, args)` streams output as events.
   `ctx.every(seconds)` polls (minimum 30 s, paused while the window is unfocused); an active timer keeps the
   exthost alive. Numbers live in the generated `reference/limits.md`.
+- **Watches (API 1.1).** `watch.documents` reports documents opening (those already open first), changing (debounced,
+  with the version; the text only when asked) and being saved; `watch.files(glob)` reports workspace files created,
+  changed and deleted, by Codeyard or anything else, coalesced per file and delivered at most once a second. Events go
+  to the guest's `events` export. Both need `read`, and every event is checked as a read of its path is (grants ∩
+  trust, the user's switches), so untrusted folders get the events of what may be read there. File watches use the
+  window's file watcher (the matching files, their folders and the workspace folders, within `WATCHED_PATHS`, after
+  Codeyard's own paths) and list the folders again when one changes; files `.gitignore` ignores are not reported. An
+  active watch keeps the exthost alive like a timer, and watches end with the exthost. There is no activation event
+  for them: an extension starts them in `activate`.
 - **Errors.** `denied { permission, why }` with `why` one of `not-declared`, `revoked-by-user`,
   `untrusted-workspace`, `revoked-extension`; the SDK formats it with the fix. Others: `not-found`,
   `cancelled`, `timeout`, `invalid`, `other`.
 - **State.** `storage` is a persisted key-value store and the only persistence concept. In `cyx dev`, hot
   reload keeps the in-memory values of `ctx.state`: the SDK saves them on `deactivate` under the reserved storage
   key `codeyard.reload-state` and restores them when the new build activates with the reason `reload`.
-- **Versioning.** `codeyard:api` is 1.0.0 (#147); `0.x` was the beta, where a minor could break. From 1.0 a minor
-  only adds interfaces, functions and types, and a major stays supported for 24 months after the next ships.
+- **Versioning.** `codeyard:api` is 1.1.0; 1.0.0 (#147) is the first stable release and `0.x` was the beta, where a
+  minor could break. From 1.0 a minor only adds interfaces, functions and types, and a major stays supported for 24
+  months after the next ships. 1.1 added `watch` and the `events` export; both ship in Codeyard 0.7.0, with 1.0.
   - *Items carry `@since`.* Every interface, function and type has a WIT `@since(version = …)` gate; the reference
     shows an item newer than its interface. `ext_api::since` reads the gates, and `ext_pkg::check_component` takes
     the newest one among the functions and types a component imports as its minimum API (`Component::min_api`);
@@ -218,7 +228,13 @@ extension's package carries its component as `extension.wasm`.
     case, a parameter or result) or changed its `@since`, and when a new item has no `@since` or one outside (released,
     current]. A new major may change anything. The component model has no optional fields or cases, so data grows by
     new types and functions; a request kind added in a minor comes as a new exported interface that the host calls only
-    when the component has it.
+    when the component has it (`events` in 1.1: the exthost looks it up beside `guest` and skips it when absent). Such
+    an interface defines its own types, so exporting it does not make a component need the newer API.
+  - *Releasing a minor.* While a minor is in the works, `released/` keeps the last released version and the check
+    compares with it; new items go into the existing files (every file must have its released copy). The release that
+    ships the minor adds its line to `ext_api::RELEASES` and commits `released/<version>/`.
+  - *Old builds.* A component built against an older 1.x runs unchanged (`testdata/probe-1.0.wasm` in the exthost
+    tests). A 0.x build is renamed to `@1.0.0` (`transition::UPGRADE_TO`), the shape it has, whatever this build's 1.x.
   - *0.x components.* API 0.1 has the same shape as 1.0, so the host keeps running 0.1 builds during a transition
     (`ext_api::TRANSITION`): the exthost renames their `codeyard:api/…@0.1.0` imports and exports to `@1.0.0` before
     compiling (`ext_api::transition::upgrade`, same-length names, nothing else in the binary moves) and wasmtime
@@ -251,6 +267,7 @@ URL on a `net` host.
 | --- | --- | --- |
 | `read` / `write` | workspace files matching globs, including open documents | "Read vercel.json" |
 | `net` | HTTPS to listed hosts. A wildcard directly under a public suffix counts as any host | "Connect to api.vercel.com" |
+| `net-from-setting` | HTTPS to servers the user allows on the extension page, for a string setting that names one (a company GitHub Enterprise). Never from the setting's value alone | "Connect to a server you allow, named in its “server” setting" |
 | `auth` | requests signed by an account; the extension never sees the token | "Act as your GitHub account" |
 | `secrets` | its own keychain entries | "Store secrets in your keychain" |
 | `run` | listed programs, with any arguments | "Run vercel with any arguments" |
@@ -275,7 +292,13 @@ signed package; a language server wrapper is therefore a normal High-risk extens
 - **Wasm.** A component can call only what it imports; imports must fit permissions. One function in `ext-pkg`
   checks this and is called by `cyx`, the registry and the installer. Revoked permissions link to stubs.
 - **Broker (app).** Every file, network, process, account and command call is checked against
-  grants ∩ workspace trust, then the path, host or program, before `Host` is called.
+  grants ∩ workspace trust, then the path, host or program, before `Host` is called. A path is checked as written
+  and again where it really leads: the workspace's host resolves it with every symbolic link followed
+  (`RealPaths`, protocol 18), the result must be inside a workspace root and match the rules too, and the call
+  reaches that resolved path. So a link in the workspace cannot reach a file outside it (`src/out -> /etc`) or a
+  file the globs leave out (`src/settings.txt -> ../.env`, which must be named); listings and search results leave
+  such files out. A path outside the workspace, or an IP address for `net`, cannot be granted at all, and the
+  denial says so instead of naming a line to add.
 - **Processes.** The broker resolves the program to an absolute path on the target host, refuses paths under
   a workspace root, and passes an explicit environment (on Unix hosts the program runs under `env -i` with only
   the variables the extension passed and a minimal PATH, HOME and LANG; the agent needs nothing new).
@@ -354,6 +377,13 @@ How it works (`ext_accounts.rs`, `ext_fetch.rs` and `workbench_ext_accounts.rs` 
   `http-head` and `data` events, never the token. A token that expires within a minute is refreshed first.
 - **Sign out.** The extension page lists each `auth` provider with the signed-in account and **Sign Out**, which
   deletes the keychain entry.
+- **Servers from a setting** (`net-from-setting`, API 1.1). For a token in `secrets` used against a server the user
+  names, such as a GitHub Enterprise host. The manifest names a string setting; the extension reads it as usual, but a
+  request to its host is refused (`net-from-setting host = "<host>"`, which the SDKs turn into "the user allows it on
+  the extension page") until the user adds the host on the extension page (Servers › **Allow Host…**, the setting's
+  value filled in) and agrees in a system dialog that names the extension, its publisher and the host. Allowed hosts
+  live with the instances in `instances.json`, keyed the same way; no extension, workspace or setting can add one. They
+  join `net` while the `net-from-setting` switch is on and the folder is trusted, and **Remove** takes one back.
 
 ## 7. Remote
 
@@ -476,7 +506,7 @@ milliseconds. A waiver is one line in the release notes.
 | Metric | Stat | Budget / release | Ceiling |
 | --- | --- | --- | --- |
 | Startup cost of 100 installed, inactive extensions | p95 delta | +1 ms | 5 ms, 0 processes, 0 requests |
-| Keystroke to frame, 5 query packs + 2 decoration providers active | p95 | +10% | the same keys without extensions, same run, +10% |
+| Keystroke to frame, 2 decoration providers active (`typing.keystroke_frame_decorations_ms`) | p95 | +10% | the same keys without extensions, same run, +10% |
 | Idle memory, 100 installed, none active | median | +2 MB | welcome scene + 3 MB |
 | Activation, warm (process running, code cached) | p95 | +10% | 10 ms |
 | Activation, cold (spawn + sandbox + load) | p95 | +10% | macOS 150 ms, Windows 400 ms |

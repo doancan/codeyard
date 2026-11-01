@@ -80,7 +80,7 @@ pub fn program_file(run: &str, target: &str) -> String {
 }
 
 pub use allow::{globs_allow, normalize, outside_line, relative};
-pub use validate::{KEY_MODIFIERS, KEY_NAMES, Options, check_https_url, check_key, check_package_path, is_deceptive};
+pub use validate::{KEY_MODIFIERS, KEY_NAMES, Options, check_https_url, check_key, check_package_path, check_watch_glob, is_deceptive};
 
 /// Parse and validate a manifest, as install and publish do. Every problem is reported, not just the first.
 pub fn parse(text: &str) -> Result<Manifest, Vec<Diagnostic>> {
@@ -610,6 +610,34 @@ pub fn parse_oauth_host_line(permission: &str) -> Option<(&str, &str)> {
     Some((provider, rest.strip_suffix("\"]")?))
 }
 
+/// What a refused call carries as its permission when no manifest entry could allow it: a file outside the workspace,
+/// or a URL that names an IP address. `what` is the call (`read file:///etc/passwd`), `reason` says why it cannot be
+/// granted. It has no `= [`, so the SDKs keep it, and they print the reason instead of a line to add
+/// ([`parse_ungrantable_line`]).
+pub fn ungrantable_line(what: &str, reason: &str) -> String {
+    format!("{what} {UNGRANTABLE}{reason})")
+}
+
+const UNGRANTABLE: &str = "(cannot be granted: ";
+
+/// The call and the reason of an [`ungrantable_line`].
+pub fn parse_ungrantable_line(permission: &str) -> Option<(&str, &str)> {
+    let (what, rest) = permission.split_once(&format!(" {UNGRANTABLE}"))?;
+    Some((what, rest.strip_suffix(')')?))
+}
+
+/// An IP address rather than a host name: `127.0.0.1`, `[::1]`, and the other spellings resolvers take for an IPv4
+/// address (`127.1`, `2130706433`, `0x7f.1`): a name whose labels are all numbers, or whose last one is (no top-level
+/// domain is numeric). `net` lists host names only.
+pub fn is_ip_address(host: &str) -> bool {
+    let number =
+        |l: &str| !l.is_empty() && (l.bytes().all(|b| b.is_ascii_digit()) || l.strip_prefix("0x").is_some_and(|h| h.bytes().all(|b| b.is_ascii_hexdigit())));
+    host.starts_with('[')
+        || host.parse::<std::net::IpAddr>().is_ok()
+        || host.split('.').all(number)
+        || host.rsplit('.').next().is_some_and(|l| !l.is_empty() && l.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// The fix for an [`oauth_host_line`]: the host goes into `hosts` of that `[[oauth]]` table. GitHub's account is built
 /// in, so its hosts are fixed.
 pub fn oauth_host_fix(permission: &str) -> Option<String> {
@@ -619,6 +647,18 @@ pub fn oauth_host_fix(permission: &str) -> Option<String> {
     } else {
         format!("add \"{host}\" to hosts in the [[oauth]] table with id = \"{provider}\"")
     })
+}
+
+/// The permission a `denied` names when an extension with `net-from-setting` reaches a host the user has not allowed:
+/// `net-from-setting host = "git.example.com"`. It has a `=`, so the SDKs keep it, and [`user_host_fix`] reads it.
+pub fn user_host_line(host: &str) -> String {
+    format!("net-from-setting host = {host:?}")
+}
+
+/// The fix for a [`user_host_line`]: only the user can allow the host.
+pub fn user_host_fix(permission: &str) -> Option<String> {
+    let host = permission.strip_prefix("net-from-setting host = \"")?.strip_suffix('"')?;
+    Some(format!("the user has not allowed \"{host}\": they add it on the extension page with Allow Host…"))
 }
 
 /// Account providers built into Codeyard; `[permissions] auth` may name them without an `[[oauth]]` table.

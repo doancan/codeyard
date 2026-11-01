@@ -28,6 +28,8 @@ pub(crate) type InlayHintsFn = Rc<dyn Fn(Context, Document, Range) -> BoxFuture<
 pub(crate) type StringFn = Rc<dyn Fn(Context, String) -> BoxFuture<Result<()>>>;
 pub(crate) type KeysFn = Rc<dyn Fn(Context, Vec<String>) -> BoxFuture<()>>;
 pub(crate) type TickFn = Rc<dyn Fn(Context) -> BoxFuture<()>>;
+pub(crate) type DocumentsFn = Rc<dyn Fn(Context, DocumentEvent) -> BoxFuture<()>>;
+pub(crate) type FilesFn = Rc<dyn Fn(Context, Vec<FileEvent>) -> BoxFuture<()>>;
 
 /// What the extension registered.
 #[derive(Default)]
@@ -44,6 +46,9 @@ pub(crate) struct Handlers {
     pub inlay_hints: Option<InlayHintsFn>,
     pub settings_changed: Vec<KeysFn>,
     pub timers: HashMap<u64, TickFn>,
+    /// `watch.documents` and `watch.files` watches, by id.
+    pub document_watches: HashMap<u64, DocumentsFn>,
+    pub file_watches: HashMap<u64, FilesFn>,
     pub hover: Option<HoverFn>,
     pub completion: Option<CompletionFn>,
     /// `[[pull-requests]]` providers, by local id.
@@ -115,6 +120,27 @@ pub fn complete(ticket: Ticket, c: Completion) {
 /// `guest.event`.
 pub fn event(ticket: Ticket, e: StreamEvent) {
     runtime::event(ticket, e);
+    runtime::run();
+}
+
+/// `events.documents`: the watch's handler runs once per event, in order.
+pub fn documents(watch: u64, events: Vec<DocumentEvent>) {
+    if let Some(f) = with(|h| h.document_watches.get(&watch).cloned()) {
+        let ctx = Context::new();
+        runtime::spawn(async move {
+            for e in events {
+                f(ctx, e).await;
+            }
+        });
+    }
+    runtime::run();
+}
+
+/// `events.files`.
+pub fn files(watch: u64, events: Vec<FileEvent>) {
+    if let Some(f) = with(|h| h.file_watches.get(&watch).cloned()) {
+        runtime::spawn(f(Context::new(), events));
+    }
     runtime::run();
 }
 

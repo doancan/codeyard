@@ -83,7 +83,7 @@ impl EditorView {
         let vy = (first.saturating_sub(start)) as f32 * ROW;
         window.paint_quad(fill(Bounds::new(point(x0, bounds.top() + px(vy)), size(px(MINIMAP_W), px(visible as f32 * ROW))), ui::ca(p.text_muted, 0.14)));
         let rope = self.buffer.rope();
-        let spans = self.syntax.as_ref().map(|s| s.highlights(rope, rope.line_to_byte(start)..rope.line_to_byte(end)));
+        let spans = self.syntax.as_ref().map(|s| s.highlights_shown(rope, rope.line_to_byte(start)..rope.line_to_byte(end)));
         let max_cols = MINIMAP_W as usize;
         for (row, line) in (start..end).enumerate() {
             let text = self.buffer.line(line);

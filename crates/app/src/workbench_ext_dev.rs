@@ -112,6 +112,7 @@ impl Workbench {
         code.record().exited(&id);
         // Calls from now on wait here for the new build.
         code.queued.insert(id.clone(), Vec::new());
+        self.forget_extension_watches(&id);
         self.forget_extension_marks(&id, cx);
         self.log_extension(&id, LogLevel::Info, "new build: reloading".into());
         let stopped = cx.background_executor().spawn(async move { old.retire() });

@@ -235,22 +235,23 @@ fn an_added_function_passes_the_check() {
     let added = edited(
         "permissions.wit",
         "  delete: func(key: string) -> ticket;\n",
-        "  delete: func(key: string) -> ticket;\n  /// Completes with `uris`.\n  @since(version = 1.1.0)\n  keys: func() -> ticket;\n",
+        "  delete: func(key: string) -> ticket;\n  /// Completes with `uris`.\n  @since(version = 1.9.0)\n  keys: func() -> ticket;\n",
     );
-    assert_eq!(diff(&current_files(), &as_version(added.clone(), "1.1.0")), Vec::<String>::new());
+    assert_eq!(diff(&current_files(), &as_version(added.clone(), "1.9.0")), Vec::<String>::new());
     // Its `@since` must be the version that adds it.
-    let problems = diff(&current_files(), &as_version(added.clone(), "1.2.0").into_iter().map(|(n, t)| (n, t.replace("1.1.0)", "1.0.0)"))).collect::<Vec<_>>());
-    assert_eq!(problems, vec!["secrets/keys is new, so its @since must be after 1.0.0 and at most 1.2.0, not 1.0.0"]);
+    let problems =
+        diff(&current_files(), &as_version(added.clone(), "1.10.0").into_iter().map(|(n, t)| (n, t.replace("1.9.0)", "1.0.0)"))).collect::<Vec<_>>());
+    assert_eq!(problems, vec![format!("secrets/keys is new, so its @since must be after {VERSION} and at most 1.10.0, not 1.0.0")]);
     // And a new interface is an addition too.
     let iface = [
         current_files(),
         vec![(
             "extra.wit".into(),
-            "package codeyard:api@1.1.0;\n\n/// New.\n@since(version = 1.1.0)\ninterface extra {\n  @since(version = 1.1.0)\n  go: func();\n}\n".into(),
+            format!("package codeyard:api@{VERSION};\n\n/// New.\n@since(version = 1.9.0)\ninterface extra {{\n  @since(version = 1.9.0)\n  go: func();\n}}\n"),
         )],
     ]
     .concat();
-    assert_eq!(diff(&current_files(), &as_version(iface, "1.1.0")), Vec::<String>::new());
+    assert_eq!(diff(&current_files(), &as_version(iface, "1.9.0")), Vec::<String>::new());
 }
 
 #[test]

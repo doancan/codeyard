@@ -42,6 +42,11 @@ Every size, count and time limit of the extension platform. `cyx check` and the 
 | `IPC_BYTES_PER_SECOND` | 32 MiB/s | Sustained bytes per second an exthost may send the app; going over kills it. |
 | `IPC_BURST_BYTES` | 64 MiB | Bytes an exthost may send in a burst above the sustained rate. |
 | `TIMER_MIN_SECONDS` | 30 s | The shortest interval of `timers.every`. |
+| `WATCHES` | 16 | Watches (`watch.documents`, `watch.files`) one extension may have at once. |
+| `DOCUMENT_EVENT_DEBOUNCE_MILLIS` | 500 ms | How long a document must stay unchanged before its `changed` event goes out: typing sends one event per pause. |
+| `FILE_EVENT_INTERVAL_MILLIS` | 1 s | File events are coalesced, one per file, and delivered at most this often. |
+| `WATCH_EVENTS` | 1,000 | Events in one delivery to `events.documents` or `events.files`; more arrive in the next ones. |
+| `WATCHED_PATHS` | 1,024 | Files and folders a window follows for the file watches of all its extensions; Codeyard's own watching keeps the rest of its budget. Past it, more files are still reported when their folder changes, but not when only they change. |
 | `GUEST_MEMORY_BYTES` | 256 MiB | Linear memory of one extension instance; growing past it traps. |
 | `EXTHOST_MEMORY_BYTES` | 512 MiB | The whole exthost process: the guest's linear memory plus the engine and compiled code. A Job Object commit limit on Windows; elsewhere the app checks the process's resident size. |
 | `GUEST_CALL_MILLIS` | 2 s | CPU time one call into an extension may take (exports must return quickly; long work waits on tickets). |
@@ -50,6 +55,8 @@ Every size, count and time limit of the extension platform. `cyx check` and the 
 | `PULL_REQUEST_DEADLINE_MILLIS` | 20 s | How long the Pull Requests view waits for a `[[pull-requests]]` provider, whose answers come from the network. A later answer is dropped like any provider's. |
 | `STATUS_TEXT_LEN` | 64 characters | Text of a status bar item, in visible characters once trimmed. `set-status-item` refuses a longer or empty text, one with control, bidirectional or zero-width characters, and an id not declared in `[[status-bar]]`. |
 | `MARKS_PER_FILE` | 1,000 | Diagnostics or decorations one extension may set on one file; the rest are dropped. |
+| `DIAGNOSTIC_FILES` | 1,000 | Files one extension may have diagnostics on at once; diagnostics for another file are dropped until it clears some. |
+| `DIAGNOSTIC_MESSAGE_LEN` | 4,096 characters | Characters of one diagnostic's message; a longer one is cut short. |
 | `NET_TIMEOUT_SECS` | 60 s | One `net` request, from the first connection to the last byte of the response, redirects included. |
 | `NET_REDIRECTS` | 5 | Redirects one `net` request follows; each is checked against `net` and the peer address rules again. |
 | `NET_REQUEST_BYTES` | 16 MiB | The body one `net` request sends. |

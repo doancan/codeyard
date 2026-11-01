@@ -16,9 +16,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 
 use crate::codeyard::api::host_requests::Request;
-use crate::codeyard::api::responses::{
-    CodeAction, CodeLens, CompletionItem, CompletionKind, CompletionList, Hover, InlayHint, LensCommand, Response, Task,
-};
+use crate::codeyard::api::responses::{CodeAction, CodeLens, CompletionItem, CompletionKind, CompletionList, Hover, InlayHint, LensCommand, Response, Task};
 use crate::codeyard::api::types::{Diagnostic, DiagnosticSeverity, Document, Position, Range, TextEdit, Tone};
 use crate::codeyard::api::{languages, requests, window};
 

@@ -40,13 +40,19 @@ pub struct Denied {
 impl Denied {
     /// What to do about it, in one line.
     pub fn fix(&self) -> String {
+        if let Some((_, reason)) = ungrantable(&self.permission) {
+            return format!("none: this cannot be granted, {reason}");
+        }
         match self.why {
             Why::NotDeclared => match oauth_host(&self.permission) {
                 Some(("github", host)) => {
                     format!("the built-in github account signs requests only to its own API hosts; send the request to {host} with fetch (net) instead")
                 }
                 Some((provider, host)) => format!("add \"{host}\" to hosts in the [[oauth]] table with id = \"{provider}\""),
-                None => format!("add to [permissions]:  {}", self.permission),
+                None => match user_host(&self.permission) {
+                    Some(host) => format!("the user has not allowed \"{host}\": they add it on the extension page with Allow Host…"),
+                    None => format!("add to [permissions]:  {}", self.permission),
+                },
             },
             Why::RevokedByUser => {
                 format!("the user turned off `{}` on the extension page; tell them what stops working without it", self.permission)
@@ -68,6 +74,9 @@ impl Denied {
 
 impl fmt::Display for Denied {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some((call, _)) = ungrantable(&self.permission) {
+            return write!(f, "denied: {call}\n   = fix: {}", self.fix());
+        }
         let what = match self.why {
             Why::NotDeclared => "the manifest does not declare",
             Why::RevokedByUser => "the user turned off",
@@ -166,6 +175,19 @@ fn oauth_host(permission: &str) -> Option<(&str, &str)> {
     Some((provider, rest.strip_suffix("\"]")?))
 }
 
+/// The call and the reason of a refusal no manifest entry can lift (a file outside the workspace, an IP address):
+/// `read file:///etc/passwd (cannot be granted: <reason>)`, as `ext_manifest::ungrantable_line` writes it.
+fn ungrantable(permission: &str) -> Option<(&str, &str)> {
+    let (call, rest) = permission.split_once(" (cannot be granted: ")?;
+    Some((call, rest.strip_suffix(')')?))
+}
+
+/// The host of a refused request from an extension with `net-from-setting` to a server the user has not allowed:
+/// `net-from-setting host = "git.example.com"`.
+fn user_host(permission: &str) -> Option<&str> {
+    permission.strip_prefix("net-from-setting host = \"")?.strip_suffix('"')
+}
+
 /// The manifest line for a permission when the call gives nothing more specific.
 pub(crate) fn line_for(permission: &str) -> String {
     match permission {
@@ -213,6 +235,15 @@ mod tests {
         // Text without `=` that is more than a permission's name is kept too.
         let e = Error::Denied(Denied { permission: "a path inside the workspace".into(), why: Why::NotDeclared }).detailed(&|| "x".into());
         assert!(e.to_string().contains("a path inside the workspace"));
+    }
+
+    /// A file outside the workspace or an IP address: no manifest line allows it, so none is suggested.
+    #[test]
+    fn a_denial_no_entry_can_lift_says_so() {
+        let d = Denied { permission: "read file:///etc/passwd (cannot be granted: the file is outside the workspace)".into(), why: Why::NotDeclared };
+        let s = Error::Denied(d.clone()).detailed(&|| r#"read = ["**/passwd"]"#.into()).to_string();
+        assert_eq!(s, "denied: read file:///etc/passwd\n   = fix: none: this cannot be granted, the file is outside the workspace");
+        assert!(!d.fix().contains("[permissions]"), "{}", d.fix());
     }
 
     #[test]

@@ -78,7 +78,11 @@ pub fn net_error(e: ext_net::Error) -> v::Error {
 /// The lowercase host of a URL an extension may request, without port: the rule ext-net, the mock hosts and `cyx test`
 /// share (`ext_manifest::calls::check_url`), so the message is the same everywhere.
 pub fn https_host(url: &str) -> Result<String, v::Error> {
-    ext_manifest::calls::check_url(url).map(|t| t.host).map_err(|e| v::Error::Invalid(e.message))
+    ext_manifest::calls::check_url(url).map(|t| t.host).map_err(|e| match e.refusal() {
+        // An IP address: no `net` entry can allow it.
+        Err(permission) => v::Error::Denied(v::Denied { permission, why: v::Why::NotDeclared }),
+        Ok(message) => v::Error::Invalid(message),
+    })
 }
 
 fn untrusted(permission: &str) -> v::Error {
@@ -102,9 +106,22 @@ pub fn net_fetch(t: &dyn Transport, scope: &Scope, req: &v::HttpRequest, sink: &
         Err(e) => return Completion::Failed(e),
     };
     if !ext_manifest::net_allows(&scope.permissions.net, &host) {
-        return Completion::Failed(v::Error::Denied(v::Denied { permission: format!("net = [\"{host}\"]"), why: v::Why::NotDeclared }));
+        return Completion::Failed(v::Error::Denied(not_in_net(scope, &host)));
     }
     done(t.send(&scope.permissions.net, req, None, sink, cancel))
+}
+
+/// The denial for a host `net` does not list: for an IP address, which `net` cannot list, why not; with
+/// `net-from-setting`, the user's fix (they allow the host on the extension page); else the line to add.
+pub fn not_in_net(scope: &Scope, host: &str) -> v::Denied {
+    let permission = if ext_manifest::is_ip_address(host) {
+        ext_manifest::calls::ip_address_line(host)
+    } else if scope.permissions.net_from_setting.is_some() {
+        ext_manifest::user_host_line(host)
+    } else {
+        format!("net = [\"{host}\"]")
+    };
+    v::Denied { permission, why: v::Why::NotDeclared }
 }
 
 /// The checks of `auth.fetch` that need no token: the permission, the folder's trust, and that the URL's host is one

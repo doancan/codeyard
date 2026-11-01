@@ -13,6 +13,7 @@ Both check every call with Codeyard's own rules (the `ext-manifest` crate, and f
 - [What the test can check](#what-the-test-can-check)
 - [Permissions in tests](#permissions-in-tests)
 - [Accounts in tests](#accounts-in-tests)
+- [Watches and servers in tests](#watches-and-servers-in-tests)
 - [cyx test](#cyx-test)
 - [Fixtures for cyx test](#fixtures-for-cyx-test)
 - [TypeScript](#typescript)
@@ -121,7 +122,7 @@ denied: the manifest does not declare [[oauth]] gitlab hosts = ["evil.example.or
 
 Globs mean what they mean in Codeyard ([globs](reference/globs.md)): `read = ["main.rs"]` is the file at the top of the folder, not `src/main.rs`. The other rules are Codeyard's too:
 
-- A URL Codeyard never fetches (`http://`, a user name or password in it, an IP address) fails with `invalid`, even when a fixture exists for it.
+- A URL Codeyard never fetches (`http://`, a user name or password in it) fails with `invalid`, even when a fixture exists for it. One that names an IP address, and a path outside the workspace, are denied with `(cannot be granted: …)` and the fix `none: this cannot be granted, …`, since no manifest entry allows them.
 - `set_status_item` refuses an id the manifest does not declare in `[[status-bar]]` and a text that is empty or longer than 64 characters.
 - An answer (a command's result, a view's tree) over 8 MiB fails its request with `invalid: the result is 20 MiB; at most 8 MiB`.
 - `open_external` works only while the extension handles a user action (a command, a view event), not from a provider or a timer.
@@ -141,6 +142,29 @@ host.instance("gitlab", "git.example.com");  // a self-managed instance the user
 ```
 
 TypeScript: `host.declineSignIn(provider)`, `host.signedOut(provider)`, `host.signIn(provider, label)`, `host.instance(provider, host)`. A token the service refuses is its answer, so give the request a `401` fixture.
+
+## Watches and servers in tests
+
+Watches (`ctx.on_documents`, `ctx.on_files`) get events when the test changes documents and files. Like Codeyard, the
+mock sends them only for paths the manifest's `read` allows, a file event only when the watch's glob matches, and
+`opened` for the documents already open when a document watch starts:
+
+```rust
+host.open_document("src/a.rs", "rust", "fn a() {}");   // document watches get `opened`
+host.edit_document("src/a.rs", "fn a() {} // TODO"); // `changed`, version 2
+host.save_document("src/a.rs");                       // `saved`
+host.create_file("src/b.rs", "fn b() {}");            // file watches whose glob matches get `created`
+host.change_file("src/b.rs", "fn b() { 1 }");
+host.delete_file("src/b.rs");
+host.allow_host("github.example.com");                // the user allowed this server for `net-from-setting`
+```
+
+Until `allow_host`, a request from an extension with `net-from-setting` to a host outside `net` is refused with
+`net-from-setting host = "github.example.com"`, whose fix says the user allows it on the extension page.
+
+TypeScript: `await host.openDocument(path, language, text)`, `await host.editDocument(path, text)`,
+`await host.saveDocument(path)`, `await host.createFile(path, contents)`, `await host.changeFile(path, contents)`,
+`await host.deleteFile(path)` and `host.allowHost(host)`.
 
 ## Hot reload
 
@@ -194,6 +218,10 @@ error[CY0201]: net/fetch needs a permission the manifest does not declare
 ```
 
 `cyx test` finds `codeyard-exthost` next to `cyx` (both ship with Codeyard), or uses `CODEYARD_EXTHOST`.
+
+Each watch the extension starts gets a file of its own, named after its glob (or the first `read` glob):
+a document watch sees it opened, changed and saved, a file watch sees it created, changed and deleted. A trap in a
+handler fails the test. For `net-from-setting`, the host in the setting's default stands in for one the user allowed.
 
 ## Fixtures for cyx test
 

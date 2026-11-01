@@ -17,10 +17,45 @@ import type {
   TextEdit,
   Tone,
   Why,
+  DocumentChange,
+  FileChange,
 } from "./wit.ts";
 import type { CodeyardError } from "./errors.ts";
 
-export type { CompletionKind, DecorationPlace, DiagnosticSeverity, Document, FormatOptions, LogLevel, Position, Range, Severity, TextEdit, Tone, Why };
+export type {
+  CompletionKind,
+  DecorationPlace,
+  DiagnosticSeverity,
+  Document,
+  DocumentChange,
+  FileChange,
+  FormatOptions,
+  LogLevel,
+  Position,
+  Range,
+  Severity,
+  TextEdit,
+  Tone,
+  Why,
+};
+
+/** One event of a `ctx.onDocuments` watch. */
+export interface DocumentEvent {
+  /** `opened` also for the documents already open when the watch started; `changed` once typing pauses. */
+  change: DocumentChange;
+  uri: Uri;
+  language: string;
+  /** As `Document.version`: edits made against it apply. */
+  version: number;
+  /** The whole text, when the watch asked for it and the document fits in one call. */
+  text?: string;
+}
+
+/** One event of a `ctx.onFiles` watch. */
+export interface FileEvent {
+  change: FileChange;
+  uri: Uri;
+}
 
 /** A file or folder. Opaque: the same code works on local and SSH folders. */
 export type Uri = string;

@@ -104,9 +104,10 @@ pub fn relative(folders: &[String], uri: &str) -> Option<String> {
     })
 }
 
-/// The `permission` of the denial for a path outside every workspace folder.
-pub fn outside_line(path: &str) -> String {
-    format!("a path inside the workspace (not {path})")
+/// The `permission` of the denial for a `kind` (`read`, `write`) of a path outside every workspace folder: no manifest
+/// entry can allow it (`crate::ungrantable_line`).
+pub fn outside_line(kind: &str, path: &str) -> String {
+    crate::ungrantable_line(&format!("{kind} {path}"), "the file is outside the workspace, and extensions reach only files inside its folders")
 }
 
 #[cfg(test)]

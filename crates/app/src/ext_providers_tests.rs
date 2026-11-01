@@ -376,6 +376,71 @@ fn extension_diagnostics_go_when_it_is_disabled_or_uninstalled(cx: &mut TestAppC
     wait_for(cx, "diagnostics to go on uninstall", |cx| ed.read_with(cx, |e, _| e.diagnostics().is_empty() && e.ext_decorations().is_empty()));
 }
 
+/// #4 of the outside-author trials: diagnostics an extension pushes need a `[[diagnostics]]` declaration and a file
+/// of a language it lists, in the workspace or open in an editor; their messages cannot hide characters and are cut
+/// short, and one extension has them on at most `limits::DIAGNOSTIC_FILES` files. No exthost needed.
+#[gpui::test]
+fn pushed_diagnostics_are_declared_bounded_and_plain(cx: &mut TestAppContext) {
+    use ext_api::value::{self as v, Notify};
+    use ext_manifest::limits;
+    let ws = config_dir("pushed-diagnostics");
+    std::fs::write(ws.join("a.toml"), "a = 1\n").unwrap();
+    let ws_s = std::fs::canonicalize(&ws).unwrap().to_string_lossy().replace('\\', "/");
+    let active = |extra: &str| {
+        let text = format!(
+            "[extension]\nid = \"you.lint\"\nversion = \"1.0.0\"\nname = \"Lint\"\nlicense = \"MIT\"\n[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n{extra}"
+        );
+        crate::ext::Active { manifest: std::sync::Arc::new(ext_manifest::parse(&text).unwrap()), dir: ws.clone() }
+    };
+    cx.update(|cx| {
+        cx.set_global(ActiveTheme(theme::DARK));
+        cx.set_global(crate::settings::Settings { lsp_enabled: false, ..Default::default() });
+    });
+    let (wb, cx) = cx.add_window_view(|window, cx| Workbench::with_state(state::State::in_memory().ok(), None, window, cx));
+    wb.update(cx, |wb, cx| wb.set_root(ws_s.clone(), cx));
+    let diag = |message: &str| v::Diagnostic {
+        range: v::Range { start: v::Position { line: 0, character: 0 }, end: v::Position { line: 0, character: 1 } },
+        severity: v::DiagnosticSeverity::Warning,
+        message: message.into(),
+        code: None,
+    };
+    let push = |wb: &Entity<Workbench>, cx: &mut VisualTestContext, uri: String, list: Vec<v::Diagnostic>| {
+        wb.update(cx, |wb, cx| wb.extension_notify_for_test("you.lint", Notify::SetDiagnostics { uri, diagnostics: list }, cx));
+    };
+    let problems = |wb: &Entity<Workbench>, cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.extension_problems_for_test());
+    let file = |rel: &str| crate::ext_broker::uri(&format!("{ws_s}/{rel}"));
+
+    // Without a declaration nothing is shown.
+    crate::ext::set_for_test(vec![active("")]);
+    push(&wb, cx, file("a.toml"), vec![diag("x")]);
+    assert!(problems(&wb, cx).is_empty());
+
+    crate::ext::set_for_test(vec![active("[[diagnostics]]\nid = \"todos\"\nlanguages = [\"toml\"]\n")]);
+    // Outside the workspace and not open, or a language it does not list: refused.
+    push(&wb, cx, "file:///etc/hosts".into(), vec![diag("x")]);
+    push(&wb, cx, file("main.rs"), vec![diag("x")]);
+    assert!(problems(&wb, cx).is_empty(), "{:?}", problems(&wb, cx));
+    // Hidden characters drop the diagnostic; a long message is cut short; a code with them is left out.
+    let long = "y".repeat(60_000);
+    let mut coded = diag("plain\nsecond line");
+    coded.code = Some("E1\u{202E}".into());
+    push(&wb, cx, file("a.toml"), vec![diag("evil \u{202E}txt.exe"), diag(&long), coded, diag("   ")]);
+    let shown = &problems(&wb, cx)[&format!("{ws_s}/a.toml")];
+    assert_eq!(shown.len(), 2, "{shown:?}");
+    assert_eq!(shown[0].message.chars().count(), limits::DIAGNOSTIC_MESSAGE_LEN + 1);
+    assert!(shown[0].message.ends_with('…'));
+    assert_eq!((shown[1].message.as_str(), shown[1].code.as_deref()), ("plain\nsecond line", None));
+    // At most so many files at once; clearing one makes room.
+    for i in 0..limits::DIAGNOSTIC_FILES + 5 {
+        push(&wb, cx, file(&format!("gen/{i}.toml")), vec![diag("x")]);
+    }
+    assert_eq!(problems(&wb, cx).len(), limits::DIAGNOSTIC_FILES);
+    wb.update(cx, |wb, cx| wb.extension_notify_for_test("you.lint", Notify::ClearDiagnostics { uri: Some(file("a.toml")) }, cx));
+    push(&wb, cx, file("gen/late.toml"), vec![diag("x")]);
+    assert!(problems(&wb, cx).contains_key(&format!("{ws_s}/gen/late.toml")));
+    crate::ext::set_for_test(Vec::new());
+}
+
 /// Code actions join the language server's in the quick-fix list; edits apply, and an action without edits asks the
 /// extension to run it.
 #[gpui::test]

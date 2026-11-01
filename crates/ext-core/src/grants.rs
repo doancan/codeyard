@@ -44,9 +44,10 @@ pub fn identity(source: &Source) -> String {
 /// in a manifest.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
-    /// `read`, `write`, `net`, `auth`, `secrets`, `run`, `clipboard`, `terminal` or `commands`.
+    /// `read`, `write`, `net`, `net-from-setting`, `auth`, `secrets`, `run`, `clipboard`, `terminal` or `commands`.
     pub kind: &'static str,
-    /// The glob, host, provider, program or command; `read`/`write` for `clipboard`; empty for the yes/no ones.
+    /// The glob, host, provider, program, command or setting key; `read`/`write` for `clipboard`; empty for the yes/no
+    /// ones.
     pub value: String,
 }
 
@@ -55,7 +56,7 @@ impl Entry {
     pub fn manifest_line(&self) -> String {
         match self.kind {
             "secrets" | "terminal" => format!("{} = true", self.kind),
-            "clipboard" => format!("clipboard = \"{}\"", self.value),
+            "clipboard" | "net-from-setting" => format!("{} = \"{}\"", self.kind, self.value),
             k => format!("{k} = [{:?}]", self.value),
         }
     }
@@ -68,6 +69,7 @@ pub fn entries(declared: &Permissions) -> Vec<Entry> {
     out.extend(list("read", &declared.read));
     out.extend(list("write", &declared.write));
     out.extend(list("net", &declared.net));
+    out.extend(declared.net_from_setting.iter().map(|k| Entry { kind: "net-from-setting", value: k.clone() }));
     out.extend(list("auth", &declared.auth));
     if declared.secrets {
         out.push(Entry { kind: "secrets", value: String::new() });
@@ -102,6 +104,7 @@ pub fn is_revoked(revoked: &Permissions, e: &Entry) -> bool {
         "read" => has(&revoked.read),
         "write" => has(&revoked.write),
         "net" => has(&revoked.net),
+        "net-from-setting" => revoked.net_from_setting.is_some(),
         "auth" => has(&revoked.auth),
         "secrets" => revoked.secrets,
         "run" => has(&revoked.run),
@@ -126,6 +129,7 @@ pub fn switch(revoked: &Permissions, e: &Entry, on: bool) -> Permissions {
         "read" => set(&mut r.read),
         "write" => set(&mut r.write),
         "net" => set(&mut r.net),
+        "net-from-setting" => r.net_from_setting = (!on).then(|| e.value.clone()),
         "auth" => set(&mut r.auth),
         "secrets" => r.secrets = !on,
         "run" => set(&mut r.run),

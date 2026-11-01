@@ -331,6 +331,9 @@ commands = ["core:workbench.saveAll"]   # core commands your code runs (referenc
 why  = "Shows your Vercel deployments next to the code."
 ```
 
+A server the user chooses (a company GitHub Enterprise) cannot be in `net`; `net-from-setting` names the setting that
+holds it, and the user allows its host on the extension page ([commands.md](commands.md#network-files-and-programs)).
+
 **You don't need a permission for:** notices, quick picks, input boxes, progress, your own views, status items, storage and settings, `env`, your dependencies' commands, or opening an `https:` link after a user action. A command the user starts can read and edit the active document and selections until it returns.
 
 **What users see.** When someone installs your extension they get one sheet that lists your permissions in plain words ("Connect to api.vercel.com", "Run vercel with any arguments") and quotes your `why`. Some combinations count as high risk: anything that *reads* private data (a wide `read`, files like `.env` or `.git/`, clipboard, secrets, an account) together with anything that *sends* (`net`, `run`, `write`, terminal), and anything that can run code as the user (`run`, terminal, or writing build files and hooks). That sheet gets a red banner, and for those combinations `why` is required. Write it in one honest sentence, 200 characters at most.
@@ -486,6 +489,12 @@ ctx.command("find-todos", async (ctx) => {
 ```
 
 Codeyard does not ask for diagnostics on its own: your code pushes them with `setDiagnostics` when its data changes, as with VS Code's `DiagnosticCollection`.
+
+Codeyard shows pushed diagnostics only when the manifest has a `[[diagnostics]]` table, for files of the languages it
+lists (all of them when it lists none), in the workspace or open in an editor. A message is cut short after 4096
+characters, and one with bidirectional or zero-width characters is dropped (line breaks and tabs are fine); one
+extension has diagnostics on at most 1000 files at once ([limits](reference/limits.md)). Whatever is dropped is noted
+in the extension's log.
 
 ### A language server
 
@@ -696,6 +705,7 @@ Every error message shows a fix line. `cyx explain <CODE>` prints what a code me
 | `denied … not-declared` in the Inspector | Add the permission shown. Click **Copy fix** |
 | `denied … untrusted-workspace` | Trust the folder, or set `untrusted = false` if the extension is useless without trust |
 | `denied … revoked-by-user` | The user turned this permission off on the extension page. Show a helpful message |
+| `denied: … (cannot be granted: …)` | No permission allows it: a file outside the workspace (or a link that leads out of it), or an IP address. Use a path inside the workspace, or the server's host name |
 | `why is required` warning on first build | Your permissions are high risk. Add one honest `why` sentence |
 | `"fs" is a Node.js built-in module` (TypeScript build) | Node built-ins are not available. Use `ctx` file APIs, or `fetch` for HTTP, or a package that works in browsers |
 | Command missing from the palette | Check the id. Commands are shown as `Title`, but the full id is `you.ext.id` |

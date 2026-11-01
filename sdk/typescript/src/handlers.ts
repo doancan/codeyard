@@ -22,6 +22,9 @@ export interface Handlers {
   pullRequests: Map<string, PullRequestProvider>;
   settingsChanged: Fn[];
   timers: Map<bigint, Fn>;
+  /** `ctx.onDocuments` and `ctx.onFiles` watches, by id. */
+  documentWatches: Map<bigint, Fn>;
+  fileWatches: Map<bigint, Fn>;
   /** Progress the user cancelled. */
   cancelledProgress: Set<bigint>;
   /** Requests the host stopped waiting for. */
@@ -52,6 +55,8 @@ function empty(): Handlers {
     pullRequests: new Map(),
     settingsChanged: [],
     timers: new Map(),
+    documentWatches: new Map(),
+    fileWatches: new Map(),
     cancelledProgress: new Set(),
     cancelledRequests: new Set(),
     reason: "",

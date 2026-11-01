@@ -96,7 +96,8 @@ fn a_path_out_of_the_folder_is_refused_however_it_is_spelled() {
     let h = host();
     for uri in ["file:///work/docs/../../etc/passwd", "file:///work/docs/%2e%2e/%2e%2e/etc/passwd", "file:///etc/passwd"] {
         let e = h.command("read", json!(uri)).unwrap_err();
-        assert!(e.denied().is_some_and(|d| d.permission.starts_with("a path inside the workspace")), "{uri}: {e}");
+        // As in Codeyard: no line to add, since no entry reaches outside the workspace.
+        assert!(e.to_string().contains("none: this cannot be granted, the file is outside the workspace"), "{uri}: {e}");
     }
 }
 
@@ -104,12 +105,13 @@ fn a_path_out_of_the_folder_is_refused_however_it_is_spelled() {
 fn urls_codeyard_never_fetches_are_invalid_even_with_a_fixture() {
     let h = host();
     h.http("GET", "http://api.example.com/zen", 200, "plain").http("GET", "https://me:pw@api.example.com/zen", 200, "creds");
-    for (url, why) in
-        [("http://api.example.com/zen", "only https://"), ("https://me:pw@api.example.com/zen", "user name or password"), ("https://127.0.0.1/", "IP address")]
-    {
+    for (url, why) in [("http://api.example.com/zen", "only https://"), ("https://me:pw@api.example.com/zen", "user name or password")] {
         let e = h.command("fetch", json!(url)).unwrap_err();
         assert!(matches!(&e, Error::Invalid(m) if m.contains(why)), "{url}: {e:?}");
     }
+    // An IP address is a denial no `net` entry can lift, as in Codeyard.
+    let e = h.command("fetch", json!("https://127.0.0.1/")).unwrap_err();
+    assert!(e.to_string().contains("none: this cannot be granted, it is an IP address"), "{e}");
     assert!(h.fetched().is_empty(), "nothing was sent");
 }
 

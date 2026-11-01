@@ -190,6 +190,13 @@ impl MockHost {
         self
     }
 
+    /// Let the extension connect to `host`, as the user allows a server for its `net-from-setting` on the extension's
+    /// page (API 1.1). Without it, a request there is refused with the `net-from-setting host = …` line.
+    pub fn allow_host(&self, host: &str) -> &Self {
+        self.state.borrow_mut().allowed_hosts.push(host.to_ascii_lowercase());
+        self
+    }
+
     pub fn clipboard_text(&self, text: &str) -> &Self {
         self.state.borrow_mut().clipboard = Some(text.to_string());
         self
@@ -392,6 +399,68 @@ impl MockHost {
         self.state.borrow_mut().clock = end;
     }
 
+    // ---- documents and files changing (API 1.1 watches) -------------------------------------------------------------
+
+    /// Open a document in an editor (version 1): `opened` for document watches, when the manifest's `read` allows it.
+    pub fn open_document(&self, path: &str, language: &str, text: &str) {
+        let uri = self.uri(path);
+        let doc = Document { uri: uri.clone(), language: language.to_string(), version: 1, text: text.to_string() };
+        let mut s = self.state.borrow_mut();
+        s.documents.insert(uri.clone(), doc);
+        s.queue_document(&uri, DocumentChange::Opened);
+        drop(s);
+        self.pump();
+    }
+
+    /// Edit an open document: its version goes up and document watches get `changed`.
+    pub fn edit_document(&self, path: &str, text: &str) {
+        let uri = self.uri(path);
+        let mut s = self.state.borrow_mut();
+        let Some(d) = s.documents.get_mut(&uri) else { panic!("{path} is not open; call host.open_document first") };
+        d.version += 1;
+        d.text = text.to_string();
+        s.queue_document(&uri, DocumentChange::Changed);
+        drop(s);
+        self.pump();
+    }
+
+    /// Save an open document: document watches get `saved`.
+    pub fn save_document(&self, path: &str) {
+        let uri = self.uri(path);
+        let mut s = self.state.borrow_mut();
+        assert!(s.documents.contains_key(&uri), "{path} is not open; call host.open_document first");
+        s.queue_document(&uri, DocumentChange::Saved);
+        drop(s);
+        self.pump();
+    }
+
+    /// A file appears in the workspace: file watches whose glob matches get `created`.
+    pub fn create_file(&self, path: &str, contents: impl Into<Vec<u8>>) {
+        self.file_changed(path, Some(contents.into()), FileChange::Created);
+    }
+
+    /// A workspace file changes: file watches whose glob matches get `changed`.
+    pub fn change_file(&self, path: &str, contents: impl Into<Vec<u8>>) {
+        self.file_changed(path, Some(contents.into()), FileChange::Changed);
+    }
+
+    /// A workspace file goes: file watches whose glob matches get `deleted`.
+    pub fn delete_file(&self, path: &str) {
+        self.file_changed(path, None, FileChange::Deleted);
+    }
+
+    fn file_changed(&self, path: &str, contents: Option<Vec<u8>>, change: FileChange) {
+        let uri = self.uri(path);
+        let mut s = self.state.borrow_mut();
+        match contents {
+            Some(c) => s.files.insert(uri.clone(), c),
+            None => s.files.remove(&uri),
+        };
+        s.queue_file(&uri, change);
+        drop(s);
+        self.pump();
+    }
+
     /// Send any request and wait for its answer.
     pub fn request(&self, request: Request) -> Result<Response> {
         let id = {
@@ -417,6 +486,8 @@ impl MockHost {
             match next {
                 Some(host::Delivery::Event(t, e)) => native::event(t, e),
                 Some(host::Delivery::Complete(t, c)) => native::complete(t, c),
+                Some(host::Delivery::Documents(w, events)) => native::documents(w, events),
+                Some(host::Delivery::Files(w, events)) => native::files(w, events),
                 None => return,
             }
         }
@@ -543,5 +614,7 @@ mod pulls_tests;
 mod scm_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod watch_tests;
 #[cfg(test)]
 mod workspace_tests;

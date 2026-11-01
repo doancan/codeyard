@@ -19,6 +19,14 @@ pub const FOLDER: &str = "file:///work";
 pub enum Delivery {
     Event(Ticket, StreamEvent),
     Complete(Ticket, Completion),
+    Documents(u64, Vec<DocumentEvent>),
+    Files(u64, Vec<FileEvent>),
+}
+
+/// A watch the extension started (API 1.1).
+pub enum Watch {
+    Documents { text: bool },
+    Files { glob: String },
 }
 
 pub struct HttpFixture {
@@ -60,6 +68,11 @@ pub struct State {
     pub accounts: BTreeMap<String, Account>,
     /// Self-managed instances the user added (#184): (`[[oauth]]` id, host).
     pub instances: Vec<(String, String)>,
+    /// Hosts the user allowed for `net-from-setting` on the extension's page.
+    pub allowed_hosts: Vec<String>,
+    pub watches: BTreeMap<u64, Watch>,
+    /// Documents open in editors, for document watches.
+    pub documents: BTreeMap<Uri, Document>,
     pub untrusted: bool,
     pub files: BTreeMap<Uri, Vec<u8>>,
     pub http: Vec<HttpFixture>,
@@ -121,7 +134,7 @@ impl State {
         };
         // A path outside the workspace folder is refused whatever the globs say, as the app's broker refuses it.
         let path = |perm: &str, uri: &str, sends: bool| match relative(uri) {
-            None if p.is_some() => Some(Denied { permission: ext_manifest::outside_line(uri), why: Why::NotDeclared }),
+            None if p.is_some() => Some(Denied { permission: ext_manifest::outside_line(perm, uri), why: Why::NotDeclared }),
             None => None,
             Some(rel) => {
                 let ok = |p: &Permissions| if perm == "read" { p.allows_read(&rel) } else { p.allows_write(&rel) };
@@ -141,7 +154,12 @@ impl State {
             Call::ApplyEdits { uri, .. } if Some(uri.as_str()) != active => path("write", uri, true),
             Call::Fetch(r) => {
                 let host = host_of(&r.url);
-                check(&|p| p.allows_net(&host), format!(r#"net = ["{host}"]"#), true)
+                let user = |p: &Permissions| p.net_from_setting.is_some() && self.allowed_hosts.contains(&host);
+                let line = match p {
+                    Some(p) if p.net_from_setting.is_some() => ext_manifest::user_host_line(&host),
+                    _ => format!(r#"net = ["{host}"]"#),
+                };
+                check(&|p| p.allows_net(&host) || user(p), line, true)
             }
             Call::Session { provider, .. } => (!self.granted(provider)).then(|| self.account_refusal(provider)),
             Call::AuthFetch { provider, request } => {
@@ -351,6 +369,65 @@ impl State {
         self.next_id += 1;
         self.next_id
     }
+
+    /// Whether the extension may read `uri`, as Codeyard checks every watch event (reading is allowed in untrusted
+    /// folders too).
+    fn readable(&self, uri: &str) -> bool {
+        relative(uri).is_some_and(|rel| self.permissions.as_ref().is_none_or(|p| p.allows_read(&rel)))
+    }
+
+    /// A new watch, refused as the exthost refuses one.
+    fn add_watch(&mut self, watch: Watch, glob: &str) -> Result<u64, Error> {
+        if self.permissions.as_ref().is_some_and(|p| p.read.is_empty()) {
+            let d = Denied { permission: format!(r#"read = ["{glob}"]"#), why: Why::NotDeclared };
+            self.denied.push(d.clone());
+            return Err(Error::Denied(d));
+        }
+        if self.watches.len() >= ext_manifest::limits::WATCHES {
+            return Err(Error::Invalid(format!("an extension may have {} watches at once; stop one first", ext_manifest::limits::WATCHES)));
+        }
+        let id = self.id();
+        self.watches.insert(id, watch);
+        Ok(id)
+    }
+
+    fn document_event(doc: &Document, change: DocumentChange, text: bool) -> DocumentEvent {
+        DocumentEvent { change, uri: doc.uri.clone(), language: doc.language.clone(), version: doc.version, text: text.then(|| doc.text.clone()) }
+    }
+
+    /// Queue `change` of the open document `uri` for every document watch.
+    pub fn queue_document(&mut self, uri: &str, change: DocumentChange) {
+        let Some(doc) = self.documents.get(uri).cloned().filter(|d| self.readable(&d.uri)) else { return };
+        let out: Vec<Delivery> = self
+            .watches
+            .iter()
+            .filter_map(|(id, w)| match w {
+                Watch::Documents { text } => Some(Delivery::Documents(*id, vec![State::document_event(&doc, change, *text)])),
+                Watch::Files { .. } => None,
+            })
+            .collect();
+        self.queue.extend(out);
+    }
+
+    /// Queue `change` of the workspace file `uri` for every file watch whose glob matches it.
+    pub fn queue_file(&mut self, uri: &str, change: FileChange) {
+        if !self.readable(uri) {
+            return;
+        }
+        let rel = relative(uri).unwrap_or_default();
+        let out: Vec<Delivery> = self
+            .watches
+            .iter()
+            .filter_map(|(id, w)| match w {
+                // As the app: the glob against the whole path in the folder.
+                Watch::Files { glob } if ext_manifest::glob::path_matches(glob, &rel) => {
+                    Some(Delivery::Files(*id, vec![FileEvent { change, uri: uri.to_string() }]))
+                }
+                _ => None,
+            })
+            .collect();
+        self.queue.extend(out);
+    }
 }
 
 impl Host for Shared {
@@ -360,10 +437,19 @@ impl Host for Shared {
         let ticket = s.next_ticket;
         s.calls.push(call.clone());
         // A URL Codeyard never fetches is `invalid` before any permission is looked at, as in the app.
+        // An IP address is `denied`: no `net` entry can allow it.
         if let Call::Fetch(r) | Call::AuthFetch { request: r, .. } = &call
             && let Err(e) = ext_manifest::calls::check_url(&r.url)
         {
-            s.queue.push_back(Delivery::Complete(ticket, Completion::Failed(Error::Invalid(e.message))));
+            let failed = match e.refusal() {
+                Err(permission) => {
+                    let d = Denied { permission, why: Why::NotDeclared };
+                    s.denied.push(d.clone());
+                    Error::Denied(d)
+                }
+                Ok(message) => Error::Invalid(message),
+            };
+            s.queue.push_back(Delivery::Complete(ticket, Completion::Failed(failed)));
             return ticket;
         }
         if let Some(d) = s.refusal(&call) {
@@ -404,6 +490,9 @@ impl Host for Shared {
             Note::ClearTimer(id) => {
                 s.timers.remove(id);
             }
+            Note::StopWatch(id) => {
+                s.watches.remove(id);
+            }
             Note::SetDiagnostics { uri, diagnostics } => {
                 s.diagnostics.insert(uri.clone(), diagnostics.clone());
             }
@@ -429,7 +518,7 @@ impl Host for Shared {
     fn env(&mut self) -> Env {
         Env {
             codeyard_version: "0.5.0".into(),
-            api_version: "1.0.0".into(),
+            api_version: "1.1.0".into(),
             language: "en".into(),
             theme: ThemeKind::Dark,
             platform: if cfg!(target_os = "macos") {
@@ -489,6 +578,22 @@ impl Host for Shared {
         let id = s.id();
         s.progress.insert(id, title.to_string());
         id
+    }
+
+    fn watch_documents(&mut self, text: bool) -> Result<u64, Error> {
+        let mut s = self.0.borrow_mut();
+        let id = s.add_watch(Watch::Documents { text }, "<glob>")?;
+        // Documents already open arrive first, as in Codeyard.
+        let open: Vec<Document> = s.documents.values().filter(|d| s.readable(&d.uri)).cloned().collect();
+        for d in open {
+            s.queue.push_back(Delivery::Documents(id, vec![State::document_event(&d, DocumentChange::Opened, text)]));
+        }
+        Ok(id)
+    }
+
+    fn watch_files(&mut self, glob: &str) -> Result<u64, Error> {
+        ext_manifest::check_watch_glob(glob).map_err(Error::Invalid)?;
+        self.0.borrow_mut().add_watch(Watch::Files { glob: glob.to_string() }, glob)
     }
 
     /// Refused as Codeyard refuses it (`ext_manifest::calls::check_status_item`): an id the manifest does not

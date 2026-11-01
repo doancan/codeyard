@@ -111,6 +111,12 @@ test("a refused fetch rejects with the manifest line to add", async () => {
   h.dispose();
 });
 
+test("a refusal no manifest entry can lift suggests no line", () => {
+  const e = new DeniedError("read file:///etc/passwd (cannot be granted: the file is outside the workspace)", "not-declared");
+  assert.equal(e.message, "denied: read file:///etc/passwd\n   = fix: none: this cannot be granted, the file is outside the workspace");
+  assert.ok(!e.fix.includes("[permissions]"), e.fix);
+});
+
 test("the global fetch reaches fixtures, with headers, JSON and a streamed body", async () => {
   const h = host();
   h.http("GET", "https://api.github.com/user/repos", 200, [{ name: "codeyard" }]);

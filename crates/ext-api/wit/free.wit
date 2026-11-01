@@ -1,4 +1,4 @@
-package codeyard:api@1.0.0;
+package codeyard:api@1.1.0;
 
 /// Messages for the extension's log, shown in the Inspector.
 @since(version = 1.0.0)

@@ -452,6 +452,18 @@ fn revocations_and_the_pre_release_channel_are_kept_and_follow_the_lock() {
     s.set_revoked(&[(a2.digest, None)]).unwrap();
     assert!(s.revoked().is_empty());
 
+    // A lock the user broke by hand does not hold a revocation back: the store's packages are what counts then.
+    let a3 = s.locked().unwrap()[&id("you.a")].digest;
+    let lock_path = d.0.join("config/extensions.lock.jsonc");
+    let good = std::fs::read_to_string(&lock_path).unwrap();
+    std::fs::write(&lock_path, good.replace("\"format\"", "\"pre_release\": true, \"format\"")).unwrap();
+    assert!(s.locked().is_err());
+    assert!(s.packages().contains(&a3));
+    assert!(s.set_revoked(&[(a3, mark("Stolen key."))]).unwrap());
+    assert_eq!(s.revoked()[&a3.hex()].reason, "Stolen key.");
+    std::fs::write(&lock_path, &good).unwrap();
+    s.set_revoked(&[(a3, None)]).unwrap();
+
     s.set_pre_release(&id("you.a"), true).unwrap();
     assert!(s.locked().unwrap()[&id("you.a")].pre_release);
     s.install(&theme("you.a", "4.0.0"), src()).unwrap();

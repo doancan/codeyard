@@ -33,15 +33,17 @@ function fail(lines) {
 const { build } = await import("esbuild");
 
 // The entry: the SDK's globals first (so the extension's modules see the SDK's `fetch`), then the extension, then the
-// granted interfaces, wired into the guest exports.
+// granted interfaces, wired into the guest exports, and the `events` export.
 const imports = job.interfaces.map((name, i) => `import * as i${i} from "codeyard:api/${name}@${job.api}";`);
 const table = job.interfaces.map((name, i) => `${camel(name)}: i${i}`).join(", ");
 const entry = [
   `import "@codeyard/extension/globals";`,
   `import * as extension from ${JSON.stringify(slash(job.entry))};`,
-  `import { start } from "@codeyard/extension/guest";`,
+  `import { start, events as watchEvents } from "@codeyard/extension/guest";`,
   ...imports,
   `export const guest = start(extension, { ${table} });`,
+  // API 1.1: what watches receive. Exported by every component; Codeyard calls it only for watches it started.
+  `export const events = watchEvents;`,
 ].join("\n");
 
 const sdkFiles = { "": "index.ts", "/guest": "guest.ts", "/globals": "globals.ts" };

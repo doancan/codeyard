@@ -102,6 +102,18 @@ host.instance("gitlab", "git.example.com");  // a self-managed instance the user
     }
 
     #[test]
+    fn watches() {
+        let host = MockHost::allow_all();
+host.open_document("src/a.rs", "rust", "fn a() {}");   // document watches get `opened`
+host.edit_document("src/a.rs", "fn a() {} // TODO"); // `changed`, version 2
+host.save_document("src/a.rs");                       // `saved`
+host.create_file("src/b.rs", "fn b() {}");            // file watches whose glob matches get `created`
+host.change_file("src/b.rs", "fn b() { 1 }");
+host.delete_file("src/b.rs");
+host.allow_host("github.example.com");                // the user allowed this server for `net-from-setting`
+    }
+
+    #[test]
     fn line_137() -> Result<()> {
         let host = MockHost::new();
         host.activate::<Counter>()?;

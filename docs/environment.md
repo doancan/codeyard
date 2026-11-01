@@ -6,7 +6,7 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 
 | Variable | Effect |
 | --- | --- |
-| `CODEYARD_STATE_DIR` | Folder for the local state database, crash reports and backups (default: `~/Library/Application Support/codeyard` on macOS, `~/.local/state/codeyard` elsewhere). Local managed language services also use this profile’s `language-services` subdirectory. |
+| `CODEYARD_STATE_DIR` | Folder for the local state database, crash reports and backups (default: `~/Library/Application Support/codeyard` on macOS, `~/.local/state/codeyard` elsewhere). Local managed language services also use this profile’s `language-services` subdirectory. Extension accounts and `secrets` stay in the system keychain, but under keys of this profile’s own, so a test profile neither reads nor replaces the user’s. |
 | `CODEYARD_CONFIG_DIR` | Folder for `settings.jsonc`, `keybindings.jsonc`, `themes/`, `snippets/`, `projects.jsonc` (default `~/.config/codeyard`). |
 | `CODEYARD_SSH_CONFIG` | Use this file instead of `~/.ssh/config` for host lists and connections. |
 | `CODEYARD_AGENT_DIR` | Optional developer override for `codeyard-agent-<triple>` binaries. Windows uses embedded agents by default; Unix packages use `agents/` next to the executable (or the macOS bundle's Resources directory). |

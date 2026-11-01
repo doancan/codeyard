@@ -5,14 +5,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { checkStatusItem, checkUrl, globsAllow, LIMITS, pathMatches, relative, resultTooLarge } from "../src/testing/rules.ts";
+import { checkStatusItem, checkUrl, globsAllow, ipAddressLine, LIMITS, outsideLine, pathMatches, relative, resultTooLarge } from "../src/testing/rules.ts";
 
 const cases = JSON.parse(readFileSync(new URL("./rule-cases.json", import.meta.url), "utf8")) as {
   limits: Record<string, number>;
   globs: { glob: string; path: string; matches: boolean }[];
   allowed: { globs: string[]; path: string; allowed: boolean }[];
   paths: { folder: string; uri: string; relative: string | null }[];
-  urls: ({ url: string; host: string; port: number } | { url: string; problem: string; message: string })[];
+  urls: ({ url: string; host: string; port: number } | { url: string; problem: string; message: string; host: string; denied: string | null })[];
+  outside: { kind: string; path: string; line: string }[];
   statusItems: { declared: string[] | null; id: string; text: string; tooltip: string | null; expect: { shown: string } | { error: string } }[];
   results: { bytes: number; error: string | null }[];
 };
@@ -33,9 +34,18 @@ test("paths are resolved inside the folder, as in Codeyard", () => {
 test("request URLs are checked as in Codeyard", () => {
   for (const c of cases.urls) {
     const r = checkUrl(c.url);
-    if ("host" in c) assert.deepEqual(r, { host: c.host, port: c.port }, c.url);
-    else assert.deepEqual(r, { problem: c.problem, message: c.message }, c.url);
+    if ("port" in c) {
+      assert.deepEqual(r, { host: c.host, port: c.port }, c.url);
+      continue;
+    }
+    assert.deepEqual(r, { problem: c.problem, message: c.message, host: c.host }, c.url);
+    // An IP address is a denial no entry can lift, with Codeyard's line.
+    assert.equal(c.problem === "ip-literal" ? ipAddressLine(c.host) : null, c.denied, c.url);
   }
+});
+
+test("refusals no entry can lift read as in Codeyard", () => {
+  for (const c of cases.outside) assert.equal(outsideLine(c.kind, c.path), c.line);
 });
 
 test("status items and answer sizes are checked as in Codeyard", () => {

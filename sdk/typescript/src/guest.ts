@@ -19,10 +19,11 @@ import {
   type CodeLens,
   type CompletionItem,
   type CompletionList,
+  type DocumentEvent,
   type Hover,
   type InlayHint,
 } from "./types.ts";
-import type { Bindings, Guest, Request, Response, WitCodeAction, WitCompletionItem } from "./wit.ts";
+import type { Bindings, Events, Guest, Request, Response, WitCodeAction, WitCompletionItem, WitDocumentEvent } from "./wit.ts";
 
 /** An extension module: `export function activate(ctx) { … }`, optionally `export function deactivate(ctx) { … }`. */
 export interface ExtensionModule {
@@ -156,6 +157,30 @@ export function start(extension: ExtensionModule, bindings: Bindings): Guest {
     },
   };
 }
+
+function documentEvent(e: WitDocumentEvent): DocumentEvent {
+  const out: DocumentEvent = { change: e.change, uri: e.uri, language: e.language, version: e.version };
+  if (e.text !== undefined) out.text = e.text;
+  return out;
+}
+
+/**
+ * The `events` export (API 1.1): each watch's events to its handler. A document watch's handler runs once per event, in
+ * order; a file watch's once per batch. `cyx` exports it from the component's entry next to `guest`.
+ */
+export const events: Events = {
+  documents(watch, list) {
+    const f = handlers.documentWatches.get(watch);
+    if (!f) return;
+    background(async () => {
+      for (const e of list) await f(ctx, documentEvent(e));
+    });
+  },
+  files(watch, list) {
+    const f = handlers.fileWatches.get(watch);
+    if (f) background(() => f(ctx, list.map((e) => ({ change: e.change, uri: e.uri }))));
+  },
+};
 
 function respond(id: bigint, result: { tag: "ok"; val: Response } | { tag: "err"; val: ReturnType<typeof toWit> }): void {
   if (handlers.cancelledRequests.delete(id)) return;

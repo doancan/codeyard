@@ -97,6 +97,29 @@ The same calls as the Rust SDK, in camelCase:
 | `ctx.spawn`, `ctx.run` | `ctx.spawn(command)` (`for await (const chunk of process)`, `await process.wait()`), `ctx.run(command)` |
 | `ctx.secret`, `ctx.set_secret`, `ctx.delete_secret` | `ctx.secret`, `ctx.setSecret`, `ctx.deleteSecret`; ask for a secret with `ctx.input({ prompt, password: true })` |
 | `ctx.read_clipboard`, `ctx.send_to_terminal` | `ctx.readClipboard`, `ctx.sendToTerminal` |
+| `ctx.on_documents(text, …)`, `ctx.on_files(glob, …)` → `Watch` | `ctx.onDocuments(async (ctx, e) => …, { text })`, `ctx.onFiles(glob, async (ctx, events) => …)` → `Watch` with `stop()` |
+| `ctx.open_in_editor(uri, selection)` | `ctx.openInEditor(uri, selection?)` |
+
+Watches ([commands.md](commands.md#watching-documents-and-files)) keep a list current without polling:
+
+```ts
+  ctx.onDocuments((ctx, e) => {
+    todos.set(e.uri, (e.text ?? "").split("\n").filter((l) => l.includes("TODO")).length);
+  }, { text: true });
+```
+
+```ts
+  ctx.onFiles("src/**/*.ts", async (ctx, events) => {
+    for (const e of events) {
+      if (e.change === "deleted") todos.delete(e.uri);
+      else todos.set(e.uri, (await ctx.readText(e.uri)).split("\n").filter((l) => l.includes("TODO")).length);
+    }
+  });
+```
+
+```ts
+    if (uri) await ctx.openInEditor(uri, { start: { line: 2, character: 0 }, end: { line: 2, character: 4 } });
+```
 
 Quick picks answer with the index of the item picked (or `undefined` when dismissed), as in Rust. A view's tree is built with `ui`, as in Rust: `ui.column([ui.text("3 clicks"), ui.button("add", "Add one")])` (see [Views](views.md#build-it-with-the-sdk)). It is a plain `ViewNode` object in the form of the [views reference](reference/ui.md), typed per element, so a hand-written tree type-checks too. `console.log` goes to the extension's log, as `ctx.log` does.
 

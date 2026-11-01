@@ -17,6 +17,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   works in them. The TypeScript `ctx.onViewEvent` handler gets a typed `ViewEvent`.
 - docs/extensions/reference/globs.md: how `read`, `write` and `workspace-contains` globs match.
 
+- Extension API 1.1 (`codeyard:api@1.1.0`), additions only: components built against 1.0 run unchanged, and an
+  extension that uses nothing new still needs only API 1.0. Both ship in this release.
+  - Watches: `ctx.on_documents` (TypeScript `ctx.onDocuments`) reports documents opening, changing (once typing
+    pauses, with the version, the text only when asked) and being saved; `ctx.on_files(glob)` (`ctx.onFiles`) reports
+    workspace files created, changed and deleted, by Codeyard or anything else, at most one batch a second. Both need
+    `read`, and an event comes only for a path the extension may read. A TODO list no longer has to poll.
+  - `ctx.open_in_editor(uri, selection)` (`ctx.openInEditor`): `core:editor.open` also takes
+    `{"uri": …, "selection": range}`, so a view can jump to a line.
+  - `[permissions] net-from-setting = "<setting>"`: an extension that talks to a server the user names in a setting,
+    such as a GitHub Enterprise host, reaches it once the user allows the host on the extension page (Servers ›
+    Allow Host…, confirmed in a system dialog). Nothing the extension, a workspace or a setting writes allows a host.
+  - The Rust and TypeScript mock hosts open, edit and save documents, change files and allow hosts; `cyx test` gives
+    each watch a file to watch and treats the host in a `net-from-setting` setting's default as allowed.
+
 - The Rust SDK has `read_many`, `search`, `rename` and `create_directory`, and the TypeScript SDK `readMany`, `rename`
   and `createDirectory`, as the API has them. `read_many` reads many files in one round trip: 2000 reads one after
   another take about 2.5 s.
@@ -468,6 +482,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A native `cargo build` or `cargo clippy` of a Rust extension no longer warns that its type is never constructed.
 - The branch-status example declares its status bar item, which Codeyard did not show.
 
+- `codeyard --update-extensions` printed nothing and exited 0 when `extensions.lock.jsonc` could not be read (an
+  unknown key after a hand edit), hiding registry errors and revocations. It now prints why and exits 1, and a
+  version a registry revoked is still stopped: revocations are checked against the packages in the store, without
+  the lock.
+- A revoked version whose newer version was withdrawn stayed stopped for good. It now goes back to the newest earlier
+  version that may install, as a withdrawn one does, and `--update-extensions` says so when there is none.
+- A denied read or write outside the workspace, and a `fetch` to an IP address, told the author to add a line no
+  manifest accepts. Both now say they cannot be granted, and why (Rust and TypeScript SDKs, the Inspector).
+- Typing words at the top of a large file no longer redraws the window behind the keys (#215). A key whose reparse
+  goes to the background (stray words make tree-sitter recover from the error across the whole file) used to redraw
+  the editor when that parse finished, often just as the next key came. Now the new tree is compared with the old
+  one only where they differ (`changed_ranges`) and only on the lines drawn; it asks for a frame only if something on
+  screen changes color, and only once typing pauses, since the next key's frame draws it anyway. Edits made while a
+  parse runs go to the next background parse instead of being reparsed on the UI thread, and the old tree (about
+  3 ms to free for a 10 000-line file in that state) is freed on a thread of its own. Painting applies any edit the
+  tree has not seen yet, whichever way it reached the buffer.
+
 - Extension authoring, from two outside-author trials: `cyx check` names the Codeyard release an extension needs
   without claiming that this preview build cannot run it, and names the API in "this Codeyard (API 1.0.0)"; a
   component built against an old API reports it once, not once per import. `cyx publish` says "in 48 hours", not 49,
@@ -477,9 +508,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and reports every unknown manifest field at once. `cyx check --fix` lists every missing permission it cannot add,
   and for TypeScript says what to add by hand. `cyx package -o` into a missing folder fails before the build. A list
   or table with too many rows says to show fewer, not to "send at most 10000 at a time".
+
 - `cyx dev` notes the sources before its first build, so a file saved while it builds, checks the extension or
   starts Codeyard is rebuilt on the next poll instead of being missed until the next save.
-
 - Unit tests no longer start an installed language server from generic editor and workbench fixtures: under test
   `lsp.enabled` defaults to off and LSP integration tests turn it on explicitly. The shipped default stays on.
 - On a busy machine, closing a window could leave its terminals running for 5 minutes, and the last keys typed into a
@@ -541,6 +572,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- A symbolic link in the workspace no longer takes an extension outside what it may read or write. With
+  `read = ["src/**"]`, `src/out -> /etc` gave it `/etc/passwd`, and `src/settings.txt -> ../.env` gave it `.env`
+  without naming it. Every file call (read, stat, write, delete, rename, new folder), file listing, search result
+  and `core:editor.open` is now checked again where the path really leads on the workspace's host, local or SSH
+  (protocol 18, `RealPaths`): it must stay in the workspace and match the rules; listings and search leave such files
+  out.
+- `codeyard --install-extension publisher.name` installed from a registry whatever the version asked for (all files
+  and the network, or programs) without showing it. A registry version or package file that asks for permissions now
+  prints its consent sheet and installs only with `--accept-permissions`, for both kinds of install.
+- Diagnostics an extension pushes need a `[[diagnostics]]` declaration and a file of a language it lists, in the
+  workspace or open in an editor. A message with bidirectional or zero-width characters is dropped, one longer than
+  4096 characters is cut short, and one extension has diagnostics on at most 1000 files at once.
+- The terminal daemon (`codeyard --daemon`) stops on SIGTERM. Started from a background thread, it inherited a signal
+  mask that blocked SIGTERM on macOS, so only `kill -9` stopped it.
+- A profile with its own `CODEYARD_STATE_DIR` keeps extension accounts and `secrets` apart from the user's in the
+  system keychain, so a test run neither reads nor replaces them.
 - `cyx package` and `cyx publish` no longer put secrets and build input in a package: `.env` files, keys (`*.key`,
   `*.pem`, `*.p12`, SSH keys), `.npmrc` and other token files, hidden files, `src/`, Rust and TypeScript sources,
   `Cargo.toml`, `Cargo.lock`, `package.json` (which held the author's local `--sdk` path) and lock files stay out.

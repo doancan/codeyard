@@ -18,7 +18,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { CodeyardError, DeniedError, fromWit } from "../errors.ts";
-import { activationOutcome, installGlobals, start, type ExtensionModule } from "../guest.ts";
+import { activationOutcome, events as watchEvents, installGlobals, start, type ExtensionModule } from "../guest.ts";
 import { complete, event, install } from "../runtime.ts";
 import {
   fromWitCheckout,
@@ -57,7 +57,7 @@ import type {
 import { fromWitCodeLens, fromWitDiagnostic, toWitCodeLens, toWitDiagnostic } from "../types.ts";
 import type * as W from "../wit.ts";
 import { allowsNet, permissionsOf, type Permissions } from "./permissions.ts";
-import { checkStatusItem, checkUrl, globsAllow, LIMITS, outsideLine, pathMatches, relative as relativeTo, resultTooLarge } from "./rules.ts";
+import { checkStatusItem, checkUrl, globsAllow, ipAddressLine, LIMITS, outsideLine, pathMatches, relative as relativeTo, resultTooLarge } from "./rules.ts";
 import { parseToml, type Table } from "./toml.ts";
 import { checkEvent, checkView } from "./view-check.ts";
 
@@ -95,7 +95,14 @@ interface HttpFixture {
   body: Uint8Array;
 }
 
-type Delivery = { ticket: bigint; event: W.StreamEvent } | { ticket: bigint; complete: W.Completion };
+type Delivery =
+  | { ticket: bigint; event: W.StreamEvent }
+  | { ticket: bigint; complete: W.Completion }
+  | { watch: bigint; documents: W.WitDocumentEvent[] }
+  | { watch: bigint; files: W.WitFileEvent[] };
+
+/** Watches one extension may have at once, as in Codeyard (`limits::WATCHES`). */
+const WATCHES = 16;
 
 const bytes = (v: string | Uint8Array): Uint8Array => (typeof v === "string" ? new TextEncoder().encode(v) : v);
 const text = (v: Uint8Array): string => new TextDecoder().decode(v);
@@ -135,6 +142,8 @@ export class MockHost {
   #accounts = new Map<string, { signedIn: string } | "signed-out" | "declines">();
   /** Self-managed instances the user added (#184), as `<provider>@<host>`. */
   #instances = new Set<string>();
+  /** Hosts the user allowed for `net-from-setting`. */
+  #allowedHosts = new Set<string>();
   #untrusted = false;
   #nextTicket = 0n;
   #nextId = 0n;
@@ -162,6 +171,10 @@ export class MockHost {
   #progress = new Map<bigint, string>();
   #statusItems = new Map<string, StatusItem>();
   #diagnostics = new Map<string, Diagnostic[]>();
+  /** Documents opened with `openDocument`, and the watches the extension started. */
+  #documents = new Map<string, Document>();
+  #documentWatches = new Map<bigint, { text: boolean }>();
+  #fileWatches = new Map<bigint, string>();
 
   #calls: Call[] = [];
   #logs: [LogLevel, string][] = [];
@@ -340,6 +353,12 @@ export class MockHost {
   /** The indices picked in the next quick pick. */
   answerPick(indices: number[]): this {
     this.#picks.push(indices);
+    return this;
+  }
+
+  /** The user allowed `host` on the extension page, for an extension that declares `[permissions] net-from-setting`. */
+  allowHost(host: string): this {
+    this.#allowedHosts.add(host.toLowerCase());
     return this;
   }
 
@@ -611,6 +630,86 @@ export class MockHost {
     this.#clock = end;
   }
 
+  // ---- documents and files, for watches ----------------------------------------------------------------------------
+
+  /** The user opens a document: `opened` reaches the extension's document watches. */
+  async openDocument(path: string, language: string, text: string): Promise<void> {
+    const doc = { uri: this.uri(path), language, version: 1, text };
+    this.#documents.set(doc.uri, doc);
+    await this.#documentEvent("opened", doc);
+  }
+
+  /** The user edits an open document: its version goes up and `changed` reaches document watches. */
+  async editDocument(path: string, text: string): Promise<void> {
+    const doc = this.#documents.get(this.uri(path));
+    if (!doc) throw new Error(`${path} is not open; call host.openDocument first`);
+    doc.version += 1;
+    doc.text = text;
+    await this.#documentEvent("changed", doc);
+  }
+
+  /** The user saves an open document: `saved` reaches document watches. */
+  async saveDocument(path: string): Promise<void> {
+    const doc = this.#documents.get(this.uri(path));
+    if (!doc) throw new Error(`${path} is not open; call host.openDocument first`);
+    this.#files.set(doc.uri, bytes(doc.text));
+    await this.#documentEvent("saved", doc);
+  }
+
+  /** A workspace file appears (from Codeyard or anything else): `created` reaches the file watches whose glob matches. */
+  async createFile(path: string, contents: string | Uint8Array): Promise<void> {
+    this.#files.set(this.uri(path), bytes(contents));
+    await this.#fileEvent("created", this.uri(path));
+  }
+
+  async changeFile(path: string, contents: string | Uint8Array): Promise<void> {
+    this.#files.set(this.uri(path), bytes(contents));
+    await this.#fileEvent("changed", this.uri(path));
+  }
+
+  async deleteFile(path: string): Promise<void> {
+    this.#files.delete(this.uri(path));
+    await this.#fileEvent("deleted", this.uri(path));
+  }
+
+  /** Events go only where Codeyard sends them: paths the manifest's `read` allows (in untrusted folders too). */
+  #readable(uri: string): boolean {
+    const rel = relative(uri);
+    return rel !== undefined && (!this.#permissions || globsAllow(this.#permissions.read, rel));
+  }
+
+  #documentDelivery(watch: bigint, text: boolean, change: W.DocumentChange, doc: Document): Delivery {
+    return { watch, documents: [{ change, uri: doc.uri, language: doc.language, version: doc.version, text: text ? doc.text : undefined }] };
+  }
+
+  async #documentEvent(change: W.DocumentChange, doc: Document): Promise<void> {
+    if (!this.#readable(doc.uri)) return;
+    for (const [watch, { text }] of this.#documentWatches) this.#queue.push(this.#documentDelivery(watch, text, change, doc));
+    await this.#pump();
+  }
+
+  async #fileEvent(change: W.FileChange, uri: string): Promise<void> {
+    if (!this.#readable(uri)) return;
+    for (const [watch, glob] of this.#fileWatches) {
+      // As in Codeyard: the glob against the whole path in the folder.
+      if (pathMatches(glob, relative(uri) ?? "")) this.#queue.push({ watch, files: [{ change, uri }] });
+    }
+    await this.#pump();
+  }
+
+  /** A watch the manifest does not allow is refused as the exthost refuses it; past the limit it is `invalid`. */
+  #watch(line: string): bigint {
+    if (this.#permissions && this.#permissions.read.length === 0) {
+      const denied = new DeniedError(line, "not-declared");
+      this.#denied.push(denied);
+      throw { payload: { tag: "denied", val: { permission: line, why: "not-declared" } } };
+    }
+    if (this.#documentWatches.size + this.#fileWatches.size >= WATCHES) {
+      throw { payload: { tag: "invalid", val: `an extension may have ${WATCHES} watches at once; stop one first` } };
+    }
+    return ++this.#nextId;
+  }
+
   /** Send any request and wait for its answer. */
   async request(request: W.Request): Promise<W.Response> {
     const id = ++this.#nextRequest;
@@ -655,7 +754,9 @@ export class MockHost {
         // Before `activate` there is no guest yet, but a call the test itself made (`fetch`) still waits for its answer.
         const to = this.#guest ?? { event, complete };
         if ("event" in d) to.event(d.ticket, d.event);
-        else to.complete(d.ticket, d.complete);
+        else if ("complete" in d) to.complete(d.ticket, d.complete);
+        else if ("documents" in d) watchEvents.documents(d.watch, d.documents);
+        else watchEvents.files(d.watch, d.files);
       }
     } finally {
       this.#pumping = undefined;
@@ -767,7 +868,7 @@ export class MockHost {
     // A path outside the workspace folder is refused whatever the globs say, as Codeyard's broker refuses it.
     const path = (perm: "read" | "write", uri: string, sends: boolean) => {
       const rel = relative(uri);
-      if (rel === undefined) return p ? new DeniedError(outsideLine(uri), "not-declared") : undefined;
+      if (rel === undefined) return p ? new DeniedError(outsideLine(perm, uri), "not-declared") : undefined;
       return check((p) => globsAllow(p[perm], rel), `${perm} = ["${rel}"]`, sends);
     };
     const uri = args[0] as string;
@@ -791,6 +892,10 @@ export class MockHost {
         return uri === active ? undefined : path("write", uri, true);
       case "net/fetch": {
         const host = hostOf((args[0] as W.HttpRequest).url);
+        // A host the user allowed for `net-from-setting` counts as declared; another is theirs to allow, not the author's.
+        if (p?.netFromSetting !== undefined && !allowsNet(p, host)) {
+          return check(() => this.#allowedHosts.has(host), `net-from-setting host = "${host}"`, true);
+        }
         return check((p) => allowsNet(p, host), `net = ["${host}"]`, true);
       }
       // An instance's account (`gitlab@git.example.com`) is granted by its provider's entry, once the user added it.
@@ -841,13 +946,15 @@ export class MockHost {
   }
 
   /**
-   * Start a call: record it, refuse it or answer it, and queue the answer for after the call returns. `invalid` is
-   * what Codeyard answers before it looks at permissions (a URL it never fetches).
+   * Start a call: record it, refuse it or answer it, and queue the answer for after the call returns. `early` is what
+   * Codeyard answers before it looks at permissions: `invalid` for a URL it never fetches, a denial no entry can lift for
+   * one that names an IP address.
    */
-  #start(name: string, args: unknown[], answer: () => [W.StreamEvent[], W.Completion], invalid?: string): bigint {
+  #start(name: string, args: unknown[], answer: () => [W.StreamEvent[], W.Completion], early?: string | DeniedError): bigint {
     const ticket = ++this.#nextTicket;
     this.#calls.push({ name, args });
-    const refused = invalid === undefined ? this.#refusal(name, args) : undefined;
+    const invalid = typeof early === "string" ? early : undefined;
+    const refused = early instanceof DeniedError ? early : invalid === undefined ? this.#refusal(name, args) : undefined;
     if (invalid !== undefined) {
       this.#queue.push({ ticket, complete: { tag: "failed", val: { tag: "invalid", val: invalid } } });
     } else if (refused) {
@@ -864,7 +971,7 @@ export class MockHost {
 
   #fetch(name: string, provider: string | undefined, r: W.HttpRequest): bigint {
     const url = checkUrl(r.url);
-    const invalid = "message" in url ? url.message : undefined;
+    const early = !("message" in url) ? undefined : url.problem === "ip-literal" ? new DeniedError(ipAddressLine(url.host), "not-declared") : url.message;
     return this.#start(name, provider === undefined ? [r] : [provider, r], () => {
       if (provider !== undefined && r.headers.some(([n]) => n.trim().toLowerCase() === "authorization")) {
         return [[], { tag: "failed", val: { tag: "invalid", val: "the authorization header is added by Codeyard; remove it from the request" } }];
@@ -888,7 +995,7 @@ export class MockHost {
         ],
         { tag: "done" },
       ];
-    }, invalid);
+    }, early);
   }
 
   #bindings(): W.Bindings {
@@ -900,7 +1007,7 @@ export class MockHost {
       env: {
         info: () => ({
           codeyardVersion: "0.5.0",
-          apiVersion: "1.0.0",
+          apiVersion: "1.1.0",
           language: "en",
           theme: "dark",
           platform: process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux",
@@ -978,6 +1085,23 @@ export class MockHost {
       },
       ui: { invalidate: (view) => void this.#invalidated.push(view) },
       scm: { refresh: (provider) => void this.#scmRefreshed.push(provider) },
+      watch: {
+        documents: (text) => {
+          const w = this.#watch(`read = ["<glob>"]`);
+          this.#documentWatches.set(w, { text });
+          // The documents already open arrive first, as in Codeyard.
+          for (const doc of this.#documents.values()) {
+            if (this.#readable(doc.uri)) this.#queue.push(this.#documentDelivery(w, text, "opened", doc));
+          }
+          return w;
+        },
+        files: (glob) => {
+          const w = this.#watch(`read = ["${glob}"]`);
+          this.#fileWatches.set(w, glob);
+          return w;
+        },
+        stop: (w) => void (this.#documentWatches.delete(w) || this.#fileWatches.delete(w)),
+      },
       documents: {
         active: () => this.#start("documents/active", [], () => [[], { tag: "document", val: this.#active }]),
         selections: () => this.#start("documents/selections", [], () => [[], { tag: "ranges", val: this.#selections }]),

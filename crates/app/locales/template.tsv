@@ -86,6 +86,8 @@ All Branches
 All conflicts are resolved	
 All levels	
 Allow	
+Allow Host	
+Allow Host…	
 Allow file access	
 Allow for this session	
 Already debugging: Shift+F5 stops the session.	
@@ -369,6 +371,7 @@ Connect to SSH host…
 Connect to WSL…	
 Connect to a Container…	
 Connect to a running container…	
+Connect to a server you allow, named in its “{}” setting	
 Connect to any website	
 Connect to which WSL distribution?	
 Connect to which running container?	
@@ -444,6 +447,7 @@ Copying files here works with a connected SSH host: connect first (⌃R).
 Copying…	
 Could not add the configuration: {}	
 Could not add the instance: {}	
+Could not allow the server: {}	
 Could not be compared	
 Could not blame: {}	
 Could not change {}	
@@ -491,6 +495,7 @@ Could not read {}: {}
 Could not read: {}	
 Could not refresh container data: {}. Check Docker access on the SSH host and retry.	
 Could not remove the instance: {}	
+Could not remove the server: {}	
 Could not resolve “{}”: check the spelling and the network (the request ran on {}).	
 Could not run “{}”: {}	
 Could not save files before debugging: {}	
@@ -1090,6 +1095,7 @@ History is collected while monitoring is active. CPU can exceed 100% across core
 History of {}	
 Host and client id of your {} server, such as git.example.com 3f2a9c	
 Host name (from ~/.ssh/config) or user@host	
+Host name of the server {} may connect to, such as github.example.com	
 Hover	
 Hover an option to preview the result.	
 Hue	
@@ -1135,6 +1141,7 @@ Install from Folder…
 Install on {}	
 Install podman-compose to open a Compose project with Podman, then try again.	
 Install the extension to add an instance; one in development has none.	
+Install the extension to allow a server; one in development has none.	
 Install which dictionary? (English is built in)	
 Install {}	
 Install {}?	
@@ -1159,7 +1166,9 @@ Invalid pattern
 Invalid string	
 It brings its own programs, built for each platform. They run on the computer that holds the workspace (this one, or the SSH server) with your rights.	
 It can't be moved to the Trash ({}). Deleting it permanently can't be undone.	
+It connects only to the servers you allow here, such as the one in its “{}” setting.	
 It declares no permissions.	
+It may send requests to {0} over HTTPS, with whatever it can read or store, such as a token you give it. Remove it on the extension's page in Extensions.	
 It may sign in to your account on {0} with the OAuth application you registered there (client id {1}, redirect URI {2}). Codeyard signs its requests to {0} with that account; the extension never sees the token. Remove it on the extension's page in Extensions.	
 It wants to read the text you copied, here or in other apps.	
 It wants to run {0} on the remote host {1}, with your account there.	
@@ -1220,6 +1229,7 @@ Left ↔ Right
 Let programs in the terminal write to the clipboard	
 Let the language server format while typing }, ; or Enter	
 Let {0} act as your GitHub account {1}?	
+Let {0} connect to {1}?	
 Let {0} run programs on {1}?	
 Let {0} sign in to your {1} account?	
 Let {0} use your account on {1}?	
@@ -1521,6 +1531,7 @@ Nothing to commit
 Nothing to rename here	
 Nothing to replace: the files no longer contain matches.	
 Nothing to run: select some text or put the cursor on a line.	
+Nothing was installed. Run the command again with --accept-permissions to grant these, or install it from the Extensions view.	
 Nothing was installed. This release isn't signed, so Codeyard can't verify it.	
 Nothing was installed. What the update server sent didn't match the signed checksums, so Codeyard discarded it.	
 Nothing yet.	
@@ -2059,6 +2070,7 @@ Sending {} {}…
 Sep	
 Served folder (empty: automatic; relative to the workspace, or an absolute path on the active host)	
 Server binding	
+Servers	
 Services	
 Set	
 Set Label…	
@@ -2641,6 +2653,7 @@ Where .http requests are sent from: the workspace host (the server when connecte
 Where forwarded ports listen: this computer only, or every network interface	
 Whole word	
 Whole word (⌥W)	
+Why: {}	
 Width of the line cursor (px)	
 Window	
 Windows on a server reconnect, which can ask for a password.	
@@ -2732,6 +2745,7 @@ decoded as {}
 default	
 deleted	
 denied ({0}); add to [permissions]: {1}	
+denied: {0}; this cannot be granted: {1}	
 deprecated	
 deprecated, use {}	
 destination	
@@ -3047,6 +3061,7 @@ your words
 {0} lines, showing lines {1}–{2}	
 {0} may again: {1}	
 {0} may no longer: {1}	
+{0} may now connect to {1}.	
 {0} needs strings, got {1} and {2}	
 {0} now tracks {1}	
 {0} of {1} MB	
@@ -3058,12 +3073,15 @@ your words
 {0} only on the left, {1} only on the right, {2} changed, {3} identical, {4} errors	
 {0} result in {1} files|{0} results in {1} files	
 {0} says why: “{1}”	
+{0} stays stopped: the registry revoked the installed version ({1}) and has no other version to install	
 {0} was left alone: {1}|{0} were left alone, the first one {1}	
 {0} was not installed from a registry, so it has no package for {1}; install the package built for {1}	
 {0} was stopped: it needs {1}, which was stopped	
 {0} was stopped: the registry revoked this version ({1})	
 {0} was updated to version {1}.	
 {0} went back to version {1}: its publisher withdrew {2}.	
+{0} went back to version {1}: the registry revoked {2}.	
+{0} {1} ({2}) asks to:	
 {0} {1} waits for your OK in the Extensions view.	
 {0} {1}: I/O {2}, overhead {3}	
 {0} {1}: guest {2}	
@@ -3118,7 +3136,6 @@ your words
 {} accepted the connection but sent no reply.	
 {} added	
 {} already exists. Choose another name.	
-{} asks for permissions: install it from the Extensions view to review them	
 {} bookmark|{} bookmarks	
 {} bytes of output were lost while no window was attached	
 {} cannot be negated	

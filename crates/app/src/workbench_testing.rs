@@ -785,6 +785,16 @@ impl Workbench {
         self.install_extension_from_folder(&InstallExtensionFromFolder, window, cx);
     }
 
+    /// A notification from extension `id`'s exthost (diagnostics, decorations, status items), as it arrives.
+    pub fn extension_notify_for_test(&mut self, id: &str, n: ext_api::value::Notify, cx: &mut Context<Self>) {
+        self.on_provider_notify(id, n, cx);
+    }
+
+    /// Every file's diagnostics from extensions.
+    pub fn extension_problems_for_test(&self) -> std::collections::BTreeMap<String, Vec<crate::lsp::Diagnostic>> {
+        self.extension_problems().map(|(p, d)| (p.clone(), d)).collect()
+    }
+
     pub fn permission_lines_for_test(p: &ext_manifest::Permissions) -> Vec<String> {
         ext_glue::permission_lines(p)
     }

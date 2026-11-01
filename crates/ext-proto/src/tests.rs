@@ -55,6 +55,10 @@ fn every_frame_kind_round_trips() {
     round_trip(ToHost::Env(env()));
     round_trip(ToHost::Shutdown);
     round_trip(ToHost::Grants(vec!["net".into()]));
+    use ext_api::value::{DocumentChange, DocumentEvent, FileChange, FileEvent};
+    let doc = DocumentEvent { change: DocumentChange::Saved, uri: "file:///work/a.rs".into(), language: "rust".into(), version: 4, text: None };
+    round_trip(ToHost::Documents { watch: 2, events: vec![doc] });
+    round_trip(ToHost::Files { watch: 3, events: vec![FileEvent { change: FileChange::Deleted, uri: "file:///work/b.rs".into() }] });
     round_trip(ToApp::Denied {
         call: "net/fetch".into(),
         denied: ext_api::value::Denied { permission: "net".into(), why: ext_api::value::Why::RevokedByUser },

@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use ext_api::value::{Completion, EnvInfo, LogLevel, Notify, Platform, Request, Response, Start, ThemeKind};
+use ext_api::value::{
+    Completion, DocumentChange, DocumentEvent, EnvInfo, FileChange, FileEvent, LogLevel, Notify, Platform, Request, Response, Start, ThemeKind,
+};
 use ext_proto::{Hello, Reader, ToApp, ToHost};
 use sha2::{Digest, Sha256};
 
@@ -204,6 +206,68 @@ fn a_component_built_against_0_1_still_runs() {
     let mut h = Host::start(hello(&d, &c, sha, &[], false)).ready();
     assert_eq!(h.json("echo", "[1,2]"), "[1,2]");
     assert_eq!(h.json("env", ""), ext_api::VERSION.to_string());
+    h.send(&ToHost::Shutdown);
+    assert!(h.exit().success());
+}
+
+/// A component built against API 1.0.0 (the probe as it was before 1.1, kept as testdata/probe-1.0.wasm) runs unchanged
+/// on this host: its `@1.0.0` imports bind to 1.1, it has no `events` export, and events sent to it are dropped.
+#[test]
+fn a_component_built_against_1_0_runs_unchanged() {
+    let old = include_bytes!("../testdata/probe-1.0.wasm");
+    assert!(old.windows(b"codeyard:api/guest@1.0.0".len()).any(|w| w == b"codeyard:api/guest@1.0.0"), "the fixture is a 1.0.0 build");
+    assert!(!old.windows(b"codeyard:api/events@".len()).any(|w| w == b"codeyard:api/events@"));
+    let d = dir("api-1-0");
+    let (c, sha) = compile_wasm(&d, old);
+    let mut h = Host::start(hello(&d, &c, sha, &["workspace"], false)).ready();
+    assert_eq!(h.json("echo", "[1,2]"), "[1,2]");
+    h.send(&ToHost::Files { watch: 1, events: vec![FileEvent { change: FileChange::Created, uri: "file:///work/a.txt".into() }] });
+    assert_eq!(h.json("env", ""), ext_api::VERSION.to_string());
+    h.send(&ToHost::Shutdown);
+    assert!(h.exit().success());
+}
+
+/// `watch` (API 1.1): a watch is announced to the app, refused when `read` is not granted or past the limit, and the
+/// app's events reach the guest's `events` export.
+#[test]
+fn watches_reach_the_app_and_their_events_reach_the_guest() {
+    let d = dir("watch");
+    let (c, sha) = compile_wasm(&d, include_bytes!("../testdata/probe.wasm"));
+    // Without `workspace` (read) granted, the watch is refused in the exthost and the app hears of the denial.
+    let mut h = Host::start(hello(&d, &c, sha, &[], false)).ready();
+    let id = h.command("watch-docs", "");
+    let (answer, other) = h.answer(id);
+    assert_eq!(answer, Ok(Response::Json(r#"Err(Error::Denied(Denied { permission: "read", why: Why::RevokedByUser }))"#.into())));
+    assert!(other.iter().any(|m| matches!(m, ToApp::Denied { call, .. } if call == "watch/documents")), "{other:?}");
+    h.send(&ToHost::Shutdown);
+    assert!(h.exit().success());
+
+    let mut h = Host::start(hello(&d, &c, sha, &["workspace", "watch"], false)).ready();
+    let id = h.command("watch-docs", "\"text\"");
+    let (answer, other) = h.answer(id);
+    assert_eq!(answer, Ok(Response::Json("Ok(1)".into())));
+    assert!(other.contains(&ToApp::Notify(Notify::WatchDocuments { id: 1, text: true })), "{other:?}");
+    let id = h.command("watch-files", "\"src/**/*.rs\"");
+    let (answer, other) = h.answer(id);
+    assert_eq!(answer, Ok(Response::Json("Ok(2)".into())));
+    assert!(other.contains(&ToApp::Notify(Notify::WatchFiles { id: 2, glob: "src/**/*.rs".into() })), "{other:?}");
+    // A glob `read` could not have is refused before it reaches the app.
+    assert!(h.json("watch-files", "\"../secret\"").starts_with("Err(Error::Invalid("), "a bad glob");
+
+    let doc =
+        DocumentEvent { change: DocumentChange::Saved, uri: "file:///work/a.txt".into(), language: "plaintext".into(), version: 3, text: Some("hi".into()) };
+    h.send(&ToHost::Documents { watch: 1, events: vec![doc] });
+    h.send(&ToHost::Files { watch: 2, events: vec![FileEvent { change: FileChange::Deleted, uri: "file:///work/src/b.rs".into() }] });
+    assert_eq!(h.json("watched", ""), "1 saved file:///work/a.txt plaintext v3 Some(\"hi\")\n2 deleted file:///work/src/b.rs\n");
+
+    // Stopping one tells the app; the limit counts only the watches still running.
+    let id = h.command("unwatch", "\"2\"");
+    let (_, other) = h.answer(id);
+    assert!(other.contains(&ToApp::Notify(Notify::StopWatch { id: 2 })), "{other:?}");
+    for _ in 1..ext_manifest::limits::WATCHES {
+        assert!(h.json("watch-docs", "").starts_with("Ok("));
+    }
+    assert!(h.json("watch-docs", "").starts_with("Err(Error::Invalid("), "past the limit");
     h.send(&ToHost::Shutdown);
     assert!(h.exit().success());
 }

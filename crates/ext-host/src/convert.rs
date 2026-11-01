@@ -3,6 +3,7 @@
 use ext_api::value as v;
 
 use crate::bindings::codeyard::api as g;
+use crate::bindings::exports::codeyard::api::events as ge;
 use crate::bindings::exports::codeyard::api::guest as gx;
 
 mod pulls;
@@ -406,6 +407,28 @@ pub fn environment(e: &v::EnvInfo) -> g::env::Environment {
         },
         remote: e.remote,
         workspace_trusted: e.workspace_trusted,
+    }
+}
+
+impl From<v::DocumentEvent> for ge::DocumentEvent {
+    fn from(e: v::DocumentEvent) -> Self {
+        let change = match e.change {
+            v::DocumentChange::Opened => ge::DocumentChange::Opened,
+            v::DocumentChange::Changed => ge::DocumentChange::Changed,
+            v::DocumentChange::Saved => ge::DocumentChange::Saved,
+        };
+        ge::DocumentEvent { change, uri: e.uri, language: e.language, version: e.version, text: e.text }
+    }
+}
+
+impl From<v::FileEvent> for ge::FileEvent {
+    fn from(e: v::FileEvent) -> Self {
+        let change = match e.change {
+            v::FileChange::Created => ge::FileChange::Created,
+            v::FileChange::Changed => ge::FileChange::Changed,
+            v::FileChange::Deleted => ge::FileChange::Deleted,
+        };
+        ge::FileEvent { change, uri: e.uri }
     }
 }
 

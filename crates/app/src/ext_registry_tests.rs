@@ -120,7 +120,7 @@ fn a_new_publisher_and_a_stale_index_are_called_out(cx: &mut TestAppContext) {
     assert_eq!(wb.update_in(cx, |wb, window, _| wb.consent_for_test(window)).unwrap().3, "cancel", "Enter does not install");
     // The command line refuses what needs that look.
     let regs = crate::ext_registry::registries(&settings_of(&cfg));
-    let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.night").unwrap_err();
+    let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.night", false).unwrap_err();
     assert!(e.contains("is now published by"), "{e}");
 }
 
@@ -131,17 +131,44 @@ fn the_command_line_installs_from_a_registry_and_explains_refusals() {
     let (mut r, _fetch) = registry(&root, "cli", now);
     let cfg = root.join("cfg");
     let regs = crate::ext_registry::registries(&settings_of(&cfg));
-    let m = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.night@1.0.0").unwrap();
+    let m = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.night@1.0.0", false).unwrap();
     assert_eq!((m.id.as_str(), m.version.to_string().as_str()), ("you.night", "1.0.0"));
-    let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.none").unwrap_err();
+    let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.none", false).unwrap_err();
     assert!(e.contains("not in any of your registries"), "{e}");
-    let e = crate::ext_registry::install_from_command_line(&cfg, &[], "you.night").unwrap_err();
+    let e = crate::ext_registry::install_from_command_line(&cfg, &[], "you.night", false).unwrap_err();
     assert!(e.contains("No extension registry is set up yet"), "{e}");
     // Stale: refused here, the Extensions view asks instead.
     r.publish(&package("you.day", "1.0.0"), &github(7, 42), now);
     r.sign(now - 4 * 86400);
-    let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.day").unwrap_err();
+    let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.day", false).unwrap_err();
     assert!(e.contains("more than 3 days old"), "{e}");
+}
+
+/// #2 of the outside-author trials: installing from a registry on the command line is not consent to what the version
+/// asks for. Its sheet is printed and only `--accept-permissions` installs it, as for a package file.
+#[test]
+fn the_command_line_needs_accept_permissions_for_what_a_version_asks() {
+    let root = dir("cli-perms");
+    let now = crate::ext_registry::now();
+    let (mut r, _fetch) = registry(&root, "cliperms", now);
+    let manifest = "[extension]\nid = \"you.wide\"\nversion = \"1.0.0\"\nname = \"Wide\"\nlicense = \"MIT\"\n[[themes]]\nlabel = \"W\"\npath = \"t.json\"\n\
+                    [permissions]\nread = [\"**\"]\nnet = [\"api.example.com\"]\nwhy = \"Uploads the workspace.\"\n";
+    let entries = vec![
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.as_bytes().to_vec(), executable: false },
+        ext_pkg::Entry { path: "t.json".into(), data: THEME.as_bytes().to_vec(), executable: false },
+    ];
+    r.publish(&ext_pkg::write(entries).unwrap().0, &github(7, 42), now);
+    let cfg = root.join("cfg");
+    let regs = crate::ext_registry::registries(&settings_of(&cfg));
+    let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.wide", false).unwrap_err();
+    assert!(e.starts_with("you.wide 1.0.0 (From the cliperms registry, published by "), "{e}");
+    for line in ["  - Read all files in the workspace", "  - Connect to api.example.com", "  Why: Uploads the workspace.", "  High risk: "] {
+        assert!(e.contains(line), "{line}: {e}");
+    }
+    assert!(e.contains("--accept-permissions"), "{e}");
+    assert!(crate::ext::store(&cfg).locked().unwrap().is_empty(), "nothing installed");
+    let m = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.wide", true).unwrap();
+    assert_eq!(m.id.as_str(), "you.wide");
 }
 
 /// Exit criterion 2 and #67 AC1: with registries configured but nothing installed from them, starting and reloading
@@ -158,7 +185,7 @@ fn no_request_without_an_extension_from_a_registry(cx: &mut TestAppContext) {
     }
     assert_eq!(fetch.count(), 0, "{:?}", fetch.requests.lock().unwrap());
     let regs = crate::ext_registry::registries(&settings_of(&cfg));
-    crate::ext_registry::install_from_command_line(&cfg, &regs, "you.night").unwrap();
+    crate::ext_registry::install_from_command_line(&cfg, &regs, "you.night", false).unwrap();
     let after_install = fetch.count();
     // The cached index is less than a day old: reloads ask nothing more.
     for _ in 0..3 {

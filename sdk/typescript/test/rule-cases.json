@@ -190,6 +190,18 @@
     "STATUS_TEXT_LEN": 64,
     "TIMER_MIN_SECONDS": 30
   },
+  "outside": [
+    {
+      "kind": "read",
+      "line": "read file:///etc/passwd (cannot be granted: the file is outside the workspace, and extensions reach only files inside its folders)",
+      "path": "file:///etc/passwd"
+    },
+    {
+      "kind": "write",
+      "line": "write file:///work/../x (cannot be granted: the file is outside the workspace, and extensions reach only files inside its folders)",
+      "path": "file:///work/../x"
+    }
+  ],
   "paths": [
     {
       "folder": "file:///work",
@@ -401,86 +413,141 @@
       "url": "https://api.example.com:8443/"
     },
     {
+      "denied": null,
+      "host": "",
       "message": "http://api.example.com/: only https:// URLs are allowed; use https://",
       "problem": "not-https",
       "url": "http://api.example.com/"
     },
     {
+      "denied": null,
+      "host": "",
       "message": "HTTP://api.example.com/: only https:// URLs are allowed; use https://",
       "problem": "not-https",
       "url": "HTTP://api.example.com/"
     },
     {
+      "denied": null,
+      "host": "",
       "message": "file:///etc/passwd: only https:// URLs are allowed; use https://",
       "problem": "not-https",
       "url": "file:///etc/passwd"
     },
     {
+      "denied": "net 127.0.0.1 (cannot be granted: it is an IP address, and net lists host names only; connect to the server by its host name)",
+      "host": "127.0.0.1",
       "message": "https://127.0.0.1/: names an IP address; extensions connect only to host names listed in `net`, so use the host name",
       "problem": "ip-literal",
       "url": "https://127.0.0.1/"
     },
     {
+      "denied": "net [::1] (cannot be granted: it is an IP address, and net lists host names only; connect to the server by its host name)",
+      "host": "[::1]",
+      "message": "https://[::1]:8443/x: names an IP address; extensions connect only to host names listed in `net`, so use the host name",
+      "problem": "ip-literal",
+      "url": "https://[::1]:8443/x"
+    },
+    {
+      "denied": "net 10.1 (cannot be granted: it is an IP address, and net lists host names only; connect to the server by its host name)",
+      "host": "10.1",
+      "message": "https://10.1/: names an IP address; extensions connect only to host names listed in `net`, so use the host name",
+      "problem": "ip-literal",
+      "url": "https://10.1/"
+    },
+    {
+      "denied": "net [::1] (cannot be granted: it is an IP address, and net lists host names only; connect to the server by its host name)",
+      "host": "[::1]",
       "message": "https://[::1]/: names an IP address; extensions connect only to host names listed in `net`, so use the host name",
       "problem": "ip-literal",
       "url": "https://[::1]/"
     },
     {
+      "denied": "net 2130706433 (cannot be granted: it is an IP address, and net lists host names only; connect to the server by its host name)",
+      "host": "2130706433",
       "message": "https://2130706433/: names an IP address; extensions connect only to host names listed in `net`, so use the host name",
       "problem": "ip-literal",
       "url": "https://2130706433/"
     },
     {
+      "denied": "net 0x7f.1 (cannot be granted: it is an IP address, and net lists host names only; connect to the server by its host name)",
+      "host": "0x7f.1",
       "message": "https://0x7f.1/: names an IP address; extensions connect only to host names listed in `net`, so use the host name",
       "problem": "ip-literal",
       "url": "https://0x7f.1/"
     },
     {
+      "denied": null,
+      "host": "",
       "message": "https://user:pw@api.example.com/: must not contain a user name or password; send credentials in a header",
       "problem": "invalid",
       "url": "https://user:pw@api.example.com/"
     },
     {
+      "denied": null,
+      "host": "",
       "message": "https://user@api.example.com/x: must not contain a user name or password; send credentials in a header",
       "problem": "invalid",
       "url": "https://user@api.example.com/x"
     },
     {
+      "denied": null,
+      "host": "",
       "message": "https://: has no host",
       "problem": "invalid",
       "url": "https://"
     },
     {
+      "denied": null,
+      "host": "",
       "message": "https://api.example.com:0/: has port 0",
       "problem": "invalid",
       "url": "https://api.example.com:0/"
     },
     {
+      "denied": null,
+      "host": "",
       "message": "https://api.example.com:/: has an empty port",
       "problem": "invalid",
       "url": "https://api.example.com:/"
     },
     {
+      "denied": null,
+      "host": "",
       "message": "https://api.example.com:99999/: has an invalid port",
       "problem": "invalid",
       "url": "https://api.example.com:99999/"
     },
     {
+      "denied": null,
+      "host": "",
       "message": "https://bad_host.example.com/: has an invalid host name; use letters, digits, '-' and dots (xn-- for other scripts)",
       "problem": "invalid",
       "url": "https://bad_host.example.com/"
     },
     {
+      "denied": null,
+      "host": "",
+      "message": "https://a.example.com../: has an invalid host name; use letters, digits, '-' and dots (xn-- for other scripts)",
+      "problem": "invalid",
+      "url": "https://a.example.com../"
+    },
+    {
+      "denied": null,
+      "host": "",
       "message": "https://ıstanbul.example.com/: has an invalid host name; use letters, digits, '-' and dots (xn-- for other scripts)",
       "problem": "invalid",
       "url": "https://ıstanbul.example.com/"
     },
     {
+      "denied": null,
+      "host": "",
       "message": "api.example.com/x: is not a URL; write it as https://host/path",
       "problem": "invalid",
       "url": "api.example.com/x"
     },
     {
+      "denied": null,
+      "host": "",
       "message": "javascript:alert(1): is not a URL; write it as https://host/path",
       "problem": "invalid",
       "url": "javascript:alert(1)"

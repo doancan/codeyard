@@ -89,6 +89,11 @@ pub(crate) fn add_instance(extension: &str, host: &str, detail: &str) -> Questio
     confirm(PromptLevel::Warning, tf("Let {0} use your account on {1}?", &[&extension, &host]), detail.into(), t("Add Instance"))
 }
 
+/// A server for an extension's `net-from-setting`.
+pub(crate) fn allow_host(extension: &str, host: &str, detail: &str) -> Question {
+    confirm(PromptLevel::Warning, tf("Let {0} connect to {1}?", &[&extension, &host]), detail.into(), t("Allow Host"))
+}
+
 /// Workspace Trust before running anything a folder or workspace defines.
 pub(crate) fn trust(workspace: Option<&str>, folder: &str) -> Question {
     let (title, detail, button) = match workspace {

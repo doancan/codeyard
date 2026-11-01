@@ -172,6 +172,8 @@ pub fn fix_line(d: &Denial, revoked: &Permissions) -> Option<String> {
             let (provider, host) = ext_manifest::parse_oauth_host_line(p)?;
             (!ext_manifest::BUILTIN_PROVIDERS.contains(&provider)).then(|| format!("hosts = [{host:?}]  # in the [[oauth]] table with id = {provider:?}"))
         }
+        // A file outside the workspace, an IP address: nothing in the manifest allows it.
+        _ if ext_manifest::parse_ungrantable_line(p).is_some() => None,
         _ if p.contains(" = ") => Some(p.to_string()),
         v::Why::NotDeclared => None,
         v::Why::RevokedByUser => {

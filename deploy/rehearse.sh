@@ -5,7 +5,8 @@
 #   2. yard init with those keys; root.json signed by one key is refused by clients, by two it is accepted
 #   3. publishes a data-only extension, is refused code from a publisher who is not invited, publishes code from an
 #      invited one
-#   4. installs both with the app (`codeyard --install-extension`) from the local registry
+#   4. installs both with the app (`codeyard --install-extension`) from the local registry: the code extension asks for
+#      permissions, so it prints its sheet and installs only with `--accept-permissions`
 #   5. revokes the code extension: the index says so, `codeyard --update-extensions` stops it on the client that has it,
 #      and another client refuses to install it, with the reason
 #   6. signs an index that has already expired: `yard status` (what the alert runs) fails, and clients refuse to
@@ -172,7 +173,9 @@ client() {
 EOF
 }
 client "$work/client-1"
-CODEYARD_CONFIG_DIR="$work/client-1" CODEYARD_STATE_DIR="$work/client-1/state" "$app" --install-extension hobby.night --install-extension rehearse.probe > "$log/install" 2>&1 ||
+expect_fail "installing code that asks for permissions, without --accept-permissions" "Nothing was installed" \
+	env CODEYARD_CONFIG_DIR="$work/client-1" CODEYARD_STATE_DIR="$work/client-1/state" "$app" --install-extension rehearse.probe
+CODEYARD_CONFIG_DIR="$work/client-1" CODEYARD_STATE_DIR="$work/client-1/state" "$app" --install-extension hobby.night --install-extension rehearse.probe --accept-permissions > "$log/install" 2>&1 ||
 	die "installing: $(cat "$log/install")"
 for line in "installed hobby.night 0.1.0" "installed rehearse.probe 1.0.0"; do
 	grep -qF "$line" "$log/install" || die "installing: $(cat "$log/install")"
@@ -190,7 +193,7 @@ grep -q rehearse.probe "$work/client-1/state/extensions/revoked.json" || die "no
 ok "the client that has it stops it: $(head -n 1 "$log/update")"
 client "$work/client-2"
 expect_fail "another client refuses to install it" "was revoked by the registry" \
-	env CODEYARD_CONFIG_DIR="$work/client-2" CODEYARD_STATE_DIR="$work/client-2/state" "$app" --install-extension rehearse.probe@1.0.0
+	env CODEYARD_CONFIG_DIR="$work/client-2" CODEYARD_STATE_DIR="$work/client-2/state" "$app" --install-extension rehearse.probe@1.0.0 --accept-permissions
 curl -fsS "$url/metrics" | grep -q '^yard_versions_revoked 1$' || die "/metrics does not count the revocation"
 ok "/metrics: yard_versions_revoked 1"
 

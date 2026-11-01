@@ -125,9 +125,19 @@ export function relative(folders: string[], uri: string): string | undefined {
   return undefined;
 }
 
-/** The `permission` of the denial for a path outside every workspace folder. */
-export function outsideLine(path: string): string {
-  return `a path inside the workspace (not ${path})`;
+/** A refusal no manifest entry can lift: `read file:///etc/passwd (cannot be granted: <reason>)`. */
+export function ungrantableLine(what: string, reason: string): string {
+  return `${what} (cannot be granted: ${reason})`;
+}
+
+/** The `permission` of the denial for a `kind` (`read`, `write`) of a path outside every workspace folder. */
+export function outsideLine(kind: string, path: string): string {
+  return ungrantableLine(`${kind} ${path}`, "the file is outside the workspace, and extensions reach only files inside its folders");
+}
+
+/** The `permission` of the denial for a request to an IP address, which `net` cannot list. */
+export function ipAddressLine(host: string): string {
+  return ungrantableLine(`net ${host}`, "it is an IP address, and net lists host names only; connect to the server by its host name");
 }
 
 export type UrlProblem = "not-https" | "ip-literal" | "invalid";
@@ -142,30 +152,34 @@ function isNumericHost(host: string): boolean {
   return /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(host) || labels.every(num) || /^[0-9]*$/.test(labels[labels.length - 1]!);
 }
 
-/** A URL Codeyard fetches: its host and port, or why not, in Codeyard's words. */
-export function checkUrl(input: string): { host: string; port: number } | { problem: UrlProblem; message: string } {
+/**
+ * A URL Codeyard fetches: its host and port, or why not, in Codeyard's words. `host` of a refusal is the IP address as
+ * written for `ip-literal` (for `ipAddressLine`), else empty.
+ */
+export function checkUrl(input: string): { host: string; port: number } | { problem: UrlProblem; message: string; host: string } {
   let url = input.trim();
   const hash = url.indexOf("#");
   if (hash >= 0) url = url.slice(0, hash);
   const shown = shorten(url);
-  const bad = (problem: UrlProblem, why: string) => ({ problem, message: `${shown}: ${why}` });
+  const bad = (problem: UrlProblem, why: string, host = "") => ({ problem, message: `${shown}: ${why}`, host });
   const schemeEnd = url.indexOf("://");
   if (schemeEnd < 0) return bad("invalid", "is not a URL; write it as https://host/path");
   if (url.slice(0, schemeEnd).toLowerCase() !== "https") return bad("not-https", "only https:// URLs are allowed; use https://");
   const authority = url.slice(schemeEnd + 3).split(/[/?]/)[0] ?? "";
   if (authority.includes("@")) return bad("invalid", "must not contain a user name or password; send credentials in a header");
-  const ipLiteral = () => bad("ip-literal", "names an IP address; extensions connect only to host names listed in `net`, so use the host name");
-  if (authority.startsWith("[")) return ipLiteral();
+  const ipLiteral = (host: string) =>
+    bad("ip-literal", "names an IP address; extensions connect only to host names listed in `net`, so use the host name", host.toLowerCase());
+  if (authority.startsWith("[")) return ipLiteral(authority.slice(0, authority.indexOf("]") + 1) || authority);
   const colon = authority.lastIndexOf(":");
   const raw = colon >= 0 ? authority.slice(0, colon) : authority;
   const port = colon >= 0 ? authority.slice(colon + 1) : undefined;
   let host = raw.replace(/[A-Z]/g, (c) => c.toLowerCase());
   if (host.endsWith(".")) host = host.slice(0, -1);
   if (host === "") return bad("invalid", "has no host");
-  if (!/^[a-z0-9.-]+$/.test(host) || host.includes("..")) {
+  if (!/^[a-z0-9.-]+$/.test(host) || host.includes("..") || host.endsWith(".")) {
     return bad("invalid", "has an invalid host name; use letters, digits, '-' and dots (xn-- for other scripts)");
   }
-  if (isNumericHost(host)) return ipLiteral();
+  if (isNumericHost(host)) return ipLiteral(host);
   if (port === undefined) return { host, port: 443 };
   if (port === "") return bad("invalid", "has an empty port");
   if (!/^[0-9]+$/.test(port)) return bad("invalid", "has an invalid port");

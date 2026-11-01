@@ -164,6 +164,7 @@ impl Workbench {
             InputPurpose::TaskInput => self.answer_task_input(name, window, cx),
             InputPurpose::RenameTerminal => self.finish_rename_terminal(name, cx),
             InputPurpose::AddInstance { extension, provider } => self.finish_add_extension_instance(extension, provider, name, window, cx),
+            InputPurpose::AllowHost { extension } => self.finish_allow_extension_host(extension, name, window, cx),
             InputPurpose::SetVariable { parent, name: var } => self.finish_set_variable(parent, var, name, cx),
             InputPurpose::PortLabel { remote } => self.finish_port_label(remote, name, cx),
             InputPurpose::PortLocal { remote } => self.finish_port_local(remote, name, cx),

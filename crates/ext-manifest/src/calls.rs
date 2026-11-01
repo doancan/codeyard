@@ -3,8 +3,6 @@
 //! `sdk/typescript/test/rule-cases.json`) and `cyx test` all apply these, so a call refused in Codeyard is refused in a
 //! test too, with the same words.
 
-use std::net::Ipv4Addr;
-
 use crate::limits;
 use crate::validate::is_deceptive;
 
@@ -22,6 +20,22 @@ pub enum UrlProblem {
 pub struct BadUrl {
     pub problem: UrlProblem,
     pub message: String,
+    /// For `IpLiteral`, the address as written (`127.0.0.1`, `[::1]`), lowercase; else empty.
+    pub host: String,
+}
+
+impl BadUrl {
+    /// How Codeyard's broker refuses it: an IP address is `denied` with [`ip_address_line`] (no `net` entry can allow
+    /// it), the rest `invalid` with the message. `Err` is the denial's permission, `Ok` the invalid message.
+    pub fn refusal(&self) -> Result<String, String> {
+        if self.problem == UrlProblem::IpLiteral { Err(ip_address_line(&self.host)) } else { Ok(self.message.clone()) }
+    }
+}
+
+/// The `permission` of the denial for a request to an IP address: `net` lists host names only, so nothing can grant
+/// it (`crate::ungrantable_line`).
+pub fn ip_address_line(host: &str) -> String {
+    crate::ungrantable_line(&format!("net {host}"), "it is an IP address, and net lists host names only; connect to the server by its host name")
 }
 
 /// The host and port of a request URL that passed [`check_url`].
@@ -39,7 +53,7 @@ pub fn check_url(url: &str) -> Result<UrlTarget, BadUrl> {
     let url = url.trim();
     let url = url.split_once('#').map_or(url, |(u, _)| u);
     let shown = shorten(url);
-    let bad = |problem: UrlProblem, why: &str| BadUrl { problem, message: format!("{shown}: {why}") };
+    let bad = |problem: UrlProblem, why: &str| BadUrl { problem, message: format!("{shown}: {why}"), host: String::new() };
     let invalid = |why: &str| bad(UrlProblem::Invalid, why);
     let Some(scheme_end) = url.find("://") else { return Err(invalid("is not a URL; write it as https://host/path")) };
     if !url[..scheme_end].eq_ignore_ascii_case("https") {
@@ -49,9 +63,12 @@ pub fn check_url(url: &str) -> Result<UrlTarget, BadUrl> {
     if authority.contains('@') {
         return Err(invalid("must not contain a user name or password; send credentials in a header"));
     }
-    let ip_literal = || bad(UrlProblem::IpLiteral, "names an IP address; extensions connect only to host names listed in `net`, so use the host name");
+    let ip_literal = |host: &str| BadUrl {
+        host: host.to_ascii_lowercase(),
+        ..bad(UrlProblem::IpLiteral, "names an IP address; extensions connect only to host names listed in `net`, so use the host name")
+    };
     if authority.starts_with('[') {
-        return Err(ip_literal());
+        return Err(ip_literal(authority.split_inclusive(']').next().unwrap_or(authority)));
     }
     let (raw, port) = match authority.rsplit_once(':') {
         Some((h, p)) => (h, Some(p)),
@@ -63,11 +80,12 @@ pub fn check_url(url: &str) -> Result<UrlTarget, BadUrl> {
         return Err(invalid("has no host"));
     }
     // What `net` can list. A name in another script is written in its `xn--` form.
-    if !host.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'.') || host.contains("..") {
+    // One trailing dot is the root (`example.com.`); `example.com..` is no name.
+    if !host.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'.') || host.contains("..") || host.ends_with('.') {
         return Err(invalid("has an invalid host name; use letters, digits, '-' and dots (xn-- for other scripts)"));
     }
-    if is_numeric_host(&host) {
-        return Err(ip_literal());
+    if crate::is_ip_address(&host) {
+        return Err(ip_literal(&host));
     }
     let port = match port {
         None => 443,
@@ -80,14 +98,6 @@ pub fn check_url(url: &str) -> Result<UrlTarget, BadUrl> {
         },
     };
     Ok(UrlTarget { host, port })
-}
-
-/// `127.0.0.1` and the other spellings resolvers accept for an IPv4 address: `127.1`, `2130706433`, `0x7f.1`. A name
-/// whose labels are all numbers is one of them, and so is a name ending in a number (no top-level domain is numeric).
-fn is_numeric_host(host: &str) -> bool {
-    let number =
-        |l: &str| !l.is_empty() && (l.bytes().all(|b| b.is_ascii_digit()) || l.strip_prefix("0x").is_some_and(|h| h.bytes().all(|b| b.is_ascii_hexdigit())));
-    host.parse::<Ipv4Addr>().is_ok() || host.split('.').all(number) || host.rsplit('.').next().is_some_and(|l| l.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// URLs in messages are cut, so a hostile page cannot fill the log with one.
@@ -169,6 +179,7 @@ mod tests {
             ("https://api.example.com:99999/", UrlProblem::Invalid),
             ("https://api.example.com:+80/", UrlProblem::Invalid),
             ("https://bad_host.example.com/", UrlProblem::Invalid),
+            ("https://a.example.com../", UrlProblem::Invalid),
             ("https://ıstanbul.example.com/", UrlProblem::Invalid),
             ("api.example.com/x", UrlProblem::Invalid),
             ("javascript:alert(1)", UrlProblem::Invalid),
@@ -176,6 +187,11 @@ mod tests {
             assert_eq!(check_url(url).map_err(|e| e.problem), Err(problem), "{url}");
         }
         assert!(check_url(&format!("http://{}", "a".repeat(1000))).unwrap_err().message.len() < 300, "long URLs are cut in messages");
+        // An IP address cannot be granted: the denial names it as written.
+        let line = check_url("https://[::1]:8443/x").unwrap_err().refusal().unwrap_err();
+        assert_eq!(crate::parse_ungrantable_line(&line).map(|(what, _)| what), Some("net [::1]"));
+        assert_eq!(check_url("https://10.1/").unwrap_err().refusal(), Err(ip_address_line("10.1")));
+        assert!(check_url("http://a.example.com/").unwrap_err().refusal().is_ok(), "the rest is invalid");
     }
 
     #[test]

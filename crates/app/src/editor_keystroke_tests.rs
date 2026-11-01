@@ -112,6 +112,107 @@ fn a_keystroke_never_waits_for_a_reparse_of_the_whole_file(cx: &mut TestAppConte
     assert_eq!(ed.read_with(cx, |e, _| e.highlights_for_test(range.clone())), full.highlights(&rope, range));
 }
 
+/// The colors of a full parse of the editor's text, compared with the editor's over its first `lines` lines and its
+/// last 100.
+fn assert_colors_of_a_full_parse(ed: &Entity<EditorView>, lines: usize, cx: &mut VisualTestContext) {
+    assert!(!ed.read_with(cx, |e, _| e.parsing_syntax_for_test()));
+    let rope = buffer::Rope::from_str(&ed.read_with(cx, |e, _| e.text()));
+    let full = syntax::Syntax::new(syntax::language_for_path("big.rs").unwrap(), &rope).unwrap();
+    for range in [0..rope.line_to_byte(lines), rope.line_to_byte(rope.len_lines() - 100)..rope.len_bytes()] {
+        assert_eq!(ed.read_with(cx, |e, _| e.highlights_for_test(range.clone())), full.highlights(&rope, range));
+    }
+}
+
+/// Every way an edit reaches the buffer reaches the tree too: several cursors, paste, undo and redo, replace in
+/// files, and edits from a language server, an extension or an agent. Once the background parses settle, the colors
+/// are those of a full parse.
+#[gpui::test]
+fn every_kind_of_edit_reaches_the_syntax_tree(cx: &mut TestAppContext) {
+    let f = file("every-edit", BIG);
+    let (wb, cx) = setup(cx);
+    let ed = open(&wb, &f, cx);
+    ed.update_in(cx, |e, window, cx| window.focus(&e.focus_handle(cx)));
+    ed.update(cx, |e, cx| e.set_cursor_for_test(0, cx));
+    cx.dispatch_action(crate::editor::AddCursorBelow);
+    cx.dispatch_action(crate::editor::AddCursorBelow);
+    assert_eq!(ed.read_with(cx, |e, _| e.cursor_count()), 3);
+    for ch in ["f", "n", " ", "/", "*"] {
+        type_char(&ed, ch, cx);
+    }
+    cx.run_until_parked();
+    assert!(ed.read_with(cx, |e, _| e.text()).starts_with("fn /*/// "));
+    assert_colors_of_a_full_parse(&ed, 200, cx);
+    cx.write_to_clipboard(gpui::ClipboardItem::new_string("*/ struct P { a: \"ğ\" }\n".into()));
+    cx.dispatch_action(crate::editor::Paste);
+    cx.run_until_parked();
+    assert_colors_of_a_full_parse(&ed, 200, cx);
+    cx.dispatch_action(crate::editor::Undo);
+    cx.dispatch_action(crate::editor::Undo);
+    cx.run_until_parked();
+    assert_colors_of_a_full_parse(&ed, 200, cx);
+    cx.dispatch_action(crate::editor::Redo);
+    cx.run_until_parked();
+    assert_colors_of_a_full_parse(&ed, 200, cx);
+    // Replace in files, then an extension's (or a language server's, or an agent's) edits in UTF-16 positions.
+    ed.update(cx, |e, cx| e.apply_buffer_edits(|_| vec![(40..48, "let x = \"".into()), (400..400, "impl S {}\n".into())], cx));
+    let version = ed.read_with(cx, |e, _| e.version());
+    let edits = [(((3, 0), (3, 4)), "/* r */".to_string()), (((9000, 0), (9000, 0)), "fn tail() {}\n".to_string())];
+    assert!(ed.update(cx, |e, cx| e.apply_lsp_edits_if_unchanged(version, &edits, cx)));
+    cx.run_until_parked();
+    assert_colors_of_a_full_parse(&ed, 200, cx);
+}
+
+/// A tree that lands while keys are coming draws no frame of its own: the next key's frame shows it. Once typing
+/// pauses it asks for a frame, only if something on screen changed color and no frame has drawn it yet.
+#[gpui::test]
+fn a_tree_that_lands_while_typing_waits_for_a_pause_to_draw(cx: &mut TestAppContext) {
+    let f = file("landing", BIG);
+    let (wb, cx) = setup(cx);
+    let ed = open(&wb, &f, cx);
+    ed.update(cx, |e, cx| e.set_cursor_for_test(0, cx));
+    cx.run_until_parked();
+    // (a parse runs in the background, a frame drew the current tree's colors, a frame waits for a pause in typing)
+    let state =
+        |cx: &mut VisualTestContext| ed.read_with(cx, |e, _| (e.parsing_syntax_for_test(), e.syntax_shown_for_test(), e.syntax_repaint_waiting_for_test()));
+    let notified = Rc::new(RefCell::new(0usize));
+    let count = notified.clone();
+    let _watch = cx.update(|_, cx| cx.observe(&ed, move |_, _| *count.borrow_mut() += 1));
+    let quiet = EditorView::SYNTAX_QUIET_FOR_TEST;
+
+    // `f` before the first item: the reparse goes to the background and lands with the same colors on screen.
+    type_char(&ed, "f", cx);
+    assert_eq!(state(cx), (true, true, false), "the key's frame is drawn with the old tree");
+    cx.run_until_parked();
+    assert_eq!(state(cx), (false, true, false), "a tree with the same colors on screen waits to draw them");
+
+    // `fn`: the item after it is colored otherwise; the frame waits for typing to pause, and a frame drawn meanwhile
+    // (here a refresh; mostly the next key) shows the new colors, so none is asked for.
+    type_char(&ed, "n", cx);
+    cx.run_until_parked();
+    assert_eq!(state(cx), (false, false, true));
+    cx.update(|window, _| window.refresh());
+    cx.run_until_parked();
+    assert_eq!(state(cx), (false, true, true));
+    *notified.borrow_mut() = 0;
+    cx.executor().advance_clock(quiet);
+    cx.run_until_parked();
+    assert_eq!((state(cx), *notified.borrow()), ((false, true, false), 0), "new colors drawn twice");
+
+    // `fn `: nothing draws the new colors before the pause, so the pause does.
+    type_char(&ed, " ", cx);
+    cx.run_until_parked();
+    assert_eq!(state(cx), (false, false, true));
+    *notified.borrow_mut() = 0;
+    cx.executor().advance_clock(quiet - std::time::Duration::from_millis(1));
+    cx.run_until_parked();
+    assert_eq!((state(cx), *notified.borrow()), ((false, false, true), 0), "drawn before typing paused");
+    cx.executor().advance_clock(std::time::Duration::from_millis(1));
+    cx.run_until_parked();
+    assert_eq!(*notified.borrow(), 1, "the new colors were never drawn");
+    assert_eq!(state(cx), (false, true, false));
+    assert_colors_of_a_full_parse(&ed, 200, cx);
+}
+
 fn item(label: &str) -> crate::lsp::CompletionItem {
     crate::lsp::CompletionItem {
         label: label.into(),

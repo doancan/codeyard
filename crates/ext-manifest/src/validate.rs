@@ -327,6 +327,14 @@ fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
     }
 
     let contributions = contributions(cx, &raw, &id, &permissions);
+    if let Some(key) = raw.permissions.as_ref().and_then(|p| p.get_ref().net_from_setting.as_ref()) {
+        let found = contributions.settings.iter().find(|s| &s.key == key.get_ref());
+        if !found.is_some_and(|s| s.kind == SettingKind::String) {
+            let what = if found.is_some() { "is not a string setting" } else { "is not one of the extension's settings" };
+            cx.err(C::BadPermission, key.span(), format!("permissions.net-from-setting '{}' {what}", key.get_ref())).fix =
+                Some(format!("declare it: [settings.{}] type = \"string\", description = \"The server's host name\"", key.get_ref()));
+        }
+    }
     let oauth = oauth(cx, &raw.oauth, raw.permissions.as_ref().map(|p| p.get_ref()), &permissions);
 
     let mut activation: Vec<Activation> = Vec::new();
@@ -486,6 +494,11 @@ fn oauth(cx: &mut Ctx, raw: &[S<RawOAuth>], perms_raw: Option<&RawPermissions>, 
     out
 }
 
+/// A glob as `watch.files` takes it: the same rules as a `read` glob (`crate::glob::check`).
+pub fn check_watch_glob(g: &str) -> Result<(), String> {
+    crate::glob::check(g).map_err(|e| format!("the glob '{g}' {e}"))
+}
+
 /// `core:` followed by a command id as the command palette lists it: ASCII letters, digits and `-`, in dot-separated
 /// parts (`core:workbench.openSettings`).
 pub(crate) fn check_core_command(c: &str) -> Result<(), String> {
@@ -505,7 +518,7 @@ fn check_host(h: &str) -> Result<(), String> {
     if h.contains("://") || h.contains('/') || h.contains(':') {
         return Err("must be a host name only, without scheme, port or path".into());
     }
-    if name.parse::<std::net::Ipv4Addr>().is_ok() || name.split('.').next_back().is_some_and(|l| l.bytes().all(|b| b.is_ascii_digit())) {
+    if crate::is_ip_address(name) {
         return Err("must be a name, not an IP address".into());
     }
     if name.len() > 253 || !name.contains('.') {
@@ -579,7 +592,8 @@ fn permissions(cx: &mut Ctx, p: &RawPermissions) -> Permissions {
         }
         s
     });
-    let perms = Permissions { read, write, net, auth, secrets: p.secrets, run, clipboard, terminal: p.terminal, commands, why };
+    let net_from_setting = p.net_from_setting.as_ref().map(|k| k.get_ref().clone());
+    let perms = Permissions { read, write, net, net_from_setting, auth, secrets: p.secrets, run, clipboard, terminal: p.terminal, commands, why };
     let r = risk::risk(&perms);
     if r.needs_why() && perms.why.is_none() && cx.options.require_why {
         let reason = if r.runs_code {

@@ -112,6 +112,14 @@ fn net_fetch_streams_from_declared_hosts_only() {
     let c = net_fetch(&t, &s, &get("https://evil.example.com/"), &Events::default(), &no_cancel());
     assert!(matches!(&c, Completion::Failed(v::Error::Denied(d)) if d.permission == "net = [\"evil.example.com\"]" && d.why == v::Why::NotDeclared), "{c:?}");
     assert!(matches!(net_fetch(&t, &s, &get("http://api.vercel.com/"), &Events::default(), &no_cancel()), Completion::Failed(v::Error::Invalid(_))));
+    // An IP address: `net` cannot list one, so no line to add is suggested.
+    for url in ["https://127.0.0.1/", "https://[::1]:8443/x", "https://10.1/"] {
+        let c = net_fetch(&t, &s, &get(url), &Events::default(), &no_cancel());
+        let Completion::Failed(v::Error::Denied(d)) = &c else { panic!("{c:?}") };
+        let (_, reason) = ext_manifest::parse_ungrantable_line(&d.permission).unwrap_or_else(|| panic!("{url}: {}", d.permission));
+        assert!(reason.contains("IP address"), "{reason}");
+    }
+    assert_eq!(t.sent().len(), 1, "nothing more was sent");
     // An untrusted folder sends nothing at all.
     let u = scope(Permissions { net: vec!["api.vercel.com".into()], ..Default::default() }, false);
     assert_eq!(why(&net_fetch(&t, &u, &get("https://api.vercel.com/"), &Events::default(), &no_cancel())), Some(v::Why::UntrustedWorkspace));

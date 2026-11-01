@@ -66,7 +66,7 @@ test("a file name glob is the file at the top of the folder only", async (t) => 
 test("a path out of the folder is refused however it is spelled", async (t) => {
   const h = await host(t);
   for (const uri of ["file:///work/docs/../../etc/passwd", "file:///work/docs/%2e%2e/%2e%2e/etc/passwd", "file:///etc/passwd"]) {
-    await assert.rejects(h.command("read", uri), /a path inside the workspace/, uri);
+    await assert.rejects(h.command("read", uri), /none: this cannot be granted, the file is outside the workspace/, uri);
   }
 });
 
@@ -76,6 +76,7 @@ test("URLs Codeyard never fetches are invalid, even with a fixture", async (t) =
   h.http("GET", "https://me:pw@api.example.com/zen", 200, "creds");
   await assert.rejects(h.command("fetch", "http://api.example.com/zen"), /only https:\/\//);
   await assert.rejects(h.command("fetch", "https://me:pw@api.example.com/zen"), /user name or password/);
+  await assert.rejects(h.command("fetch", "https://127.0.0.1/"), /none: this cannot be granted, it is an IP address/);
   assert.deepEqual(h.fetched(), []);
 });
 

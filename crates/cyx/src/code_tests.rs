@@ -185,6 +185,58 @@ codeyard_extension::export!(Fetcher);
     std::fs::remove_dir_all(&root).unwrap();
 }
 
+/// API 1.1 in the real exthost: `cyx test` gives each watch a file of its own (a trap in a handler fails the run), and
+/// treats the host in a `net-from-setting` setting's default as the one the user allowed.
+#[test]
+fn cyx_test_exercises_watches_and_net_from_setting() {
+    let Some(exthost) = toolchain() else { return };
+    let root = tmp("watches");
+    let dir = root.join("todos");
+    scaffold::create_with(&dir, Kind::Command, "todos", "you", Some(&repo().to_string_lossy())).unwrap();
+    let manifest_path = dir.join(ext_manifest::FILE_NAME);
+    let manifest = std::fs::read_to_string(&manifest_path).unwrap();
+    let more = "\n[permissions]\nread = [\"src/**/*.rs\"]\nnet-from-setting = \"server\"\n\n[settings.server]\ntype = \"string\"\ndefault = \"ghe.example.com\"\ndescription = \"Your GitHub Enterprise host.\"\n";
+    std::fs::write(&manifest_path, format!("{manifest}{more}")).unwrap();
+    let code = r#"use codeyard_extension::prelude::*;
+
+struct Todos;
+
+impl Extension for Todos {
+    fn activate(ctx: Context) -> Result<()> {
+        ctx.on_documents(true, async |ctx, e| {
+            ctx.log(LogLevel::Info, format!("{:?} {} {}", e.change, e.uri, e.text.unwrap_or_default().trim()));
+        })?;
+        ctx.on_files("src/**/*.rs", async |_ctx, events| {
+            if events.iter().any(|e| e.change == FileChange::Deleted) {
+                panic!("deleted");
+            }
+        })?;
+        ctx.command("hello", async |ctx, _args| {
+            let r = ctx.fetch(Request::get("https://ghe.example.com/api/v3/user")).await?;
+            Ok(r.status)
+        });
+        Ok(())
+    }
+}
+
+codeyard_extension::export!(Todos);
+"#;
+    std::fs::write(dir.join("src/lib.rs"), code).unwrap();
+    std::fs::copy(repo().join("examples/extensions/hello-command/Cargo.lock"), dir.join("Cargo.lock")).unwrap();
+    build::build_in(&dir, Some(&target_dir())).unwrap();
+    let manifest = build::manifest(&dir).unwrap();
+    let fixtures = crate::fixtures::Fixtures::parse(r#"{ "http": [{ "url": "https://ghe.example.com/api/v3/user", "body": {} }] }"#).unwrap();
+    let run = harness::run(&dir, &manifest, &exthost, &fixtures).unwrap();
+    let lines = run.lines.join("\n");
+    assert!(lines.contains("command hello answers"), "{lines}");
+    assert!(lines.contains("Opened file://") && lines.contains("src/example.rs TODO: example"), "{lines}");
+    assert!(lines.contains("document watch handles src/example.rs opened, changed and saved"), "{lines}");
+    let all = run.failures.join("\n");
+    assert!(all.contains("the extension trapped"), "{all}");
+    assert_eq!(run.failures.len(), 1, "{all}");
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
 #[test]
 fn cyx_test_fails_on_a_view_codeyard_would_not_draw() {
     // #182: the `{ "type": … }` shorthand the view template once wrote is refused by Codeyard, so `cyx test` refuses it.
@@ -409,7 +461,8 @@ fn the_typescript_examples_build_package_and_pass_cyx_test() {
         ("hello-view-ts", ""),
         ("octokit-repos-ts", "auth"),
         ("crate-version-ts", "net"),
-        ("vercel-status", "net,secrets,workspace"),
+        // ComponentizeJS imports every interface the narrowed world has: `read` brings `watch` (API 1.1) too.
+        ("vercel-status", "net,secrets,watch,workspace"),
         ("gitlab", "auth"),
     ] {
         let dir = repo().join("examples/extensions").join(name);

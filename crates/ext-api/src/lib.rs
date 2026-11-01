@@ -18,7 +18,7 @@ use ext_manifest::Permissions;
 pub const PACKAGE: &str = "codeyard:api";
 /// The API version this build implements. From 1.0 a minor only adds (docs/plugin-architecture.md §5.2): a component
 /// that uses only items this version has runs here, whichever 1.x it was built against.
-pub const VERSION: Version = Version(1, 0, 0);
+pub const VERSION: Version = Version(1, 1, 0);
 
 /// 0.x versions whose components this host still runs, during the move to 1.0. Their WIT has the same shape as 1.0.0,
 /// so the exthost renames their imports and exports to 1.0.0 before it compiles them (`transition::upgrade`). `cyx`
@@ -27,7 +27,7 @@ pub const TRANSITION: [Version; 1] = [Version(0, 1, 0)];
 
 /// The first Codeyard release with each API version, oldest first: what `cyx` reports as the minimum Codeyard. A
 /// release that ships a new minor adds its line here.
-pub const RELEASES: [(Version, &str); 1] = [(Version(1, 0, 0), "0.7.0")];
+pub const RELEASES: [(Version, &str); 2] = [(Version(1, 0, 0), "0.7.0"), (Version(1, 1, 0), "0.7.0")];
 
 /// The first Codeyard release that has API `api`; none for a version newer than this build knows of.
 pub fn codeyard_for(api: Version) -> Option<&'static str> {
@@ -107,7 +107,7 @@ impl Need {
             Need::Nothing => true,
             Need::Read => !p.read.is_empty(),
             Need::Write => !p.write.is_empty(),
-            Need::Net => !p.net.is_empty(),
+            Need::Net => !p.net.is_empty() || p.net_from_setting.is_some(),
             Need::Auth => !p.auth.is_empty(),
             Need::Secrets => p.secrets,
             Need::Run => !p.run.is_empty(),
@@ -162,8 +162,13 @@ const fn i(name: &'static str, need: Need) -> Interface {
     Interface { name, since: Version(1, 0, 0), need }
 }
 
-/// Every interface of `codeyard:api`, in WIT order. A test keeps this in step with `wit/`.
-pub const INTERFACES: [Interface; 26] = [
+/// An interface API 1.1 added.
+const fn i11(name: &'static str, need: Need) -> Interface {
+    Interface { name, since: Version(1, 1, 0), need }
+}
+
+/// Every interface of `codeyard:api` the guest may import, in WIT order. A test keeps this in step with `wit/`.
+pub const INTERFACES: [Interface; 27] = [
     i("types", Need::Nothing),
     // Imported by every component, through the types `guest` uses.
     i("host-requests", Need::Nothing),
@@ -181,6 +186,7 @@ pub const INTERFACES: [Interface; 26] = [
     i("documents", Need::Nothing),
     i("languages", Need::Nothing),
     i("workspace", Need::Read),
+    i11("watch", Need::Read),
     i("workspace-write", Need::Write),
     i("net", Need::Net),
     i("auth", Need::Auth),
@@ -194,8 +200,9 @@ pub const INTERFACES: [Interface; 26] = [
     i("pull-requests", Need::Nothing),
 ];
 
-/// The interface the guest exports.
-pub const EXPORTS: [&str; 1] = ["guest"];
+/// The interfaces the guest exports, with the API version that added each. The host calls `events` only when a
+/// component exports it (built against 1.1 or later).
+pub const EXPORTS: [Interface; 2] = [i("guest", Need::Nothing), i11("events", Need::Nothing)];
 
 pub fn interface(name: &str) -> Option<&'static Interface> {
     INTERFACES.iter().find(|i| i.name == name)
