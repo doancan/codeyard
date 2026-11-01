@@ -42,8 +42,8 @@ Every field of `codeyard-extension.toml` outside the contributions, which are in
 
 | Field | Type | Required | What it does |
 | --- | --- | --- | --- |
-| `read` | array of strings | no | Workspace globs the code may read. `.env*` and `.git/` must be named explicitly. |
-| `write` | array of strings | no | Workspace globs the code may write. |
+| `read` | array of strings | no | Workspace globs the code may read, matched against the whole path ([globs](globs.md)): `main.rs` is the file at the top, `**/main.rs` one in any folder. `.env*` and `.git/` must be named explicitly. |
+| `write` | array of strings | no | Workspace globs the code may write ([globs](globs.md)). |
 | `net` | array of strings | no | Hosts the code may reach over HTTPS: `api.example.com`, or `*.example.com` for its subdomains. |
 | `net-from-setting` | string | no | A string setting (the key of a `[[settings]]` entry) that names a server of the user's, such as a company GitHub Enterprise: the user allows that host on the extension page, and the code may then reach it over HTTPS. |
 | `auth` | array of strings | no | Accounts the code may sign requests with: `github`, or the id of an `[[oauth]]` table. It never sees the token. |

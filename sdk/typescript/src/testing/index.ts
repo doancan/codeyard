@@ -10,14 +10,16 @@
 //   assert.deepEqual(host.notices(), ["Hello, Ada!"]);
 //
 // The extension runs through the same SDK code as in Codeyard: the mock implements the host's interfaces, delivers
-// each result after the call returns (as the extension host does), and is the global `fetch` while it is active.
+// each result after the call returns (as the extension host does), and is the global `fetch` from the moment it is
+// made until `dispose()`. Every call is checked with Codeyard's own rules (./rules.ts, a copy checked against the Rust
+// rules by test/rules.test.ts).
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { CodeyardError, DeniedError, fromWit } from "../errors.ts";
-import { events as watchEvents, installGlobals, start, type ExtensionModule } from "../guest.ts";
-import { hostOf } from "../fetch.ts";
+import { activationOutcome, events as watchEvents, installGlobals, start, type ExtensionModule } from "../guest.ts";
+import { complete, event, install } from "../runtime.ts";
 import {
   fromWitCheckout,
   fromWitComment,
@@ -54,7 +56,22 @@ import type {
 } from "../types.ts";
 import { fromWitCodeLens, fromWitDiagnostic, toWitCodeLens, toWitDiagnostic } from "../types.ts";
 import type * as W from "../wit.ts";
-import { allowsNet, allowsRead, allowsWrite, globMatch, permissionsOf, type Permissions } from "./permissions.ts";
+import { allowsNet, permissionsOf, type Permissions } from "./permissions.ts";
+import {
+  checkDiagnosticsTarget,
+  checkStatusItem,
+  checkUrl,
+  globsAllow,
+  ipAddressLine,
+  languageId,
+  LIMITS,
+  normalize as normalizePath,
+  outsideLine,
+  pathMatches,
+  relative as relativeTo,
+  resultTooLarge,
+  shownDiagnosticMessage,
+} from "./rules.ts";
 import { parseToml, type Table } from "./toml.ts";
 import { checkEvent, checkView } from "./view-check.ts";
 
@@ -105,11 +122,21 @@ const bytes = (v: string | Uint8Array): Uint8Array => (typeof v === "string" ? n
 const text = (v: Uint8Array): string => new TextDecoder().decode(v);
 const tick = () => new Promise<void>((r) => setImmediate(r));
 
-/** The workspace-relative path of a uri, for `read` and `write` globs. */
-function relative(uri: string): string {
-  if (uri.startsWith(FOLDER)) return uri.slice(FOLDER.length).replace(/^\/+/, "");
-  const at = uri.indexOf("://");
-  return (at >= 0 ? uri.slice(at + 3) : uri).replace(/^\/+/, "");
+/** The workspace-relative path of a uri, as Codeyard makes it (`..` and `%2e` resolved); undefined outside the folder. */
+function relative(uri: string): string | undefined {
+  return relativeTo([FOLDER], uri);
+}
+
+/** The host of a URL that passed `checkUrl` (others never get as far as asking). */
+function hostOf(url: string): string {
+  const r = checkUrl(url);
+  return "host" in r ? r.host : "";
+}
+
+/** Started by the user, so it may open links (`Request::is_user_action` in Codeyard). */
+function isUserAction(r: W.Request): boolean {
+  if (r.tag === "pull-requests") return r.val.tag === "add-comment" || r.val.tag === "checkout";
+  return ["command", "ui-event", "run-code-action", "run-task", "open-uri"].includes(r.tag);
 }
 
 /** The hosts `auth.fetch` signs requests to for the built-in GitHub account. */
@@ -118,6 +145,15 @@ const GITHUB_HOSTS = ["api.github.com", "uploads.github.com"];
 /** A mock Codeyard for one extension. Set it up and inspect it in any order. */
 export class MockHost {
   #permissions: Permissions | undefined;
+  /** The local ids of the manifest's `[[status-bar]]` items; undefined without a manifest. */
+  #statusIds: string[] | undefined;
+  /** The manifest's own `[[languages]]`, which name files no built-in language claims. */
+  #ownLanguages: { id: string; extensions: string[]; filenames: string[] }[] = [];
+  /** The `languages` of each of the manifest's `[[diagnostics]]`; undefined without a manifest. */
+  #diagnosticLanguages: string[][] | undefined;
+  /** The request being handled is a user action: it may open links. */
+  #userAction = false;
+  #pumping: Promise<void> | undefined;
   /** The manifest's `[[oauth]]` providers: the name and the hosts `auth.fetch` may sign requests to. */
   #oauth = new Map<string, { name: string; hosts: string[] }>();
   /** Accounts by provider; one not in the map is signed in as `test-user`. */
@@ -177,6 +213,9 @@ export class MockHost {
     const path = join(process.cwd(), "codeyard-extension.toml");
     const manifest = options.manifest ?? (existsSync(path) ? readFileSync(path, "utf8") : undefined);
     if (manifest !== undefined) this.manifest(manifest);
+    // The global `fetch` is the mock's from here on, so a test that fetches before `activate` never reaches the network.
+    install(this.#bindings());
+    this.#restore = installGlobals();
   }
 
   /** A mock that allows every call. */
@@ -186,6 +225,9 @@ export class MockHost {
 
   #allowAll(): MockHost {
     this.#permissions = undefined;
+    this.#statusIds = undefined;
+    this.#diagnosticLanguages = undefined;
+    this.#ownLanguages = [];
     return this;
   }
 
@@ -193,6 +235,12 @@ export class MockHost {
   manifest(toml: string): this {
     const m: Table = parseToml(toml);
     this.#permissions = permissionsOf(m);
+    const bar = (Array.isArray(m["status-bar"]) ? m["status-bar"] : []) as Table[];
+    this.#statusIds = bar.map((b) => String(b.id));
+    const list = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
+    this.#ownLanguages = ((Array.isArray(m.languages) ? m.languages : []) as Table[]).map((l) => ({ id: String(l.id), extensions: list(l.extensions), filenames: list(l.filenames) }));
+    const diagnostics = (Array.isArray(m.diagnostics) ? m.diagnostics : []) as Table[];
+    this.#diagnosticLanguages = diagnostics.map((d) => (Array.isArray(d.languages) ? (d.languages as unknown[]).map(String) : []));
     this.#oauth.clear();
     for (const o of (Array.isArray(m.oauth) ? m.oauth : []) as Table[]) {
       const hosts = Array.isArray(o.hosts) ? (o.hosts as unknown[]).map(String) : [];
@@ -346,17 +394,22 @@ export class MockHost {
 
   // ---- driving the extension ---------------------------------------------------------------------------------------
 
-  /** Call the extension's `activate`, then deliver what it waits on. Rejects with activate's error. */
+  /**
+   * Call the extension's `activate`, then deliver what it waits on. Rejects with activate's error, also when an
+   * `async activate` rejects after an `await`, as Codeyard then fails the activation.
+   */
   async activate(extension: ExtensionModule, reason = "command"): Promise<void> {
-    this.#restore?.();
     this.#guest = start(extension, this.#bindings());
-    this.#restore = installGlobals();
+    this.#restore ??= installGlobals();
     try {
       this.#guest.activate({ reason });
     } catch (e) {
       throw new Error(String(e));
     }
     await this.#pump();
+    const outcome = activationOutcome();
+    if (!outcome) throw new Error("activate did not finish: it waits on something the mock host never finishes");
+    if (outcome.error !== undefined) throw new Error(`activate failed: ${outcome.error}`);
   }
 
   async deactivate(): Promise<void> {
@@ -373,7 +426,7 @@ export class MockHost {
     await this.activate(extension, "reload");
   }
 
-  /** Stop being the global `fetch`. */
+  /** Stop being the global `fetch` (dispose mocks in the reverse order they were made, as `t.after` does). */
   dispose(): void {
     this.#restore?.();
     this.#restore = undefined;
@@ -645,7 +698,8 @@ export class MockHost {
 
   /** Events go only where Codeyard sends them: paths the manifest's `read` allows (in untrusted folders too). */
   #readable(uri: string): boolean {
-    return !this.#permissions || allowsRead(this.#permissions, relative(uri));
+    const rel = relative(uri);
+    return rel !== undefined && (!this.#permissions || globsAllow(this.#permissions.read, rel));
   }
 
   #documentDelivery(watch: bigint, text: boolean, change: W.DocumentChange, doc: Document): Delivery {
@@ -661,7 +715,8 @@ export class MockHost {
   async #fileEvent(change: W.FileChange, uri: string): Promise<void> {
     if (!this.#readable(uri)) return;
     for (const [watch, glob] of this.#fileWatches) {
-      if (globMatch(glob, relative(uri))) this.#queue.push({ watch, files: [{ change, uri }] });
+      // As in Codeyard: the glob against the whole path in the folder.
+      if (pathMatches(glob, relative(uri) ?? "")) this.#queue.push({ watch, files: [{ change, uri }] });
     }
     await this.#pump();
   }
@@ -682,8 +737,13 @@ export class MockHost {
   /** Send any request and wait for its answer. */
   async request(request: W.Request): Promise<W.Response> {
     const id = ++this.#nextRequest;
-    this.#need().handle(id, request);
-    await this.#pump();
+    this.#userAction = isUserAction(request);
+    try {
+      this.#need().handle(id, request);
+      await this.#pump();
+    } finally {
+      this.#userAction = false;
+    }
     const r = this.#responses.get(id);
     this.#responses.delete(id);
     if (!r) throw CodeyardError.other("the extension did not answer: it waits on something the mock host never finishes");
@@ -696,20 +756,34 @@ export class MockHost {
     return this.#guest;
   }
 
-  /** Deliver every completion and event the mock has queued, until the extension stops making calls. */
-  async #pump(): Promise<void> {
-    for (;;) {
-      await tick();
-      const d = this.#queue.shift();
-      if (!d) {
+  /**
+   * Deliver every completion and event the mock has queued, until the extension stops making calls. It also starts on
+   * its own when a call is queued outside a request, such as a `fetch` from the test itself.
+   */
+  #pump(): Promise<void> {
+    this.#pumping ??= this.#drain();
+    return this.#pumping;
+  }
+
+  async #drain(): Promise<void> {
+    try {
+      for (;;) {
         await tick();
-        if (this.#queue.length === 0) return;
-        continue;
+        const d = this.#queue.shift();
+        if (!d) {
+          await tick();
+          if (this.#queue.length === 0) return;
+          continue;
+        }
+        // Before `activate` there is no guest yet, but a call the test itself made (`fetch`) still waits for its answer.
+        const to = this.#guest ?? { event, complete };
+        if ("event" in d) to.event(d.ticket, d.event);
+        else if ("complete" in d) to.complete(d.ticket, d.complete);
+        else if ("documents" in d) watchEvents.documents(d.watch, d.documents);
+        else watchEvents.files(d.watch, d.files);
       }
-      if ("event" in d) this.#guest?.event(d.ticket, d.event);
-      else if ("complete" in d) this.#guest?.complete(d.ticket, d.complete);
-      else if ("documents" in d) watchEvents.documents(d.watch, d.documents);
-      else watchEvents.files(d.watch, d.files);
+    } finally {
+      this.#pumping = undefined;
     }
   }
 
@@ -768,6 +842,36 @@ export class MockHost {
     return Object.fromEntries(this.#secrets);
   }
 
+  /**
+   * As Codeyard: refused with a warning in the extension's log (`logs()`) unless the manifest declares `[[diagnostics]]`
+   * for the file's language and the file is in the workspace or open; messages that could disguise what they say are
+   * dropped, long ones cut, and one extension has diagnostics on at most `DIAGNOSTIC_FILES` files.
+   */
+  #setDiagnostics(uri: string, diagnostics: W.Diagnostic[]): void {
+    const doc = this.#documents.get(uri) ?? (this.#active?.uri === uri ? this.#active : undefined);
+    // By the file's name, wherever it is, as Codeyard does (it gives an open document the language of its file name too,
+    // whatever the test said it was).
+    const language = languageId(this.#ownLanguages, normalizePath(uri) ?? "");
+    const others = [...this.#diagnostics.keys()].filter((u) => u !== uri).length;
+    const why = checkDiagnosticsTarget(this.#diagnosticLanguages, language, relative(uri) !== undefined || doc !== undefined, others);
+    if (why !== undefined) {
+      this.#logs.push(["warn", `set-diagnostics on ${uri} refused: ${why}`]);
+      return;
+    }
+    const kept: Diagnostic[] = [];
+    for (const d of diagnostics.map(fromWitDiagnostic)) {
+      const m = shownDiagnosticMessage(d.message);
+      if (m) kept.push({ ...d, message: m.shown });
+    }
+    if (kept.length < diagnostics.length) {
+      this.#logs.push(["warn", `set-diagnostics on ${uri}: ${diagnostics.length - kept.length} with an empty message or hidden characters dropped`]);
+    }
+    kept.length = Math.min(kept.length, LIMITS.MARKS_PER_FILE);
+    if (kept.length === 0) this.#diagnostics.delete(uri);
+    else this.#diagnostics.set(uri, kept);
+  }
+
+  /** The status bar items the extension set, by id. */
   statusItems(): Record<string, StatusItem> {
     return Object.fromEntries(this.#statusItems);
   }
@@ -814,23 +918,31 @@ export class MockHost {
       if (p && !ok(p)) return new DeniedError(line, "not-declared");
       return sends && this.#untrusted ? new DeniedError(line, "untrusted-workspace") : undefined;
     };
-    const pathLine = (perm: string, uri: string) => `${perm} = ["${relative(uri)}"]`;
+    // A path outside the workspace folder is refused whatever the globs say, as Codeyard's broker refuses it.
+    const path = (perm: "read" | "write", uri: string, sends: boolean) => {
+      const rel = relative(uri);
+      if (rel === undefined) return p ? new DeniedError(outsideLine(perm, uri), "not-declared") : undefined;
+      return check((p) => globsAllow(p[perm], rel), `${perm} = ["${rel}"]`, sends);
+    };
     const uri = args[0] as string;
     const active = this.#active?.uri;
     switch (name) {
       case "workspace/read-file":
       case "workspace/stat":
-        return check((p) => allowsRead(p, relative(uri)), pathLine("read", uri), false);
+        return path("read", uri, false);
       case "documents/read":
-        return uri === active ? undefined : check((p) => allowsRead(p, relative(uri)), pathLine("read", uri), false);
+        return uri === active ? undefined : path("read", uri, false);
       case "workspace/find-files":
         return check((p) => p.read.length > 0, `read = ["${uri}"]`, false);
       case "workspace-write/write-file":
       case "workspace-write/delete":
-        return check((p) => allowsWrite(p, relative(uri)), pathLine("write", uri), true);
+      case "workspace-write/create-directory":
+        return path("write", uri, true);
+      case "workspace-write/rename":
+        return path("write", uri, true) ?? path("write", args[1] as string, true);
       // A command may edit the active document without `write` (docs/plugin-architecture.md §5.2).
       case "documents/apply-edits":
-        return uri === active ? undefined : check((p) => allowsWrite(p, relative(uri)), pathLine("write", uri), true);
+        return uri === active ? undefined : path("write", uri, true);
       case "net/fetch": {
         const host = hostOf((args[0] as W.HttpRequest).url);
         // A host the user allowed for `net-from-setting` counts as declared; another is theirs to allow, not the author's.
@@ -886,23 +998,33 @@ export class MockHost {
     return new DeniedError(`[[oauth]] ${provider} hosts = ["${host}"]`, "not-declared");
   }
 
-  /** Start a call: record it, refuse it or answer it, and queue the answer for after the call returns. */
-  #start(name: string, args: unknown[], answer: () => [W.StreamEvent[], W.Completion]): bigint {
+  /**
+   * Start a call: record it, refuse it or answer it, and queue the answer for after the call returns. `early` is what
+   * Codeyard answers before it looks at permissions: `invalid` for a URL it never fetches, a denial no entry can lift for
+   * one that names an IP address.
+   */
+  #start(name: string, args: unknown[], answer: () => [W.StreamEvent[], W.Completion], early?: string | DeniedError): bigint {
     const ticket = ++this.#nextTicket;
     this.#calls.push({ name, args });
-    const refused = this.#refusal(name, args);
-    if (refused) {
+    const invalid = typeof early === "string" ? early : undefined;
+    const refused = early instanceof DeniedError ? early : invalid === undefined ? this.#refusal(name, args) : undefined;
+    if (invalid !== undefined) {
+      this.#queue.push({ ticket, complete: { tag: "failed", val: { tag: "invalid", val: invalid } } });
+    } else if (refused) {
       this.#denied.push(refused);
       this.#queue.push({ ticket, complete: { tag: "failed", val: { tag: "denied", val: { permission: refused.permission, why: refused.why } } } });
-      return ticket;
+    } else {
+      const [events, completion] = answer();
+      for (const event of events) this.#queue.push({ ticket, event });
+      this.#queue.push({ ticket, complete: completion });
     }
-    const [events, completion] = answer();
-    for (const event of events) this.#queue.push({ ticket, event });
-    this.#queue.push({ ticket, complete: completion });
+    void this.#pump();
     return ticket;
   }
 
   #fetch(name: string, provider: string | undefined, r: W.HttpRequest): bigint {
+    const url = checkUrl(r.url);
+    const early = !("message" in url) ? undefined : url.problem === "ip-literal" ? new DeniedError(ipAddressLine(url.host), "not-declared") : url.message;
     return this.#start(name, provider === undefined ? [r] : [provider, r], () => {
       if (provider !== undefined && r.headers.some(([n]) => n.trim().toLowerCase() === "authorization")) {
         return [[], { tag: "failed", val: { tag: "invalid", val: "the authorization header is added by Codeyard; remove it from the request" } }];
@@ -926,7 +1048,7 @@ export class MockHost {
         ],
         { tag: "done" },
       ];
-    });
+    }, early);
   }
 
   #bindings(): W.Bindings {
@@ -947,7 +1069,15 @@ export class MockHost {
         }),
       },
       tickets: { cancel: () => {} },
-      requests: { respond: (rid, result) => void this.#responses.set(rid, result) },
+      requests: {
+        // An answer over the call limit never reaches Codeyard: the request fails, as from the extension host.
+        respond: (rid, result) => {
+          const r = result.tag === "ok" ? result.val : undefined;
+          const text = r && (r.tag === "json" || r.tag === "view" || r.tag === "text") ? (r.val ?? "") : "";
+          const tooBig = resultTooLarge(new TextEncoder().encode(text).length);
+          this.#responses.set(rid, tooBig ? { tag: "err", val: { tag: "invalid", val: tooBig } } : result);
+        },
+      },
       window: {
         showNotice: (severity, message, actions) =>
           this.#start("window/show-notice", [severity, message, actions], () => {
@@ -964,12 +1094,23 @@ export class MockHost {
         },
         reportProgress: () => {},
         endProgress: (p) => void this.#progress.delete(p),
+        // Refused as Codeyard refuses it: an id not declared in `[[status-bar]]`, an empty or too long text.
         setStatusItem: (item) => {
-          if (!item.id) throw { payload: { tag: "invalid", val: "a status item needs an id" } };
-          this.#statusItems.set(item.id, Object.fromEntries(Object.entries(item).filter(([, v]) => v !== undefined)) as unknown as StatusItem);
+          const verdict = checkStatusItem(this.#statusIds, item.id, item.text, item.tooltip);
+          if ("error" in verdict) throw { payload: { tag: "invalid", val: verdict.error } };
+          const kept = { ...item, text: verdict.shown };
+          this.#statusItems.set(item.id, Object.fromEntries(Object.entries(kept).filter(([, v]) => v !== undefined)) as unknown as StatusItem);
         },
         removeStatusItem: (sid) => void this.#statusItems.delete(sid),
-        openExternal: (url) => this.#start("window/open-external", [url], () => [[], done]),
+        // As in Codeyard: a link opens only while the extension handles a user action.
+        openExternal: (url) =>
+          this.#start("window/open-external", [url], () => {
+            if (!this.#userAction) {
+              return [[], { tag: "failed", val: { tag: "denied", val: { permission: "a user action (a command or a link click)", why: "not-declared" } } }];
+            }
+            if (!url.startsWith("https://")) return [[], { tag: "failed", val: { tag: "invalid", val: "only https: links open" } }];
+            return [[], done];
+          }),
       },
       commands: {
         execute: (command, argsJson) => this.#start("commands/execute", [command, argsJson], () => [[], { tag: "json", val: this.#commandResults.get(command) ?? "null" }]),
@@ -979,7 +1120,7 @@ export class MockHost {
         set: (key, value) => {
           let total = key.length + value.length;
           for (const [k, v] of this.#storage) if (k !== key) total += k.length + v.length;
-          if (total > 50 * 1024 * 1024) throw { payload: { tag: "invalid", val: "the store would grow past its 50 MiB limit" } };
+          if (total > LIMITS.DATA_DIR_BYTES) throw { payload: { tag: "invalid", val: "the store would grow past its 50 MiB limit" } };
           this.#storage.set(key, value);
         },
         delete: (key) => void this.#storage.delete(key),
@@ -989,7 +1130,7 @@ export class MockHost {
       timers: {
         every: (seconds) => {
           const t = id();
-          const period = Math.max(seconds, 30);
+          const period = Math.max(seconds, LIMITS.TIMER_MIN_SECONDS);
           this.#timers.set(t, { period, next: this.#clock + period });
           return t;
         },
@@ -1031,7 +1172,7 @@ export class MockHost {
         setSelections: (uri, selections) => this.#start("documents/set-selections", [uri, selections], () => [[], done]),
       },
       languages: {
-        setDiagnostics: (uri, diagnostics) => void this.#diagnostics.set(uri, diagnostics.map(fromWitDiagnostic)),
+        setDiagnostics: (uri, diagnostics) => this.#setDiagnostics(uri, diagnostics),
         clearDiagnostics: (uri) => (uri === undefined ? this.#diagnostics.clear() : void this.#diagnostics.delete(uri)),
         setDecorations: () => {},
       },
@@ -1058,10 +1199,15 @@ export class MockHost {
             const b = this.#files.get(uri);
             return [[], b ? { tag: "stat", val: { isDir: false, size: BigInt(b.length), modified: 0n } } : notFound(uri)];
           }),
+        // As in Codeyard: files the glob matches and `read` allows.
         findFiles: (glob, max) =>
           this.#start("workspace/find-files", [glob, max], () => {
-            const found = [...this.#files.keys()].filter((u) => globMatch(glob, relative(u))).slice(0, max);
-            return [[], { tag: "uris", val: found }];
+            const readable = (rel: string) => !this.#permissions || globsAllow(this.#permissions.read, rel);
+            const found = [...this.#files.keys()].filter((u) => {
+              const rel = relative(u);
+              return rel !== undefined && pathMatches(glob, rel) && readable(rel);
+            });
+            return [[], { tag: "uris", val: found.slice(0, max) }];
           }),
         search: (query) =>
           this.#start("workspace/search", [query], () => {

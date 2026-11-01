@@ -45,6 +45,7 @@ fn start(name: &str) -> Option<(Process, mpsc::Receiver<(String, Event)>, PathBu
         env: env(),
         settings: vec![],
         folders: vec![],
+        status_items: vec![],
         reason: "command:echo".into(),
         sandbox: true,
     };

@@ -125,6 +125,22 @@ export interface InputOptions {
   password?: boolean;
 }
 
+/**
+ * What the user did in a view, as Codeyard sends it (docs/extensions/reference/ui.md#events). One key is set, so read it
+ * with `event.click?.path[0]`.
+ */
+export interface ViewEvent {
+  click?: { path: string[] };
+  /** `value` is `{ text }` for a text input, `{ checked }` for a checkbox, `{ choice }` (an option key) for a select. */
+  change?: { path: string[]; value: { text?: string; checked?: boolean; choice?: string } };
+  submit?: { path: string[]; text: string };
+  /** Every selected row (for a tree: item keys). */
+  select?: { path: string[]; rows: string[] };
+  /** The item whose next page is wanted (`null` for the top level), and that level's `more` token. */
+  expand?: { path: string[]; item: string | null; page: string };
+  link?: { path: string[] };
+}
+
 export interface StatusItem {
   /** Local to the extension, as in `[[status-bar]]`. */
   id: string;

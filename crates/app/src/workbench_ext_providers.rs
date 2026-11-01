@@ -83,17 +83,10 @@ fn same_file(a: &str, b: &str) -> bool {
 }
 
 /// A diagnostic as the editor shows it, or `None` when its message is empty or carries characters that could disguise
-/// what it says (`ext_manifest::is_deceptive`: bidirectional overrides, zero-width characters). Line breaks and tabs,
-/// which compilers' messages have, are kept; a message longer than `limits::DIAGNOSTIC_MESSAGE_LEN` is cut short.
+/// what it says; a long one is cut short (`ext_manifest::calls::shown_diagnostic_message`, the rule the mock hosts and
+/// `cyx test` apply too).
 fn to_lsp_diagnostic(extension: &str, d: &v::Diagnostic) -> Option<crate::lsp::Diagnostic> {
-    let message = d.message.trim();
-    if message.is_empty() || message.chars().any(|c| c != '\n' && c != '\t' && ext_manifest::is_deceptive(c)) {
-        return None;
-    }
-    let message = match message.char_indices().nth(limits::DIAGNOSTIC_MESSAGE_LEN) {
-        Some((cut, _)) => format!("{}…", &message[..cut]),
-        None => message.to_string(),
-    };
+    let (message, _) = ext_manifest::calls::shown_diagnostic_message(&d.message)?;
     Some(crate::lsp::Diagnostic {
         start: (d.range.start.line, d.range.start.character),
         end: (d.range.end.line, d.range.end.character),
@@ -705,21 +698,18 @@ impl Workbench {
     fn on_set_status_item(&mut self, id: &str, mut item: v::StatusItem, cx: &mut Context<Self>) {
         let reg = crate::ext::current();
         let Some(active) = reg.active.iter().find(|e| e.id() == id) else { return };
-        let full = format!("{id}.{}", item.id);
-        if !active.manifest.contributions.status_items.iter().any(|s| s.id == full) {
-            self.log_extension(id, LogLevel::Warn, format!("status item \"{}\" is not declared in [[status-bar]]; it is not shown", item.id));
-            return;
+        // The exthost refuses the same items first (`ext_manifest::calls::check_status_item`); nothing it sends is trusted.
+        let declared = |local: &str| active.manifest.contributions.status_items.iter().any(|s| s.id == format!("{id}.{local}"));
+        match ext_manifest::calls::check_status_item(Some(&declared), &item.id, &item.text, item.tooltip.as_deref()) {
+            Ok(text) => {
+                item.text = text;
+                item.tooltip = item.tooltip.as_deref().and_then(|t| shown_text(t, limits::ITEM_LEN));
+            }
+            Err(e) => {
+                self.log_extension(id, LogLevel::Warn, format!("{e}; it is not shown"));
+                return;
+            }
         }
-        let Some(text) = shown_text(&item.text, limits::STATUS_TEXT_LEN) else {
-            self.log_extension(
-                id,
-                LogLevel::Warn,
-                format!("status item \"{}\": its text must be 1 to {} visible characters", item.id, limits::STATUS_TEXT_LEN),
-            );
-            return;
-        };
-        item.text = text;
-        item.tooltip = item.tooltip.as_deref().and_then(|t| shown_text(t, limits::ITEM_LEN));
         let list = &mut self.cfg.exts.providers.status;
         match list.iter_mut().find(|(e, i)| e == id && i.id == item.id) {
             Some(slot) => slot.1 = item,
@@ -831,22 +821,10 @@ impl Workbench {
     fn may_set_diagnostics(&self, id: &str, path: &str, open: bool, cx: &App) -> Result<(), String> {
         let reg = crate::ext::current();
         let active = reg.active.iter().find(|a| a.id() == id).ok_or("the extension is not active")?;
-        let declared = &active.manifest.contributions.diagnostics;
-        if declared.is_empty() {
-            return Err("the manifest declares no [[diagnostics]]".into());
-        }
-        let language = language_id(path);
-        if !declared.iter().any(|d| d.languages.is_empty() || d.handles(&language)) {
-            return Err(format!("[[diagnostics]] does not list its language, {language}"));
-        }
-        if !open && self.extension_scope(active, cx).relative(path).is_none() {
-            return Err("it is neither in the workspace nor open in an editor".into());
-        }
+        let declared: Vec<Vec<String>> = active.manifest.contributions.diagnostics.iter().map(|d| d.languages.clone()).collect();
+        let reachable = open || self.extension_scope(active, cx).relative(path).is_some();
         let files = self.cfg.exts.providers.diagnostics.iter().filter(|(p, l)| p.as_str() != path && l.iter().any(|(e, _)| e == id)).count();
-        if files >= limits::DIAGNOSTIC_FILES {
-            return Err(format!("it has diagnostics on {files} files already, the most one extension may; clear some first"));
-        }
-        Ok(())
+        ext_manifest::calls::check_diagnostics_target(Some(&declared), &language_id(path), reachable, files)
     }
 
     fn on_clear_diagnostics(&mut self, id: &str, uri: Option<&str>, cx: &mut Context<Self>) {

@@ -75,22 +75,14 @@ pub fn net_error(e: ext_net::Error) -> v::Error {
     }
 }
 
-/// The lowercase host of an `https://` URL, without port; ext-net checks the rest of the URL.
+/// The lowercase host of a URL an extension may request, without port: the rule ext-net, the mock hosts and `cyx test`
+/// share (`ext_manifest::calls::check_url`), so the message is the same everywhere.
 pub fn https_host(url: &str) -> Result<String, v::Error> {
-    let rest = url.trim().strip_prefix("https://").ok_or_else(|| v::Error::Invalid(format!("{url}: only https:// URLs can be fetched")))?;
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    if authority.contains('@') {
-        return Err(v::Error::Invalid(format!("{url}: a user name or password in the URL is not allowed")));
-    }
-    let host = match authority.rsplit_once(':') {
-        Some((h, p)) if p.bytes().all(|b| b.is_ascii_digit()) && !authority.starts_with('[') => h,
-        _ => authority,
-    };
-    let host = host.trim_end_matches('.').to_ascii_lowercase();
-    if host.is_empty() {
-        return Err(v::Error::Invalid(format!("{url}: no host")));
-    }
-    Ok(host)
+    ext_manifest::calls::check_url(url).map(|t| t.host).map_err(|e| match e.refusal() {
+        // An IP address: no `net` entry can allow it.
+        Err(permission) => v::Error::Denied(v::Denied { permission, why: v::Why::NotDeclared }),
+        Ok(message) => v::Error::Invalid(message),
+    })
 }
 
 fn untrusted(permission: &str) -> v::Error {
@@ -123,7 +115,7 @@ pub fn net_fetch(t: &dyn Transport, scope: &Scope, req: &v::HttpRequest, sink: &
 /// `net-from-setting`, the user's fix (they allow the host on the extension page); else the line to add.
 pub fn not_in_net(scope: &Scope, host: &str) -> v::Denied {
     let permission = if ext_manifest::is_ip_address(host) {
-        ext_manifest::ungrantable_line(&format!("net {host}"), "it is an IP address, and net lists host names only; connect to the server by its host name")
+        ext_manifest::calls::ip_address_line(host)
     } else if scope.permissions.net_from_setting.is_some() {
         ext_manifest::user_host_line(host)
     } else {

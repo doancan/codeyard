@@ -35,6 +35,8 @@ pub struct State {
     pub env: v::EnvInfo,
     pub settings: BTreeMap<String, Option<String>>,
     folders: Vec<String>,
+    /// `Hello::status_items`.
+    status_items: Vec<String>,
     storage: Storage,
     wasi: WasiCtx,
     table: ResourceTable,
@@ -61,6 +63,7 @@ impl State {
             env: hello.env.clone(),
             settings: hello.settings.iter().cloned().collect(),
             folders: hello.folders.clone(),
+            status_items: hello.status_items.clone(),
             storage: Storage::open(&hello.data_dir),
             wasi,
             table: ResourceTable::new(),
@@ -147,10 +150,6 @@ impl WasiView for State {
     }
 }
 
-fn text_ok(s: &str) -> bool {
-    s.len() <= limits::ITEM_LEN && !s.chars().any(|c| c.is_control())
-}
-
 impl g::types::Host for State {}
 impl g::responses::Host for State {}
 impl g::host_requests::Host for State {}
@@ -175,9 +174,18 @@ impl g::tickets::Host for State {
 }
 
 impl g::requests::Host for State {
+    /// An answer too large for one frame fails its request with `invalid` instead of never arriving.
     fn respond(&mut self, id: u64, result: Result<g::responses::Response, g::types::Error>) {
         let result = result.map(Into::into).map_err(Into::into);
-        self.notify(Notify::Respond { id, result });
+        // The id and the tags around the answer take a few bytes; the answer itself may have `CALL_BYTES`.
+        match ext_proto::write_within(&mut self.out, &ToApp::Notify(Notify::Respond { id, result }), limits::CALL_BYTES + 64) {
+            Ok(()) => {}
+            Err(ext_proto::Error::TooLarge { len }) => {
+                let msg = ext_manifest::calls::result_too_large(len).unwrap_or_else(|| format!("the result is {len} bytes, too large to send"));
+                self.notify(Notify::Respond { id, result: Err(v::Error::Invalid(msg)) });
+            }
+            Err(e) => self.broken = Some(e.to_string()),
+        }
     }
 }
 
@@ -208,12 +216,12 @@ impl g::window::Host for State {
         self.notify(Notify::EndProgress { id });
     }
 
+    /// Refused here as the app would refuse it (`ext_manifest::calls::check_status_item`), so the extension gets the
+    /// error instead of an item that never shows.
     fn set_status_item(&mut self, item: g::window::StatusItem) -> Result<(), g::types::Error> {
         let item: v::StatusItem = item.into();
-        if item.id.is_empty() || !text_ok(&item.id) || !text_ok(&item.text) || !item.tooltip.as_deref().is_none_or(text_ok) {
-            let msg = format!("a status item needs an id, and its texts at most {} characters without control characters", limits::ITEM_LEN);
-            return Err(g::types::Error::Invalid(msg));
-        }
+        let declared = |id: &str| self.status_items.iter().any(|s| s == id);
+        ext_manifest::calls::check_status_item(Some(&declared), &item.id, &item.text, item.tooltip.as_deref()).map_err(g::types::Error::Invalid)?;
         self.notify(Notify::SetStatusItem { item });
         Ok(())
     }

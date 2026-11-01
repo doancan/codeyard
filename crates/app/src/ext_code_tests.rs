@@ -56,6 +56,10 @@ id = "ask"
 title = "Probe: Ask"
 
 [[commands]]
+id = "ask-secret"
+title = "Probe: Ask Secret"
+
+[[commands]]
 id = "doc"
 title = "Probe: Document"
 
@@ -179,6 +183,14 @@ fn picks_and_inputs_answer_through_the_window(cx: &mut TestAppContext) {
     wb.update_in(cx, |wb, _, cx| wb.set_overlay_query_for_test("Ada".into(), cx));
     cx.simulate_keystrokes("enter");
     wait_for(cx, &wb, |wb| answer_is(wb, "text Some(\"Ada\")"));
+    // A password input (a token for `secrets`) is masked on screen; Enter sends what was typed.
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Ask Secret", window, cx));
+    wait_for(cx, &wb, |wb| wb.has_overlay_for_test());
+    wb.update_in(cx, |wb, _, cx| wb.set_overlay_query_for_test("t0k3n".into(), cx));
+    let shown = wb.read_with(cx, |wb, cx| wb.overlay_query_shown_for_test(cx));
+    assert_eq!(shown.as_deref(), Some("•••••"));
+    cx.simulate_keystrokes("enter");
+    wait_for(cx, &wb, |wb| answer_is(wb, "text Some(\"t0k3n\")"));
 }
 
 #[gpui::test]

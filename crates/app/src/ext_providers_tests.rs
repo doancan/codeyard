@@ -215,15 +215,16 @@ fn extension_commands_run_from_menus_keys_and_status_items(cx: &mut TestAppConte
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Notice", window, cx));
     wait_for(cx, "the palette's command", |cx| notice(&wb, cx).contains("you.probe: Pick"));
 
-    // A status item: shown once set, runs its command on click, and an undeclared one is refused and logged.
+    // A status item: shown once set, runs its command on click, and an undeclared one is refused (by the exthost, with
+    // the app's rule) to the extension.
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Status", window, cx));
     wait_for(cx, "the status item", |cx| wb.read_with(cx, |wb, _| wb.extension_status_for_test()) == [("you.probe".to_string(), "Probe ready".to_string())]);
     wb.update_in(cx, |wb, _, _| wb.clear_notice_for_test());
     wb.update_in(cx, |wb, window, cx| wb.click_extension_status_for_test("Probe ready", window, cx));
     wait_for(cx, "the status item's command", |cx| notice(&wb, cx).contains("you.probe: Pick"));
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Undeclared Status", window, cx));
-    wait_for(cx, "the refusal in the log", |cx| {
-        wb.read_with(cx, |wb, _| wb.extension_log_for_test("you.probe")).iter().any(|l| l.contains("\"other\" is not declared"))
+    wait_for(cx, "the refusal", |cx| {
+        wb.read_with(cx, |wb, _| wb.extension_answer_for_test("you.probe")).is_some_and(|a| a.contains("other") && a.contains("is not declared"))
     });
     assert_eq!(wb.read_with(cx, |wb, _| wb.extension_status_for_test()).len(), 1);
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Remove Status", window, cx));

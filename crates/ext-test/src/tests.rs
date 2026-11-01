@@ -29,6 +29,10 @@ why  = "Tests."
 id    = "greet"
 title = "Greet"
 
+[[diagnostics]]
+id        = "words"
+languages = ["rust"]
+
 [[views]]
 id       = "counter"
 title    = "Counter"
@@ -211,9 +215,9 @@ fn storage_settings_and_documents() {
     assert_eq!(h.command("interval", Value::Null).unwrap(), json!(60));
     h.setting("interval", Some("90"));
     assert_eq!(h.command("interval", Value::Null).unwrap(), json!(90));
-    h.active_document("notes.md", "markdown", "one two three");
+    h.active_document("notes.rs", "rust", "one two three");
     assert_eq!(h.command("words", Value::Null).unwrap(), json!(3));
-    assert_eq!(h.diagnostics("notes.md")[0].message, "first");
+    assert_eq!(h.diagnostics("notes.rs")[0].message, "first");
     assert!(matches!(h.calls().last(), Some(Call::ActiveDocument)));
 }
 

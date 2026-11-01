@@ -58,7 +58,7 @@ pub use wasm as __wasm;
 #[cfg(target_arch = "wasm32")]
 use wasm as sys;
 
-pub use context::{Context, Progress, State, Storage, Timer, Watch};
+pub use context::{Context, Outcome, Progress, State, Storage, Timer, Watch};
 pub use error::{Denied, Error, Result, Why};
 pub use guest::{RELOAD, RELOAD_STATE_KEY};
 pub use serde_json::{Value, json};
@@ -81,8 +81,9 @@ pub mod prelude {
     pub use crate::{Context, Denied, Error, Extension, Result, Value, Why, json, ui};
 }
 
-/// Make `$ty` the extension this component runs. On the host target (unit tests) it expands to nothing: the mock host
-/// starts the extension by type.
+/// Make `$ty` the extension this component runs. On the host target (unit tests) the mock host starts the extension
+/// by type, so there it only names `$ty`'s `activate`: a native `cargo build` or `cargo clippy` then does not warn that
+/// the type is never constructed.
 #[macro_export]
 macro_rules! export {
     ($ty:ty) => {
@@ -90,6 +91,10 @@ macro_rules! export {
         const _: () = {
             type __CodeyardExtension = $crate::__wasm::Glue<$ty>;
             $crate::__wasm::bindings::export! { __CodeyardExtension with_types_in $crate::__wasm::bindings }
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        const _: () = {
+            let _ = <$ty as $crate::Extension>::activate;
         };
     };
 }

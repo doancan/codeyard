@@ -5,8 +5,10 @@
 //! Design: docs/plugin-architecture.md §4–§6.
 
 mod allow;
+pub mod calls;
 pub mod core_commands;
 pub mod diagnostics;
+pub mod glob;
 pub mod limits;
 mod raw;
 pub mod risk;
@@ -17,6 +19,8 @@ pub mod when;
 mod fuzz_tests;
 #[cfg(test)]
 mod reference_tests;
+#[cfg(test)]
+mod rule_cases_tests;
 #[cfg(test)]
 mod tests;
 
@@ -75,7 +79,7 @@ pub fn program_file(run: &str, target: &str) -> String {
     if target.contains("-windows-") && !path.to_ascii_lowercase().ends_with(".exe") { format!("{path}.exe") } else { path.to_string() }
 }
 
-pub use allow::glob_match;
+pub use allow::{globs_allow, normalize, outside_line, relative};
 pub use validate::{KEY_MODIFIERS, KEY_NAMES, Options, check_https_url, check_key, check_package_path, check_watch_glob, is_deceptive};
 
 /// Parse and validate a manifest, as install and publish do. Every problem is reported, not just the first.
@@ -121,6 +125,61 @@ pub const LANGUAGE_IDS: &[&str] = &[
     "typescriptreact",
     "yaml",
 ];
+
+/// The language id Codeyard gives a file: a built-in one ([`builtin_language`]), else one of `own` (the extension's
+/// `[[languages]]`, by file name, then by extension), else `plaintext`. The mock hosts and `cyx test` know only the
+/// extension's own languages, not those of other installed extensions.
+pub fn language_id(own: &[Language], path: &str) -> String {
+    if let Some(id) = builtin_language(path) {
+        return id.to_string();
+    }
+    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+    let hit = own
+        .iter()
+        .find(|l| l.filenames.iter().any(|f| f == name))
+        .or_else(|| ext.as_deref().and_then(|x| own.iter().find(|l| l.extensions.iter().any(|e| e.eq_ignore_ascii_case(x)))));
+    hit.map_or_else(|| "plaintext".to_string(), |l| l.id.clone())
+}
+
+/// The built-in language id of a file name (`a.rs` is `rust`), none for one no built-in language claims. The app's table
+/// (`lsp::language_of`) gives the same ids, which a test there checks, so the mock hosts and `cyx test` decide
+/// `[[diagnostics]]` languages as the app does; a language an extension adds is only the app's to know.
+pub fn builtin_language(path: &str) -> Option<&'static str> {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    if matches!(name, "Gemfile" | "Rakefile" | "Podfile" | "Vagrantfile" | "Guardfile") {
+        return Some("ruby");
+    }
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase())?;
+    Some(match ext.as_str() {
+        "rs" => "rust",
+        "c" | "h" => "c",
+        "cc" | "cpp" | "cxx" | "hpp" | "hh" | "hxx" => "cpp",
+        "go" => "go",
+        "py" | "pyi" => "python",
+        "ts" | "mts" | "cts" => "typescript",
+        "tsx" => "typescriptreact",
+        "js" | "mjs" | "cjs" => "javascript",
+        "jsx" => "javascriptreact",
+        "java" => "java",
+        "cs" => "csharp",
+        "php" | "phtml" => "php",
+        "rb" | "rake" | "gemspec" | "ru" => "ruby",
+        "kt" | "kts" => "kotlin",
+        "swift" => "swift",
+        "lua" => "lua",
+        "sh" | "bash" => "shellscript",
+        "html" | "htm" => "html",
+        "css" => "css",
+        "scss" => "scss",
+        "less" => "less",
+        "json" => "json",
+        "jsonc" => "jsonc",
+        "yaml" | "yml" => "yaml",
+        "toml" => "toml",
+        _ => return None,
+    })
+}
 
 /// `publisher.name`. Serialized as its text and checked again when read back.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -786,5 +845,12 @@ impl Manifest {
     /// The permission set is high risk and has no `why`: an error at install and publish, a warning in `cyx dev`.
     pub fn missing_why(&self) -> bool {
         self.risk().needs_why() && self.permissions.why.is_none()
+    }
+
+    /// The local ids of its `[[status-bar]]` items, the only ones `set-status-item` takes
+    /// ([`calls::check_status_item`]).
+    pub fn status_item_ids(&self) -> Vec<String> {
+        let prefix = format!("{}.", self.id.as_str());
+        self.contributions.status_items.iter().map(|s| s.id.strip_prefix(&prefix).unwrap_or(&s.id).to_string()).collect()
     }
 }

@@ -40,6 +40,7 @@ import {
   type StatusItem,
   type TextEdit,
   type Uri,
+  type ViewEvent,
   type ViewNode,
 } from "./types.ts";
 import type { ScmState } from "./scm.ts";
@@ -102,7 +103,7 @@ export class Context {
   }
 
   /** Handle what happens in view `id` (a click, a changed input): the event as Codeyard sends it, `{ click: { path: ["add"] } }`. */
-  onViewEvent(id: string, f: (ctx: Context, event: any) => Awaitable<void>): void {
+  onViewEvent(id: string, f: (ctx: Context, event: ViewEvent) => Awaitable<void>): void {
     handlers.viewEvents.set(id, f);
   }
 

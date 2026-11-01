@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `cyx test` asks every declared provider once (formatter, code actions, hover, completion, code lenses, inlay hints,
+  tasks, source control) with a sample document, reads workspace files from `files` in `test/fixtures.json`, runs
+  commands with the arguments in its `commands`, and starts the extension host again after a trap or a timeout, so one
+  run reports every problem. A trap shows the extension's own frames first, with Rust names demangled.
+- `MockHost::decorations(path)` (Rust); `on_settings_changed` and `every` handlers may return `Result<()>`, so `?`
+  works in them. The TypeScript `ctx.onViewEvent` handler gets a typed `ViewEvent`.
+- docs/extensions/reference/globs.md: how `read`, `write` and `workspace-contains` globs match.
+
 - Extension API 1.1 (`codeyard:api@1.1.0`), additions only: components built against 1.0 run unchanged, and an
   extension that uses nothing new still needs only API 1.0. Both ship in this release.
   - Watches: `ctx.on_documents` (TypeScript `ctx.onDocuments`) reports documents opening, changing (once typing
@@ -396,6 +404,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   opened from the command line or the Open dialog and a folder added to the workspace kept the `\\?\` prefix of a
   canonical path, so they matched no tab, root or breakpoint; they now keep the workbench's form (`C:/...`).
 
+- The mock hosts (Rust and TypeScript) and `cyx test` judge diagnostics as Codeyard does: `set_diagnostics` needs a
+  `[[diagnostics]]` declaration that lists the file's language, a file in the workspace or open in the editor, and at
+  most 1000 files; messages with bidirectional or zero-width characters are dropped and ones over 4096 characters cut.
+  The rule is `ext_manifest::calls` (with `builtin_language` for the file name's language, which the app's table is
+  tested against); the TypeScript copy is checked against cases the Rust rules judge. A refusal is a warning in the
+  mock's `logs()` and a failure in `cyx test`.
+- A path outside the workspace and a request to an IP address are denied in the mocks and in `cyx test` with the same
+  `(cannot be granted: …)` line and `none: this cannot be granted, …` fix the app and the SDKs give (a test in `cyx`
+  runs both through the real extension host).
+
+- One set of rules for the app, the extension host, both mock hosts and `cyx test` (`ext_manifest::glob`, `allow`,
+  `calls`; the TypeScript mock has a copy checked against cases the Rust rules judge): a glob is matched against the
+  whole workspace path in linear time (`read = ["main.rs"]` is no longer `src/main.rs` in tests), a path is resolved
+  (`..`, `%2e%2e`) before it is matched, request URLs are checked once (`http://`, user info and IP addresses are
+  `invalid` in tests too), and `set-status-item` refuses an undeclared id or a text over 64 characters in the extension
+  host instead of the app dropping it silently. `cyx check` refuses a leading `!` and `**` inside a path part.
+- `window.input-box` with `password: true` shows a masked input instead of failing: a token pasted for `secrets` stays
+  possible (docs/plugin-architecture.md §6.4) and is not shown on screen.
+- An `async activate` in TypeScript: requests wait for its Promise, and a rejection fails the activation (logged as
+  `activate failed: …`; `cyx test` and the mock fail on it).
+- The TypeScript mock is the global `fetch` from the moment it is made, and a `fetch` from the test itself is answered.
+
 - The extension rows of the performance gate block a release: typing with decorations, completion, lenses and
   hints, keys in an extension view, the provider overhead (ceiling 3 ms) and hot reload (ceiling 500 ms). A keystroke
   row's ceiling is now relative (`ceiling_vs` in `perf/metrics.json`): the same keys typed without extensions in the
@@ -460,6 +490,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   asked about one by one.
 
 ### Fixed
+
+- A command or view answer over 8 MiB fails its request with `invalid: the result is 20 MiB; at most 8 MiB`; it was
+  dropped, the request waited until its deadline and the extension was counted as crashed.
+- `cyx test` no longer passes a command that throws, has no handler, or returns any error: an error is an answer only
+  after a call it cannot serve offline (a missing fixture, file or program). An `async activate` that rejects fails it.
+- The mocks check `open-external` for a user action as Codeyard does, and both mocks' and `cyx test`'s `find-files`
+  list only what `read` allows.
+- A native `cargo build` or `cargo clippy` of a Rust extension no longer warns that its type is never constructed.
+- The branch-status example declares its status bar item, which Codeyard did not show.
 
 - `codeyard --update-extensions` printed nothing and exited 0 when `extensions.lock.jsonc` could not be read (an
   unknown key after a hand edit), hiding registry errors and revocations. It now prints why and exits 1, and a
