@@ -129,6 +129,7 @@ pub fn parse(text: &str, options: Options) -> Result<Manifest, Vec<Diagnostic>> 
     }
     let raw: RawManifest = match toml::from_str(text) {
         Ok(r) => r,
+        Err(e) if e.message().contains("unknown field") => return Err(unknown_fields(text, e, options)),
         Err(e) => {
             let message = e.message().trim().to_string();
             let fix = if message.contains("missing field `extension`") {
@@ -148,6 +149,113 @@ pub fn parse(text: &str, options: Options) -> Result<Manifest, Vec<Diagnostic>> 
     let mut cx = Ctx { errors: Vec::new(), options };
     let m = build(&mut cx, raw);
     if cx.errors.is_empty() { Ok(m) } else { Err(cx.errors) }
+}
+
+/// The most unknown fields one check reports.
+const MAX_UNKNOWN_FIELDS: usize = 50;
+
+/// Every unknown field, not only the first one the parser stops at: each is blanked out (its line, or a whole unknown
+/// table) and the text parsed again. When the rest then parses, its own problems follow. Blanking keeps every byte
+/// offset, so each span points into the author's text.
+fn unknown_fields(text: &str, first: toml::de::Error, options: Options) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    let mut bytes = text.as_bytes().to_vec();
+    let mut err = first;
+    while let Some(span) = err.span().filter(|_| err.message().contains("unknown field") && out.len() < MAX_UNKNOWN_FIELDS) {
+        out.push(Diagnostic::new(C::Syntax, err.message().trim().to_string()).at(Some(span.clone())).fix("check the spelling against the manifest reference"));
+        if !blank_entry(&mut bytes, span.start) {
+            break;
+        }
+        // Only ASCII spaces replaced whole lines, so the text is still UTF-8.
+        let Ok(blanked) = std::str::from_utf8(&bytes) else { break };
+        match toml::from_str::<RawManifest>(blanked) {
+            Ok(raw) => {
+                let mut cx = Ctx { errors: Vec::new(), options };
+                build(&mut cx, raw);
+                out.sort_by_key(|d| d.span.as_ref().map(|s| s.start));
+                out.extend(cx.errors);
+                return out;
+            }
+            Err(e) => err = e,
+        }
+    }
+    // In the order of the file, as the author reads it.
+    out.sort_by_key(|d| d.span.as_ref().map(|s| s.start));
+    out
+}
+
+/// Replace with spaces the line holding byte `at`, or for a table header (`[x]`, `[[x]]`) the table up to the next
+/// header. False when there was nothing left to blank.
+fn blank_entry(bytes: &mut [u8], at: usize) -> bool {
+    let at = at.min(bytes.len());
+    let line_start = |i: usize| bytes[..i].iter().rposition(|b| *b == b'\n').map_or(0, |p| p + 1);
+    let line_end = |i: usize| bytes[i..].iter().position(|b| *b == b'\n').map_or(bytes.len(), |p| i + p);
+    let start = line_start(at);
+    let mut end = line_end(at);
+    let is_header = |line: &[u8]| line.iter().find(|b| !b.is_ascii_whitespace()) == Some(&b'[');
+    if is_header(&bytes[start..end]) {
+        while end < bytes.len() {
+            let next = end + 1;
+            let next_end = line_end(next);
+            if is_header(&bytes[next..next_end]) {
+                break;
+            }
+            end = next_end;
+        }
+    }
+    let mut changed = false;
+    for b in &mut bytes[start..end] {
+        if *b != b'\n' && *b != b' ' {
+            *b = b' ';
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// The modifiers a key binding may use (`secondary` is cmd on macOS and ctrl elsewhere).
+pub const KEY_MODIFIERS: &[&str] = &["cmd", "ctrl", "alt", "shift", "fn", "super", "win", "secondary"];
+
+/// Key names besides single characters (`a`, `1`, `/`) and `f1`…`f35`.
+pub const KEY_NAMES: &[&str] =
+    &["enter", "escape", "tab", "space", "backspace", "delete", "insert", "home", "end", "pageup", "pagedown", "up", "down", "left", "right", "menu"];
+
+/// A key binding as Codeyard reads it: one to four keystrokes separated by spaces, each modifiers and one key joined
+/// by `-` (`cmd-shift-r`, `ctrl-k ctrl-r`, `ctrl--` for the minus key).
+pub fn check_key(key: &str) -> Result<(), String> {
+    if key.is_empty() || key.len() > 64 {
+        return Err("must be 1 to 64 characters".into());
+    }
+    let strokes: Vec<&str> = key.split(' ').collect();
+    if strokes.len() > 4 {
+        return Err("has more than 4 keystrokes".into());
+    }
+    for stroke in strokes {
+        // `ctrl--`: the key is `-` itself.
+        let (mods, key) = match stroke.strip_suffix("--") {
+            Some(m) => (m, "-"),
+            None if stroke == "-" => ("", "-"),
+            None => match stroke.rsplit_once('-') {
+                Some((m, k)) => (m, k),
+                None => ("", stroke),
+            },
+        };
+        if stroke.is_empty() || key.is_empty() {
+            return Err("has an empty keystroke; separate keystrokes with one space".into());
+        }
+        for m in mods.split('-').filter(|_| !mods.is_empty()) {
+            if !KEY_MODIFIERS.contains(&m.to_ascii_lowercase().as_str()) {
+                return Err(format!("uses '{m}', which is not a modifier ({})", KEY_MODIFIERS.join(", ")));
+            }
+        }
+        let lower = key.to_ascii_lowercase();
+        let function_key = lower.strip_prefix('f').and_then(|n| n.parse::<u8>().ok()).is_some_and(|n| (1..=35).contains(&n));
+        let single = key.chars().count() == 1 && key.chars().all(|c| c.is_ascii_graphic());
+        if !(single || function_key || KEY_NAMES.contains(&lower.as_str())) {
+            return Err(format!("uses '{key}', which is not a key: use one character, f1 to f35, or one of {}", KEY_NAMES.join(", ")));
+        }
+    }
+    Ok(())
 }
 
 fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
@@ -587,8 +695,9 @@ fn contributions(cx: &mut Ctx, raw: &RawManifest, id: &ExtId, perms: &Permission
     for k in &raw.keybindings {
         let k = k.get_ref();
         let key = k.key.get_ref().trim().to_string();
-        if key.is_empty() || key.len() > 64 || key.split(' ').any(|stroke| stroke.is_empty() || stroke.split('-').any(str::is_empty)) {
-            cx.err(C::BadContribution, k.key.span(), format!("key '{key}' must look like \"cmd-shift-r\" or \"ctrl-k ctrl-r\""));
+        if let Err(why) = check_key(&key) {
+            cx.err(C::BadContribution, k.key.span(), format!("key '{key}' {why}")).fix =
+                Some("write modifiers and a key joined by -, like \"cmd-shift-r\" or \"ctrl-k ctrl-r\"; reference/contributions.md lists the key names".into());
         }
         let cmd = k.command.get_ref();
         // A binding only acts when the user presses the key, so binding a core command needs no permission. What it may

@@ -192,6 +192,11 @@ fn a_code_extension_is_flagged_and_a_data_only_registry_says_so() {
     std::fs::write(dir.join(ext_pkg::COMPONENT), PROBE).unwrap();
     let out = w.publish(&dir, &github(7, 42), true, false).unwrap();
     assert!(out.contains("note: you.probe runs code: the index marks it as code"), "{out}");
+    // A pre-release of code does not wait for those who opted in.
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), PROBE_MANIFEST.replace("version = \"1.0.0\"", "version = \"1.0.0-beta.1\"")).unwrap();
+    let out = w.publish(&dir, &github(7, 42), true, true).unwrap();
+    assert!(out.contains("a pre-release installs at once") && !out.contains("48 hours"), "{out}");
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), PROBE_MANIFEST).unwrap();
     // This registry (Phase 1) refuses code; cyx says what that means instead of passing the refusal on.
     let err = w.publish(&dir, &github(7, 42), false, false).unwrap_err();
     assert!(err.starts_with(&format!("error: {} accepts data-only extensions; you.probe 1.0.0 runs code", w.registry)), "{err}");
@@ -203,4 +208,17 @@ fn a_code_extension_is_flagged_and_a_data_only_registry_says_so() {
 fn registry_urls() {
     assert_eq!(publish::registry_url(Some("http://localhost:8080/")), "http://localhost:8080");
     assert!(publish::registry_url(None).starts_with("https://"));
+}
+
+/// The wait is the registry's 48 h, not 49 (e2e trial: the clocks differ by seconds and the hours were rounded up).
+#[test]
+fn the_wait_is_said_in_whole_hours() {
+    const NOW: u64 = 1_800_000_000;
+    let wait = ext_core::update::CODE_WAIT_SECS;
+    use super::when_available;
+    assert_eq!(when_available(NOW + wait + 5, NOW), "in 48 hours (updates that run code wait 48 h)");
+    assert_eq!(when_available(NOW + wait - 5, NOW), "in 48 hours (updates that run code wait 48 h)");
+    assert_eq!(when_available(NOW + 3600, NOW), "in 1 hour (updates that run code wait 48 h)");
+    assert_eq!(when_available(NOW + 60, NOW), "now");
+    assert_eq!(when_available(NOW - 60, NOW), "now");
 }

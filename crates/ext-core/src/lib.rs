@@ -284,7 +284,7 @@ impl Store {
         self.commit_package(vec![pkg], source, targets)
     }
 
-    /// Package a folder and install it (`codeyard ext install ./folder`). An extension with native programs is packaged
+    /// Package a folder and install it (`codeyard --install-extension ./folder`). An extension with native programs is packaged
     /// for every platform its `native/` folder has, and the one for this machine (else the first) is the installed one.
     pub fn install_dir(&self, dir: &Path) -> Result<Installed, Error> {
         let source = Source::Folder { path: dir.display().to_string() };

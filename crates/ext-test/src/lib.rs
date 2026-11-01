@@ -525,3 +525,5 @@ mod pulls_tests;
 mod scm_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod workspace_tests;

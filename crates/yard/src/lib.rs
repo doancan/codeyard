@@ -43,7 +43,7 @@ pub const ROTATE_WARNING_SECS: u64 = 14 * 86400;
 /// How old a status statement may be: a captured one cannot be replayed later.
 pub const STATEMENT_MAX_AGE_SECS: u64 = 15 * 60;
 /// Code waits this long before clients update to it.
-pub const CODE_WAIT_SECS: u64 = 48 * 3600;
+pub const CODE_WAIT_SECS: u64 = ext_core::update::CODE_WAIT_SECS;
 /// The largest upload: a per-platform package (the larger limit; `ext_pkg::read` holds others to theirs) and its bundle.
 pub const MAX_UPLOAD_BYTES: usize = ext_manifest::limits::TARGET_PACKAGE_BYTES as usize + publisher::MAX_BUNDLE_BYTES + 4;
 
@@ -375,7 +375,8 @@ impl Yard {
         self.write_package(review, &digest, bytes, bundle, &details)?;
         self.sign_index(&tx, now)?;
         tx.commit().map_err(internal("database"))?;
-        let available = if release.code { now + CODE_WAIT_SECS } else { now };
+        // When clients may install it by themselves: the same rule they apply (pre-releases, opted into, never wait).
+        let available = ext_core::update::ready_at(&release);
         Ok(Published { id: m.id.clone(), version: m.version.clone(), digest, available, publisher: who, review })
     }
 
@@ -426,7 +427,7 @@ impl Yard {
         db::add_target_package(tx, &m.id, &m.version, target, &digest).map_err(internal("database"))?;
         self.write_package(review, &digest, bytes, bundle, details)?;
         self.sign_index(tx, now)?;
-        let available = if release.code { release.published + CODE_WAIT_SECS } else { now };
+        let available = ext_core::update::ready_at(&release).max(now);
         Ok(Published { id: m.id.clone(), version: m.version.clone(), digest, available, publisher: who.clone(), review })
     }
 

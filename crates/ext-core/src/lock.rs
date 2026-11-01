@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 /// lowest format that holds it, so an older Codeyard keeps reading it.
 pub const FORMAT: u32 = 4;
 
-const HEADER: &str = "// Installed extensions. Written by Codeyard; change it with the Extensions view or `codeyard ext`.\n";
+const HEADER: &str = "// Installed extensions. Written by Codeyard; change it with the Extensions view or `codeyard --install-extension`.\n";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -43,7 +43,7 @@ pub struct Locked {
 pub enum Source {
     /// A `.cyx` file the user installed (its path when installed).
     File { path: String },
-    /// A folder packaged on install (`codeyard ext install ./folder`).
+    /// A folder packaged on install (`codeyard --install-extension ./folder`).
     Folder { path: String },
     /// A registry, by its name in `extensions.registries`, with the publisher identity pinned at the first install from
     /// it: a later version signed by anyone else is a new trust decision.

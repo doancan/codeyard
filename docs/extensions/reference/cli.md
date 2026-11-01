@@ -19,7 +19,8 @@ usage:
                                              missing permissions to codeyard-extension.toml
   cyx explain CODE                           what an error code such as CY0201 means and how to fix it
   cyx package [FOLDER] [-o FILE|FOLDER]      build the code, then write a .cyx to install or publish
-                                             (--no-build: package the extension.wasm already there;
+                                             (--dry-run: list the files it would hold, write nothing;
+                                             --no-build: package the extension.wasm already there;
                                              --target TRIPLE: one platform's package of an extension with
                                              native programs in native/<TRIPLE>/; without it, every platform)
   cyx test [FOLDER] [--fixtures FILE]        build the code and run each command and view in the extension host;
@@ -29,8 +30,9 @@ usage:
   cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL] [--target TRIPLE]
                                              sign it (no keys: GitHub Actions or a browser sign-in) and publish
                                              (native programs: every platform in native/, or the one named)
-  cyx yank | restore VERSION [FOLDER]        hide a published version from installs, or bring it back
-  cyx deprecate VERSION [FOLDER] [--replacement ID]
+  cyx yank | restore VERSION [FOLDER] [--registry URL]
+                                             hide a published version from installs, or bring it back
+  cyx deprecate VERSION [FOLDER] [--replacement ID] [--registry URL]
   cyx yard <keygen|sign|verify> …           the registry operator's commands (cyx yard help)
   cyx --version
 

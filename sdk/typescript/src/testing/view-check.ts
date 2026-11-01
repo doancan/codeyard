@@ -291,7 +291,7 @@ class Validator {
       return;
     }
     if (spec.rows) {
-      if (children.length > L.rowsPerPage) this.problem(`has ${children.length} rows; send at most ${L.rowsPerPage} at a time`);
+      if (children.length > L.rowsPerPage) this.problem(tooManyRows(kind, children.length));
       if (children.some((c) => keyOf(c) === undefined)) this.problem(`every row of a ${kind} needs a key`);
     }
     if (kind === "table") {
@@ -497,4 +497,12 @@ export function checkEvent(json: string): string | undefined {
     if (!ok) return `the ${name} event's \`${f}\` is ${v === undefined ? "missing" : `not ${JSON.stringify(v)}`}`;
   }
   return undefined;
+}
+
+/** As `too_many_rows` in crates/ext-ui: a list or table has no pages, a tree sends the rest with `more`. */
+function tooManyRows(kind: string, n: number): string {
+  const max = L.rowsPerPage;
+  return kind === "tree"
+    ? `has ${n} rows; a tree takes at most ${max} at a time: send the rest as later pages with \`more\``
+    : `has ${n} rows; a ${kind} takes at most ${max}: show fewer, such as the newest, or let the user filter them`;
 }

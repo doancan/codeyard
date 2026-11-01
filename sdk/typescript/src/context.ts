@@ -21,6 +21,7 @@ import {
   type Diagnostic,
   type Document,
   type Env,
+  type FileResult,
   type FileStat,
   type FormatOptions,
   type Hover,
@@ -385,6 +386,19 @@ export class Context {
     throw unexpected(c);
   }
 
+  /**
+   * Read several files in one round trip, each with its own result, in the order asked. Much faster than one
+   * `readFile` after another: 2000 sequential reads take seconds.
+   */
+  async readMany(uris: Uri[]): Promise<FileResult[]> {
+    const line = () => pathLine("read", uris[0] ?? "");
+    const c = await result(call(() => optional("workspace", line).readMany(uris)), line);
+    if (c.tag !== "files") throw unexpected(c);
+    return c.val.map((f) =>
+      f.contents.tag === "ok" ? { uri: f.uri, bytes: f.contents.val } : { uri: f.uri, error: fromWit(f.contents.val, () => pathLine("read", f.uri)) },
+    );
+  }
+
   async readText(uri: Uri): Promise<string> {
     return new TextDecoder().decode(await this.readFile(uri));
   }
@@ -429,6 +443,18 @@ export class Context {
   async deleteFile(uri: Uri): Promise<void> {
     const line = () => pathLine("write", uri);
     await result(call(() => optional("workspaceWrite", line).delete(uri)), line);
+  }
+
+  /** Move or rename a file or folder; both paths need `write`. */
+  async rename(from: Uri, to: Uri): Promise<void> {
+    const line = () => pathLine("write", to);
+    await result(call(() => optional("workspaceWrite", line).rename(from, to)), line);
+  }
+
+  /** Create a folder and any missing parents. */
+  async createDirectory(uri: Uri): Promise<void> {
+    const line = () => pathLine("write", uri);
+    await result(call(() => optional("workspaceWrite", line).createDirectory(uri)), line);
   }
 
   // ---- network (`net`, `auth`) -------------------------------------------------------------------------------------
