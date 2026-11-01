@@ -132,6 +132,102 @@ fn writes_need_write_and_trust() {
     assert_eq!(denied_why(&c), Some(v::Why::UntrustedWorkspace));
 }
 
+fn denied_permission(c: &Completion) -> String {
+    match c {
+        Completion::Failed(v::Error::Denied(d)) => d.permission.clone(),
+        other => panic!("not denied: {other:?}"),
+    }
+}
+
+/// A file outside the workspace: no manifest line reaches it, so the denial says it cannot be granted.
+#[test]
+fn outside_the_workspace_cannot_be_granted() {
+    let r = root("outside");
+    let s = scope(&r, perms(&["**"], &["**"], &[]), true);
+    let (c, _) = call(&s, Start::ReadFile { uri: "file:///etc/passwd".into() });
+    let p = denied_permission(&c);
+    let (what, reason) = ext_manifest::parse_ungrantable_line(&p).unwrap_or_else(|| panic!("{p}"));
+    assert_eq!(what, "read file:///etc/passwd");
+    assert!(reason.contains("outside the workspace"), "{reason}");
+    let (c, _) = call(&s, Start::WriteFile { uri: "file:///tmp/x".into(), contents: Vec::new() });
+    assert!(denied_permission(&c).starts_with("write file:///tmp/x (cannot be granted: "), "{c:?}");
+}
+
+/// Links inside the workspace are followed on the host before anything is reached: one leading out of it is refused
+/// for every kind of call, and one leading to a file the rules do not allow (`.env`) is checked as that file.
+#[cfg(unix)]
+#[test]
+fn symbolic_links_do_not_lead_out_of_the_workspace() {
+    use std::os::unix::fs::symlink;
+    let r = root("links");
+    let away = std::env::temp_dir().join(format!("broker-away-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&away);
+    std::fs::create_dir_all(&away).unwrap();
+    std::fs::write(away.join("passwd"), "root:x:0:0\n").unwrap();
+    let away = std::fs::canonicalize(&away).unwrap().to_string_lossy().into_owned();
+    symlink(&away, format!("{r}/src/link-out")).unwrap();
+    symlink("/etc", format!("{r}/src/etc")).unwrap();
+    symlink("../.env", format!("{r}/src/settings.txt")).unwrap();
+    symlink("a.rs", format!("{r}/src/alias.rs")).unwrap();
+    symlink(format!("{away}/planted.sh"), format!("{r}/src/dangling")).unwrap();
+    let s = scope(&r, perms(&["src/**"], &["src/**"], &[]), true);
+    let file = |rel: &str| uri(&format!("{r}/{rel}"));
+
+    // Reads, stats and many-file reads.
+    for rel in ["src/link-out/passwd", "src/etc/passwd"] {
+        let (c, _) = call(&s, Start::ReadFile { uri: file(rel) });
+        let p = denied_permission(&c);
+        assert!(p.starts_with(&format!("read {r}/{rel} (cannot be granted: it leads through a symbolic link to ")), "{p}");
+        assert_eq!(denied_why(&call(&s, Start::Stat { uri: file(rel) }).0), Some(v::Why::NotDeclared));
+    }
+    let (c, _) = call(&s, Start::ReadFile { uri: file("src/settings.txt") });
+    assert_eq!(denied_permission(&c), "read = [\".env\"]", "checked as the file it leads to, which must be named");
+    assert_eq!(call(&s, Start::ReadFile { uri: file("src/alias.rs") }).0, Completion::Bytes(b"fn main() { needle(); }\n".to_vec()));
+    let (c, _) = call(&s, Start::ReadMany { uris: vec![file("src/a.rs"), file("src/link-out/passwd"), file("src/settings.txt")] });
+    let Completion::Files(files) = c else { panic!("{c:?}") };
+    assert!(files[0].contents.is_ok());
+    assert!(matches!(files[1].contents, Err(v::Error::Denied(_))), "{:?}", files[1]);
+    assert!(matches!(files[2].contents, Err(v::Error::Denied(_))), "{:?}", files[2]);
+
+    // Listing and search report no file behind a link that leads out or to `.env`.
+    std::fs::write(format!("{away}/needle.rs"), "needle").unwrap();
+    std::fs::write(format!("{r}/.env"), "needle").unwrap();
+    let (c, _) = call(&s, Start::FindFiles { glob: "**".into(), max: 100 });
+    let Completion::Uris(found) = c else { panic!("{c:?}") };
+    assert!(found.contains(&file("src/a.rs")), "{found:?}");
+    assert!(!found.iter().any(|u| u.contains("settings.txt") || u.contains("link-out") || u.contains("/etc/") || u.contains("dangling")), "{found:?}");
+    let q = v::SearchQuery { pattern: "needle".into(), regex: false, case_sensitive: true, whole_word: false, include: vec![], max: 100 };
+    let (_, events) = call(&s, Start::Search { query: q });
+    for e in &events {
+        let StreamEvent::SearchMatch(m) = e else { continue };
+        assert!(!m.uri.contains("settings.txt") && !m.uri.contains("link-out") && !m.uri.contains("/etc/"), "{events:?}");
+    }
+
+    // Writes through a link, or through a dangling one, never land outside.
+    let (c, _) = call(&s, Start::WriteFile { uri: file("src/link-out/new.txt"), contents: b"x".to_vec() });
+    assert!(denied_permission(&c).contains("cannot be granted"), "{c:?}");
+    let (c, _) = call(&s, Start::WriteFile { uri: file("src/dangling"), contents: b"x".to_vec() });
+    assert!(denied_permission(&c).contains("cannot be granted"), "{c:?}");
+    assert!(!std::path::Path::new(&format!("{away}/planted.sh")).exists());
+    let (c, _) = call(&s, Start::CreateDirectory { uri: file("src/link-out/made") });
+    assert!(denied_permission(&c).contains("cannot be granted"), "{c:?}");
+    let (c, _) = call(&s, Start::Rename { from: file("src/a.rs"), to: file("src/link-out/a.rs") });
+    assert!(denied_permission(&c).contains("cannot be granted"), "{c:?}");
+    let (c, _) = call(&s, Start::Delete { uri: file("src/link-out/passwd") });
+    assert!(denied_permission(&c).contains("cannot be granted"), "{c:?}");
+    assert!(std::path::Path::new(&format!("{away}/passwd")).exists());
+    // Deleting the link itself removes the link, not what it points to.
+    assert_eq!(call(&s, Start::Delete { uri: file("src/settings.txt") }).0, Completion::Done);
+    assert!(std::fs::symlink_metadata(format!("{r}/src/settings.txt")).is_err());
+    assert_eq!(std::fs::read(format!("{r}/.env")).unwrap(), b"needle");
+
+    // A workspace opened through a link of its own still works.
+    let via = format!("{away}/ws-link");
+    symlink(&r, &via).unwrap();
+    let s = scope(&via, perms(&["src/**"], &[], &[]), true);
+    assert_eq!(call(&s, Start::ReadFile { uri: uri(&format!("{via}/src/a.rs")) }).0, Completion::Bytes(b"fn main() { needle(); }\n".to_vec()));
+}
+
 #[test]
 fn find_files_and_search_report_only_readable_files() {
     let r = root("find");

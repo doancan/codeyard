@@ -73,6 +73,9 @@ impl Workbench {
             return done(self, Completion::Failed(v::Error::Invalid(format!("{command} is not a core command extensions may run"))), cx);
         };
         let arg: serde_json::Value = serde_json::from_str(args_json).unwrap_or(serde_json::Value::Null);
+        if core.implies == Implies::ReadArgument {
+            return self.open_for_extension(caller, core, scope, &arg, done, window, cx);
+        }
         match self.run_core_command(core, &scope, &arg, window, cx) {
             Ok(Some(c)) => done(self, c, cx),
             Err(e) => {
@@ -95,6 +98,49 @@ impl Workbench {
         }
     }
 
+    /// A core command that opens the file its argument names: `read` on it as written and where it really leads on the
+    /// workspace's host (checked on a background thread), so a symbolic link in the workspace cannot open a file
+    /// outside it, or one the rules do not allow, for the extension to read as the active document.
+    #[allow(clippy::too_many_arguments)]
+    fn open_for_extension(
+        &mut self,
+        caller: &str,
+        core: &CoreCommand,
+        scope: Scope,
+        arg: &serde_json::Value,
+        done: CoreDone,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some((uri, selection)) = file_location(arg) else {
+            return done(self, Completion::Failed(v::Error::Invalid(format!("core:{} takes {}", core.id, core.argument.describe()))), cx);
+        };
+        let host = self.remote.host.clone();
+        let checked = cx.background_executor().spawn(async move { crate::ext_broker::may_read_on_disk(host.as_ref(), &scope, &uri) });
+        let (caller, id) = (caller.to_string(), core.id);
+        cx.spawn_in(window, async move |this, cx| {
+            let checked = checked.await;
+            this.update_in(cx, |this, window, cx| match checked {
+                Ok(path) => {
+                    match selection {
+                        // Selected when its editor comes to the front (`select_for_extension`), loaded or not.
+                        Some(range) => {
+                            this.cfg.exts.open_selection = Some((path.clone(), range));
+                            this.open_location(path, range.0.0, range.0.1, window, cx);
+                        }
+                        None => this.open_file(path, window, cx),
+                    }
+                    done(this, Completion::Done, cx);
+                }
+                Err(e) => {
+                    this.log_extension(&caller, ext_api::value::LogLevel::Warn, format!("core:{id} refused: {}", super::code_glue::explain(&e)));
+                    done(this, Completion::Failed(e), cx);
+                }
+            })
+        })
+        .detach();
+    }
+
     /// Check and run `core`: its completion, or `None` when it finishes later (a task by label).
     fn run_core_command(
         &mut self,
@@ -105,19 +151,8 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) -> Result<Option<Completion>, v::Error> {
         match core.implies {
-            Implies::ReadArgument => {
-                let (uri, selection) = file_location(arg).ok_or_else(|| v::Error::Invalid(format!("core:{} takes {}", core.id, core.argument.describe())))?;
-                let path = scope.may_read(&uri)?;
-                match selection {
-                    // Selected when its editor comes to the front (`select_for_extension`), loaded or not.
-                    Some(range) => {
-                        self.cfg.exts.open_selection = Some((path.clone(), range));
-                        self.open_location(path, range.0.0, range.0.1, window, cx);
-                    }
-                    None => self.open_file(path, window, cx),
-                }
-                return Ok(Some(Completion::Done));
-            }
+            // Opened by `open_for_extension`, after the file's real path was checked.
+            Implies::ReadArgument => return Err(v::Error::Invalid(format!("core:{} opens a file", core.id))),
             Implies::RunTask if arg.is_string() => return Ok(None),
             Implies::WriteActiveFile => {
                 let path = self.active_editor().map(|e| e.read(cx).path.clone());

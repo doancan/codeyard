@@ -69,7 +69,7 @@ impl Yard {
     fn install(&self, spec: &str) {
         let regs =
             crate::ext_registry::registries(&crate::settings::parse_layers(&std::fs::read_to_string(self.cfg.join("settings.jsonc")).unwrap(), &[]).unwrap().0);
-        crate::ext_registry::install_from_command_line(&self.cfg, &regs, spec).unwrap();
+        crate::ext_registry::install_from_command_line(&self.cfg, &regs, spec, true).unwrap();
     }
 
     /// What the registry did since the client last asked becomes visible on the next check (the cached index is a day
@@ -355,6 +355,59 @@ fn update_extensions_asks_now_and_stops_a_revoked_version() {
     assert!(report.errors.is_empty(), "{:?}", report.errors);
     assert!(report.stopped.iter().any(|l| l.contains("Canary.")), "{:?}", report.stopped);
     assert!(crate::ext::store(&y.cfg).revoked().values().any(|r| r.version.to_string() == "1.0.0"));
+}
+
+fn regs_of(cfg: &Path) -> Vec<ext_core::registry::Registry> {
+    crate::ext_registry::registries(&crate::settings::parse_layers(&std::fs::read_to_string(cfg.join("settings.jsonc")).unwrap(), &[]).unwrap().0)
+}
+
+/// #3 of the outside-author trials: a lock file broken by hand (`pre_release` for `pre-release`) is reported, not passed
+/// over in silence, and a revoked version still stops: revocation does not depend on reading the lock's settings.
+#[test]
+fn a_lock_that_cannot_be_read_is_reported_and_revocations_still_apply() {
+    let root = dir("bad-lock");
+    let mut y = Yard::new(&root, "badlock", &["1.0.0"], None);
+    let now = crate::ext_registry::now();
+    y.r.set_status("you.night", "1.0.0", Status::Revoked { reason: "Key stolen.".into() }, now);
+    let lock = y.cfg.join(crate::ext::LOCK_FILE);
+    let good = std::fs::read_to_string(&lock).unwrap();
+    std::fs::write(&lock, good.replacen("\"version\"", "\"pre_release\": true,\n      \"version\"", 1)).unwrap();
+    let report = crate::ext_updates::check_now(&y.cfg, &regs_of(&y.cfg), ext_core::update::AutoUpdate::Install, now);
+    assert!(report.errors.iter().any(|e| e.contains("extensions.lock.jsonc is not valid") && e.contains("pre_release")), "{:?}", report.errors);
+    assert!(report.stopped.iter().any(|l| l.contains("Key stolen.")), "{:?}", report.stopped);
+    // Fixing the lock does not start the revoked version again.
+    std::fs::write(&lock, &good).unwrap();
+    let problems = crate::ext::reload(Some(&y.cfg));
+    assert!(problems.iter().any(|p| p.contains("Key stolen.")), "{problems:?}");
+    assert_eq!(active_version(), None);
+}
+
+/// #5 of the outside-author trials: a revoked version whose newer one was withdrawn goes back to the newest earlier
+/// version that may install, and with none left the status says it stays stopped.
+#[test]
+fn a_revoked_version_goes_back_when_nothing_newer_may_install() {
+    let root = dir("revoked-back");
+    let mut y = Yard::new(&root, "revokedback", &["0.9.0", "1.0.0", "1.1.0"], None);
+    y.install("you.night@1.0.0");
+    let now = crate::ext_registry::now();
+    y.r.set_status("you.night", "1.0.0", Status::Revoked { reason: "Bad build.".into() }, now);
+    y.r.set_status("you.night", "1.1.0", Status::Yanked, now);
+    let report = crate::ext_updates::check_now(&y.cfg, &regs_of(&y.cfg), ext_core::update::AutoUpdate::Install, now);
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+    assert!(report.done.iter().any(|l| l.contains("went back to version 0.9.0: the registry revoked 1.0.0")), "{:?}", report.done);
+    assert_eq!(y.installed(), "0.9.0");
+    crate::ext::reload(Some(&y.cfg));
+    assert_eq!(active_version().as_deref(), Some("0.9.0"), "runs again");
+
+    // Nothing to go to: it stays stopped, and the status says why.
+    let root = dir("revoked-stuck");
+    let mut y = Yard::new(&root, "revokedstuck", &["1.0.0", "1.1.0"], None);
+    y.r.set_status("you.night", "1.0.0", Status::Revoked { reason: "Bad build.".into() }, now);
+    y.r.set_status("you.night", "1.1.0", Status::Yanked, now);
+    let report = crate::ext_updates::check_now(&y.cfg, &regs_of(&y.cfg), ext_core::update::AutoUpdate::Install, now);
+    let s = &report.status[&ext_manifest::ExtId::parse("you.night").unwrap()];
+    assert_eq!((&s.standing, &s.offer), (&Standing::Revoked { reason: "Bad build.".into() }, &None));
+    assert_eq!(y.installed(), "1.0.0");
 }
 
 /// A public registry ships only with real ceremony keys: the check that runs when the app compiles.

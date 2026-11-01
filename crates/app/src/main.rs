@@ -1,6 +1,6 @@
 //! codeyard: lightweight, native code editor. Local + SSH.
 //!
-//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|FOLDER|ID[@VERSION]] [--update-extensions]
+//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|FOLDER|ID[@VERSION] [--accept-permissions]] [--update-extensions]
 
 // Normal Windows launches are GUI applications in every profile. Test harnesses keep their console.
 #![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
@@ -788,12 +788,14 @@ struct Args {
     install: Vec<String>,
     /// `--update-extensions`: check the registries of installed extensions now, act as the update check does, and exit.
     update_extensions: bool,
+    /// `--accept-permissions`: with `--install-extension`, grant what the packages ask for (their sheets are printed).
+    accept_permissions: bool,
 }
 
-/// `--install-extension`: install each package into the user's store, as the Extensions view does after its consent
-/// sheet (the person running the command is the one consenting), and report one line per package. Exit status 1 when any
-/// failed; the others are still installed.
-fn install_extensions(files: &[String]) -> i32 {
+/// `--install-extension`: install each package into the user's store with the checks of the Extensions view, and report
+/// one line per package. A package that asks for permissions prints its consent sheet and installs only with
+/// `--accept-permissions`. Exit status 1 when any failed; the others are still installed.
+fn install_extensions(files: &[String], accept_permissions: bool) -> i32 {
     let Some(cfg) = settings::config_dir() else {
         eprintln!("codeyard: no settings folder");
         return 1;
@@ -807,9 +809,20 @@ fn install_extensions(files: &[String]) -> i32 {
         let path = std::fs::canonicalize(f).unwrap_or_else(|_| f.into());
         // A file (or anything that looks like one) is a package; `publisher.name[@version]` comes from a registry.
         let from_file = path.exists() || f.ends_with(".cyx") || f.contains(['/', '\\']);
-        let result = if from_file { ext::install_file(&store, &path) } else { ext_registry::install_from_command_line(&cfg, &registries, f) };
+        let result = if from_file {
+            ext::install_file(&store, &path, accept_permissions)
+        } else {
+            ext_registry::install_from_command_line(&cfg, &registries, f, accept_permissions)
+        };
         match result {
-            Ok(m) => println!("installed {} {}", m.id, m.version),
+            Ok(m) => {
+                // What was granted, as the sheet put it.
+                let source = store.locked().ok().and_then(|l| l.get(&m.id).map(|l| l.source.clone()));
+                if let Some(sheet) = source.and_then(|s| ext::permission_sheet(&m, &s)) {
+                    println!("{sheet}");
+                }
+                println!("installed {} {}", m.id, m.version)
+            }
             Err(e) => {
                 eprintln!("{f}: {e}");
                 status = 1;
@@ -835,6 +848,9 @@ fn update_extensions() -> i32 {
         println!("{line}");
     }
     for (id, s) in &report.status {
+        if let (ext_core::update::Standing::Revoked { reason }, None) = (&s.standing, &s.offer) {
+            println!("{}", i18n::tf("{0} stays stopped: the registry revoked the installed version ({1}) and has no other version to install", &[id, reason]));
+        }
         let Some(offer) = &s.offer else { continue };
         let v = offer.version();
         match offer {
@@ -900,6 +916,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
         extension_dev: None,
         install: Vec::new(),
         update_extensions: false,
+        accept_permissions: false,
     };
     let mut it = argv;
     while let Some(a) = it.next() {
@@ -911,6 +928,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             "--extension-dev" => args.extension_dev = it.next(),
             "--install-extension" => args.install.extend(it.next()),
             "--update-extensions" => args.update_extensions = true,
+            "--accept-permissions" => args.accept_permissions = true,
             update_restart::FLAG => args.after_update = true,
             "--search" => args.search = it.next(),
             "--panel" => args.panel = it.next(),
@@ -929,7 +947,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             }
             "-h" | "--help" => {
                 println!(
-                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|FOLDER|ID[@VERSION]] [--update-extensions]"
+                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|FOLDER|ID[@VERSION] [--accept-permissions]] [--update-extensions]"
                 );
                 std::process::exit(0);
             }
@@ -969,6 +987,9 @@ mod args_tests {
         assert_eq!((dev.extension_dev.as_deref(), dev.path.as_deref()), (Some("/ext"), Some("/work")), "its value is not the folder to open");
         let inst = parse(false, &["--install-extension", "a.cyx", "--install-extension", "b.cyx"]);
         assert_eq!((inst.install.as_slice(), inst.path.as_deref()), (&["a.cyx".to_string(), "b.cyx".to_string()][..], None));
+        assert!(!inst.accept_permissions, "never without the flag");
+        let accepted = parse(false, &["--install-extension", "you.tools", "--accept-permissions"]);
+        assert!(accepted.accept_permissions && accepted.path.is_none());
         let up = parse(false, &["--update-extensions"]);
         assert!(up.update_extensions && up.path.is_none());
     }
@@ -1164,7 +1185,7 @@ fn main() {
     if !args.install.is_empty() || args.update_extensions {
         let mut status = 0;
         if !args.install.is_empty() {
-            status = install_extensions(&args.install);
+            status = install_extensions(&args.install, args.accept_permissions);
         }
         if args.update_extensions {
             status = status.max(update_extensions());

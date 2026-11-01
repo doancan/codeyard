@@ -606,6 +606,34 @@ pub fn parse_oauth_host_line(permission: &str) -> Option<(&str, &str)> {
     Some((provider, rest.strip_suffix("\"]")?))
 }
 
+/// What a refused call carries as its permission when no manifest entry could allow it: a file outside the workspace,
+/// or a URL that names an IP address. `what` is the call (`read file:///etc/passwd`), `reason` says why it cannot be
+/// granted. It has no `= [`, so the SDKs keep it, and they print the reason instead of a line to add
+/// ([`parse_ungrantable_line`]).
+pub fn ungrantable_line(what: &str, reason: &str) -> String {
+    format!("{what} {UNGRANTABLE}{reason})")
+}
+
+const UNGRANTABLE: &str = "(cannot be granted: ";
+
+/// The call and the reason of an [`ungrantable_line`].
+pub fn parse_ungrantable_line(permission: &str) -> Option<(&str, &str)> {
+    let (what, rest) = permission.split_once(&format!(" {UNGRANTABLE}"))?;
+    Some((what, rest.strip_suffix(')')?))
+}
+
+/// An IP address rather than a host name: `127.0.0.1`, `[::1]`, and the other spellings resolvers take for an IPv4
+/// address (`127.1`, `2130706433`, `0x7f.1`): a name whose labels are all numbers, or whose last one is (no top-level
+/// domain is numeric). `net` lists host names only.
+pub fn is_ip_address(host: &str) -> bool {
+    let number =
+        |l: &str| !l.is_empty() && (l.bytes().all(|b| b.is_ascii_digit()) || l.strip_prefix("0x").is_some_and(|h| h.bytes().all(|b| b.is_ascii_hexdigit())));
+    host.starts_with('[')
+        || host.parse::<std::net::IpAddr>().is_ok()
+        || host.split('.').all(number)
+        || host.rsplit('.').next().is_some_and(|l| !l.is_empty() && l.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// The fix for an [`oauth_host_line`]: the host goes into `hosts` of that `[[oauth]]` table. GitHub's account is built
 /// in, so its hosts are fixed.
 pub fn oauth_host_fix(permission: &str) -> Option<String> {

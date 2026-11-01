@@ -288,7 +288,8 @@ tokens and rules apply.
   at most 1440): the window sends `KeepFor` when it opens the session and again at quit, and the daemon applies it to
   that session instead of its default grace period; 0 ends the session as soon as its connection does. The local daemon
   exits 10 minutes after its last session.
-- **Protocol:** version 16 added `PtyToken`, `PtyAttach` and `PtyList`; version 17 adds `KeepFor`. The static Linux agent
+- **Protocol:** version 16 added `PtyToken`, `PtyAttach` and `PtyList`; version 17 adds `KeepFor`, and version 18 `RealPaths`
+  for the extension broker (docs/plugin-architecture.md §6.2). The static Linux agent
   stays within its budget (1664 KB).
 
 On Windows the terminal daemon listens on a named pipe instead of a socket (`agent/src/daemon_windows.rs`), with the

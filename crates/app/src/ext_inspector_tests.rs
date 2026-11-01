@@ -84,6 +84,12 @@ fn a_fix_pasted_into_the_manifest_makes_the_call_pass() {
 }
 
 #[test]
+fn a_denial_no_entry_can_lift_has_no_fix_line() {
+    let p = ext_manifest::ungrantable_line("read file:///work/a = b", "the file is outside the workspace");
+    assert_eq!(fix_line(&denial(&p, v::Why::NotDeclared), &Permissions::default()), None);
+}
+
+#[test]
 fn fixes_name_the_switch_or_nothing() {
     let off = Permissions { net: vec!["api.example.com".into(), "cdn.example.com".into()], ..Default::default() };
     // The exthost knows only the kind: the entries the user turned off fill it in.

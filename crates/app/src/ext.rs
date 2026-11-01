@@ -509,10 +509,88 @@ pub fn check_setting(key: &str, value: &serde_json::Value) -> Result<(), String>
     Err(crate::i18n::tf("{0}: expected {1}", &[&format!("\"{key}\""), &kind]))
 }
 
+/// The consent sheet's text and every other plain-words line of an extension.
+pub fn source_line(s: &ext_core::Source) -> String {
+    match s {
+        ext_core::Source::File { path } => crate::i18n::tf("Installed from the file {}", &[path]),
+        ext_core::Source::Folder { path } => crate::i18n::tf("Installed from the folder {}", &[path]),
+        ext_core::Source::Registry { registry, publisher } => crate::i18n::tf("From the {0} registry, published by {1}", &[registry, publisher]),
+    }
+}
+
+/// The consent sheet's lines (`Permissions::lines`) in the UI language.
+pub fn permission_lines(p: &ext_manifest::Permissions) -> Vec<String> {
+    use ext_manifest::{Clipboard, Line};
+    p.lines()
+        .iter()
+        .map(|l| match l {
+            Line::ReadAll => crate::i18n::t("Read all files in the workspace").to_string(),
+            Line::Read(g) => crate::i18n::tf("Read {}", &[g]),
+            Line::ReadSecrets => crate::i18n::t("Read files that can hold passwords and keys").to_string(),
+            Line::ChangeAll => crate::i18n::t("Change all files in the workspace").to_string(),
+            Line::Change(g) => crate::i18n::tf("Change {}", &[g]),
+            Line::ConnectAny => crate::i18n::t("Connect to any website").to_string(),
+            Line::Connect(h) => crate::i18n::tf("Connect to {}", &[h]),
+            Line::ConnectSetting(k) => crate::i18n::tf("Connect to a server you allow, named in its “{}” setting", &[k]),
+            Line::Account(a) => crate::i18n::tf("Act as your {} account", &[a]),
+            Line::Secrets => crate::i18n::t("Store secrets in your keychain").to_string(),
+            Line::Run(r) => crate::i18n::tf("Run {} with any arguments", &[r]),
+            Line::Clipboard(Clipboard::Read) => crate::i18n::t("Read the clipboard").to_string(),
+            Line::Clipboard(Clipboard::Write) => crate::i18n::t("Write to the clipboard").to_string(),
+            Line::Clipboard(_) => crate::i18n::t("Read and write the clipboard").to_string(),
+            Line::Terminal => crate::i18n::t("Type into terminals").to_string(),
+            Line::Commands(c) => crate::i18n::tf("Run Codeyard commands: {}", &[c]),
+        })
+        .collect()
+}
+
+/// The red line on the sheet and the detail page, for a High-risk permission set.
+pub fn high_risk_line(m: &Manifest) -> Option<String> {
+    let r = m.risk();
+    (r.level == ext_manifest::Level::High).then(|| {
+        if r.runs_code {
+            crate::i18n::t("High risk: this extension can run programs as you.").to_string()
+        } else {
+            crate::i18n::t("High risk: this extension can read private data and send it elsewhere.").to_string()
+        }
+    })
+}
+
+/// The consent sheet as text, for `codeyard --install-extension`: where the package comes from, what it asks for in
+/// the sheet's words, its high-risk line and the author's reason. `None` when it asks for no permission.
+pub fn permission_sheet(m: &Manifest, source: &ext_core::Source) -> Option<String> {
+    if m.permissions.is_empty() {
+        return None;
+    }
+    let mut out = crate::i18n::tf("{0} {1} ({2}) asks to:", &[&m.id, &m.version, &source_line(source)]);
+    for line in permission_lines(&m.permissions) {
+        out.push_str(&format!("\n  - {line}"));
+    }
+    if let Some(why) = &m.permissions.why {
+        out.push_str(&format!("\n  {}", crate::i18n::tf("Why: {}", &[why])));
+    }
+    if let Some(red) = high_risk_line(m) {
+        out.push_str(&format!("\n  {red}"));
+    }
+    Some(out)
+}
+
+/// Consent on the command line: running `codeyard --install-extension` is not consent to what a package asks for. One
+/// that asks for permissions installs only with `--accept-permissions`; without it the sheet is the error.
+pub fn command_line_consent(m: &Manifest, source: &ext_core::Source, accepted: bool) -> Result<(), String> {
+    match permission_sheet(m, source) {
+        Some(sheet) if !accepted => Err(format!(
+            "{sheet}\n{}",
+            crate::i18n::t("Nothing was installed. Run the command again with --accept-permissions to grant these, or install it from the Extensions view.")
+        )),
+        _ => Ok(()),
+    }
+}
+
 /// Install a package file, or a folder packaged as `cyx package` would but without building it (`codeyard
-/// --install-extension`): the checks of the Extensions view, without its sheet. A package with code installs only when
-/// it asks for no permissions: anything more needs the consent sheet.
-pub fn install_file(store: &ext_core::Store, path: &Path) -> Result<Manifest, String> {
+/// --install-extension`): the checks of the Extensions view, with its sheet as text. A package that asks for permissions
+/// installs only when `accepted` (`--accept-permissions`).
+pub fn install_file(store: &ext_core::Store, path: &Path, accepted: bool) -> Result<Manifest, String> {
     let (bytes, source) = if path.is_dir() {
         let files = ext_pkg::collect_dir_for(path, ext_pkg::folder_target(path).as_deref()).map_err(|e| e.to_string())?;
         (ext_pkg::write(files).map_err(|e| e.to_string())?.0, ext_core::Source::Folder { path: path.display().to_string() })
@@ -520,10 +598,7 @@ pub fn install_file(store: &ext_core::Store, path: &Path) -> Result<Manifest, St
         (std::fs::read(path).map_err(|e| e.to_string())?, ext_core::Source::File { path: path.display().to_string() })
     };
     let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
-    // Native programs need their id typed on the sheet (§6.3), and they always ask to run.
-    if (pkg.manifest.code.is_some() || pkg.manifest.has_native_programs()) && !pkg.manifest.permissions.is_empty() {
-        return Err(crate::i18n::tf("{} asks for permissions: install it from the Extensions view to review them", &[&pkg.manifest.id]));
-    }
+    command_line_consent(&pkg.manifest, &source, accepted)?;
     let installed = store.install(&bytes, source).map_err(|e| e.to_string())?;
     Ok(installed.manifest)
 }
