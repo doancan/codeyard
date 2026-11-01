@@ -1410,7 +1410,7 @@ while True:
         wb.read_with(cx, |wb, _| wb.palette_path_for_test(&api.to_string_lossy(), &format!("{label} › src/app.c"))),
         crate::ui::local_path(&web.join("src/app.c"))
     );
-    assert_eq!(wb.read_with(cx, |wb, _| wb.palette_path_for_test(&api.to_string_lossy(), "main.c")), api.join("main.c").to_string_lossy());
+    assert_eq!(wb.read_with(cx, |wb, _| wb.palette_path_for_test(&crate::ui::local_path(&api), "main.c")), crate::ui::local_path(&api.join("main.c")));
 
     // Language servers: one process per root, each with its own rootUri.
     let main_c = crate::ui::local_path(&api.join("main.c"));

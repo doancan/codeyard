@@ -388,6 +388,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Windows CI runs every test of the workspace (`cargo test --workspace`, no name filter); before, the app's tests ran
+  through a list of name filters, so most of them, among them every extension test, never ran on Windows and new
+  tests were left out silently. A test that needs what the runner lacks says so in a SKIPPED line with the reason:
+  the exthost's OS sandbox, a POSIX shell, sshd. macOS and Linux CI set `CODEYARD_REQUIRE_TOOLS=codeyard-exthost`, so
+  the extension tests cannot pass there by skipping. Fixed on the way, on Windows: a paused debug line, a file
+  opened from the command line or the Open dialog and a folder added to the workspace kept the `\\?\` prefix of a
+  canonical path, so they matched no tab, root or breakpoint; they now keep the workbench's form (`C:/...`).
+
 - The extension rows of the performance gate block a release: typing with decorations, completion, lenses and
   hints, keys in an extension view, the provider overhead (ceiling 3 ms) and hot reload (ceiling 500 ms). A keystroke
   row's ceiling is now relative (`ceiling_vs` in `perf/metrics.json`): the same keys typed without extensions in the
