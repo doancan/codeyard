@@ -247,6 +247,8 @@ when fetched, the index's ETag) are kept in `<data>/extensions/registries/<name>
   temporary file, `sha256sum`, then `mv`); the host downloads nothing, and each run first checks the copy's hash.
 - **Stale index.** Past its 72 h, installs and updates wait for the user to confirm on the sheet;
   `--install-extension` refuses. Installed extensions keep running.
+- **Command line consent.** `--install-extension` prints the sheet of a version that asks for permissions and installs
+  it only with `--accept-permissions`, from a registry as from a file.
 - **Checking now.** `codeyard --update-extensions` runs the update check below without a window, asking each registry
   an installed extension came from at once (the person asked, so not only once a day), and prints what changed.
 - **Updates and version status** (`ext_core::update` decides, `app/src/ext_updates.rs` acts). Each time the index is
@@ -423,7 +425,8 @@ git fetch origin yard-canary-log && git show origin/yard-canary-log:canary.tsv |
 CI runs it on Linux: a stand-in Sigstore (`crates/yard/examples/sigstore_stand_in.rs`, built from the test authority,
 never deployed), a ceremony with throwaway keys, `yard init` with them (one signature is refused, two accepted),
 a data-only extension published, code refused from a publisher who is not invited and published by one who is, both
-installed with `codeyard --install-extension`, the code extension revoked (the index shows it, `codeyard
+installed with `codeyard --install-extension` (the code extension prints its sheet and is refused until
+`--accept-permissions` is added), the code extension revoked (the index shows it, `codeyard
 --update-extensions` stops it on the client that has it, another client refuses to install it with the reason), and an
 index signed already expired (`yard resign --expired`): `yard status` and `cyx yard check` fail, and a client refuses
 to install from it and says the list is more than 3 days old. Each client keeps its files in the rehearsal's folder.
