@@ -502,6 +502,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   memory scene a value, or the run stops with a message; before, a baseline's missing samples were left out of the
   comparison without a word. A baseline runs with its own `codeyard-exthost`: the candidate's answered none of the
   older app's provider requests.
+
 - Typing with line wrapping on in a large file looked every line up anew to lay out the screen lines: in a 50 000-line
   file a key took 15.7 ms against 9.2 ms in plain text on an M4 Pro, and 34 to 50 ms on the Windows CI runner, where
   the test's budget (50 ms) failed now and then. The lines are now read in one pass (11.6 ms; turning wrapping on
