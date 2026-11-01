@@ -82,6 +82,12 @@ pub(super) struct ExtViewState {
     pub(super) prompts: super::prompts_glue::PromptState,
     /// The resident-memory cap of exthosts (workbench_ext_memory.rs).
     pub(super) memory: super::memory_glue::MemoryState,
+    /// Watches of code extensions: document and file events (workbench_ext_watch.rs).
+    pub(super) watch: super::ext_watch_glue::WatchState,
+    /// Servers the user allowed for `net-from-setting` (workbench_ext_hosts.rs).
+    pub(super) hosts: super::ext_hosts_glue::HostsState,
+    /// `core:editor.open` with a selection: selected once the file's editor is in front (workbench_ext_core.rs).
+    pub(super) open_selection: Option<(String, crate::lsp::Range16)>,
 }
 
 /// The consent sheet's text and every other plain-words line of an extension.
@@ -106,6 +112,7 @@ pub(super) fn permission_lines(p: &Permissions) -> Vec<String> {
             Line::Change(g) => crate::i18n::tf("Change {}", &[g]),
             Line::ConnectAny => crate::i18n::t("Connect to any website").to_string(),
             Line::Connect(h) => crate::i18n::tf("Connect to {}", &[h]),
+            Line::ConnectSetting(k) => crate::i18n::tf("Connect to a server you allow, named in its “{}” setting", &[k]),
             Line::Account(a) => crate::i18n::tf("Act as your {} account", &[a]),
             Line::Secrets => crate::i18n::t("Store secrets in your keychain").to_string(),
             Line::Run(r) => crate::i18n::tf("Run {} with any arguments", &[r]),

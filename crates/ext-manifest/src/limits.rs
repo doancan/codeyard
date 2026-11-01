@@ -51,6 +51,17 @@ pub const IPC_BYTES_PER_SECOND: u64 = 32 * 1024 * 1024;
 pub const IPC_BURST_BYTES: u64 = 64 * 1024 * 1024;
 /// The shortest interval of `timers.every`.
 pub const TIMER_MIN_SECONDS: u32 = 30;
+/// Watches (`watch.documents`, `watch.files`) one extension may have at once.
+pub const WATCHES: usize = 16;
+/// How long a document must stay unchanged before its `changed` event goes out: typing sends one event per pause.
+pub const DOCUMENT_EVENT_DEBOUNCE_MILLIS: u64 = 500;
+/// File events are coalesced, one per file, and delivered at most this often.
+pub const FILE_EVENT_INTERVAL_MILLIS: u64 = 1_000;
+/// Events in one delivery to `events.documents` or `events.files`; more arrive in the next ones.
+pub const WATCH_EVENTS: usize = 1_000;
+/// Files and folders a window follows for the file watches of all its extensions; Codeyard's own watching keeps the
+/// rest of its budget. Past it, more files are still reported when their folder changes, but not when only they change.
+pub const WATCHED_PATHS: usize = 1_024;
 /// Linear memory of one extension instance; growing past it traps.
 pub const GUEST_MEMORY_BYTES: usize = 256 * 1024 * 1024;
 /// The whole exthost process: the guest's linear memory plus the engine and compiled code. A Job Object commit limit

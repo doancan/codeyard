@@ -145,6 +145,9 @@ pub struct RawPermissions {
     /// Hosts the code may reach over HTTPS: `api.example.com`, or `*.example.com` for its subdomains.
     #[serde(default)]
     pub net: Vec<S<String>>,
+    /// A string setting (the key of a `[[settings]]` entry) that names a server of the user's, such as a company
+    /// GitHub Enterprise: the user allows that host on the extension page, and the code may then reach it over HTTPS.
+    pub net_from_setting: Option<S<String>>,
     /// Accounts the code may sign requests with: `github`, or the id of an `[[oauth]]` table. It never sees the token.
     #[serde(default)]
     pub auth: Vec<S<String>>,

@@ -276,6 +276,10 @@ pub(super) enum InputPurpose {
         extension: String,
         provider: String,
     },
+    /// A server an extension with `net-from-setting` may connect to (workbench_ext_hosts.rs).
+    AllowHost {
+        extension: String,
+    },
     /// Workspace switcher: connect to the typed host name (or `user@host`).
     ConnectHost,
     /// `user@host[:port] [as name]` -> ~/.ssh/config.

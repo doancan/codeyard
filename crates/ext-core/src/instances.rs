@@ -4,7 +4,11 @@
 //! identity: a package with the same id from another publisher, or a sideloaded one, gets none of them.
 //!
 //! Only the app's own UI adds one, after a dialog that names the extension, its publisher and the host; nothing an
-//! extension or a workspace can write reaches this file. An instance is the provider's endpoints on another host
+//! extension or a workspace can write reaches this file.
+//!
+//! The same file keeps the hosts the user allowed for an extension's `net-from-setting` (a server named in one of its
+//! settings, such as a company GitHub Enterprise): added the same way, after the same kind of dialog, and joining the
+//! extension's `net` while that permission is on. An instance is the provider's endpoints on another host
 //! (`OAuthProvider::instance`), so it signs requests to that host only, under an account id of its own
 //! (`gitlab@git.example.com`) that remotes on the host carry.
 
@@ -69,7 +73,26 @@ impl Instance {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct Record {
     publisher: String,
+    #[serde(default)]
     instances: Vec<Instance>,
+    /// Hosts the user allowed for `net-from-setting`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    hosts: Vec<String>,
+}
+
+/// A host the user typed for an extension's `net-from-setting`, checked: the extension declares it, and it is a plain
+/// host name (an `https://` URL is reduced to its host).
+pub fn user_host(m: &Manifest, typed: &str) -> Result<String, String> {
+    if m.permissions.net_from_setting.is_none() {
+        return Err(format!("{} does not connect to servers named in its settings", m.id));
+    }
+    let host = typed.trim().trim_end_matches('/').to_ascii_lowercase();
+    let host = host.strip_prefix("https://").unwrap_or(&host).to_string();
+    match ext_manifest::check_https_url(&format!("https://{host}/")) {
+        Ok(h) if h == host => Ok(host),
+        Ok(_) => Err(format!("'{host}' must be a host name only, without a port or path")),
+        Err(e) => Err(format!("'{host}': {e}")),
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -119,7 +142,7 @@ impl Store {
         let who = identity(source);
         let r = file.extensions.entry(id.to_string()).or_default();
         if r.publisher != who {
-            *r = Record { publisher: who, instances: Vec::new() };
+            *r = Record { publisher: who, ..Default::default() };
         }
         r.instances.retain(|i| !(i.provider == instance.provider && i.host == instance.host));
         r.instances.push(instance);
@@ -132,7 +155,51 @@ impl Store {
         let mut file = self.read_instances();
         if let Some(r) = file.extensions.get_mut(id.as_str()) {
             r.instances.retain(|i| i.account() != account);
-            if r.instances.is_empty() {
+            if r.instances.is_empty() && r.hosts.is_empty() {
+                file.extensions.remove(id.as_str());
+            }
+            self.write_instances(&file)?;
+        }
+        Ok(())
+    }
+
+    /// The `net-from-setting` hosts the user allowed for every installed extension whose record matches its installed
+    /// identity, by id.
+    pub fn all_user_hosts(&self) -> BTreeMap<String, Vec<String>> {
+        let Ok((lock, _)) = self.read_lock() else { return BTreeMap::new() };
+        let records = self.read_instances().extensions;
+        lock.extensions
+            .iter()
+            .filter_map(|(id, l)| {
+                let r = records.get(id.as_str()).filter(|r| !r.hosts.is_empty())?;
+                (r.publisher == identity(&l.source)).then(|| (id.to_string(), r.hosts.clone()))
+            })
+            .collect()
+    }
+
+    /// Allow `host` (checked with [`user_host`]) for `id` from `source`: the user agreed to it.
+    pub fn add_user_host(&self, id: &ExtId, source: &Source, host: &str) -> Result<(), Error> {
+        let _guard = self.guard()?;
+        let mut file = self.read_instances();
+        file.format = FORMAT;
+        let who = identity(source);
+        let r = file.extensions.entry(id.to_string()).or_default();
+        if r.publisher != who {
+            *r = Record { publisher: who, ..Default::default() };
+        }
+        if !r.hosts.iter().any(|h| h == host) {
+            r.hosts.push(host.to_string());
+        }
+        self.write_instances(&file)
+    }
+
+    /// Take back a host allowed for `net-from-setting`.
+    pub fn remove_user_host(&self, id: &ExtId, host: &str) -> Result<(), Error> {
+        let _guard = self.guard()?;
+        let mut file = self.read_instances();
+        if let Some(r) = file.extensions.get_mut(id.as_str()) {
+            r.hosts.retain(|h| h != host);
+            if r.instances.is_empty() && r.hosts.is_empty() {
                 file.extensions.remove(id.as_str());
             }
             self.write_instances(&file)?;

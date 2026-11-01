@@ -9,6 +9,11 @@ description = "The TypeScript snippets of the extension docs."
 [code]
 entry = "src/extension.ts"
 
+# For the watches and openInEditor of src/watching.ts.
+[permissions]
+read     = ["src/**/*.ts"]
+commands = ["core:editor.open"]
+
 [[commands]]
 id    = "hello"
 title = "Doc Snippets Ts: Say Hello"

@@ -42,6 +42,11 @@ Every size, count and time limit of the extension platform. `cyx check` and the 
 | `IPC_BYTES_PER_SECOND` | 32 MiB/s | Sustained bytes per second an exthost may send the app; going over kills it. |
 | `IPC_BURST_BYTES` | 64 MiB | Bytes an exthost may send in a burst above the sustained rate. |
 | `TIMER_MIN_SECONDS` | 30 s | The shortest interval of `timers.every`. |
+| `WATCHES` | 16 | Watches (`watch.documents`, `watch.files`) one extension may have at once. |
+| `DOCUMENT_EVENT_DEBOUNCE_MILLIS` | 500 ms | How long a document must stay unchanged before its `changed` event goes out: typing sends one event per pause. |
+| `FILE_EVENT_INTERVAL_MILLIS` | 1 s | File events are coalesced, one per file, and delivered at most this often. |
+| `WATCH_EVENTS` | 1,000 | Events in one delivery to `events.documents` or `events.files`; more arrive in the next ones. |
+| `WATCHED_PATHS` | 1,024 | Files and folders a window follows for the file watches of all its extensions; Codeyard's own watching keeps the rest of its budget. Past it, more files are still reported when their folder changes, but not when only they change. |
 | `GUEST_MEMORY_BYTES` | 256 MiB | Linear memory of one extension instance; growing past it traps. |
 | `EXTHOST_MEMORY_BYTES` | 512 MiB | The whole exthost process: the guest's linear memory plus the engine and compiled code. A Job Object commit limit on Windows; elsewhere the app checks the process's resident size. |
 | `GUEST_CALL_MILLIS` | 2 s | CPU time one call into an extension may take (exports must return quickly; long work waits on tickets). |

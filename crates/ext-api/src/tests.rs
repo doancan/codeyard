@@ -33,12 +33,12 @@ fn the_package_parses_and_matches_the_constants() {
 fn every_interface_is_in_the_table_with_its_since() {
     let (r, pkg) = resolve();
     let wit: BTreeSet<&str> = interfaces(&r, pkg).iter().map(|i| i.name.as_deref().unwrap()).collect();
-    let table: BTreeSet<&str> = INTERFACES.iter().map(|i| i.name).chain(EXPORTS).collect();
+    let table: BTreeSet<&str> = INTERFACES.iter().chain(&EXPORTS).map(|i| i.name).collect();
     assert_eq!(wit, table);
     for i in interfaces(&r, pkg) {
         let name = i.name.as_deref().unwrap();
         let Stability::Stable { since, .. } = &i.stability else { panic!("{name} has no @since") };
-        let want = interface(name).map_or(VERSION, |t| t.since);
+        let want = interface(name).or_else(|| EXPORTS.iter().find(|e| e.name == name)).map_or(VERSION, |t| t.since);
         assert_eq!(since.to_string(), want.to_string(), "{name}");
         assert!(i.docs.contents.is_some(), "{name} has no doc comment");
     }
@@ -106,6 +106,9 @@ fn every_imported_function_has_one_call() {
         Notify::ClearDiagnostics { uri: None },
         Notify::SetDecorations { uri: String::new(), set: String::new(), decorations: vec![] },
         Notify::ScmRefresh { provider: String::new() },
+        Notify::WatchDocuments { id: 0, text: false },
+        Notify::WatchFiles { id: 0, glob: String::new() },
+        Notify::StopWatch { id: 0 },
     ];
     let mut ours: Vec<&str> = starts.iter().map(Start::wit_name).chain(notifies.iter().map(Notify::wit_name)).collect();
     ours.extend(LOCAL);
@@ -118,7 +121,7 @@ fn every_imported_function_has_one_call() {
     let mut wit = Vec::new();
     for i in interfaces(&r, pkg) {
         let name = i.name.as_deref().unwrap();
-        if EXPORTS.contains(&name) {
+        if EXPORTS.iter().any(|e| e.name == name) {
             continue;
         }
         for f in i.functions.keys() {
@@ -164,6 +167,7 @@ fn versions() {
 #[test]
 fn every_api_version_has_its_codeyard_release() {
     assert_eq!(codeyard_for(Version(1, 0, 0)), Some("0.7.0"));
+    assert_eq!(codeyard_for(Version(1, 1, 0)), Some("0.7.0"));
     assert!(codeyard_for(VERSION).is_some(), "add {VERSION} to RELEASES");
     assert_eq!(codeyard_for(Version(VERSION.0, VERSION.1 + 1, 0)), None);
     assert!(RELEASES.windows(2).all(|w| w[0].0 < w[1].0));

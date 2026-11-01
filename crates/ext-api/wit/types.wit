@@ -1,4 +1,4 @@
-package codeyard:api@1.0.0;
+package codeyard:api@1.1.0;
 
 /// Types shared by every interface. Importing it needs no permission.
 @since(version = 1.0.0)

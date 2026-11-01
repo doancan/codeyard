@@ -379,6 +379,23 @@ export interface SearchQuery {
   max: number;
 }
 
+export type DocumentChange = "opened" | "changed" | "saved";
+
+export interface WitDocumentEvent {
+  change: DocumentChange;
+  uri: string;
+  language: string;
+  version: number;
+  text: string | undefined;
+}
+
+export type FileChange = "created" | "changed" | "deleted";
+
+export interface WitFileEvent {
+  change: FileChange;
+  uri: string;
+}
+
 /// The imports, one object per interface (`import * as net from "codeyard:api/net@1.0.0"`). An interface the manifest
 /// does not grant is left out of the component, so it is missing here; the SDK then refuses the call with the fix.
 export interface Bindings {
@@ -442,6 +459,8 @@ export interface Bindings {
   clipboardRead?: { readText(): Ticket };
   clipboardWrite?: { writeText(text: string): Ticket };
   terminal?: { sendText(text: string): Ticket };
+  /** API 1.1. Imported only when the manifest grants `read`. `documents` and `files` throw `{ payload: WitError }`. */
+  watch?: { documents(text: boolean): bigint; files(glob: string): bigint; stop(id: bigint): void };
   scm: { refresh(provider: string): void };
 }
 
@@ -453,4 +472,10 @@ export interface Guest {
   cancel(id: bigint): void;
   complete(ticket: Ticket, result: Completion): void;
   event(ticket: Ticket, event: StreamEvent): void;
+}
+
+/// The `events` export (API 1.1): what watches receive.
+export interface Events {
+  documents(watch: bigint, events: WitDocumentEvent[]): void;
+  files(watch: bigint, events: WitFileEvent[]): void;
 }

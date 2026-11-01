@@ -13,14 +13,14 @@ pub mod appcontainer;
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
 
-use ext_api::value::{Completion, EnvInfo, Error as ApiError, Notify, Request, Response, Start, StreamEvent, Ticket};
+use ext_api::value::{Completion, DocumentEvent, EnvInfo, Error as ApiError, FileEvent, Notify, Request, Response, Start, StreamEvent, Ticket};
 use ext_manifest::limits;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 /// Compared in the handshake. The app and the exthost ship together, so they must match exactly; on a mismatch (the
 /// app updated in place) the exthost exits and the app starts the new one.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 /// App → exthost.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,6 +43,10 @@ pub enum ToHost {
     /// The interfaces granted now (`Hello::granted`), after the user turned a permission off or on: the next call to
     /// one no longer granted fails with `denied { why: revoked-by-user }`, without a restart.
     Grants(Vec<String>),
+    /// Events of a `watch.documents` watch: call `events.documents` (a component without that export gets none).
+    Documents { watch: u64, events: Vec<DocumentEvent> },
+    /// Events of a `watch.files` watch: call `events.files`.
+    Files { watch: u64, events: Vec<FileEvent> },
     /// Call `guest.deactivate` and exit.
     Shutdown,
 }

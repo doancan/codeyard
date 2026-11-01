@@ -76,7 +76,7 @@ pub fn program_file(run: &str, target: &str) -> String {
 }
 
 pub use allow::glob_match;
-pub use validate::{KEY_MODIFIERS, KEY_NAMES, Options, check_https_url, check_key, check_package_path, is_deceptive};
+pub use validate::{KEY_MODIFIERS, KEY_NAMES, Options, check_https_url, check_key, check_package_path, check_watch_glob, is_deceptive};
 
 /// Parse and validate a manifest, as install and publish do. Every problem is reported, not just the first.
 pub fn parse(text: &str) -> Result<Manifest, Vec<Diagnostic>> {
@@ -615,6 +615,18 @@ pub fn oauth_host_fix(permission: &str) -> Option<String> {
     } else {
         format!("add \"{host}\" to hosts in the [[oauth]] table with id = \"{provider}\"")
     })
+}
+
+/// The permission a `denied` names when an extension with `net-from-setting` reaches a host the user has not allowed:
+/// `net-from-setting host = "git.example.com"`. It has a `=`, so the SDKs keep it, and [`user_host_fix`] reads it.
+pub fn user_host_line(host: &str) -> String {
+    format!("net-from-setting host = {host:?}")
+}
+
+/// The fix for a [`user_host_line`]: only the user can allow the host.
+pub fn user_host_fix(permission: &str) -> Option<String> {
+    let host = permission.strip_prefix("net-from-setting host = \"")?.strip_suffix('"')?;
+    Some(format!("the user has not allowed \"{host}\": they add it on the extension page with Allow Host…"))
 }
 
 /// Account providers built into Codeyard; `[permissions] auth` may name them without an `[[oauth]]` table.

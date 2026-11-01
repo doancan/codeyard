@@ -1,4 +1,4 @@
-package codeyard:api@1.0.0;
+package codeyard:api@1.1.0;
 
 /// What the host asks the extension.
 @since(version = 1.0.0)
@@ -98,9 +98,56 @@ interface guest {
   event: func(ticket: ticket, event: stream-event);
 }
 
+/// Events a watch asked for (`watch`). The SDKs export it and route each event to its handler; the host calls it only
+/// for a component that exports it, so components built against 1.0 run unchanged.
+@since(version = 1.1.0)
+interface events {
+  use types.{uri};
+
+  @since(version = 1.1.0)
+  enum document-change {
+    /// Opened in an editor, or already open when the watch started.
+    opened,
+    /// Edited; debounced, so one event carries the latest version.
+    changed,
+    saved,
+  }
+
+  @since(version = 1.1.0)
+  record document-event {
+    change: document-change,
+    uri: uri,
+    language: string,
+    /// The document's version, as `document.version`: edits made against it apply.
+    version: u32,
+    /// The whole text, when the watch asked for it and the document fits in one call.
+    text: option<string>,
+  }
+
+  @since(version = 1.1.0)
+  enum file-change {
+    created,
+    changed,
+    deleted,
+  }
+
+  @since(version = 1.1.0)
+  record file-event {
+    change: file-change,
+    uri: uri,
+  }
+
+  /// Events of a `watch.documents` watch, oldest first.
+  @since(version = 1.1.0)
+  documents: func(watch: u64, events: list<document-event>);
+  /// Events of a `watch.files` watch, one per file.
+  @since(version = 1.1.0)
+  files: func(watch: u64, events: list<file-event>);
+}
+
 /// Everything an extension may import. Each interface outside `types`, `log`, `env`, `tickets`, `requests`,
 /// `responses`, `window`, `commands`, `storage`, `settings`, `timers`, `ui`, `documents`, `languages`, `scm`,
-/// `pull-requests` and `host-requests` needs its permission in the manifest.
+/// `pull-requests` and `host-requests` needs its permission in the manifest (`watch` needs `read`).
 ///
 /// Within a major version, a minor only adds interfaces, functions and types, each with its `@since`; nothing
 /// released changes or goes away (`crates/ext-api/released` holds the released WIT, and a test compares).
@@ -119,6 +166,7 @@ world extension {
   import documents;
   import languages;
   import workspace;
+  import watch;
   import workspace-write;
   import net;
   import auth;
@@ -130,4 +178,5 @@ world extension {
   import scm;
 
   export guest;
+  export events;
 }

@@ -84,7 +84,9 @@ pub fn handle(id: u64, query: Query) {
             let t = fetch(&remote, "POST", api(&remote, &format!("/{pr}/comments")), &body);
             WAITING.with(|w| w.borrow_mut().insert(t, (id, Then::Commented(body))));
         }
-        Query::Checkout((_, pr)) => answer(id, Answer::Checkout(Checkout { fetch_url: None, ref_: format!("refs/pull/{pr}/head"), branch: format!("pr-{pr}") })),
+        Query::Checkout((_, pr)) => {
+            answer(id, Answer::Checkout(Checkout { fetch_url: None, ref_: format!("refs/pull/{pr}/head"), branch: format!("pr-{pr}") }))
+        }
     }
 }
 

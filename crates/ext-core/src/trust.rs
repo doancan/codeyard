@@ -32,6 +32,7 @@ pub fn effective(m: &Manifest, revoked: &Permissions, trust: Trust) -> Effective
         read: keep(&declared.read, &revoked.read),
         write: keep(&declared.write, &revoked.write),
         net: keep(&declared.net, &revoked.net),
+        net_from_setting: declared.net_from_setting.clone().filter(|_| revoked.net_from_setting.is_none()),
         auth: keep(&declared.auth, &revoked.auth),
         secrets: declared.secrets && !revoked.secrets,
         run: keep(&declared.run, &revoked.run),
@@ -57,6 +58,7 @@ pub fn effective(m: &Manifest, revoked: &Permissions, trust: Trust) -> Effective
         // Reading and UI only: nothing that sends, writes, runs or acts as the user.
         p.write.clear();
         p.net.clear();
+        p.net_from_setting = None;
         p.auth.clear();
         p.secrets = false;
         p.run.clear();

@@ -12,6 +12,7 @@ use wasmtime::component::{HasSelf, Linker};
 use wasmtime::{Engine, Store, StoreLimitsBuilder, UpdateDeadline, WasmBacktrace};
 
 use crate::bindings::Extension;
+use crate::bindings::exports::codeyard::api::{events, guest};
 use crate::convert;
 use crate::state::State;
 
@@ -85,11 +86,19 @@ pub fn run(input: impl Read, output: impl Write + Send + 'static) -> Result<(), 
     let ticker = Ticker::start(&engine);
     let mut guest = Guest { store, ticker, ext: None };
 
-    let ext = guest.call(limits::ACTIVATE_MILLIS, |store, _| Extension::instantiate(store, &component, &linker))?;
-    guest.ext = Some(ext);
-    let activated = guest.call(limits::ACTIVATE_MILLIS, |store, ext| {
-        ext.expect("instantiated").codeyard_api_guest().call_activate(store, &convert::activation(&hello.reason))
+    // `guest` is required; `events` (API 1.1) only when the component exports it, so 1.0 components run unchanged.
+    // wasmtime finds `@1.0.0` exports under this build's `@1.x` names.
+    let pre = linker.instantiate_pre(&component).map_err(|e| format!("{e:#}"))?;
+    let guest_exports = guest::GuestIndices::new(&pre).map_err(|e| format!("{e:#}"))?;
+    let event_exports = events::GuestIndices::new(&pre).ok();
+    let ext = guest.call(limits::ACTIVATE_MILLIS, |store, _| {
+        let instance = pre.instantiate(&mut *store)?;
+        let events = event_exports.map(|e| e.load(&mut *store, &instance)).transpose()?;
+        Ok(Exports { guest: guest_exports.load(&mut *store, &instance)?, events })
     })?;
+    guest.ext = Some(ext);
+    let activated =
+        guest.call(limits::ACTIVATE_MILLIS, |store, ext| ext.expect("instantiated").guest.call_activate(store, &convert::activation(&hello.reason)))?;
     guest.store.data_mut().send(&ToApp::Activated(activated));
     guest.drain()?;
 
@@ -103,21 +112,35 @@ pub fn run(input: impl Read, output: impl Write + Send + 'static) -> Result<(), 
             ToHost::Hello(_) => return Err("a second Hello".into()),
             ToHost::Handle { id, request, .. } => {
                 let request = request.into();
-                guest.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").codeyard_api_guest().call_handle(s, id, &request))?;
+                guest.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").guest.call_handle(s, id, &request))?;
             }
             ToHost::Cancel { id } => {
-                guest.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").codeyard_api_guest().call_cancel(s, id))?;
+                guest.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").guest.call_cancel(s, id))?;
             }
             ToHost::Complete { ticket, completion } => guest.complete(ticket, completion.into())?,
             ToHost::Event { ticket, event } => {
                 let event = event.into();
-                guest.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").codeyard_api_guest().call_event(s, ticket, &event))?;
+                guest.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").guest.call_event(s, ticket, &event))?;
+            }
+            ToHost::Documents { watch, events } => {
+                let events: Vec<_> = events.into_iter().map(Into::into).collect();
+                guest.call(limits::GUEST_CALL_MILLIS, |s, x| match &x.expect("instantiated").events {
+                    Some(e) => e.call_documents(s, watch, &events),
+                    None => Ok(()),
+                })?;
+            }
+            ToHost::Files { watch, events } => {
+                let events: Vec<_> = events.into_iter().map(Into::into).collect();
+                guest.call(limits::GUEST_CALL_MILLIS, |s, x| match &x.expect("instantiated").events {
+                    Some(e) => e.call_files(s, watch, &events),
+                    None => Ok(()),
+                })?;
             }
             ToHost::Settings(values) => guest.store.data_mut().settings.extend(values),
             ToHost::Env(env) => guest.store.data_mut().env = env,
             ToHost::Grants(granted) => guest.store.data_mut().set_granted(granted),
             ToHost::Shutdown => {
-                guest.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").codeyard_api_guest().call_deactivate(s))?;
+                guest.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").guest.call_deactivate(s))?;
                 return Ok(());
             }
         }
@@ -128,13 +151,19 @@ pub fn run(input: impl Read, output: impl Write + Send + 'static) -> Result<(), 
 struct Guest {
     store: Store<State>,
     ticker: Ticker,
-    ext: Option<Extension>,
+    ext: Option<Exports>,
+}
+
+/// What the component exports: `guest` always, `events` from API 1.1 on.
+struct Exports {
+    guest: guest::Guest,
+    events: Option<events::Guest>,
 }
 
 impl Guest {
     /// One call into the guest with a CPU budget. A trap (or the budget running out) is reported to the app as a
     /// `Trap` frame and ends the exthost.
-    fn call<R>(&mut self, budget_ms: u64, f: impl FnOnce(&mut Store<State>, Option<&Extension>) -> wasmtime::Result<R>) -> Result<R, String> {
+    fn call<R>(&mut self, budget_ms: u64, f: impl FnOnce(&mut Store<State>, Option<&Exports>) -> wasmtime::Result<R>) -> Result<R, String> {
         let started = Instant::now();
         let budget = Duration::from_millis(budget_ms);
         self.store.set_epoch_deadline(1);
@@ -182,7 +211,7 @@ impl Guest {
     }
 
     fn complete(&mut self, ticket: u64, completion: crate::bindings::codeyard::api::types::Completion) -> Result<(), String> {
-        self.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").codeyard_api_guest().call_complete(s, ticket, &completion))
+        self.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").guest.call_complete(s, ticket, &completion))
     }
 
     /// Deliver tickets that finished inside the exthost (refused calls). Delivering one may refuse another, so this

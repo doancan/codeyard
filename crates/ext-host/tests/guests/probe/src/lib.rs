@@ -4,18 +4,19 @@
 wit_bindgen::generate!({ path: "../../../../ext-api/wit", world: "extension" });
 
 mod providers;
+mod pulls;
 #[cfg(feature = "scm")]
 mod scm;
-mod pulls;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use codeyard::api::types::{Completion, Error, HttpRequest, StreamEvent, Ticket};
-use codeyard::api::{documents, env, log, requests, settings, storage, timers, ui, window, workspace};
-use exports::codeyard::api::guest::{Activation, Guest};
 use codeyard::api::host_requests::Request;
 use codeyard::api::responses::Response;
+use codeyard::api::types::{Completion, Error, HttpRequest, StreamEvent, Ticket};
+use codeyard::api::{documents, env, log, requests, settings, storage, timers, ui, window, workspace};
+use exports::codeyard::api::events::{DocumentChange, DocumentEvent, FileChange, FileEvent};
+use exports::codeyard::api::guest::{Activation, Guest};
 
 thread_local! {
     /// Which request each outstanding ticket answers.
@@ -144,7 +145,10 @@ impl Guest for Probe {
             }
             "trap" => panic!("asked to trap"),
             "pick" => {
-                let items = [window::PickItem { label: "One".into(), detail: None, picked: false }, window::PickItem { label: "Two".into(), detail: None, picked: false }];
+                let items = [
+                    window::PickItem { label: "One".into(), detail: None, picked: false },
+                    window::PickItem { label: "Two".into(), detail: None, picked: false },
+                ];
                 let options = window::PickOptions { title: None, placeholder: Some("Pick one".into()), many: false };
                 wait(window::quick_pick(&items, &options), id)
             }
@@ -162,11 +166,25 @@ impl Guest for Probe {
             "secret-set" => wait(codeyard::api::secrets::set("api-key", "s3cr3t"), id),
             "secret-get" => wait(codeyard::api::secrets::get("api-key"), id),
             "every" => reply(id, format!("{}", timers::every(30))),
+            // Watches (API 1.1): events land in storage, and `watched` lists them.
+            "watch-docs" => reply(id, format!("{:?}", codeyard::api::watch::documents(args.trim_matches('"') == "text"))),
+            "watch-files" => reply(id, format!("{:?}", codeyard::api::watch::files(args.trim_matches('"')))),
+            "unwatch" => {
+                codeyard::api::watch::stop(args.trim_matches('"').parse().unwrap_or(0));
+                requests::respond(id, Ok(&Response::None));
+            }
+            "watched" => reply(id, storage::get("watched").map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default()),
             // `commands.execute`: the argument is "<command> <argument>"; the argument goes as a JSON string, or null.
             "exec" => {
                 let line = args.trim_matches('"');
                 let (command, arg) = line.split_once(' ').map_or((line, "null".to_string()), |(c, a)| (c, format!("\"{a}\"")));
                 wait(codeyard::api::commands::execute(command, &arg), id)
+            }
+            // The same with a JSON argument as it is: "<command> <json>".
+            "exec-json" => {
+                let line = args.trim_matches('"').replace("\\\"", "\"");
+                let (command, arg) = line.split_once(' ').unwrap_or((&line, "null"));
+                wait(codeyard::api::commands::execute(command, arg), id)
             }
             // What an extension can try from inside Wasm: WASI files, sockets and processes. Every line must fail.
             // Only in probe-escape.wasm: its socket imports would fail the package import check, by design.
@@ -211,6 +229,38 @@ impl Guest for Probe {
     fn event(ticket: Ticket, event: StreamEvent) {
         if let StreamEvent::Data(d) = event {
             BODIES.with(|b| b.borrow_mut().entry(ticket).or_default().extend_from_slice(&d));
+        }
+    }
+}
+
+/// One line per event, kept in storage for the `watched` command.
+fn record(line: String) {
+    let mut all = storage::get("watched").unwrap_or_default();
+    all.extend_from_slice(line.as_bytes());
+    all.push(b'\n');
+    let _ = storage::set("watched", &all);
+}
+
+impl exports::codeyard::api::events::Guest for Probe {
+    fn documents(watch: u64, events: Vec<DocumentEvent>) {
+        for e in events {
+            let change = match e.change {
+                DocumentChange::Opened => "opened",
+                DocumentChange::Changed => "changed",
+                DocumentChange::Saved => "saved",
+            };
+            record(format!("{watch} {change} {} {} v{} {:?}", e.uri, e.language, e.version, e.text));
+        }
+    }
+
+    fn files(watch: u64, events: Vec<FileEvent>) {
+        for e in events {
+            let change = match e.change {
+                FileChange::Created => "created",
+                FileChange::Changed => "changed",
+                FileChange::Deleted => "deleted",
+            };
+            record(format!("{watch} {change} {}", e.uri));
         }
     }
 }

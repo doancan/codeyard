@@ -30,6 +30,8 @@ pub struct State {
     pub broken: Option<String>,
     granted: BTreeSet<String>,
     untrusted: bool,
+    /// The watches the guest started and has not stopped (`watch`), counted against `limits::WATCHES`.
+    watches: BTreeSet<u64>,
     pub env: v::EnvInfo,
     pub settings: BTreeMap<String, Option<String>>,
     folders: Vec<String>,
@@ -55,6 +57,7 @@ impl State {
             broken: None,
             granted: hello.granted.iter().cloned().collect(),
             untrusted: hello.untrusted,
+            watches: BTreeSet::new(),
             env: hello.env.clone(),
             settings: hello.settings.iter().cloned().collect(),
             folders: hello.folders.clone(),
@@ -275,6 +278,43 @@ impl g::ui::Host for State {
 impl g::scm::Host for State {
     fn refresh(&mut self, provider: String) {
         self.notify(Notify::ScmRefresh { provider });
+    }
+}
+
+impl State {
+    /// A new watch: refused like a call when `watch` is not granted, and past the limit.
+    fn watch(&mut self, call: &'static str, notify: impl FnOnce(u64) -> Notify) -> Result<u64, g::types::Error> {
+        if let Some((need, why)) = self.refused("watch") {
+            let denied = v::Denied { permission: need.name().to_string(), why };
+            self.send(&ToApp::Denied { call: call.to_string(), denied: denied.clone() });
+            return Err(v::Error::Denied(denied).into());
+        }
+        if self.watches.len() >= limits::WATCHES {
+            return Err(g::types::Error::Invalid(format!("an extension may have {} watches at once; stop one first", limits::WATCHES)));
+        }
+        let id = self.id();
+        self.watches.insert(id);
+        self.notify(notify(id));
+        Ok(id)
+    }
+}
+
+impl g::watch::Host for State {
+    fn documents(&mut self, text: bool) -> Result<u64, g::types::Error> {
+        self.watch("watch/documents", |id| Notify::WatchDocuments { id, text })
+    }
+
+    fn files(&mut self, glob: String) -> Result<u64, g::types::Error> {
+        if let Err(e) = ext_manifest::check_watch_glob(&glob) {
+            return Err(g::types::Error::Invalid(e));
+        }
+        self.watch("watch/files", |id| Notify::WatchFiles { id, glob })
+    }
+
+    fn stop(&mut self, id: u64) {
+        if self.watches.remove(&id) {
+            self.notify(Notify::StopWatch { id });
+        }
     }
 }
 

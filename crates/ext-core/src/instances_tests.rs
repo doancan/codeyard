@@ -122,3 +122,34 @@ fn instances_are_kept_per_extension_and_publisher() {
     assert!(s.instances(&id, &registry(7)).is_empty());
     assert_eq!(s.instances(&id, &registry(8)), [b]);
 }
+
+#[test]
+fn hosts_allowed_for_net_from_setting_are_kept_per_publisher() {
+    let m = ext_manifest::parse(
+        "[extension]\nid = \"you.ghe\"\nversion = \"0.1.0\"\nname = \"GHE\"\nlicense = \"MIT\"\n[code]\nentry = \"Cargo.toml\"\n\
+         [permissions]\nnet-from-setting = \"server\"\n[settings.server]\ntype = \"string\"\ndescription = \"Server\"\n\
+         [[commands]]\nid = \"go\"\ntitle = \"Go\"\n",
+    )
+    .unwrap();
+    assert_eq!(user_host(&m, " https://GHE.example.com/ "), Ok("ghe.example.com".into()));
+    assert!(user_host(&m, "ghe.example.com:8443").is_err());
+    assert!(user_host(&m, "ghe.example.com/api").is_err());
+    assert!(user_host(&m, "10.0.0.1").is_err(), "no IP literals, as in net");
+    let plain = ext_manifest::parse(&MANIFEST.replace("you.forge", "you.plain")).unwrap();
+    assert!(user_host(&plain, "ghe.example.com").unwrap_err().contains("does not connect to servers named in its settings"));
+
+    let (_d, s) = store("hosts");
+    let id = ExtId::parse("you.ghe").unwrap();
+    s.add_user_host(&id, &registry(9), "ghe.example.com").unwrap();
+    s.add_user_host(&id, &registry(9), "ghe.example.com").unwrap();
+    // Nothing is installed yet, so no record matches an installed identity.
+    assert!(s.all_user_hosts().is_empty());
+    let text = std::fs::read_to_string(s.instances_path()).unwrap();
+    assert_eq!(text.matches("ghe.example.com").count(), 1, "{text}");
+    // Another publisher with the same id starts over.
+    s.add_user_host(&id, &registry(10), "other.example.com").unwrap();
+    let text = std::fs::read_to_string(s.instances_path()).unwrap();
+    assert!(!text.contains("ghe.example.com") && text.contains("other.example.com"), "{text}");
+    s.remove_user_host(&id, "other.example.com").unwrap();
+    assert!(!std::fs::read_to_string(s.instances_path()).unwrap().contains("you.ghe"));
+}

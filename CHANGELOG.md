@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Extension API 1.1 (`codeyard:api@1.1.0`), additions only: components built against 1.0 run unchanged, and an
+  extension that uses nothing new still needs only API 1.0. Both ship in this release.
+  - Watches: `ctx.on_documents` (TypeScript `ctx.onDocuments`) reports documents opening, changing (once typing
+    pauses, with the version, the text only when asked) and being saved; `ctx.on_files(glob)` (`ctx.onFiles`) reports
+    workspace files created, changed and deleted, by Codeyard or anything else, at most one batch a second. Both need
+    `read`, and an event comes only for a path the extension may read. A TODO list no longer has to poll.
+  - `ctx.open_in_editor(uri, selection)` (`ctx.openInEditor`): `core:editor.open` also takes
+    `{"uri": …, "selection": range}`, so a view can jump to a line.
+  - `[permissions] net-from-setting = "<setting>"`: an extension that talks to a server the user names in a setting,
+    such as a GitHub Enterprise host, reaches it once the user allows the host on the extension page (Servers ›
+    Allow Host…, confirmed in a system dialog). Nothing the extension, a workspace or a setting writes allows a host.
+  - The Rust and TypeScript mock hosts open, edit and save documents, change files and allow hosts; `cyx test` gives
+    each watch a file to watch and treats the host in a `net-from-setting` setting's default as allowed.
+
 - The Rust SDK has `read_many`, `search`, `rename` and `create_directory`, and the TypeScript SDK `readMany`, `rename`
   and `createDirectory`, as the API has them. `read_many` reads many files in one round trip: 2000 reads one after
   another take about 2.5 s.

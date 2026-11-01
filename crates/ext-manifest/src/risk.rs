@@ -87,6 +87,10 @@ pub struct Permissions {
     pub write: Vec<String>,
     /// Hosts, optionally `*.example.com`.
     pub net: Vec<String>,
+    /// A string setting that names a server: hosts the user allowed on the extension page join `net`
+    /// (docs/plugin-architecture.md §6.1). Never filled from the setting's value alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub net_from_setting: Option<String>,
     /// Account providers (`github`, or an OAuth provider declared by the extension).
     pub auth: Vec<String>,
     pub secrets: bool,
@@ -105,6 +109,7 @@ impl Permissions {
         self.read.is_empty()
             && self.write.is_empty()
             && self.net.is_empty()
+            && self.net_from_setting.is_none()
             && self.auth.is_empty()
             && !self.secrets
             && self.run.is_empty()
@@ -146,6 +151,9 @@ impl Permissions {
         if !self.net.is_empty() {
             out.push(if self.net.iter().any(|h| is_wide_host(h)) { Line::ConnectAny } else { Line::Connect(list(&self.net)) });
         }
+        if let Some(key) = &self.net_from_setting {
+            out.push(Line::ConnectSetting(key.clone()));
+        }
         out.extend(self.auth.iter().map(|a| Line::Account(provider_name(a))));
         if self.secrets {
             out.push(Line::Secrets);
@@ -183,6 +191,7 @@ impl Permissions {
             read: new(&self.read, &old.read),
             write: new(&self.write, &old.write),
             net: new(&self.net, &old.net),
+            net_from_setting: self.net_from_setting.clone().filter(|k| old.net_from_setting.as_ref() != Some(k)),
             auth: new(&self.auth, &old.auth),
             secrets: self.secrets && !old.secrets,
             run: new(&self.run, &old.run),
@@ -206,6 +215,8 @@ pub enum Line {
     Change(String),
     ConnectAny,
     Connect(String),
+    /// `net-from-setting`: the setting's key.
+    ConnectSetting(String),
     /// The account provider's display name.
     Account(String),
     Secrets,
@@ -225,6 +236,7 @@ impl Line {
             Line::Change(g) => format!("Change {g}"),
             Line::ConnectAny => "Connect to any website".into(),
             Line::Connect(h) => format!("Connect to {h}"),
+            Line::ConnectSetting(k) => format!("Connect to a server you allow, named in its “{k}” setting"),
             Line::Account(a) => format!("Act as your {a} account"),
             Line::Secrets => "Store secrets in your keychain".into(),
             Line::Run(p) => format!("Run {p} with any arguments"),
@@ -446,7 +458,7 @@ pub fn risk(p: &Permissions) -> Risk {
         reads.push("auth");
     }
     let mut sends = Vec::new();
-    if !p.net.is_empty() {
+    if !p.net.is_empty() || p.net_from_setting.is_some() {
         sends.push("net");
     }
     if !p.run.is_empty() {
