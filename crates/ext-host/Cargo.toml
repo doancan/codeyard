@@ -14,9 +14,9 @@ path = "src/main.rs"
 [dependencies]
 async-trait = "0.1.89"
 bytes = "1.11.1"
-ext-api = { version = "0.6.0", path = "../ext-api" }
-ext-manifest = { version = "0.6.0", path = "../ext-manifest" }
-ext-proto = { version = "0.6.0", path = "../ext-proto" }
+ext-api = { version = "0.7.0", path = "../ext-api" }
+ext-manifest = { version = "0.7.0", path = "../ext-manifest" }
+ext-proto = { version = "0.7.0", path = "../ext-proto" }
 # Trap frames name Rust functions as authors wrote them (wasmtime already links it).
 rustc-demangle = "0.1.28"
 sha2 = "0.11.1"

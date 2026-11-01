@@ -8,10 +8,10 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-ext-api = { version = "0.6.0", path = "../ext-api" }
-ext-core = { version = "0.6.0", path = "../ext-core" }
-ext-manifest = { version = "0.6.0", path = "../ext-manifest" }
-ext-pkg = { version = "0.6.0", path = "../ext-pkg" }
+ext-api = { version = "0.7.0", path = "../ext-api" }
+ext-core = { version = "0.7.0", path = "../ext-core" }
+ext-manifest = { version = "0.7.0", path = "../ext-manifest" }
+ext-pkg = { version = "0.7.0", path = "../ext-pkg" }
 http-body-util = "0.1.5"
 hyper = { version = "1.12.0", features = ["http1", "server"] }
 hyper-util = { version = "0.1.21", features = ["tokio"] }
@@ -22,5 +22,5 @@ sha2 = "0.11.1"
 tokio = { version = "1.54.1", features = ["fs", "net", "rt", "sync", "time"] }
 
 [dev-dependencies]
-ext-core = { version = "0.6.0", path = "../ext-core", features = ["testing"] }
-ext-pkg = { version = "0.6.0", path = "../ext-pkg", features = ["testing"] }
+ext-core = { version = "0.7.0", path = "../ext-core", features = ["testing"] }
+ext-pkg = { version = "0.7.0", path = "../ext-pkg", features = ["testing"] }

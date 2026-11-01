@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-02
+
+The extensions release. Extensions with code run as WebAssembly in a sandboxed process with only the permissions they
+declare (Extension API 1.0 and 1.1, Rust and TypeScript SDKs, `cyx` to create, test, package and publish them), and can
+add commands, views, formatters, code actions, hover, completion, code lenses, inlay hints and source control and pull
+request providers. Screen readers reach the whole interface. Terminals keep running when Codeyard quits, crashes or
+restarts; editors, side views and terminals move into windows of their own, and side views to a secondary side bar.
+Two limits in this version: on Windows, extensions with code do not run yet (their sandbox has not passed its hardware
+check; extensions without code do), and the public extension registry is not online yet (install from a `.cyx` file, a
+folder or a registry you run). Screen-reader support has not yet been tested with a screen reader by a person.
+
+Performance (docs/benchmarks/perf-0.7.0.json, against the 2026-11-01 record on the same Mac): startup, typing, views and
+memory within budget. Accepted: `extensions.provider_overhead_ms` p95 0.5 → 0.9 ms (budget +10%, ceiling 3 ms); the
+median is unchanged at 0.2 ms and the p95 of earlier records on this Mac ranges from 0.4 to 2.0 ms.
+
 ### Added
 
 - "Preferences: Reset Settings to Defaults…" and a **Reset All Settings…** button on the Settings page, next to
@@ -1449,7 +1464,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/doancan/codeyard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/doancan/codeyard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/doancan/codeyard/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/doancan/codeyard/compare/v0.4.0...v0.4.1

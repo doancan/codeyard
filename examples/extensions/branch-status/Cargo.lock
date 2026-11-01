@@ -54,7 +54,7 @@ dependencies = [
 
 [[package]]
 name = "codeyard-extension"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -63,7 +63,7 @@ dependencies = [
 
 [[package]]
 name = "codeyard-extension-test"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "codeyard-extension",
  "ext-manifest",
@@ -97,7 +97,7 @@ checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 
 [[package]]
 name = "ext-manifest"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "ext-ui"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "base64",
  "ext-manifest",

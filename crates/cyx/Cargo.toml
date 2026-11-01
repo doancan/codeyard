@@ -18,16 +18,16 @@ rustls = { version = "0.23.46", default-features = false, features = ["ring", "s
 sha2 = "0.11.1"
 tokio = { version = "1.54.1", features = ["net", "rt", "time"] }
 toml_edit = { version = "0.25.17", default-features = false, features = ["parse", "display"] }
-ext-api = { version = "0.6.0", path = "../ext-api" }
-ext-core = { version = "0.6.0", path = "../ext-core" }
-ext-manifest = { version = "0.6.0", path = "../ext-manifest" }
-ext-pkg = { version = "0.6.0", path = "../ext-pkg" }
-ext-proto = { version = "0.6.0", path = "../ext-proto" }
-ext-ui = { version = "0.6.0", path = "../ext-ui" }
+ext-api = { version = "0.7.0", path = "../ext-api" }
+ext-core = { version = "0.7.0", path = "../ext-core" }
+ext-manifest = { version = "0.7.0", path = "../ext-manifest" }
+ext-pkg = { version = "0.7.0", path = "../ext-pkg" }
+ext-proto = { version = "0.7.0", path = "../ext-proto" }
+ext-ui = { version = "0.7.0", path = "../ext-ui" }
 serde_json = "1.0.154"
 
 [dev-dependencies]
-ext-core = { version = "0.6.0", path = "../ext-core", features = ["testing"] }
-ext-pkg = { version = "0.6.0", path = "../ext-pkg", features = ["testing"] }
+ext-core = { version = "0.7.0", path = "../ext-core", features = ["testing"] }
+ext-pkg = { version = "0.7.0", path = "../ext-pkg", features = ["testing"] }
 tokio = { version = "1.54.1", features = ["net", "rt", "time"] }
-yard = { version = "0.6.0", path = "../yard" }
+yard = { version = "0.7.0", path = "../yard" }

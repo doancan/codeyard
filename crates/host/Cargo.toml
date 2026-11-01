@@ -8,8 +8,8 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-agent = { version = "0.6.0", path = "../agent" }
-proto = { version = "0.6.0", path = "../proto" }
+agent = { version = "0.7.0", path = "../agent" }
+proto = { version = "0.7.0", path = "../proto" }
 dirs = "7.0.0"
 sha2 = "0.11.1"
 

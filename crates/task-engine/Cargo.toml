@@ -11,4 +11,4 @@ publish = false
 # Task patterns need lookarounds/backreferences; this is already locked through schema validation.
 fancy-regex = "0.19.2"
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
-theme = { version = "0.6.0", path = "../theme" }
+theme = { version = "0.7.0", path = "../theme" }
