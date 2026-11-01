@@ -9,6 +9,7 @@
 //! Design: docs/plugin-architecture.md §4, §8.
 
 mod component;
+pub mod rules;
 mod tar;
 
 #[cfg(test)]
@@ -29,6 +30,7 @@ use ext_manifest::{Diagnostic, Manifest, limits};
 use sha2::{Digest as _, Sha256};
 
 pub use component::{COMPONENT, Component, check_component};
+pub use rules::{EXCLUDED, EXCLUDED_AT_ROOT, IGNORE_FILE};
 pub use tar::Entry;
 
 /// The list of file hashes inside every package.
@@ -41,13 +43,6 @@ pub const TARGET: &str = "TARGET";
 /// The folder of an extension's source that holds native programs, one subfolder per target triple:
 /// `native/x86_64-unknown-linux-musl/bin/server` is `bin/server` in that platform's package. Never packaged as such.
 pub const NATIVE_DIR: &str = "native";
-
-/// Folder and file names `pack_dir` leaves out: version control, build output, dependencies, OS litter.
-pub const EXCLUDED: &[&str] = &[".git", ".github", ".hg", ".svn", "target", "node_modules", ".DS_Store", "Thumbs.db", "desktop.ini"];
-
-/// Folders left out at the top of an extension only: its tests (`test/` in TypeScript, `tests/` in Rust), which run
-/// on the author's machine and in `cyx test`, never in Codeyard.
-pub const EXCLUDED_AT_ROOT: &[&str] = &["test", "tests"];
 
 #[derive(Debug)]
 pub enum Error {
@@ -93,7 +88,13 @@ impl fmt::Display for Error {
                 }
                 Ok(())
             }
-            Error::MissingFile { field, path } => write!(f, "{field} points to '{path}', which is not in the package"),
+            Error::MissingFile { field, path } => {
+                write!(f, "{field} points to '{path}', which is not in the package")?;
+                match rules::left_out_because(path) {
+                    Some(why) => write!(f, ": {why}; move the file"),
+                    None => Ok(()),
+                }
+            }
             Error::Io(e) => write!(f, "{e}"),
         }
     }
@@ -402,10 +403,10 @@ pub fn read(bytes: &[u8]) -> Result<Package, Error> {
     Ok(Package { manifest, files, digest, component, target })
 }
 
-/// Collect an extension folder for `write`: every regular file except `EXCLUDED` names, the `EXCLUDED_AT_ROOT` test
-/// folders, packages (`*.cyx`, such as the one `cyx package` wrote last time) and the `native/` folder, with its
-/// executable bit. Symlinks are refused rather than followed: a package must not depend on what a link points to on
-/// the author's disk.
+/// Collect an extension folder for `write`: the files a package holds (`rules`: no secrets, version control,
+/// dependencies, build input, tests, packages such as the one `cyx package` wrote last time, nor what `.cyxignore`
+/// names), with their executable bit. The `native/` folder is not collected as such. Symlinks are refused rather than
+/// followed: a package must not depend on what a link points to on the author's disk.
 pub fn collect_dir(root: &Path) -> Result<Vec<Entry>, Error> {
     collect_dir_for(root, None)
 }
@@ -413,7 +414,28 @@ pub fn collect_dir(root: &Path) -> Result<Vec<Entry>, Error> {
 /// [`collect_dir`] for one platform: with `target`, the files of `native/<target>/` join the package at their path
 /// inside that folder, and a `TARGET` file names the platform.
 pub fn collect_dir_for(root: &Path, target: Option<&str>) -> Result<Vec<Entry>, Error> {
-    let mut out = collect_tree(root, true)?;
+    collect(root, target).map(|c| c.files)
+}
+
+/// An extension folder collected for a package.
+#[derive(Debug)]
+pub struct Collected {
+    pub files: Vec<Entry>,
+    /// Paths left out because their name says they hold a secret (`.env`, `signing.key`), sorted: `cyx` tells the
+    /// author.
+    pub secrets: Vec<String>,
+}
+
+/// [`collect_dir_for`], with the secrets it left out. A file whose contents hold a private key is refused, whatever
+/// its name.
+pub fn collect(root: &Path, target: Option<&str>) -> Result<Collected, Error> {
+    let ignore = match std::fs::read_to_string(root.join(IGNORE_FILE)) {
+        Ok(text) => rules::Ignore::parse(&text),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => rules::Ignore::default(),
+        Err(e) => return Err(Error::Io(e)),
+    };
+    let mut c = Collected { files: Vec::new(), secrets: Vec::new() };
+    collect_tree(root, true, &ignore, &mut c)?;
     if let Some(t) = target {
         if !ext_manifest::is_target(t) {
             return Err(Error::Path {
@@ -425,20 +447,24 @@ pub fn collect_dir_for(root: &Path, target: Option<&str>) -> Result<Vec<Entry>, 
         if !dir.is_dir() {
             return Err(Error::MissingFile { field: "--target".into(), path: format!("{NATIVE_DIR}/{t}/") });
         }
-        for mut e in collect_tree(&dir, false)? {
-            if out.iter().any(|o| o.path == e.path) {
+        let mut native = Collected { files: Vec::new(), secrets: Vec::new() };
+        collect_tree(&dir, false, &rules::Ignore::default(), &mut native)?;
+        c.secrets.extend(native.secrets.into_iter().map(|s| format!("{NATIVE_DIR}/{t}/{s}")));
+        for mut e in native.files {
+            if c.files.iter().any(|o| o.path == e.path) {
                 return Err(Error::Path { path: format!("{NATIVE_DIR}/{t}/{}", e.path), reason: "is also outside native/; keep one of them".into() });
             }
             // Windows has no executable bit to read; a program built for Windows is one by its target.
             e.executable |= t.contains("-windows-") && e.path.to_ascii_lowercase().ends_with(".exe");
-            out.push(e);
+            c.files.push(e);
         }
-        out.push(Entry { path: TARGET.into(), data: format!("{t}\n").into_bytes(), executable: false });
+        c.files.push(Entry { path: TARGET.into(), data: format!("{t}\n").into_bytes(), executable: false });
     }
-    if out.len() > limits::PACKAGE_FILES {
+    if c.files.len() > limits::PACKAGE_FILES {
         return Err(Error::TooLarge(format!("the folder has more than {} files", limits::PACKAGE_FILES)));
     }
-    Ok(out)
+    c.secrets.sort();
+    Ok(c)
 }
 
 /// The target triples an extension folder has programs for (`native/<triple>/`), sorted.
@@ -459,36 +485,44 @@ pub fn folder_target(root: &Path) -> Option<String> {
     targets.iter().find(|t| Some(t.as_str()) == here).or(targets.first()).cloned()
 }
 
-fn collect_tree(root: &Path, skip_native: bool) -> Result<Vec<Entry>, Error> {
-    fn walk(root: &Path, dir: &Path, out: &mut Vec<Entry>, skip_native: bool) -> Result<(), Error> {
+/// Walk `root`; `top` is false for a `native/<triple>/` folder, where the top-of-folder rules do not apply.
+fn collect_tree(root: &Path, top: bool, ignore: &rules::Ignore, out: &mut Collected) -> Result<(), Error> {
+    fn walk(root: &Path, dir: &Path, top: bool, ignore: &rules::Ignore, out: &mut Collected) -> Result<(), Error> {
         let mut names: Vec<_> = std::fs::read_dir(dir).map_err(Error::Io)?.collect::<Result<_, _>>().map_err(Error::Io)?;
         names.sort_by_key(|e| e.file_name());
         for item in names {
-            let name = item.file_name();
-            if EXCLUDED.iter().any(|x| name == *x) || (skip_native && dir == root && name == NATIVE_DIR) {
-                continue;
-            }
             let path = item.path();
-            if dir == root && EXCLUDED_AT_ROOT.iter().any(|x| name == *x) && item.file_type().is_ok_and(|t| t.is_dir()) {
-                continue;
-            }
-            if path.extension().is_some_and(|x| x.eq_ignore_ascii_case("cyx")) && item.file_type().is_ok_and(|t| t.is_file()) {
-                continue;
-            }
             let rel = path.strip_prefix(root).expect("walked under root").to_string_lossy().replace('\\', "/");
             let meta = std::fs::symlink_metadata(&path).map_err(Error::Io)?;
+            if top && dir == root && item.file_name() == NATIVE_DIR && meta.is_dir() {
+                continue;
+            }
+            match rules::rule(&rel, meta.is_dir(), top, ignore) {
+                rules::Rule::Keep => {}
+                rules::Rule::Skip => continue,
+                rules::Rule::Secret => {
+                    out.secrets.push(rel);
+                    continue;
+                }
+            }
             if meta.file_type().is_symlink() {
                 return Err(Error::Path { path: rel, reason: "is a symbolic link; copy the file into the extension instead".into() });
             }
             if meta.is_dir() {
-                walk(root, &path, out, skip_native)?;
+                walk(root, &path, top, ignore, out)?;
             } else if meta.is_file() {
                 if meta.len() > limits::PACKAGE_FILE_BYTES {
                     return Err(Error::TooLarge(format!("'{rel}' is larger than {} MiB", limits::PACKAGE_FILE_BYTES >> 20)));
                 }
                 let data = std::fs::read(&path).map_err(Error::Io)?;
-                out.push(Entry { path: rel, data, executable: is_executable(&meta) });
-                if out.len() > limits::PACKAGE_FILES {
+                if rules::holds_private_key(&data) {
+                    return Err(Error::Path {
+                        path: rel,
+                        reason: "holds a private key, and a package must never hold one: move it out of the extension folder, or list it in .cyxignore".into(),
+                    });
+                }
+                out.files.push(Entry { path: rel, data, executable: is_executable(&meta) });
+                if out.files.len() > limits::PACKAGE_FILES {
                     return Err(Error::TooLarge(format!("the folder has more than {} files", limits::PACKAGE_FILES)));
                 }
             } else {
@@ -497,9 +531,7 @@ fn collect_tree(root: &Path, skip_native: bool) -> Result<Vec<Entry>, Error> {
         }
         Ok(())
     }
-    let mut out = Vec::new();
-    walk(root, root, &mut out, skip_native)?;
-    Ok(out)
+    walk(root, root, top, ignore, out)
 }
 
 #[cfg(unix)]

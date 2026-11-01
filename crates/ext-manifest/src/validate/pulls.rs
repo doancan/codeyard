@@ -31,7 +31,7 @@ pub(super) fn contribute(cx: &mut Ctx, raw: &RawManifest, id: &ExtId, perms: &Pe
         let auth = p.auth.as_ref().map(|a| {
             if !perms.auth.contains(a.get_ref()) {
                 cx.err(C::NotDeclared, a.span(), format!("pull-requests auth '{}' is not in [permissions] auth", a.get_ref())).fix =
-                    Some(format!("add auth = [\"{}\"] to [permissions], so the provider can call its forge with auth.fetch", a.get_ref()));
+                    Some(format!("add to [permissions]:  auth = [\"{}\"]", a.get_ref()));
             }
             a.get_ref().clone()
         });

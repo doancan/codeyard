@@ -26,10 +26,14 @@ pub enum Call {
     ApplyEdits { uri: Uri, version: u32, edits: Vec<TextEdit> },
     SetSelections { uri: Uri, selections: Vec<Range> },
     ReadFile(Uri),
+    ReadMany(Vec<Uri>),
     Stat(Uri),
     FindFiles { glob: String, max: u32 },
+    Search(SearchQuery),
     WriteFile { uri: Uri, contents: Vec<u8> },
     DeleteFile(Uri),
+    Rename { from: Uri, to: Uri },
+    CreateDirectory(Uri),
     Fetch(HttpRequest),
     Session { provider: String, scopes: Vec<String> },
     AuthFetch { provider: String, request: HttpRequest },
@@ -302,8 +306,16 @@ pub(crate) fn read_file(uri: &str) -> Ticket {
     start(Call::ReadFile(uri.into()))
 }
 
+pub(crate) fn read_many(uris: &[&str]) -> Ticket {
+    start(Call::ReadMany(uris.iter().map(|u| u.to_string()).collect()))
+}
+
 pub(crate) fn stat(uri: &str) -> Ticket {
     start(Call::Stat(uri.into()))
+}
+
+pub(crate) fn search(query: &SearchQuery) -> Ticket {
+    start(Call::Search(query.clone()))
 }
 
 pub(crate) fn find_files(glob: &str, max: u32) -> Ticket {
@@ -316,6 +328,14 @@ pub(crate) fn write_file(uri: &str, contents: &[u8]) -> Ticket {
 
 pub(crate) fn delete_file(uri: &str) -> Ticket {
     start(Call::DeleteFile(uri.into()))
+}
+
+pub(crate) fn rename(from: &str, to: &str) -> Ticket {
+    start(Call::Rename { from: from.into(), to: to.into() })
+}
+
+pub(crate) fn create_directory(uri: &str) -> Ticket {
+    start(Call::CreateDirectory(uri.into()))
 }
 
 pub(crate) fn fetch(request: &HttpRequest) -> Ticket {

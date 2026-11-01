@@ -18,6 +18,7 @@ import type {
   Tone,
   Why,
 } from "./wit.ts";
+import type { CodeyardError } from "./errors.ts";
 
 export type { CompletionKind, DecorationPlace, DiagnosticSeverity, Document, FormatOptions, LogLevel, Position, Range, Severity, TextEdit, Tone, Why };
 
@@ -50,6 +51,9 @@ export interface FileStat {
   /** Unix milliseconds. */
   modified: number;
 }
+
+/** One file of `ctx.readMany`: its bytes, or why it could not be read. */
+export type FileResult = { uri: Uri; bytes: Uint8Array; error?: undefined } | { uri: Uri; bytes?: undefined; error: CodeyardError };
 
 export interface Account {
   provider: string;

@@ -13,7 +13,7 @@ use crate::error::{Error, Result, line_for, path_line};
 use crate::guest::{self, BoxFuture};
 use crate::net::{self, Request, Response};
 use crate::process::{Chunk, Command, Output, Process};
-use crate::protocol::Completion;
+use crate::protocol::{Completion, StreamEvent};
 use crate::runtime::{self, Pending};
 use crate::sys;
 use crate::types::*;
@@ -420,6 +420,22 @@ impl Context {
         }
     }
 
+    /// Read several files in one round trip, each with its own result, in the order asked. Much faster than one
+    /// `read_file` after another: 2000 sequential reads take seconds, one `read_many` a fraction of that.
+    pub async fn read_many(&self, uris: &[&str]) -> Result<Vec<(Uri, Result<Vec<u8>>)>> {
+        let first = uris.first().copied().unwrap_or_default().to_string();
+        match call(sys::read_many(uris), || path_line("read", &first)).await? {
+            Completion::Files(files) => Ok(files
+                .into_iter()
+                .map(|(uri, r)| {
+                    let line = path_line("read", &uri);
+                    (uri, r.map_err(|e| e.detailed(&|| line.clone())))
+                })
+                .collect()),
+            c => Err(unexpected(c)),
+        }
+    }
+
     pub async fn read_text(&self, uri: &str) -> Result<String> {
         Ok(String::from_utf8(self.read_file(uri).await?)?)
     }
@@ -439,12 +455,38 @@ impl Context {
         }
     }
 
+    /// Search the workspace's files; each match is passed to `found` as it arrives.
+    pub async fn search(&self, query: &SearchQuery, mut found: impl FnMut(SearchMatch)) -> Result<()> {
+        let glob = query.include.first().cloned().unwrap_or_else(|| "<glob>".into());
+        let mut pending = Pending::new(sys::search(query));
+        while let Some(e) = pending.next_event().await {
+            if let StreamEvent::SearchMatch { uri, range, line } = e {
+                found(SearchMatch { uri, range, line });
+            }
+        }
+        match pending.await {
+            Completion::Done => Ok(()),
+            Completion::Failed(e) => Err(e.detailed(&|| format!(r#"read = ["{glob}"]"#))),
+            c => Err(unexpected(c)),
+        }
+    }
+
     pub async fn write_file(&self, uri: &str, contents: &[u8]) -> Result<()> {
         call(sys::write_file(uri, contents), || path_line("write", uri)).await.map(|_| ())
     }
 
     pub async fn delete_file(&self, uri: &str) -> Result<()> {
         call(sys::delete_file(uri), || path_line("write", uri)).await.map(|_| ())
+    }
+
+    /// Move or rename a file or folder; both paths need `write`.
+    pub async fn rename(&self, from: &str, to: &str) -> Result<()> {
+        call(sys::rename(from, to), || path_line("write", to)).await.map(|_| ())
+    }
+
+    /// Create a folder and any missing parents.
+    pub async fn create_directory(&self, uri: &str) -> Result<()> {
+        call(sys::create_directory(uri), || path_line("write", uri)).await.map(|_| ())
     }
 
     // ---- network (`net`, `auth`) ---------------------------------------------------------------------------------
