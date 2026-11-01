@@ -3495,3 +3495,7 @@ Opacity	Opaklık
 Saturation	Doygunluk
 Unfold line {}	{}. satırı aç
 disabled	devre dışı
+Preferences: Reset Settings to Defaults…	Tercihler: Ayarları Varsayılana Sıfırla…
+Reset all settings to the defaults?	Tüm ayarlar varsayılana sıfırlansın mı?
+Settings reset. The old file is kept as {}	Ayarlar sıfırlandı. Eski dosya {} olarak saklandı
+{} is replaced by the default settings of this version. The current file is kept next to it as a backup.	{} bu sürümün varsayılan ayarlarıyla değiştirilir. Mevcut dosya yanında yedek olarak saklanır.

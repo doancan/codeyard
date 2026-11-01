@@ -486,6 +486,7 @@ registry! {
     "workbench.importVsCode" => wb::ImportVsCode,
     "workbench.applyRustSetup" => wb::settings_ui::ApplyRustSetup,
     "workbench.resetRustSetup" => wb::settings_ui::ResetRustSetup,
+    "workbench.resetSettings" => wb::settings_ui::ResetSettings,
     "workbench.quit" => wb::Quit,
     "workbench.checkForUpdates" => wb::CheckForUpdates,
     "terminal.toggle" => wb::ToggleTerminal,

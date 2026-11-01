@@ -1337,6 +1337,10 @@ writes them once you confirm: Clippy for checks, checks with the Cargo features 
 (`rust.features`, `rust.noDefaultFeatures`), a check folder of its own, and rustfmt on save. Comments and other settings
 stay as they are; "Preferences: Reset Rust Setup…" removes exactly those lines again.
 
+If `settings.jsonc` is broken or left over from an old version, "Preferences: Reset Settings to Defaults…" replaces it with
+the default file of the running version after you confirm. The old file stays next to it as
+`settings.backup-<time>.jsonc`.
+
 **Check the way you build.** rust-analyzer runs `cargo check` when you save. Tell it to run Clippy instead, to analyse the
 code behind your Cargo features, or to keep a target folder of its own, in `lsp.servers` (no `command`: the default server
 keeps running, with these settings):

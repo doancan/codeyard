@@ -589,6 +589,29 @@ impl Workbench {
         self.change_rust_setup(true, window, cx);
     }
 
+    /// Replaces `settings.jsonc` with the current template once confirmed, keeping the old file next to it as a backup.
+    pub(super) fn reset_settings(&mut self, _: &ResetSettings, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((spath, _)) = self.config_paths() else { return };
+        let answer = crate::questions::reset_settings(&spath.display().to_string()).ask(window, cx);
+        cx.spawn_in(window, async move |this, cx| {
+            if answer.await != Some(0) {
+                return;
+            }
+            this.update_in(cx, |this, window, cx| {
+                match write_default_settings(&spath) {
+                    Ok(backup) => {
+                        this.notice = backup.map(|b| Notice::Info(crate::i18n::tf("Settings reset. The old file is kept as {}", &[&b.display()]).into()));
+                        this.reload_config(window, cx);
+                    }
+                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     /// Shows the exact change to `settings.jsonc` and writes it once confirmed, if the file did not change meanwhile.
     fn change_rust_setup(&mut self, reset: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some((spath, _)) = self.config_paths() else { return };
@@ -632,9 +655,23 @@ impl Workbench {
     }
 }
 
-gpui::actions!(workbench, [ApplyRustSetup, ResetRustSetup]);
+gpui::actions!(workbench, [ApplyRustSetup, ResetRustSetup, ResetSettings]);
 
 /// `text` with the Rust setup written (`reset`: removed), and the unified diff of that change (empty: no change).
+/// Writes the template over `path`, first copying an existing file to `settings.backup-<unix seconds>.jsonc` beside it.
+pub fn write_default_settings(path: &std::path::Path) -> std::io::Result<Option<std::path::PathBuf>> {
+    let backup = if path.exists() {
+        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        let backup = path.with_file_name(format!("settings.backup-{secs}.jsonc"));
+        std::fs::copy(path, &backup)?;
+        Some(backup)
+    } else {
+        None
+    };
+    crate::fsutil::write_atomic(path, settings::TEMPLATE.to_string())?;
+    Ok(backup)
+}
+
 pub fn rust_setup_change(text: &str, s: &Settings, reset: bool) -> (String, String) {
     let new = settings::rust_setup(s).iter().fold(text.to_string(), |t, (path, v)| settings::set_path_in(&t, path, (!reset).then_some(v)));
     if new == text {

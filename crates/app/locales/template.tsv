@@ -1691,6 +1691,7 @@ Preferences: Open Settings
 Preferences: Open Settings (JSON)	
 Preferences: Open Workspace Settings	
 Preferences: Reset Rust Setup…	
+Preferences: Reset Settings to Defaults…	
 Preferences: Settings	
 Preserve case (⌥P)	
 Preserve case when replacing	
@@ -1910,6 +1911,7 @@ Reset Hard to Here…
 Reset Mixed to Here	
 Reset Soft to Here	
 Reset Zoom	
+Reset all settings to the defaults?	
 Reset the Rust setup in settings.jsonc?	
 Reset to {0} ({1})	
 Resolve the file conflict before debugging.	
@@ -2087,6 +2089,7 @@ Setting up key login for {}…
 Setting upstream of {}…	
 Setting: {}	
 Settings	
+Settings reset. The old file is kept as {}	
 Settings…	
 Several Rust targets reported this test name. Run it individually to identify the failing target.	
 Shape of the cursor	
@@ -3206,6 +3209,7 @@ your words
 {} is not in the registry	
 {} is not installed	
 {} is not installed. Open the setup instructions, then try again.	
+{} is replaced by the default settings of this version. The current file is kept next to it as a backup.	
 {} is too large to be a time in seconds or milliseconds	
 {} is uninstalled.	
 {} isn't available. Or set “lsp.servers” in settings.	

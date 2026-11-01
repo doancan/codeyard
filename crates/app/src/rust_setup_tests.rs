@@ -69,3 +69,25 @@ fn the_rust_setup_command_writes_after_confirmation_and_resets(cx: &mut gpui::Te
     cx.run_until_parked();
     assert_eq!(read(), USER);
 }
+
+#[gpui::test]
+fn reset_settings_restores_the_template_and_keeps_a_backup(cx: &mut gpui::TestAppContext) {
+    let dir = crate::qa_workbench_tests::fresh("reset-settings");
+    let broken = "{ \"editor.tabSize\": 2, this is not json";
+    std::fs::write(dir.join("settings.jsonc"), broken).unwrap();
+    let (wb, cx) = crate::qa_workbench_tests::setup_with_config(cx, &dir);
+    let read = || std::fs::read_to_string(dir.join("settings.jsonc")).unwrap();
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Preferences: Reset Settings to Defaults…", window, cx));
+    cx.run_until_parked();
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
+    cx.run_until_parked();
+    assert_eq!(read(), broken, "nothing is written without confirmation");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Preferences: Reset Settings to Defaults…", window, cx));
+    cx.run_until_parked();
+    cx.simulate_prompt_answer("Reset");
+    cx.run_until_parked();
+    assert_eq!(read(), settings::TEMPLATE);
+    let backups: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with("settings.backup-")).collect();
+    assert_eq!(backups.len(), 1, "the old file is kept");
+    assert_eq!(std::fs::read_to_string(backups[0].path()).unwrap(), broken);
+}

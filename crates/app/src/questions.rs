@@ -134,6 +134,11 @@ pub(crate) fn rust_setup(reset: bool, diff: &str) -> Question {
     confirm(PromptLevel::Info, title.into(), diff.into(), button)
 }
 
+pub(crate) fn reset_settings(path: &str) -> Question {
+    let detail = tf("{} is replaced by the default settings of this version. The current file is kept next to it as a backup.", &[&path]);
+    confirm(PromptLevel::Warning, t("Reset all settings to the defaults?").into(), detail, t("Reset"))
+}
+
 /// A request in a `.http` file that should not be sent without a look (`reasons`, one per line).
 pub(crate) fn send_request(file: &str, reasons: &[String]) -> Question {
     let detail = format!("{}\n• {}\n\n{}", tf("{} contains a request that:", &[&file]), reasons.join("\n• "), t("Only send it if you trust this file."));

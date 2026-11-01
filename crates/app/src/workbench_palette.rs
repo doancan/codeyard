@@ -307,6 +307,7 @@ impl Workbench {
             Command::action("Preferences: Import Settings and Shortcuts from Another Editor", ImportVsCode),
             Command::action("Preferences: Apply Rust Setup…", settings_ui::ApplyRustSetup),
             Command::action("Preferences: Reset Rust Setup…", settings_ui::ResetRustSetup),
+            Command::action("Preferences: Reset Settings to Defaults…", settings_ui::ResetSettings),
             Command::action("View: Problems", ShowProblems),
             Command::action("Problems: Copy Full Diagnostic", CopyFullDiagnostic),
             Command::action("Rust: Expand Macro Recursively", RustExpandMacro),
