@@ -93,6 +93,8 @@ impl MockHost {
             s.settings.entry(setting.key.clone()).or_insert(json);
         }
         s.status_ids = Some(m.status_item_ids());
+        s.own_languages = m.contributions.languages.clone();
+        s.diagnostic_languages = Some(m.contributions.diagnostics.iter().map(|d| d.languages.clone()).collect());
         s.permissions = Some(m.permissions);
         s.oauth = m.oauth.into_iter().map(|o| (o.id, (o.name, o.hosts))).collect();
         drop(s);

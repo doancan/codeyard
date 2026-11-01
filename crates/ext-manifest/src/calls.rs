@@ -142,6 +142,43 @@ pub fn check_status_item(declared: Option<&dyn Fn(&str) -> bool>, id: &str, text
     Ok(shown.to_string())
 }
 
+/// How `languages.set-diagnostics` treats a message: trimmed, `None` when it is empty or has a character that could
+/// disguise what it says (`is_deceptive`: bidirectional overrides, zero-width characters; line breaks and tabs, which
+/// compilers' messages have, are fine), cut to [`limits::DIAGNOSTIC_MESSAGE_LEN`] characters with a `…`. The `bool` says
+/// it was cut.
+pub fn shown_diagnostic_message(message: &str) -> Option<(String, bool)> {
+    let message = message.trim();
+    if message.is_empty() || message.chars().any(|c| c != '\n' && c != '\t' && is_deceptive(c)) {
+        return None;
+    }
+    Some(match message.char_indices().nth(limits::DIAGNOSTIC_MESSAGE_LEN) {
+        Some((cut, _)) => (format!("{}…", &message[..cut]), true),
+        None => (message.to_string(), false),
+    })
+}
+
+/// Whether an extension may set diagnostics on a file, or why not (the app logs it as a warning and shows nothing):
+/// `declared` is the `languages` of each `[[diagnostics]]` entry (an empty list means every language; `None` skips the
+/// check, as for a mock without a manifest), `language` the file's language id, `reachable` whether the file is in the
+/// workspace or open in an editor, `other_files` how many other files already have diagnostics from the extension.
+pub fn check_diagnostics_target(declared: Option<&[Vec<String>]>, language: &str, reachable: bool, other_files: usize) -> Result<(), String> {
+    if let Some(declared) = declared {
+        if declared.is_empty() {
+            return Err("the manifest declares no [[diagnostics]]".into());
+        }
+        if !declared.iter().any(|languages| languages.is_empty() || languages.iter().any(|l| l == language)) {
+            return Err(format!("[[diagnostics]] does not list its language, {language}"));
+        }
+    }
+    if !reachable {
+        return Err("it is neither in the workspace nor open in an editor".into());
+    }
+    if other_files >= limits::DIAGNOSTIC_FILES {
+        return Err(format!("it has diagnostics on {other_files} files already, the most one extension may; clear some first"));
+    }
+    Ok(())
+}
+
 /// The error for an answer (a command's result, a view's tree, …) of `bytes`, if it is larger than
 /// [`limits::CALL_BYTES`]: the app never receives it, the request fails with this instead.
 pub fn result_too_large(bytes: usize) -> Option<String> {
@@ -207,6 +244,27 @@ mod tests {
         assert!(check_status_item(d, "deploys", &"ğ".repeat(64), None).is_ok(), "characters, not bytes");
         assert!(check_status_item(d, "deploys", "a\u{202e}b", None).is_err());
         assert!(check_status_item(d, "deploys", "ok", Some(&"t".repeat(257))).unwrap_err().contains("tooltip"));
+    }
+
+    #[test]
+    fn diagnostics() {
+        assert_eq!(shown_diagnostic_message("  borrow of moved value\n  --> a.rs:1\t "), Some(("borrow of moved value\n  --> a.rs:1".into(), false)));
+        assert_eq!(shown_diagnostic_message("   "), None);
+        assert_eq!(shown_diagnostic_message("a\u{202e}b"), None);
+        assert_eq!(shown_diagnostic_message("a\u{200b}b"), None);
+        let (cut, was_cut) = shown_diagnostic_message(&"ğ".repeat(limits::DIAGNOSTIC_MESSAGE_LEN + 1)).unwrap();
+        assert!(was_cut && cut.chars().count() == limits::DIAGNOSTIC_MESSAGE_LEN + 1 && cut.ends_with('…'));
+        assert_eq!(shown_diagnostic_message(&"x".repeat(limits::DIAGNOSTIC_MESSAGE_LEN)).map(|m| m.1), Some(false));
+
+        let rust = vec![vec!["rust".to_string()]];
+        assert_eq!(check_diagnostics_target(Some(&rust), "rust", true, 0), Ok(()));
+        assert_eq!(check_diagnostics_target(Some(&[vec![]]), "toml", true, 0), Ok(()), "no languages: every language");
+        assert_eq!(check_diagnostics_target(None, "toml", true, 0), Ok(()), "no manifest: nothing declared to check");
+        assert!(check_diagnostics_target(Some(&[]), "rust", true, 0).unwrap_err().contains("declares no [[diagnostics]]"));
+        assert!(check_diagnostics_target(Some(&rust), "toml", true, 0).unwrap_err().contains("does not list its language, toml"));
+        assert!(check_diagnostics_target(Some(&rust), "rust", false, 0).unwrap_err().contains("neither in the workspace nor open"));
+        assert!(check_diagnostics_target(Some(&rust), "rust", true, limits::DIAGNOSTIC_FILES).unwrap_err().contains("1000 files already"));
+        assert_eq!(check_diagnostics_target(Some(&rust), "rust", true, limits::DIAGNOSTIC_FILES - 1), Ok(()));
     }
 
     #[test]

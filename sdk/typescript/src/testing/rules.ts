@@ -7,6 +7,9 @@ export const LIMITS = {
   CALL_BYTES: 8 * 1024 * 1024,
   DATA_DIR_BYTES: 50 * 1024 * 1024,
   ITEM_LEN: 256,
+  DIAGNOSTIC_FILES: 1000,
+  DIAGNOSTIC_MESSAGE_LEN: 4096,
+  MARKS_PER_FILE: 1000,
   STATUS_TEXT_LEN: 64,
   TIMER_MIN_SECONDS: 30,
 } as const;
@@ -222,4 +225,58 @@ export function resultTooLarge(bytes: number): string | undefined {
   const tenths = Math.max(Math.floor((bytes * 10 + MIB / 2) / MIB), Math.floor((LIMITS.CALL_BYTES * 10) / MIB) + 1);
   const size = tenths % 10 === 0 ? `${tenths / 10}` : `${Math.floor(tenths / 10)}.${tenths % 10}`;
   return `the result is ${size} MiB; at most ${LIMITS.CALL_BYTES / MIB} MiB`;
+}
+
+/**
+ * A diagnostic's message as Codeyard shows it: trimmed, undefined when empty or with a character that could disguise
+ * what it says (line breaks and tabs are fine), cut to DIAGNOSTIC_MESSAGE_LEN characters with a `…`.
+ */
+export function shownDiagnosticMessage(message: string): { shown: string; cut: boolean } | undefined {
+  const m = message.trim();
+  if (m === "" || deceptive(m.replace(/[\n\t]/g, ""))) return undefined;
+  const chars = [...m];
+  return chars.length > LIMITS.DIAGNOSTIC_MESSAGE_LEN
+    ? { shown: `${chars.slice(0, LIMITS.DIAGNOSTIC_MESSAGE_LEN).join("")}…`, cut: true }
+    : { shown: m, cut: false };
+}
+
+/**
+ * Why an extension may not set diagnostics on a file, or undefined when it may. `declared` is the `languages` of each
+ * `[[diagnostics]]` entry (empty: every language; undefined skips the check, as without a manifest).
+ */
+export function checkDiagnosticsTarget(declared: string[][] | undefined, language: string, reachable: boolean, otherFiles: number): string | undefined {
+  if (declared) {
+    if (declared.length === 0) return "the manifest declares no [[diagnostics]]";
+    if (!declared.some((l) => l.length === 0 || l.includes(language))) return `[[diagnostics]] does not list its language, ${language}`;
+  }
+  if (!reachable) return "it is neither in the workspace nor open in an editor";
+  if (otherFiles >= LIMITS.DIAGNOSTIC_FILES) return `it has diagnostics on ${otherFiles} files already, the most one extension may; clear some first`;
+  return undefined;
+}
+
+const BY_EXTENSION: Record<string, string> = {
+  rs: "rust", c: "c", h: "c", cc: "cpp", cpp: "cpp", cxx: "cpp", hpp: "cpp", hh: "cpp", hxx: "cpp", go: "go", py: "python", pyi: "python",
+  ts: "typescript", mts: "typescript", cts: "typescript", tsx: "typescriptreact", js: "javascript", mjs: "javascript", cjs: "javascript",
+  jsx: "javascriptreact", java: "java", cs: "csharp", php: "php", phtml: "php", rb: "ruby", rake: "ruby", gemspec: "ruby", ru: "ruby",
+  kt: "kotlin", kts: "kotlin", swift: "swift", lua: "lua", sh: "shellscript", bash: "shellscript", html: "html", htm: "html", css: "css",
+  scss: "scss", less: "less", json: "json", jsonc: "jsonc", yaml: "yaml", yml: "yaml", toml: "toml",
+};
+
+/** The built-in language id of a file name (`a.rs` is `rust`), undefined for one no built-in language claims. */
+export function builtinLanguage(path: string): string | undefined {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  if (["Gemfile", "Rakefile", "Podfile", "Vagrantfile", "Guardfile"].includes(name)) return "ruby";
+  const dot = name.lastIndexOf(".");
+  return dot < 0 ? undefined : BY_EXTENSION[name.slice(dot + 1).toLowerCase()];
+}
+
+/** The language id Codeyard gives a file: a built-in one, else one of the extension's own `[[languages]]`, else `plaintext`. */
+export function languageId(own: { id: string; extensions: string[]; filenames: string[] }[], path: string): string {
+  const builtin = builtinLanguage(path);
+  if (builtin) return builtin;
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  const ext = dot < 0 ? undefined : name.slice(dot + 1).toLowerCase();
+  const hit = own.find((l) => l.filenames.includes(name)) ?? (ext === undefined ? undefined : own.find((l) => l.extensions.some((e) => e.toLowerCase() === ext)));
+  return hit?.id ?? "plaintext";
 }

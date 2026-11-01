@@ -156,6 +156,46 @@ fn status_items() -> Value {
         .collect()
 }
 
+/// Declared `languages` of each `[[diagnostics]]` (none: no manifest), language, reachable, other files.
+type TargetCase = (Option<Vec<Vec<String>>>, &'static str, bool, usize);
+
+fn diagnostics() -> Value {
+    let long = "ğ".repeat(limits::DIAGNOSTIC_MESSAGE_LEN + 1);
+    let exact = "x".repeat(limits::DIAGNOSTIC_MESSAGE_LEN);
+    let messages = ["  unused import ", "", "   ", "a\u{202e}b", "a\u{200b}b", "a\u{feff}b", "line one\n\tline two", "a\u{7}b", &long, &exact];
+    let messages: Vec<Value> = messages
+        .iter()
+        .map(|m| match crate::calls::shown_diagnostic_message(m) {
+            Some((shown, cut)) => json!({ "message": m, "shown": shown, "cut": cut }),
+            None => json!({ "message": m, "shown": null }),
+        })
+        .collect();
+    let rust = vec!["rust".to_string()];
+    let any: Vec<String> = Vec::new();
+    let targets: [TargetCase; 9] = [
+        (Some(vec![rust.clone()]), "rust", true, 0),
+        (Some(vec![any]), "toml", true, 0),
+        (None, "toml", true, 0),
+        (Some(vec![]), "rust", true, 0),
+        (Some(vec![rust.clone()]), "toml", true, 0),
+        (Some(vec![rust.clone()]), "rust", false, 0),
+        (Some(vec![rust.clone()]), "rust", true, limits::DIAGNOSTIC_FILES),
+        (Some(vec![rust.clone()]), "rust", true, limits::DIAGNOSTIC_FILES - 1),
+        (Some(vec![rust.clone(), vec!["markdown".into()]]), "markdown", true, 3),
+    ];
+    let targets: Vec<Value> = targets
+        .iter()
+        .map(|(declared, language, reachable, others)| {
+            let error = crate::calls::check_diagnostics_target(declared.as_deref(), language, *reachable, *others).err();
+            json!({ "declared": declared, "language": language, "reachable": reachable, "otherFiles": others, "error": error })
+        })
+        .collect();
+    let files =
+        ["a.rs", "b/c.PY", "x.hxx", "Rakefile", "dir/Gemfile", "a.gemspec", "a.phtml", "a.yml", "a.tsx", "a.zzz", "noext", "dir.d/noext", ".toml", "a.TOML"];
+    let languages: Vec<Value> = files.iter().map(|f| json!({ "path": f, "language": crate::builtin_language(f) })).collect();
+    json!({ "messages": messages, "targets": targets, "languages": languages })
+}
+
 fn results() -> Value {
     [0, limits::CALL_BYTES, limits::CALL_BYTES + 1, 20 << 20].iter().map(|b| json!({ "bytes": b, "error": result_too_large(*b) })).collect()
 }
@@ -167,6 +207,9 @@ fn cases() -> Value {
             "DATA_DIR_BYTES": limits::DATA_DIR_BYTES,
             "ITEM_LEN": limits::ITEM_LEN,
             "STATUS_TEXT_LEN": limits::STATUS_TEXT_LEN,
+            "DIAGNOSTIC_FILES": limits::DIAGNOSTIC_FILES,
+            "DIAGNOSTIC_MESSAGE_LEN": limits::DIAGNOSTIC_MESSAGE_LEN,
+            "MARKS_PER_FILE": limits::MARKS_PER_FILE,
             "TIMER_MIN_SECONDS": limits::TIMER_MIN_SECONDS,
         },
         "globs": globs(),
@@ -175,6 +218,7 @@ fn cases() -> Value {
         "urls": urls(),
         "statusItems": status_items(),
         "results": results(),
+        "diagnostics": diagnostics(),
         "outside": [
             { "kind": "read", "path": "file:///etc/passwd", "line": crate::outside_line("read", "file:///etc/passwd") },
             { "kind": "write", "path": "file:///work/../x", "line": crate::outside_line("write", "file:///work/../x") },

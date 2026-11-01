@@ -125,6 +125,7 @@ Globs mean what they mean in Codeyard ([globs](reference/globs.md)): `read = ["m
 - A URL Codeyard never fetches (`http://`, a user name or password in it) fails with `invalid`, even when a fixture exists for it. One that names an IP address, and a path outside the workspace, are denied with `(cannot be granted: …)` and the fix `none: this cannot be granted, …`, since no manifest entry allows them.
 - `set_status_item` refuses an id the manifest does not declare in `[[status-bar]]` and a text that is empty or longer than 64 characters.
 - An answer (a command's result, a view's tree) over 8 MiB fails its request with `invalid: the result is 20 MiB; at most 8 MiB`.
+- `set_diagnostics` is refused, with a warning in `host.logs()` and nothing stored, unless the manifest declares `[[diagnostics]]`, lists the file's language (decided by its name, as Codeyard does: `.rs` is `rust`, and `.md` has no language id; the extension's own `[[languages]]` count), and the file is in the workspace or open in the editor. Messages with bidirectional or zero-width characters (or empty ones) are dropped, messages over 4096 characters are cut with a `…`, and one extension has diagnostics on at most 1000 files.
 - `open_external` works only while the extension handles a user action (a command, a view event), not from a provider or a timer.
 
 `on_settings_changed` and `every` handlers may return `Result<()>`, so `?` works in them; an error goes to the extension's log (`host.logs()`).
@@ -208,6 +209,7 @@ It fails when:
 - `activate` returns an error, or an `async activate` rejects after an `await` (the log shows `activate failed: …`);
 - a command, view or provider fails as above, or does not answer within 20 seconds;
 - a view draws a tree Codeyard would refuse; the reason is printed as Codeyard shows it;
+- `set-diagnostics` is something Codeyard would not show: no `[[diagnostics]]` for the file's language, a file outside the workspace, messages it would drop, more than 1000 files (the fix says what to add to the manifest);
 - the extension traps (a panic, running out of memory, computing too long); the trap is printed with the extension's own frames first (the Rust runtime's panic handling is left out, names are demangled);
 - **any call is refused**, even if the extension handles the error. The refusal is printed with its fix:
 

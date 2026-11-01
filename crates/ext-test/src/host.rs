@@ -61,6 +61,10 @@ pub struct State {
     pub permissions: Option<Permissions>,
     /// The local ids of the manifest's `[[status-bar]]` items; none without a manifest.
     pub status_ids: Option<Vec<String>>,
+    /// The `languages` of each of the manifest's `[[diagnostics]]`; none without a manifest.
+    pub diagnostic_languages: Option<Vec<Vec<String>>>,
+    /// The manifest's own `[[languages]]`, which name files no built-in language claims.
+    pub own_languages: Vec<ext_manifest::Language>,
     /// The request being handled is a user action (a command, a view event, …): it may open links.
     pub user_action: bool,
     /// The manifest's `[[oauth]]` providers: id, then the name and the hosts `auth.fetch` may sign requests to.
@@ -370,6 +374,11 @@ impl State {
         self.next_id
     }
 
+    /// A warning in the extension's log, where Codeyard writes what it refuses without an error to return.
+    fn warn(&mut self, message: String) {
+        self.notes.push(Note::Log { level: LogLevel::Warn, message });
+    }
+
     /// Whether the extension may read `uri`, as Codeyard checks every watch event (reading is allowed in untrusted
     /// folders too).
     fn readable(&self, uri: &str) -> bool {
@@ -493,8 +502,37 @@ impl Host for Shared {
             Note::StopWatch(id) => {
                 s.watches.remove(id);
             }
+            // As the app: refused with a warning in the extension's log unless the manifest declares `[[diagnostics]]`
+            // for the file's language and the file is in the workspace or open; messages that could disguise what they
+            // say are dropped, long ones cut, and one extension has diagnostics on at most `DIAGNOSTIC_FILES` files.
             Note::SetDiagnostics { uri, diagnostics } => {
-                s.diagnostics.insert(uri.clone(), diagnostics.clone());
+                let open = s.active.as_ref().is_some_and(|d| d.uri == *uri) || s.documents.contains_key(uri);
+                // By the file's name, wherever it is, as the app does (the app gives an open document the language of its
+                // file name too, whatever the test said it was).
+                let language = ext_manifest::language_id(&s.own_languages, &ext_manifest::normalize(uri).unwrap_or_default());
+                let others = s.diagnostics.keys().filter(|u| *u != uri).count();
+                let verdict =
+                    ext_manifest::calls::check_diagnostics_target(s.diagnostic_languages.as_deref(), &language, relative(uri).is_some() || open, others);
+                match verdict {
+                    Err(why) => s.warn(format!("set-diagnostics on {uri} refused: {why}")),
+                    Ok(()) => {
+                        let mut kept = Vec::new();
+                        for d in diagnostics {
+                            if let Some((message, _)) = ext_manifest::calls::shown_diagnostic_message(&d.message) {
+                                kept.push(Diagnostic { message, ..d.clone() });
+                            }
+                        }
+                        if kept.len() < diagnostics.len() {
+                            s.warn(format!("set-diagnostics on {uri}: {} with an empty message or hidden characters dropped", diagnostics.len() - kept.len()));
+                        }
+                        kept.truncate(ext_manifest::limits::MARKS_PER_FILE);
+                        if kept.is_empty() {
+                            s.diagnostics.remove(uri);
+                        } else {
+                            s.diagnostics.insert(uri.clone(), kept);
+                        }
+                    }
+                }
             }
             Note::ClearDiagnostics(uri) => match uri {
                 Some(u) => {

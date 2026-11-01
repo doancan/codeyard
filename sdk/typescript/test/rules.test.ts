@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { checkStatusItem, checkUrl, globsAllow, ipAddressLine, LIMITS, outsideLine, pathMatches, relative, resultTooLarge } from "../src/testing/rules.ts";
+import { builtinLanguage, checkDiagnosticsTarget, checkStatusItem, checkUrl, globsAllow, ipAddressLine, LIMITS, outsideLine, pathMatches, relative, resultTooLarge, shownDiagnosticMessage } from "../src/testing/rules.ts";
 
 const cases = JSON.parse(readFileSync(new URL("./rule-cases.json", import.meta.url), "utf8")) as {
   limits: Record<string, number>;
@@ -14,6 +14,11 @@ const cases = JSON.parse(readFileSync(new URL("./rule-cases.json", import.meta.u
   paths: { folder: string; uri: string; relative: string | null }[];
   urls: ({ url: string; host: string; port: number } | { url: string; problem: string; message: string; host: string; denied: string | null })[];
   outside: { kind: string; path: string; line: string }[];
+  diagnostics: {
+    messages: { message: string; shown: string | null; cut?: boolean }[];
+    targets: { declared: string[][] | null; language: string; reachable: boolean; otherFiles: number; error: string | null }[];
+    languages: { path: string; language: string | null }[];
+  };
   statusItems: { declared: string[] | null; id: string; text: string; tooltip: string | null; expect: { shown: string } | { error: string } }[];
   results: { bytes: number; error: string | null }[];
 };
@@ -53,4 +58,16 @@ test("status items and answer sizes are checked as in Codeyard", () => {
     assert.deepEqual(checkStatusItem(c.declared ?? undefined, c.id, c.text, c.tooltip ?? undefined), c.expect, `${c.id} ${c.text}`);
   }
   for (const c of cases.results) assert.equal(resultTooLarge(c.bytes) ?? null, c.error, String(c.bytes));
+});
+
+test("diagnostics are checked as in Codeyard", () => {
+  for (const c of cases.diagnostics.messages) {
+    const r = shownDiagnosticMessage(c.message);
+    assert.equal(r?.shown ?? null, c.shown, JSON.stringify(c.message));
+    if (r) assert.equal(r.cut, c.cut, JSON.stringify(c.message));
+  }
+  for (const c of cases.diagnostics.targets) {
+    assert.equal(checkDiagnosticsTarget(c.declared ?? undefined, c.language, c.reachable, c.otherFiles) ?? null, c.error, JSON.stringify(c));
+  }
+  for (const c of cases.diagnostics.languages) assert.equal(builtinLanguage(c.path) ?? null, c.language, c.path);
 });

@@ -396,6 +396,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The mock hosts (Rust and TypeScript) and `cyx test` judge diagnostics as Codeyard does: `set_diagnostics` needs a
+  `[[diagnostics]]` declaration that lists the file's language, a file in the workspace or open in the editor, and at
+  most 1000 files; messages with bidirectional or zero-width characters are dropped and ones over 4096 characters cut.
+  The rule is `ext_manifest::calls` (with `builtin_language` for the file name's language, which the app's table is
+  tested against); the TypeScript copy is checked against cases the Rust rules judge. A refusal is a warning in the
+  mock's `logs()` and a failure in `cyx test`.
+- A path outside the workspace and a request to an IP address are denied in the mocks and in `cyx test` with the same
+  `(cannot be granted: …)` line and `none: this cannot be granted, …` fix the app and the SDKs give (a test in `cyx`
+  runs both through the real extension host).
+
 - One set of rules for the app, the extension host, both mock hosts and `cyx test` (`ext_manifest::glob`, `allow`,
   `calls`; the TypeScript mock has a copy checked against cases the Rust rules judge): a glob is matched against the
   whole workspace path in linear time (`read = ["main.rs"]` is no longer `src/main.rs` in tests), a path is resolved

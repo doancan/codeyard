@@ -34,6 +34,10 @@ languages = ["rust"]
 id        = "marks"
 languages = ["rust"]
 
+[[diagnostics]]
+id        = "lint"
+languages = ["rust", "toml"]
+
 [settings.interval]
 type        = "number"
 default     = 60
@@ -57,6 +61,17 @@ impl Extension for Parity {
         ctx.command("mark", async |ctx, _args| {
             let mark = Decoration { range: Range::line(0, 0, 1), place: DecorationPlace::After, tone: Tone::Muted, text: Some("here".into()), hover: None };
             ctx.set_decorations("file:///work/main.rs", "marks", &[mark]);
+            Ok(())
+        });
+        ctx.command("diagnose", async |ctx, args| {
+            let uri = args["uri"].as_str().unwrap_or_default().to_string();
+            let messages: Vec<String> = args["messages"].as_array().into_iter().flatten().filter_map(|m| m.as_str()).map(str::to_string).collect();
+            let list: Vec<Diagnostic> = messages.iter().map(|m| Diagnostic::new(Range::line(0, 0, 1), DiagnosticSeverity::Warning, m.as_str())).collect();
+            ctx.set_diagnostics(&uri, &list);
+            Ok(())
+        });
+        ctx.command("clear", async |ctx, args| {
+            ctx.clear_diagnostics(args.as_str());
             Ok(())
         });
         // A provider is not a user action, so it may not open links.
@@ -158,4 +173,77 @@ fn a_settings_handler_may_use_the_question_mark() {
     assert!(h.logs().iter().any(|(_, m)| m == "interval 90"), "{:?}", h.logs());
     h.change_setting("interval", None);
     assert!(h.logs().iter().any(|(l, m)| *l == LogLevel::Error && m.contains("the settings handler failed: no interval")), "{:?}", h.logs());
+}
+
+fn diagnose(h: &MockHost, uri: &str, messages: &[&str]) {
+    h.command("diagnose", json!({ "uri": uri, "messages": messages })).unwrap();
+}
+
+fn warned(h: &MockHost, what: &str) -> bool {
+    h.logs().iter().any(|(l, m)| *l == LogLevel::Warn && m.contains(what))
+}
+
+#[test]
+fn diagnostics_follow_codeyards_rules() {
+    let h = host();
+    // A declared language, a file in the workspace: kept, trimmed.
+    diagnose(&h, "file:///work/src/lib.rs", &["  unused import ", "", "   "]);
+    let kept = h.diagnostics("src/lib.rs");
+    assert_eq!(kept.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(), ["unused import"]);
+    assert!(warned(&h, "2 with an empty message or hidden characters dropped"), "{:?}", h.logs());
+    // Bidirectional and zero-width characters drop the message; line breaks and tabs do not.
+    diagnose(&h, "file:///work/src/lib.rs", &["a\u{202e}b", "c\u{200b}d", "line one\n\tline two"]);
+    assert_eq!(h.diagnostics("src/lib.rs").iter().map(|d| d.message.as_str()).collect::<Vec<_>>(), ["line one\n\tline two"]);
+    // Cut at 4096 characters, with a `…`.
+    diagnose(&h, "file:///work/src/lib.rs", &[&"ğ".repeat(5000)]);
+    let long = &h.diagnostics("src/lib.rs")[0].message;
+    assert_eq!((long.chars().count(), long.ends_with('…')), (4097, true));
+    // A language the manifest does not list, and a file outside the workspace that is not open.
+    diagnose(&h, "file:///work/main.go", &["no"]);
+    assert!(h.diagnostics("main.go").is_empty() && warned(&h, "does not list its language, go"), "{:?}", h.logs());
+    diagnose(&h, "file:///work/notes.md", &["no"]);
+    assert!(warned(&h, "does not list its language, plaintext"), "Codeyard has no markdown language id: {:?}", h.logs());
+    diagnose(&h, "file:///etc/hosts.rs", &["no"]);
+    assert!(h.diagnostics("file:///etc/hosts.rs").is_empty() && warned(&h, "neither in the workspace nor open in an editor"), "{:?}", h.logs());
+    // Open in the editor, it is allowed wherever it is.
+    h.active_document("file:///elsewhere/lib.rs", "rust", "fn main() {}");
+    diagnose(&h, "file:///elsewhere/lib.rs", &["fine"]);
+    assert_eq!(h.diagnostics("file:///elsewhere/lib.rs").len(), 1);
+}
+
+#[test]
+fn diagnostics_need_a_declaration_and_stop_at_a_thousand_files() {
+    let h = MockHost::allow_all();
+    h.manifest(&MANIFEST.replace("[[diagnostics]]\nid        = \"lint\"\nlanguages = [\"rust\", \"toml\"]\n", ""));
+    h.activate::<Parity>().unwrap();
+    diagnose(&h, "file:///work/a.rs", &["x"]);
+    assert!(h.diagnostics("a.rs").is_empty() && warned(&h, "declares no [[diagnostics]]"), "{:?}", h.logs());
+
+    let h = host();
+    for i in 0..1000 {
+        diagnose(&h, &format!("file:///work/f{i}.rs"), &["x"]);
+    }
+    diagnose(&h, "file:///work/one-too-many.rs", &["x"]);
+    assert!(h.diagnostics("one-too-many.rs").is_empty() && warned(&h, "1000 files already"));
+    // A file that already has some may change, and clearing makes room.
+    diagnose(&h, "file:///work/f0.rs", &["y"]);
+    assert_eq!(h.diagnostics("f0.rs")[0].message, "y");
+    h.command("clear", json!("file:///work/f1.rs")).unwrap();
+    diagnose(&h, "file:///work/one-too-many.rs", &["x"]);
+    assert_eq!(h.diagnostics("one-too-many.rs").len(), 1);
+}
+
+#[test]
+fn an_extensions_own_language_counts_for_diagnostics() {
+    let h = MockHost::allow_all();
+    h.manifest(
+        &MANIFEST
+            .replace("languages = [\"rust\", \"toml\"]", "languages = [\"acme\"]")
+            .replace("[[hover]]", "[[languages]]\nid = \"acme\"\nextensions = [\"acme\"]\n\n[[hover]]"),
+    );
+    h.activate::<Parity>().unwrap();
+    diagnose(&h, "file:///work/a.acme", &["fine"]);
+    assert_eq!(h.diagnostics("a.acme").len(), 1, "{:?}", h.logs());
+    diagnose(&h, "file:///work/a.rs", &["no"]);
+    assert!(h.diagnostics("a.rs").is_empty() && warned(&h, "does not list its language, rust"));
 }

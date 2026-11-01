@@ -402,6 +402,8 @@ struct App {
     /// Watches the extension started: (id, the glob of a file watch, or none for a document watch, and whether it wants
     /// the text).
     watches: Vec<(u64, Option<String>, bool)>,
+    /// The files the extension has diagnostics on now (a uri each), for the limit on how many.
+    diagnostic_files: std::collections::BTreeSet<String>,
 }
 
 impl App {
@@ -440,6 +442,7 @@ impl App {
             late_activate: false,
             current: "activate".into(),
             watches: Vec::new(),
+            diagnostic_files: Default::default(),
         };
         match app.frames.recv_timeout(WAIT) {
             Ok(Ok(ToApp::Ready { .. })) => Ok(app),
@@ -510,6 +513,13 @@ impl App {
                         report.fail(format!("activate failed: {why}"));
                     }
                 }
+                ToApp::Notify(Notify::SetDiagnostics { uri, diagnostics }) => self.set_diagnostics(report, &uri, &diagnostics),
+                ToApp::Notify(Notify::ClearDiagnostics { uri }) => match uri {
+                    Some(u) => {
+                        self.diagnostic_files.remove(&u);
+                    }
+                    None => self.diagnostic_files.clear(),
+                },
                 ToApp::Notify(Notify::WatchDocuments { id, text }) => self.watches.push((id, None, text)),
                 ToApp::Notify(Notify::WatchFiles { id, glob }) => self.watches.push((id, Some(glob), false)),
                 ToApp::Notify(Notify::StopWatch { id }) => self.watches.retain(|(w, ..)| *w != id),
@@ -607,6 +617,43 @@ impl App {
             }
             _ => Completion::Done,
         })
+    }
+
+    /// `languages.set-diagnostics`, with the app's rules (`ext_manifest::calls`): refused, or with messages it would
+    /// drop, the diagnostics never show, so each is a failure.
+    fn set_diagnostics(&mut self, report: &mut Report, uri: &str, diagnostics: &[ext_api::value::Diagnostic]) {
+        let languages = &self.manifest.contributions.languages;
+        let language = ext_manifest::language_id(languages, &ext_manifest::normalize(uri).unwrap_or_default());
+        let declared: Vec<Vec<String>> = self.manifest.contributions.diagnostics.iter().map(|d| d.languages.clone()).collect();
+        let reachable = ext_manifest::relative(std::slice::from_ref(&self.folder), uri).is_some();
+        let others = self.diagnostic_files.iter().filter(|u| u.as_str() != uri).count();
+        if let Err(why) = ext_manifest::calls::check_diagnostics_target(Some(&declared), &language, reachable, others) {
+            let fix = if declared.is_empty() {
+                format!("\n        = fix: add [[diagnostics]] with languages = [\"{language}\"] to {}", ext_manifest::FILE_NAME)
+            } else if why.contains("does not list its language") {
+                format!("\n        = fix: add \"{language}\" to the languages of [[diagnostics]]")
+            } else {
+                String::new()
+            };
+            report.fail(format!("set-diagnostics on {uri} is refused by Codeyard: {why}{fix}"));
+            return;
+        }
+        let shown: Vec<_> = diagnostics.iter().filter_map(|d| ext_manifest::calls::shown_diagnostic_message(&d.message)).collect();
+        if shown.len() < diagnostics.len() {
+            report.fail(format!(
+                "set-diagnostics on {uri}: Codeyard drops {} of {} diagnostics, whose message is empty or has bidirectional or zero-width characters",
+                diagnostics.len() - shown.len(),
+                diagnostics.len()
+            ));
+        }
+        if shown.iter().any(|(_, cut)| *cut) {
+            report.lines.push(format!("    set-diagnostics on {uri}: a message is cut at {} characters", ext_manifest::limits::DIAGNOSTIC_MESSAGE_LEN));
+        }
+        if shown.is_empty() {
+            self.diagnostic_files.remove(uri);
+        } else {
+            self.diagnostic_files.insert(uri.to_string());
+        }
     }
 
     /// The workspace-relative path of `uri` in the folder (`ext_manifest::relative`).
