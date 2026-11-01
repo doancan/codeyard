@@ -419,7 +419,8 @@ probe as the workbench's lists (`painted.rs`).
 ## Not verified / missing
 
 - **No screen reader has been run.** VoiceOver (speech, rotor, VO cursor, "interact with text area") and NVDA, JAWS or
-  Narrator on Windows. The Windows adapter builds and passes CI, but no UI Automation client has read its tree yet.
+  Narrator on Windows. The Windows adapter builds and passes CI, but no UI Automation client has read its tree yet. The
+  steps to run are in "Manual screen-reader checklist" below.
 - **Right-to-left caret.** The tree reports right-to-left characters where they are drawn (see Text positions), and so
   the caret and selection bounds AccessKit computes from them are on those characters. The editor itself still draws
   its caret and selection inside right-to-left text with GPUI's `x_for_index`, which assumes glyphs in reading order:
@@ -472,10 +473,106 @@ probe as the workbench's lists (`painted.rs`).
   (`accessibility_bounds_follow_the_interface_scale`, `a11y_frames_tests.rs`). Checked natively at 100% and 200% with
   `axframes` (below); not yet with VoiceOver, NVDA or Narrator running, nor with UI Automation on Windows.
 
+## Manual screen-reader checklist
+
+The limits above that only a person with a screen reader can close. Each pass is written down with the date, the
+build (`codeyard --version`), the system and screen-reader versions, and for every step **pass**, **fail** (what was
+heard or seen instead) or **not run**. A failure is fixed or recorded under "Not verified / missing"; a pass replaces
+the matching "not run" sentence there.
+
+Set up once per pass:
+
+1. Use a release build or a dev build with its own folders (`CODEYARD_DEV=1`), so the pass never touches a real
+   profile.
+2. Make a throwaway folder with a Git repository: `main.rs` (about 200 lines, one line with "café", one with
+   "abc אבג def", one misspelled word), `notes.md`, one uncommitted change and one new file.
+3. Open that folder (`codeyard <folder>`) at 100% (`View: Reset Zoom`).
+
+### VoiceOver (macOS)
+
+Turn VoiceOver on (Cmd+F5) after Codeyard has opened; "VO" below is Control+Option.
+
+1. **Window and its parts.** Cmd+Tab to Codeyard. VoiceOver says the window title. VO+Right walks the window's top
+   level: the activity bar, the side bar, the editor area, the panel and the status bar are each reached; write down
+   the name and role VoiceOver says for each (the tree has no landmark roles, so the rotor's Landmarks list is expected
+   to be empty; write down what it shows).
+2. **Explorer.** Focus the Explorer (click it, or `File: Reveal Active File in Explorer`). Up and Down move between
+   rows; each is read with its name, its level and "collapsed" or "expanded" for a folder. Right and Left expand and
+   collapse a folder, and VoiceOver says the new state. Enter on `main.rs` opens it, and the keyboard is in the editor.
+3. **VO cursor follows focus.** With "VoiceOver cursor follows keyboard focus" on (VoiceOver Utility › Navigation), Tab
+   and Shift+Tab move the VO cursor with the keyboard; the cursor outline is drawn on the focused part. This is the
+   live focus check that "Not verified" lacks for everything but Source Control.
+4. **Editor text.** In `main.rs` VoiceOver says "edit text" (text area). Down reads the next line; Option+Right reads
+   word by word; Shift+Right says what was selected. VO+Shift+Down ("interact") and VO+Right inside the text read the
+   same characters. Select "café": VoiceOver says it, and the VO cursor outline sits on the drawn selection.
+5. **A long file.** Cmd+Down to the end of the file and back: the line read is the one the caret is on, never a line of
+   the previously exposed range. Then VO+Shift+Up ("stop interacting") and the scroll position is read from the text
+   area's description.
+6. **Right-to-left.** Put the caret before "א" in "abc אבג def" and press Right three times: VoiceOver reads א, ב, ג.
+   Write down where the VO cursor outline is drawn for each (on the letter, or elsewhere, see "Right-to-left caret").
+7. **One cursor.** Place a second cursor (`Editor: Add Cursor Below`) and type a letter. VoiceOver reads the primary
+   cursor's line and position only; note what it says about the other cursor (nothing is expected: AccessKit 0.25's
+   `TextSelection` holds one anchor and one focus).
+8. **Leaving a control (Blur).** Focus the editor, then move the VO cursor to the status bar without moving the
+   keyboard (VO+arrows, with "VoiceOver cursor follows keyboard focus" off). VoiceOver may set `AXFocused` to false on
+   the text area; `accesskit_macos` 0.27 turns that into a focus request for the window's root, and only when the root
+   can take focus, which it cannot (it offers no `Focus` action): nothing reaches the app, never a `Blur`. Expected:
+   the keyboard stays in the editor and typing still edits `main.rs`.
+9. **Terminal.** `Terminal: Toggle`. VoiceOver reads the shell prompt; type `echo hello` and Return: "hello" is read.
+   Shift+Page Up scrolls the history a page and VoiceOver reads the rows now on screen.
+10. **Lists with a cursor row.** Source Control: Down and Up move the cursor row, each change is read with its status;
+    Shift+F10 opens the row's menu, Escape returns to the same row. Repeat in Run and Debug's breakpoints, the
+    Testing tree and Ports.
+11. **Popups.** Cmd+Shift+P: the palette is read as a combo box, typing narrows it and the selected row is read.
+    "Editor: Show Hover" over the misspelled word reads the hover text. Word suggestions while typing are read as a
+    list with the selected row.
+12. **Dialogs.** Close an unsaved file: the confirmation is read with its buttons and Escape cancels it.
+13. **Zoom.** Cmd+= twice, then repeat steps 2, 4 and 6: the VO cursor outline stays on the drawn row and selection.
+
+### NVDA, Narrator and JAWS (Windows)
+
+Run the Windows build with NVDA (the free reference) first, then the same steps with Narrator (Ctrl+Win+Enter);
+JAWS when a licence is at hand. NVDA's Speech Viewer (NVDA menu › Tools) keeps a written record of what was said.
+
+1. **Window and focus.** Alt+Tab to Codeyard: the window title is read. NVDA+Tab reads the focused element, its role
+   and name.
+2. **Explorer.** As VoiceOver step 2; NVDA reads "tree view item", the level, and "collapsed"/"expanded". With
+   NVDA's object navigation (NVDA+Numpad 8/2/4/6, or NVDA+Shift+arrows on a laptop), the navigator object moves from
+   the tree to its parent group and back.
+3. **Editor text.** In `main.rs` NVDA reads "edit, multi line". Up/Down read lines, Ctrl+Right words, Shift+Right the
+   selected character; NVDA+Up re-reads the current line. Narrator: Caps Lock+Right reads the next character. Select
+   "café": the selection is read, and NVDA's focus highlight (Focus Highlight add-on, or Narrator's blue box) is on the
+   drawn selection.
+4. **Browse mode.** NVDA+Space switches to browse mode in the editor: the text is readable line by line and
+   NVDA+Space returns to focus mode with the caret where it was.
+5. **Right-to-left, one cursor, leaving a control.** VoiceOver steps 6, 7 and 8. On Windows a UI Automation client has
+   no blur either: moving NVDA's navigator object away (object navigation) must not move the keyboard.
+6. **Terminal, lists, popups, dialogs.** VoiceOver steps 9 to 12, with Shift+F10 or the Applications key for row
+   menus.
+7. **Expand and Collapse through UI Automation.** In the Search results, Run and Debug and the Testing tree, Narrator's
+   Caps Lock+Space ("do default action") or Inspect's ExpandCollapse pattern expands and collapses a node that folds
+   on a click; asking for the state it already has changes nothing.
+8. **Scale.** Settings › Display at 150%, then `ui.scale` 2: repeat steps 2 and 3; the focus highlight stays on what
+   is drawn.
+
+### Linux (AT-SPI)
+
+There is no Linux adapter (see "Not verified / missing"); this pass checks that the gap is what the documents say,
+and is the list to run once an adapter exists.
+
+1. Run Codeyard on a GNOME session with Orca (Super+Alt+S). Expected today: Orca reads the window title and nothing
+   inside the window; Accerciser shows the application with no children. Anything more means an adapter appeared and
+   this section and "Not verified" must be updated.
+2. The confirmation dialogs are drawn inside the window (GPUI); check that Escape and Enter work on them with Orca on,
+   since Orca will not read them.
+3. With an adapter: VoiceOver steps 1 to 13 with Orca (Orca+Space for its preferences, Orca+Up to read the current
+   line), on X11 and on Wayland. On Wayland, write down whether Orca's flat review and the magnifier land on the drawn
+   parts: frames there are window-relative (see "Not verified / missing").
+
 ## Order of work
 
-1. Screen-reader passes (VoiceOver, NVDA, Narrator) on real machines, with focus tracking observed live; fix what they
-   find.
+1. Screen-reader passes (VoiceOver, NVDA, Narrator) on real machines, with focus tracking observed live ("Manual
+   screen-reader checklist"); fix what they find.
 2. The Linux adapter, once GPUI's Linux backends give the app its window's bounds and focus.
 
 ## Geometry verification

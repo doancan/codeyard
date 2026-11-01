@@ -82,7 +82,8 @@ These are the important gaps, in rough order of how much they get in the way. Th
 
 - **No screen reader has been tested yet.** The tree is checked with the macOS accessibility API and with automated tests on
   every change, but no one has run a real VoiceOver, NVDA, JAWS or Narrator session against it. Expect rough edges and please
-  report them.
+  report them. The steps such a session follows are the
+  [manual screen-reader checklist](docs/accessibility.md#manual-screen-reader-checklist).
 - **No screen reader on Linux.**
 - **On-screen positions.** The window, its main areas, the rows and controls on screen (Explorer, tabs, status bar,
   find bar, Source Control, Run and Debug, Testing, Remote Explorer, Ports, Settings, Extensions, pickers, suggestions,
