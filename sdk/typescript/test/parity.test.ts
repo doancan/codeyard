@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { CodeyardError, type Context } from "../src/index.ts";
+import { refuseTimers } from "../src/guest.ts";
 import { MockHost } from "../src/testing/index.ts";
 
 const MANIFEST = `
@@ -20,6 +21,7 @@ entry = "src/extension.ts"
 [permissions]
 read = ["main.rs", "docs/**"]
 net  = ["api.example.com"]
+commands = ["core:editor.open"]
 
 [[commands]]
 id = "read"
@@ -47,6 +49,7 @@ const extension = {
     );
     ctx.command("clear", (ctx, uri: string) => ctx.clearDiagnostics(uri));
     ctx.command("huge", () => "x".repeat(20 << 20));
+    ctx.command("open-file", (ctx, arg: unknown) => ctx.execute("core:editor.open", arg));
     ctx.command("open", (ctx) => ctx.openExternal("https://example.com/"));
     ctx.hover(async (ctx) => {
       await ctx.openExternal("https://example.com/");
@@ -202,4 +205,37 @@ test("an extension's own language counts for diagnostics", async (t) => {
   await h.command("diagnose", { uri: "file:///work/a.rs", messages: ["no"] });
   assert.deepEqual(h.diagnostics("a.rs"), []);
   assert.ok(warned(h, "does not list its language, rust"));
+});
+
+test("the timers the engine cannot run throw and point at ctx.every", () => {
+  const { setTimeout: original } = globalThis;
+  const restore = refuseTimers();
+  try {
+    assert.throws(() => setTimeout(() => {}, 50), /setTimeout is not available.*ctx\.every/);
+    assert.throws(() => setInterval(() => {}, 50), /setInterval is not available.*ctx\.every/);
+  } finally {
+    restore();
+  }
+  assert.equal(globalThis.setTimeout, original);
+});
+
+test("core:editor.open is judged as Codeyard judges it", async (t) => {
+  const h = await host(t);
+  const bad = /core:editor\.open takes a `file:\/\/` URI/;
+  for (const arg of [[], 7, null, { uri: 1 }]) await assert.rejects(h.command("open-file", arg), (e: CodeyardError) => e.kind === "invalid" && bad.test(e.message));
+  // Not a file URI inside the workspace: refused as no entry can lift, never opened.
+  await assert.rejects(h.command("open-file", "https://example.com/a.rs"), (e: CodeyardError) => e.kind === "denied");
+  await assert.rejects(h.command("open-file", "file:///etc/passwd"), (e: CodeyardError) => e.kind === "denied");
+  // Needs `read` on the file, as the implied permission says.
+  await assert.rejects(h.command("open-file", "file:///work/secret.txt"), (e: CodeyardError) => e.kind === "denied" && e.message.includes('read = ["secret.txt"]'));
+  await h.command("open-file", "file:///work/docs/guide.md");
+  await h.command("open-file", { uri: "file:///work/main.rs", selection: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } } });
+});
+
+test("fake files are found by the path Codeyard reads", async (t) => {
+  const h = await host(t);
+  h.file("main.rs", "fn main() {}");
+  for (const uri of ["file:///work/./main.rs", "file:///work/src/../main.rs", "file:///work//main.rs", "file:///work/%6dain.rs", "file:///work/src/%2e%2e/main.rs"]) {
+    assert.equal(await h.command("read", uri), "fn main() {}", uri);
+  }
 });

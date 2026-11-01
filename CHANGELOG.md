@@ -483,6 +483,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Extension authoring, second outside-author trial:
+  - In an untrusted folder a refused write, `net` or other sending call says the folder is untrusted, not that the user
+    turned the permission off, and the fix line is the right one.
+  - `cyx package` finds a private key only as a whole PEM, PGP or PuTTY block, never in `extension.wasm`,
+    `extension.js.map` or a README, LICENSE, CHANGELOG or `.md` file, so extensions that talk about keys package.
+    It now also leaves out `.ppk`, `.p8`, `secret.*` and `secrets.*` files, and stops on an obvious GitHub, AWS or
+    Slack token in a text file, naming the file and `.cyxignore` as the way to leave it out.
+  - The publish workflow `cyx new` writes uses an action that installs the `wasm32-wasip2` target (Rust) and Node.js
+    (TypeScript); until a release can publish API 1.1 code it follows `main`, with a comment saying when to pin it.
+  - A user's setting is `ext.<id>.<key>` in settings.jsonc; the reference said `<id>.<key>`. Docs say API 1.1, and
+    that **Allow Host** needs the packaged install. `cyx check` reports API 1.1 for a manifest with `net-from-setting`.
+  - `codeyard --accept-permissions` without `--install-extension` is refused with a message, not ignored.
+  - `cyx test` tells a repeated refusal once. TypeScript: `setTimeout` and `setInterval` throw and point at
+    `ctx.every` instead of hanging, and a 20 MiB answer fails as `invalid` like it does in Rust.
+  - The mock hosts and `cyx test` judge `core:editor.open` as Codeyard does (argument, URI, `read` on the file) and find
+    fake files by the resolved path (`./`, `..`, `//`, `%2e`).
+
 - A command or view answer over 8 MiB fails its request with `invalid: the result is 20 MiB; at most 8 MiB`; it was
   dropped, the request waited until its deadline and the extension was counted as crashed.
 - `cyx test` no longer passes a command that throws, has no handler, or returns any error: an error is an answer only

@@ -29,7 +29,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-pub use core_commands::{CORE_COMMANDS, CoreCommand, core_command};
+pub use core_commands::{CORE_COMMANDS, CoreCommand, core_command, file_location};
 pub use diagnostics::{Code, Diagnostic, ErrorDoc};
 pub use risk::{Clipboard, Level, Line, Permissions, Risk, is_package_program, net_allows, package_program_path, risk};
 

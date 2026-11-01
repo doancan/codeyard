@@ -354,10 +354,10 @@ fn cyx_test_fails_diagnostics_codeyard_would_not_show() {
     let manifest_path = dir.join(ext_manifest::FILE_NAME);
     let base = std::fs::read_to_string(&manifest_path).unwrap();
     let mut more = String::new();
-    for id in ["fine", "other-language", "hidden", "outside", "read-outside", "fetch-ip"] {
+    for id in ["fine", "other-language", "hidden", "outside", "read-outside", "fetch-ip", "flood", "open-bad", "open-unread"] {
         more.push_str(&format!("\n[[commands]]\nid    = \"{id}\"\ntitle = \"{id}\"\n"));
     }
-    let declared = format!("{base}{more}\n[permissions]\nread = [\"src/lib.rs\"]\nnet  = [\"api.example.com\"]\n");
+    let declared = format!("{base}{more}\n[permissions]\nread = [\"src/lib.rs\"]\nnet  = [\"api.example.com\"]\ncommands = [\"core:editor.open\"]\n");
     let code = r#"use codeyard_extension::prelude::*;
 
 struct Marker;
@@ -381,6 +381,19 @@ impl Extension for Marker {
         // What no manifest entry can allow: a file outside the workspace, a request to an IP address.
         ctx.command("read-outside", async |ctx, _args| Ok(ctx.read_text("file:///etc/passwd").await.is_err()));
         ctx.command("fetch-ip", async |ctx, _args| Ok(ctx.fetch(Request::get("https://127.0.0.1/")).await.is_err()));
+        // `core:editor.open`: an argument it cannot take is `invalid`; the file needs `read`, as in the app.
+        ctx.command("open-bad", async |ctx, _args| ctx.execute("core:editor.open", json!(7)).await.map(drop));
+        ctx.command("open-unread", async |ctx, _args| {
+            let folder = ctx.folders().first().cloned().unwrap_or_default();
+            ctx.execute("core:editor.open", json!(format!("{folder}/Cargo.toml"))).await.map(drop)
+        });
+        // More files than one extension may mark: every one past the limit is refused for the same reason.
+        ctx.command("flood", async |ctx, _args| {
+            for i in 0..1100 {
+                mark(&ctx, &format!("src/f{i}.rs"), "x");
+            }
+            Ok(())
+        });
         Ok(())
     }
 }
@@ -411,6 +424,9 @@ codeyard_extension::export!(Marker);
     assert!(listed.contains("= fix: none: this cannot be granted, the file is outside the workspace"), "{listed}");
     assert!(listed.contains("net/fetch is refused, and no permission can allow it"), "{listed}");
     assert!(listed.contains("= fix: none: this cannot be granted, it is an IP address, and net lists host names only"), "{listed}");
+    assert!(listed.contains("command open-bad failed: invalid: core:editor.open takes a `file://` URI"), "{listed}");
+    assert!(listed.contains(r#"read = ["Cargo.toml"]"#), "{listed}");
+    assert_eq!(listed.matches("it has diagnostics on 1000 files already").count(), 1, "one line, not one per file past the limit: {listed}");
     assert!(!listed.contains("unused import"), "the fine command is not a failure: {listed}");
     std::fs::remove_dir_all(&root).unwrap();
 }
@@ -581,7 +597,7 @@ fn cyx_test_maps_typescript_stacks_and_fails_on_refused_calls() {
     scaffold::create_in(&dir, Kind::Command, "fetcher", "you", None, scaffold::Lang::TypeScript).unwrap();
     let manifest_path = dir.join(ext_manifest::FILE_NAME);
     let manifest = std::fs::read_to_string(&manifest_path).unwrap();
-    let more = "\n[[commands]]\nid    = \"boom\"\ntitle = \"Boom\"\n\n[[commands]]\nid    = \"files\"\ntitle = \"Files\"\n\n[permissions]\nnet = [\"api.example.com\"]\n";
+    let more = "\n[[commands]]\nid    = \"boom\"\ntitle = \"Boom\"\n\n[[commands]]\nid    = \"files\"\ntitle = \"Files\"\n\n[[commands]]\nid    = \"huge\"\ntitle = \"Huge\"\n\n[[commands]]\nid    = \"wait\"\ntitle = \"Wait\"\n\n[permissions]\nnet = [\"api.example.com\"]\n";
     std::fs::write(&manifest_path, format!("{manifest}{more}")).unwrap();
     let code = r#"import type { Context } from "@codeyard/extension";
 
@@ -595,6 +611,11 @@ export function activate(ctx: Context) {
     return fetch("https://other.example.org/x").then(() => "sent", (e) => String(e));
   });
   ctx.command("boom", async () => explode());
+  // An answer over 8 MiB fails as `invalid`, as from Rust; a timer the engine cannot run says what to use.
+  ctx.command("huge", () => "x".repeat(20 << 20));
+  ctx.command("wait", async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
   // `read` is not declared, so the component does not import `workspace` at all.
   ctx.command("files", (ctx) => ctx.readText("file:///work/a.json").catch(() => "refused"));
 }
@@ -606,6 +627,9 @@ export function activate(ctx: Context) {
     let all = run.failures.join("\n");
     assert!(all.contains(r#"= fix: add to [permissions]:  net = ["other.example.org"]"#), "{all}");
     assert!(all.contains(r#"= fix: add to [permissions]:  read = ["**/a.json"]"#), "{all}");
+    assert!(all.contains("command huge failed: invalid: the result is 20 MiB; at most 8 MiB"), "{all}");
+    assert!(all.contains("setTimeout is not available") && all.contains("ctx.every"), "{all}");
+    assert!(!all.contains("did not answer") && !all.contains("trapped"), "{all}");
     // The thrown error names the .ts file and line, not the bundle.
     let lines = run.lines.join("\n");
     assert!(lines.contains("it broke\n    at explode (src/extension.ts:4:9)"), "{lines}");

@@ -24,7 +24,7 @@ const TOOLCHAIN: [(&str, &str); 3] = [
 ];
 
 /// `@codeyard/extension`'s sources, except the mock host (`testing/`), which only `npm test` uses.
-pub const SDK: [(&str, &str); 14] = [
+pub const SDK: [(&str, &str); 15] = [
     ("context.ts", include_str!("../../../sdk/typescript/src/context.ts")),
     ("errors.ts", include_str!("../../../sdk/typescript/src/errors.ts")),
     ("fetch.ts", include_str!("../../../sdk/typescript/src/fetch.ts")),
@@ -32,6 +32,7 @@ pub const SDK: [(&str, &str); 14] = [
     ("guest.ts", include_str!("../../../sdk/typescript/src/guest.ts")),
     ("handlers.ts", include_str!("../../../sdk/typescript/src/handlers.ts")),
     ("index.ts", include_str!("../../../sdk/typescript/src/index.ts")),
+    ("limits.ts", include_str!("../../../sdk/typescript/src/limits.ts")),
     ("pulls.ts", include_str!("../../../sdk/typescript/src/pulls.ts")),
     ("runtime.ts", include_str!("../../../sdk/typescript/src/runtime.ts")),
     ("scm.ts", include_str!("../../../sdk/typescript/src/scm.ts")),

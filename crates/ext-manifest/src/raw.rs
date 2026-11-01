@@ -48,7 +48,7 @@ pub struct RawManifest {
     /// A JSON schema for the YAML files that match.
     #[serde(default)]
     pub yaml_schemas: Vec<S<RawSchema>>,
-    /// A setting, as `[settings.<key>]`. The user sets it as `<extension id>.<key>`; code reads it by its key.
+    /// A setting, as `[settings.<key>]`. The user sets it as `ext.<extension id>.<key>` in settings.jsonc; code reads it by its key.
     #[serde(default)]
     pub settings: BTreeMap<S<String>, S<RawSetting>>,
     /// A language server: a program that speaks the Language Server Protocol. It runs where the files are, so it works over SSH.
@@ -146,8 +146,8 @@ pub struct RawPermissions {
     /// Hosts the code may reach over HTTPS: `api.example.com`, or `*.example.com` for its subdomains.
     #[serde(default)]
     pub net: Vec<S<String>>,
-    /// A string setting (the key of a `[[settings]]` entry) that names a server of the user's, such as a company
-    /// GitHub Enterprise: the user allows that host on the extension page, and the code may then reach it over HTTPS.
+    /// A string setting (the key of a `[settings.<key>]` table) that names a server of the user's, such as a company
+    /// GitHub Enterprise: the user allows that host on the extension page, and the code may then reach it over HTTPS. Allow Host needs the packaged install; an extension run with `cyx dev` cannot use it. Needs API 1.1.
     pub net_from_setting: Option<S<String>>,
     /// Accounts the code may sign requests with: `github`, or the id of an `[[oauth]]` table. It never sees the token.
     #[serde(default)]

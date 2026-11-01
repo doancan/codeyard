@@ -898,7 +898,7 @@ unless you add `--accept-permissions`, which grants what the printed sheets list
 registry list are refused there, with the reason: use the Extensions view.
 `codeyard --update-extensions` runs the update check now, without a window: it asks the registries your extensions
 came from, applies what would apply by itself (updates, going back from a withdrawn or revoked version, stopping a
-revoked one) and prints one line for each change and for each update that waits for you, and says so when a revoked
+revoked one) and prints one line for each change and for each update that waits for you (an update that asks for more permissions waits for the Extensions view: `--accept-permissions` is for `--install-extension` only, and is refused here), and says so when a revoked
 version has no other version to go to. If `extensions.lock.jsonc` cannot be read (a hand edit), it prints why and
 exits with status 1; a version a registry revoked is still stopped, so it does not start again once the lock is
 fixed.

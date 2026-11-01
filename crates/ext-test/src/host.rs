@@ -120,6 +120,15 @@ fn relative(uri: &str) -> Option<String> {
 /// The hosts `auth.fetch` signs requests to for the built-in GitHub account.
 const GITHUB_HOSTS: &[&str] = &["api.github.com", "uploads.github.com"];
 
+/// The key a fake file is found under: the path Codeyard reads, with `..`, `//` and `%2e` resolved.
+fn canonical(uri: &str) -> String {
+    ext_manifest::normalize(uri).map_or_else(|| uri.to_string(), |p| format!("file://{p}"))
+}
+
+fn editor_open_target(args_json: &str) -> Option<String> {
+    ext_manifest::file_location(&serde_json::from_str(args_json).unwrap_or_default()).map(|(uri, _)| uri)
+}
+
 /// The host of a request URL that passed `ext_manifest::calls::check_url` (calls that fail it never get this far).
 fn host_of(url: &str) -> String {
     ext_manifest::calls::check_url(url).map(|t| t.host).unwrap_or_default()
@@ -178,8 +187,10 @@ impl State {
             Call::ReadClipboard => check(&|p| p.clipboard.reads(), r#"clipboard = "read""#.into(), false),
             Call::WriteClipboard(_) => check(&|p| p.clipboard.writes(), r#"clipboard = "write""#.into(), true),
             Call::SendText(_) => check(&|p| p.terminal, "terminal = true".into(), true),
-            Call::Execute { command, .. } if command.starts_with("core:") => {
-                check(&|p| p.commands.iter().any(|c| c == command), format!(r#"commands = ["{command}"]"#), false)
+            Call::Execute { command, args_json } if command.starts_with("core:") => {
+                let listed = check(&|p| p.commands.iter().any(|c| c == command), format!(r#"commands = ["{command}"]"#), false);
+                // `core:editor.open` needs `read` on the file it opens, as the app checks it.
+                listed.or_else(|| path("read", &(command == "core:editor.open").then(|| editor_open_target(args_json)).flatten()?, false))
             }
             _ => None,
         }
@@ -235,6 +246,11 @@ impl State {
             }
             Call::OpenExternal(url) if !url.starts_with("https://") => (none, Completion::Failed(Error::Invalid("only https: links open".into()))),
             Call::OpenExternal(_) | Call::SetSelections { .. } => (none, Completion::Done),
+            // An argument it cannot open is `invalid`, as in the app.
+            Call::Execute { command, args_json } if command == "core:editor.open" && editor_open_target(&args_json).is_none() => {
+                let message = ext_manifest::core_command(&command).map(|c| c.bad_argument()).unwrap_or_default();
+                (none, Completion::Failed(Error::Invalid(message)))
+            }
             Call::Execute { command, .. } => (none, Completion::Json(self.command_results.get(&command).cloned().unwrap_or_else(|| "null".into()))),
             Call::ActiveDocument => (none, Completion::Document(self.active.clone())),
             Call::Selections => (none, Completion::Ranges(self.selections.clone())),
@@ -255,11 +271,11 @@ impl State {
                 self.applied.push((uri, version, edits));
                 (none, Completion::Done)
             }
-            Call::ReadFile(uri) => match self.files.get(&uri) {
+            Call::ReadFile(uri) => match self.files.get(&canonical(&uri)) {
                 Some(b) => (none, Completion::Bytes(b.clone())),
                 None => (none, not_found(uri)),
             },
-            Call::Stat(uri) => match self.files.get(&uri) {
+            Call::Stat(uri) => match self.files.get(&canonical(&uri)) {
                 Some(b) => (none, Completion::Stat(FileStat { is_dir: false, size: b.len() as u64, modified: 0 })),
                 None => (none, not_found(uri)),
             },
@@ -276,15 +292,15 @@ impl State {
                 (none, Completion::Uris(found))
             }
             Call::WriteFile { uri, contents } => {
-                self.files.insert(uri, contents);
+                self.files.insert(canonical(&uri), contents);
                 (none, Completion::Done)
             }
-            Call::DeleteFile(uri) => match self.files.remove(&uri) {
+            Call::DeleteFile(uri) => match self.files.remove(&canonical(&uri)) {
                 Some(_) => (none, Completion::Done),
                 None => (none, not_found(uri)),
             },
             Call::ReadMany(uris) => {
-                let files = uris.into_iter().map(|u| (u.clone(), self.files.get(&u).cloned().ok_or(Error::NotFound(u)))).collect();
+                let files = uris.into_iter().map(|u| (u.clone(), self.files.get(&canonical(&u)).cloned().ok_or(Error::NotFound(u)))).collect();
                 (none, Completion::Files(files))
             }
             // Plain text only: the mock does not run regular expressions.
@@ -292,9 +308,9 @@ impl State {
                 let readable = |u: &Uri| relative(u).is_some_and(|rel| self.permissions.as_ref().is_none_or(|p| p.allows_read(&rel)));
                 (search(&self.files, &q, readable), Completion::Done)
             }
-            Call::Rename { from, to } => match self.files.remove(&from) {
+            Call::Rename { from, to } => match self.files.remove(&canonical(&from)) {
                 Some(b) => {
-                    self.files.insert(to, b);
+                    self.files.insert(canonical(&to), b);
                     (none, Completion::Done)
                 }
                 None => (none, not_found(from)),

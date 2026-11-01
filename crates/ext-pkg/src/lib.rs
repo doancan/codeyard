@@ -515,10 +515,14 @@ fn collect_tree(root: &Path, top: bool, ignore: &rules::Ignore, out: &mut Collec
                     return Err(Error::TooLarge(format!("'{rel}' is larger than {} MiB", limits::PACKAGE_FILE_BYTES >> 20)));
                 }
                 let data = std::fs::read(&path).map_err(Error::Io)?;
-                if rules::holds_private_key(&data) {
+                if let Some(leak) = rules::leak_in(item.file_name().to_string_lossy().as_ref(), &data) {
+                    let (what, fix) = match leak {
+                        rules::Leak::PrivateKey => ("holds a private key".to_string(), "move it out of the extension folder"),
+                        rules::Leak::Token(kind) => (format!("holds what looks like a {kind} access token"), "remove it"),
+                    };
                     return Err(Error::Path {
                         path: rel,
-                        reason: "holds a private key, and a package must never hold one: move it out of the extension folder, or list it in .cyxignore".into(),
+                        reason: format!("{what}, and a package must never hold one: {fix}, or list the file in .cyxignore to leave it out"),
                     });
                 }
                 out.files.push(Entry { path: rel, data, executable: is_executable(&meta) });

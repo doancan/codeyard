@@ -87,11 +87,13 @@ impl State {
         if need == Need::Nothing {
             return None;
         }
-        if !self.granted.contains(interface) {
-            return Some((need, v::Why::RevokedByUser));
-        }
         let sends = matches!(need, Need::Write | Need::Net | Need::Auth | Need::Run | Need::Terminal | Need::ClipboardWrite);
-        (self.untrusted && sends).then_some((need, v::Why::UntrustedWorkspace))
+        // Checked first: the app masks grants by trust before sending them, so in an untrusted folder a sending
+        // interface is never in `granted` and would otherwise read as turned off by the user.
+        if self.untrusted && sends {
+            return Some((need, v::Why::UntrustedWorkspace));
+        }
+        (!self.granted.contains(interface)).then_some((need, v::Why::RevokedByUser))
     }
 
     /// The interfaces granted from now on.

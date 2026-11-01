@@ -61,6 +61,8 @@ import {
   checkDiagnosticsTarget,
   checkStatusItem,
   checkUrl,
+  EDITOR_OPEN_ARGUMENT,
+  editorOpenTarget,
   globsAllow,
   ipAddressLine,
   languageId,
@@ -122,6 +124,35 @@ const bytes = (v: string | Uint8Array): Uint8Array => (typeof v === "string" ? n
 const text = (v: Uint8Array): string => new TextDecoder().decode(v);
 const tick = () => new Promise<void>((r) => setImmediate(r));
 
+/** The file `core:editor.open`'s JSON argument names, if it is one the command takes. */
+function editorOpenFile(argsJson: string): string | undefined {
+  try {
+    return editorOpenTarget(JSON.parse(argsJson));
+  } catch {
+    return undefined;
+  }
+}
+
+/** The fake files, found by the path Codeyard reads (`./`, `..`, `//` and `%2e` resolved), as the app finds them. */
+class Files extends Map<string, Uint8Array> {
+  static #canonical(uri: string): string {
+    const path = normalizePath(uri);
+    return path === undefined ? uri : `file://${path}`;
+  }
+  override get(uri: string) {
+    return super.get(Files.#canonical(uri));
+  }
+  override set(uri: string, contents: Uint8Array) {
+    return super.set(Files.#canonical(uri), contents);
+  }
+  override delete(uri: string) {
+    return super.delete(Files.#canonical(uri));
+  }
+  override has(uri: string) {
+    return super.has(Files.#canonical(uri));
+  }
+}
+
 /** The workspace-relative path of a uri, as Codeyard makes it (`..` and `%2e` resolved); undefined outside the folder. */
 function relative(uri: string): string | undefined {
   return relativeTo([FOLDER], uri);
@@ -172,7 +203,7 @@ export class MockHost {
   #restore: (() => void) | undefined;
   #clock = 0;
 
-  #files = new Map<string, Uint8Array>();
+  #files = new Files();
   #http: HttpFixture[] = [];
   #processes: { program: string; args: string[]; fixture: ProcessFixture }[] = [];
   #active: Document | undefined;
@@ -970,8 +1001,13 @@ export class MockHost {
         return check((p) => p.clipboard === "write" || p.clipboard === "read-write", `clipboard = "write"`, true);
       case "terminal/send-text":
         return check((p) => p.terminal, "terminal = true", true);
-      case "commands/execute":
-        return uri.startsWith("core:") ? check((p) => p.commands.includes(uri), `commands = ["${uri}"]`, false) : undefined;
+      case "commands/execute": {
+        if (!uri.startsWith("core:")) return undefined;
+        const listed = check((p) => p.commands.includes(uri), `commands = ["${uri}"]`, false);
+        // `core:editor.open` also needs `read` on the file it opens; an argument it cannot take is `invalid` (answered).
+        const target = uri === "core:editor.open" ? editorOpenFile(args[1] as string) : undefined;
+        return listed ?? (target === undefined ? undefined : path("read", target, false));
+      }
       default:
         return undefined;
     }
@@ -1113,7 +1149,12 @@ export class MockHost {
           }),
       },
       commands: {
-        execute: (command, argsJson) => this.#start("commands/execute", [command, argsJson], () => [[], { tag: "json", val: this.#commandResults.get(command) ?? "null" }]),
+        execute: (command, argsJson) =>
+          this.#start("commands/execute", [command, argsJson], () =>
+            command === "core:editor.open" && editorOpenFile(argsJson) === undefined
+              ? [[], { tag: "failed", val: { tag: "invalid", val: EDITOR_OPEN_ARGUMENT } }]
+              : [[], { tag: "json", val: this.#commandResults.get(command) ?? "null" }],
+          ),
       },
       storage: {
         get: (key) => this.#storage.get(key),

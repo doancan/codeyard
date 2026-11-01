@@ -92,6 +92,7 @@ name = "ext-manifest"
 version = "0.6.0"
 dependencies = [
  "serde",
+ "serde_json",
  "toml",
 ]
 

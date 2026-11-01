@@ -2,7 +2,7 @@
 
 A code extension can be written in TypeScript (or JavaScript) with `@codeyard/extension`. `cyx` bundles it with esbuild and builds a WebAssembly component with ComponentizeJS, so it runs in the same extension host, with the same permissions and limits, as a Rust one. The API has the same shape as the Rust SDK ([commands.md](commands.md)); every call that reaches Codeyard returns a Promise. [testing.md](testing.md) covers tests, and [reference/api.md](reference/api.md) lists every call.
 
-`@codeyard/extension` is not on npm yet (see [The SDK package](#the-sdk-package)). It implements API 1.0, which later 1.x versions only add to ([Migrating to API 1.0](migrating-to-1.0.md)).
+`@codeyard/extension` is not on npm yet (see [The SDK package](#the-sdk-package)). It implements API 1.1, which later 1.x versions only add to ([Migrating to API 1.0](migrating-to-1.0.md)).
 
 <!-- toc -->
 - [Setup](#setup)
@@ -67,7 +67,7 @@ A call that reaches Codeyard (a notice with buttons, a file read, an HTTPS reque
 
 Under the hood every such call returns a ticket at once, and the SDK settles the Promise when Codeyard delivers the result. The extension never blocks while it waits, so it can answer other requests at the same time. Two rules are enough:
 
-- **Don't block.** A handler that computes for more than 2 seconds without awaiting is stopped. Poll with `ctx.every`, not with timers of your own.
+- **Don't block.** A handler that computes for more than 2 seconds without awaiting is stopped. Poll with `ctx.every`, not with timers of your own: `setTimeout` and `setInterval` throw an error saying so, because an extension has no event loop between calls.
 - **Answer fast.** Providers (views, formatters, code actions, hover, completion, code lenses, inlay hints) are cancelled when the user moves on; the answer of a cancelled request is dropped.
 
 `ctx.background(promise)` runs work that no request waits for, such as work started from `activate`; a failure is logged with its stack. A handler may also return a value directly instead of a Promise.

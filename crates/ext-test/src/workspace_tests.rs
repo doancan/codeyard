@@ -18,6 +18,7 @@ entry = "Cargo.toml"
 [permissions]
 read  = ["*.md", "notes/**"]
 write = ["notes/**"]
+commands = ["core:editor.open"]
 
 [[commands]]
 id    = "go"
@@ -47,6 +48,8 @@ impl Extension for Files {
             ctx.create_directory(&uri("notes/old")).await?;
             ctx.rename(&uri("notes/a.md"), &uri("notes/old/a.md")).await
         });
+        ctx.command("open", async |ctx, args| ctx.execute("core:editor.open", args).await);
+        ctx.command("read-uri", async |ctx, args| ctx.read_text(args.as_str().unwrap_or_default()).await);
         ctx.command("escape", async |ctx, _args| ctx.rename(&uri("notes/a.md"), &uri("a.md")).await);
         Ok(())
     }
@@ -89,4 +92,34 @@ fn rename_and_create_directory_need_write() {
     h.file("notes/a.md", "again");
     let e = h.command("escape", Value::Null).unwrap_err();
     assert!(e.to_string().contains(r#"write = ["a.md"]"#), "{e}");
+}
+
+/// `core:editor.open` is judged as the app judges it: its argument, then `read` on the file.
+#[test]
+fn editor_open_checks_its_argument_and_the_file() {
+    let h = host();
+    for bad in [json!([]), json!(7), json!(null), json!({ "uri": 1 })] {
+        let e = h.command("open", bad.clone()).unwrap_err().to_string();
+        assert!(e.contains("core:editor.open takes a `file://` URI"), "{bad}: {e}");
+    }
+    // Never a file inside the workspace: refused, and no entry can lift it.
+    for outside in ["https://example.com/a.md", "file:///etc/passwd"] {
+        let e = h.command("open", json!(outside)).unwrap_err().to_string();
+        assert!(e.contains("cannot be granted") || e.contains("denied"), "{outside}: {e}");
+    }
+    let e = h.command("open", json!(uri("secret.txt"))).unwrap_err().to_string();
+    assert!(e.contains(r#"read = ["secret.txt"]"#), "{e}");
+    h.command("open", json!(uri("README.md"))).unwrap();
+    let range = json!({ "start": { "line": 0, "character": 0 }, "end": { "line": 0, "character": 1 } });
+    h.command("open", json!({ "uri": uri("notes/a.md"), "selection": range })).unwrap();
+}
+
+/// A fake file is found by the path Codeyard reads: `..`, `//` and `%6d` are resolved first.
+#[test]
+fn fake_files_are_found_by_their_resolved_path() {
+    let h = host();
+    for path in ["./README.md", "notes/../README.md", "/README.md", "%52EADME.md", "notes/%2e%2e/README.md"] {
+        let out = h.command("read-uri", json!(format!("file:///work/{path}"))).unwrap();
+        assert_eq!(out, json!("# Files\nTODO: write\n"), "{path}");
+    }
 }

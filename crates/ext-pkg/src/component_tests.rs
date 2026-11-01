@@ -61,6 +61,14 @@ fn the_fixture_is_current() {
     assert!(c.interfaces.iter().all(|i| ext_api::interface(i).is_some_and(|i| i.need == ext_api::Need::Nothing)), "{c:?}");
 }
 
+/// `net-from-setting` is a manifest field API 1.1 added, so a manifest with it needs 1.1 whatever the code imports.
+#[test]
+fn net_from_setting_needs_api_1_1() {
+    let with = manifest("net-from-setting = \"server\"\n[settings.server]\ntype = \"string\"\ndescription = \"S\"");
+    let c = check_component(crate::testing::COMPONENT, &with).unwrap();
+    assert_eq!(c.min_api, ext_api::Version(1, 1, 0));
+}
+
 #[test]
 fn an_import_needs_its_permission() {
     let wasm = build(&["codeyard:api/net@1.0.0", "codeyard:api/process@1.0.0"], true, "");
