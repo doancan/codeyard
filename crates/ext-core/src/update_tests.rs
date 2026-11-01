@@ -122,6 +122,17 @@ fn revoked_deprecated_and_unlisted_versions_say_so() {
     let i = index(vec![release("1.0.0", Status::Revoked { reason: "x".into() }, false, 0), release("1.0.1", ok.clone(), false, 0)]);
     assert_eq!(next_version(&check(&i, &id(), &on("1.0.0", false), NOW)), Some(("up", "1.0.1".into())));
 
+    // A revoked version whose newer one was yanked goes back to the newest earlier one that may install, as a yanked
+    // one does, instead of staying stopped (#5 of the outside-author trials); with none it stays stopped.
+    let i = index(vec![
+        release("0.9.0", ok.clone(), false, 0),
+        release("1.0.0", Status::Revoked { reason: "x".into() }, false, 0),
+        release("1.1.0", Status::Yanked, false, 0),
+    ]);
+    assert_eq!(next_version(&check(&i, &id(), &on("1.0.0", false), NOW)), Some(("back", "0.9.0".into())));
+    let i = index(vec![release("1.0.0", Status::Revoked { reason: "x".into() }, false, 0), release("1.1.0", Status::Yanked, false, 0)]);
+    assert_eq!(check(&i, &id(), &on("1.0.0", false), NOW).next, Next::Nothing);
+
     let b = ExtId::parse("you.b").unwrap();
     let i = index(vec![release("1.0.0", Status::Deprecated { replacement: Some(b.clone()) }, false, 0)]);
     assert_eq!(check(&i, &id(), &on("1.0.0", false), NOW).standing, Standing::Deprecated { replacement: Some(b) });

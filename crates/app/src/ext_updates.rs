@@ -8,7 +8,10 @@
 //!   needs the full consent sheet. A version that adds a native program (a `run` entry inside the package) needs the
 //!   full sheet too, where its id is typed as on a first install (docs/plugin-architecture.md §6.3). `notify` only shows the version; `off` downloads nothing.
 //! - A yanked installed version goes back to the newest earlier one at once (from the store when it is still there).
-//! - A revoked version is recorded in `revoked.json` and stops, with its dependents, in every window (`ext::reload`).
+//! - A revoked version is recorded in `revoked.json` and stops, with its dependents, in every window (`ext::reload`),
+//!   then goes to another version as a yanked one does; with none to go to it stays stopped, and the check says so.
+//! - A lock file that cannot be read (a hand edit) is reported, and revocations still apply: the packages in the store
+//!   are checked against the registries asked before, by content digest, without the lock.
 //!
 //! Privacy is as in `ext_registry`: only registries an installed extension came from are asked, at most once a day.
 
@@ -91,7 +94,14 @@ pub fn check(cfg_dir: &Path, registries: &[Registry], auto: AutoUpdate, now: u64
     let _one = CHECKING.lock().unwrap_or_else(|e| e.into_inner());
     let mut report = Report::default();
     let store = crate::ext::store(cfg_dir);
-    let (Ok(loaded), Ok(locked)) = (store.load(), store.locked()) else { return report };
+    let (loaded, locked) = match store.load().and_then(|loaded| Ok((loaded, store.locked()?))) {
+        Ok(both) => both,
+        Err(e) => {
+            report.errors.push(e.to_string());
+            revoke_without_lock(cfg_dir, registries, now, &mut report);
+            return report;
+        }
+    };
     let revoked_before = store.revoked();
     let mut revocations = Vec::new();
     for reg in registries {
@@ -131,9 +141,11 @@ pub fn check(cfg_dir: &Path, registries: &[Registry], auto: AutoUpdate, now: u64
                 Next::RollBack(r) => match roll_back(&From { cfg_dir, reg, v: &v, now }, id, l, current, &r) {
                     Ok(None) => {
                         report.changed = true;
-                        report
-                            .done
-                            .push(crate::i18n::tf("{0} went back to version {1}: its publisher withdrew {2}.", &[&current.name, &r.version, &l.version]));
+                        report.done.push(if matches!(standing, Standing::Revoked { .. }) {
+                            crate::i18n::tf("{0} went back to version {1}: the registry revoked {2}.", &[&current.name, &r.version, &l.version])
+                        } else {
+                            crate::i18n::tf("{0} went back to version {1}: its publisher withdrew {2}.", &[&current.name, &r.version, &l.version])
+                        });
                         standing = standing_of(&r);
                         None
                     }
@@ -172,13 +184,62 @@ pub fn check(cfg_dir: &Path, registries: &[Registry], auto: AutoUpdate, now: u64
     report
 }
 
+/// The lock cannot be read, so nothing updates; but a version a registry revoked must stop anyway. Every package in the
+/// store is looked up by content digest in the indexes of the registries asked before (their cached copy exists: one
+/// an extension was installed from), so no new registry learns anything.
+fn revoke_without_lock(cfg_dir: &Path, registries: &[Registry], now: u64, report: &mut Report) {
+    let store = crate::ext::store(cfg_dir);
+    let packages = store.packages();
+    let revoked_before = store.revoked();
+    let mut revocations = Vec::new();
+    for reg in asked_before(cfg_dir, registries) {
+        let dir = registry::cache_dir(&cache_root(cfg_dir), reg);
+        let v = match with_fetch(|f| registry::index(reg, &dir, f, now, false)) {
+            Ok(v) => v,
+            Err(e) => {
+                report.errors.push(format!("{}: {e}", reg.name));
+                continue;
+            }
+        };
+        for (id, entry) in &v.index.extensions {
+            for r in &entry.versions {
+                let digests = std::iter::once(r.digest.as_str()).chain(r.targets.values().map(|t| t.digest.as_str()));
+                for d in digests.filter_map(|d| packages.iter().find(|p| p.hex() == d)) {
+                    let mark = match &r.status {
+                        ext_core::yard::Status::Revoked { reason } => Some(Revoked { id: id.clone(), version: r.version.clone(), reason: reason.clone() }),
+                        _ => None,
+                    };
+                    revocations.push((*d, mark));
+                }
+            }
+        }
+    }
+    match store.set_revoked(&revocations) {
+        Ok(true) => {
+            report.changed = true;
+            for r in store.revoked().values().filter(|r| !revoked_before.values().any(|b| b.id == r.id && b.version == r.version)) {
+                report.stopped.push(crate::ext::stopped_line(&r.id, &ext_core::Stopped::Revoked { reason: r.reason.clone() }));
+            }
+        }
+        Ok(false) => {}
+        Err(e) => report.errors.push(e.to_string()),
+    }
+}
+
+/// The registries an installed extension came from, by the lock; while it cannot be read, those asked before.
+fn asked_before<'a>(cfg_dir: &Path, registries: &'a [Registry]) -> Vec<&'a Registry> {
+    match crate::ext::store(cfg_dir).locked() {
+        Ok(locked) => registries.iter().filter(|r| locked.values().any(|l| l.source.registry().is_some_and(|(name, _)| name == r.name))).collect(),
+        Err(_) => registries.iter().filter(|r| registry::cache_dir(&cache_root(cfg_dir), r).is_dir()).collect(),
+    }
+}
+
 /// `codeyard --update-extensions`: the person asked now, so each registry an installed extension came from is asked
 /// once more (not only once a day), then [`check`] runs as usual. Registries no installed extension came from are not
 /// asked.
 pub fn check_now(cfg_dir: &Path, registries: &[Registry], auto: AutoUpdate, now: u64) -> Report {
-    let locked = crate::ext::store(cfg_dir).locked().unwrap_or_default();
     let mut refresh_errors = Vec::new();
-    for reg in registries.iter().filter(|r| locked.values().any(|l| l.source.registry().is_some_and(|(name, _)| name == r.name))) {
+    for reg in asked_before(cfg_dir, registries) {
         let dir = registry::cache_dir(&cache_root(cfg_dir), reg);
         if let Err(e) = with_fetch(|f| registry::index(reg, &dir, f, now, true)) {
             refresh_errors.push(format!("{}: {e}", reg.name));

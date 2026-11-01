@@ -1508,6 +1508,7 @@ Nothing to commit
 Nothing to rename here	
 Nothing to replace: the files no longer contain matches.	
 Nothing to run: select some text or put the cursor on a line.	
+Nothing was installed. Run the command again with --accept-permissions to grant these, or install it from the Extensions view.	
 Nothing was installed. This release isn't signed, so Codeyard can't verify it.	
 Nothing was installed. What the update server sent didn't match the signed checksums, so Codeyard discarded it.	
 Nothing yet.	
@@ -2620,6 +2621,7 @@ Where .http requests are sent from: the workspace host (the server when connecte
 Where forwarded ports listen: this computer only, or every network interface	
 Whole word	
 Whole word (⌥W)	
+Why: {}	
 Width of the line cursor (px)	
 Window	
 Windows on a server reconnect, which can ask for a password.	
@@ -2711,6 +2713,7 @@ decoded as {}
 default	
 deleted	
 denied ({0}); add to [permissions]: {1}	
+denied: {0}; this cannot be granted: {1}	
 deprecated	
 deprecated, use {}	
 destination	
@@ -3035,12 +3038,15 @@ your words
 {0} only on the left, {1} only on the right, {2} changed, {3} identical, {4} errors	
 {0} result in {1} files|{0} results in {1} files	
 {0} says why: “{1}”	
+{0} stays stopped: the registry revoked the installed version ({1}) and has no other version to install	
 {0} was left alone: {1}|{0} were left alone, the first one {1}	
 {0} was not installed from a registry, so it has no package for {1}; install the package built for {1}	
 {0} was stopped: it needs {1}, which was stopped	
 {0} was stopped: the registry revoked this version ({1})	
 {0} was updated to version {1}.	
 {0} went back to version {1}: its publisher withdrew {2}.	
+{0} went back to version {1}: the registry revoked {2}.	
+{0} {1} ({2}) asks to:	
 {0} {1} waits for your OK in the Extensions view.	
 {0} {1}: I/O {2}, overhead {3}	
 {0} {1}: guest {2}	
@@ -3094,7 +3100,6 @@ your words
 {} YAML documents became one list.	
 {} accepted the connection but sent no reply.	
 {} already exists. Choose another name.	
-{} asks for permissions: install it from the Extensions view to review them	
 {} bookmark|{} bookmarks	
 {} bytes of output were lost while no window was attached	
 {} cannot be negated	

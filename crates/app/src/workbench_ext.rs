@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use ext_core::Source as ExtSource;
-use ext_manifest::{ExtId, Manifest, Permissions};
+use ext_manifest::{ExtId, Manifest};
 use gpui::{Context, Entity, FocusHandle, Window};
 
 use super::*;
@@ -84,51 +84,7 @@ pub(super) struct ExtViewState {
     pub(super) memory: super::memory_glue::MemoryState,
 }
 
-/// The consent sheet's text and every other plain-words line of an extension.
-pub(super) fn source_line(s: &ExtSource) -> String {
-    match s {
-        ExtSource::File { path } => crate::i18n::tf("Installed from the file {}", &[path]),
-        ExtSource::Folder { path } => crate::i18n::tf("Installed from the folder {}", &[path]),
-        ExtSource::Registry { registry, publisher } => crate::i18n::tf("From the {0} registry, published by {1}", &[registry, publisher]),
-    }
-}
-
-/// The consent sheet's lines (`Permissions::lines`) in the UI language.
-pub(super) fn permission_lines(p: &Permissions) -> Vec<String> {
-    use ext_manifest::{Clipboard, Line};
-    p.lines()
-        .iter()
-        .map(|l| match l {
-            Line::ReadAll => crate::i18n::t("Read all files in the workspace").to_string(),
-            Line::Read(g) => crate::i18n::tf("Read {}", &[g]),
-            Line::ReadSecrets => crate::i18n::t("Read files that can hold passwords and keys").to_string(),
-            Line::ChangeAll => crate::i18n::t("Change all files in the workspace").to_string(),
-            Line::Change(g) => crate::i18n::tf("Change {}", &[g]),
-            Line::ConnectAny => crate::i18n::t("Connect to any website").to_string(),
-            Line::Connect(h) => crate::i18n::tf("Connect to {}", &[h]),
-            Line::Account(a) => crate::i18n::tf("Act as your {} account", &[a]),
-            Line::Secrets => crate::i18n::t("Store secrets in your keychain").to_string(),
-            Line::Run(r) => crate::i18n::tf("Run {} with any arguments", &[r]),
-            Line::Clipboard(Clipboard::Read) => crate::i18n::t("Read the clipboard").to_string(),
-            Line::Clipboard(Clipboard::Write) => crate::i18n::t("Write to the clipboard").to_string(),
-            Line::Clipboard(_) => crate::i18n::t("Read and write the clipboard").to_string(),
-            Line::Terminal => crate::i18n::t("Type into terminals").to_string(),
-            Line::Commands(c) => crate::i18n::tf("Run Codeyard commands: {}", &[c]),
-        })
-        .collect()
-}
-
-/// The red line on the sheet and the detail page, for a High-risk permission set.
-pub(super) fn high_risk_line(m: &Manifest) -> Option<String> {
-    let r = m.risk();
-    (r.level == ext_manifest::Level::High).then(|| {
-        if r.runs_code {
-            crate::i18n::t("High risk: this extension can run programs as you.").to_string()
-        } else {
-            crate::i18n::t("High risk: this extension can read private data and send it elsewhere.").to_string()
-        }
-    })
-}
+pub(super) use crate::ext::{high_risk_line, permission_lines, source_line};
 
 /// One line per contribution, in plain words.
 pub(super) fn contribution_lines(m: &Manifest) -> Vec<String> {

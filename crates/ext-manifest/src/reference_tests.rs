@@ -216,6 +216,8 @@ fn limit_values() -> Vec<(&'static str, u64)> {
         PULL_REQUEST_DEADLINE_MILLIS,
         STATUS_TEXT_LEN,
         MARKS_PER_FILE,
+        DIAGNOSTIC_FILES,
+        DIAGNOSTIC_MESSAGE_LEN,
         NET_TIMEOUT_SECS,
         NET_REDIRECTS,
         NET_REQUEST_BYTES,

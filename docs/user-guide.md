@@ -882,20 +882,26 @@ Opening an extension's page in the Market fetches that page once.
   until you ask.
 - Whatever the setting, a version its publisher withdrew goes back to the newest earlier one at once (from the kept
   previous version when it is that one), and a version the registry revoked stops at once, with every extension that
-  depends on it, and its page says why. It stays stopped offline and after a restart, until a fixed version replaces it.
+  depends on it, and its page says why. It stays stopped offline and after a restart, until another version replaces
+  it: a fixed newer one, or else the newest earlier one that was not withdrawn, as for a withdrawn version.
   A deprecated version keeps working; its page names the replacement.
 - *Get Pre-releases* on an extension's page opts that extension into its publisher's pre-releases, with no wait;
   *Stop Pre-releases* goes back to releases (the pre-release you have stays until a release passes it). The choice is
   kept in `extensions.lock.jsonc`.
 
 From a terminal or a script, `codeyard --install-extension FILE.cyx` or `--install-extension publisher.name[@1.2.0]`
-(repeat the flag for several) installs without opening a window; running it is your consent, and the same checks
-apply. A folder with a built extension (its manifest and, for code, `extension.wasm`) installs the same way, packaged
-as it is, without building it. A changed publisher, an old registry list, and a package file or folder with code that
-asks for permissions are refused there, with the reason: use the Extensions view, which shows the permissions first.
+(repeat the flag for several) installs without opening a window, with the same checks. A folder with a built
+extension (its manifest and, for code, `extension.wasm`) installs the same way, packaged as it is, without building
+it. Running the command is not consent to what an extension asks for: a package or registry version that asks for
+permissions prints its sheet (what it asks for, the author's reason and the high-risk line) and is not installed
+unless you add `--accept-permissions`, which grants what the printed sheets list. A changed publisher and an old
+registry list are refused there, with the reason: use the Extensions view.
 `codeyard --update-extensions` runs the update check now, without a window: it asks the registries your extensions
-came from, applies what would apply by itself (updates, going back from a withdrawn version, stopping a revoked one)
-and prints one line for each change and for each update that waits for you.
+came from, applies what would apply by itself (updates, going back from a withdrawn or revoked version, stopping a
+revoked one) and prints one line for each change and for each update that waits for you, and says so when a revoked
+version has no other version to go to. If `extensions.lock.jsonc` cannot be read (a hand edit), it prints why and
+exits with status 1; a version a registry revoked is still stopped, so it does not start again once the lock is
+fixed.
 
 **Manage.** Choose an extension in the list to open its page: contributions, permissions and these actions:
 

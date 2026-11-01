@@ -485,6 +485,12 @@ ctx.command("find-todos", async (ctx) => {
 });
 ```
 
+Codeyard shows pushed diagnostics only when the manifest has a `[[diagnostics]]` table, for files of the languages it
+lists (all of them when it lists none), in the workspace or open in an editor. A message is cut short after 4096
+characters, and one with bidirectional or zero-width characters is dropped (line breaks and tabs are fine); one
+extension has diagnostics on at most 1000 files at once ([limits](reference/limits.md)). Whatever is dropped is noted
+in the extension's log.
+
 A `[[diagnostics]]` provider that Codeyard calls on its own, as you type, is **(coming)**.
 
 ### A language server
@@ -657,6 +663,7 @@ Every error message shows a fix line. `cyx explain <CODE>` prints what a code me
 | `denied … not-declared` in the Inspector | Add the permission shown. Click **Copy fix** |
 | `denied … untrusted-workspace` | Trust the folder, or set `untrusted = false` if the extension is useless without trust |
 | `denied … revoked-by-user` | The user turned this permission off on the extension page. Show a helpful message |
+| `denied: … (cannot be granted: …)` | No permission allows it: a file outside the workspace (or a link that leads out of it), or an IP address. Use a path inside the workspace, or the server's host name |
 | `why is required` warning on first build | Your permissions are high risk. Add one honest `why` sentence |
 | `"fs" is a Node.js built-in module` (TypeScript build) | Node built-ins are not available. Use `ctx` file APIs, or `fetch` for HTTP, or a package that works in browsers |
 | Command missing from the palette | Check the id. Commands are shown as `Title`, but the full id is `you.ext.id` |

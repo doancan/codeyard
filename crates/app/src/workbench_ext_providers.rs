@@ -82,8 +82,19 @@ fn same_file(a: &str, b: &str) -> bool {
     ext_broker::normalize(a).is_some_and(|a| ext_broker::normalize(b).is_some_and(|b| a == b))
 }
 
-fn to_lsp_diagnostic(extension: &str, d: &v::Diagnostic) -> crate::lsp::Diagnostic {
-    crate::lsp::Diagnostic {
+/// A diagnostic as the editor shows it, or `None` when its message is empty or carries characters that could disguise
+/// what it says (`ext_manifest::is_deceptive`: bidirectional overrides, zero-width characters). Line breaks and tabs,
+/// which compilers' messages have, are kept; a message longer than `limits::DIAGNOSTIC_MESSAGE_LEN` is cut short.
+fn to_lsp_diagnostic(extension: &str, d: &v::Diagnostic) -> Option<crate::lsp::Diagnostic> {
+    let message = d.message.trim();
+    if message.is_empty() || message.chars().any(|c| c != '\n' && c != '\t' && ext_manifest::is_deceptive(c)) {
+        return None;
+    }
+    let message = match message.char_indices().nth(limits::DIAGNOSTIC_MESSAGE_LEN) {
+        Some((cut, _)) => format!("{}…", &message[..cut]),
+        None => message.to_string(),
+    };
+    Some(crate::lsp::Diagnostic {
         start: (d.range.start.line, d.range.start.character),
         end: (d.range.end.line, d.range.end.character),
         severity: match d.severity {
@@ -92,13 +103,13 @@ fn to_lsp_diagnostic(extension: &str, d: &v::Diagnostic) -> crate::lsp::Diagnost
             v::DiagnosticSeverity::Information => 3,
             v::DiagnosticSeverity::Hint => 4,
         },
-        message: d.message.clone(),
+        message,
         source: Some(extension.to_string()),
-        code: d.code.clone(),
+        code: d.code.as_deref().and_then(|c| shown_text(c, limits::ITEM_LEN)),
         related: Vec::new(),
         more_related: 0,
         rendered: None,
-    }
+    })
 }
 
 fn from_lsp_diagnostic(d: &crate::lsp::Diagnostic) -> v::Diagnostic {
@@ -785,13 +796,26 @@ impl Workbench {
         cx.notify();
     }
 
+    /// Diagnostics an extension pushes: only with a `[[diagnostics]]` declaration, for a file of a language it declares,
+    /// in the workspace or open in an editor, on at most `limits::DIAGNOSTIC_FILES` files at once, and with messages
+    /// that cannot disguise what they say.
     fn on_set_diagnostics(&mut self, id: &str, uri: &str, list: Vec<v::Diagnostic>, cx: &mut Context<Self>) {
         let Some(path) = ext_broker::normalize(uri) else {
             self.log_extension(id, LogLevel::Warn, format!("set-diagnostics: '{uri}' is not a file URI"));
             return;
         };
-        let path = self.open_path_matching(&path, cx).unwrap_or(path);
-        let mut list: Vec<crate::lsp::Diagnostic> = list.iter().map(|d| to_lsp_diagnostic(id, d)).collect();
+        let open = self.open_path_matching(&path, cx);
+        let path = open.clone().unwrap_or(path);
+        if let Err(why) = self.may_set_diagnostics(id, &path, open.is_some(), cx) {
+            self.log_extension(id, LogLevel::Warn, format!("set-diagnostics on {path} refused: {why}"));
+            return;
+        }
+        let count = list.len();
+        let mut list: Vec<crate::lsp::Diagnostic> = list.iter().filter_map(|d| to_lsp_diagnostic(id, d)).collect();
+        if list.len() < count {
+            let dropped = count - list.len();
+            self.log_extension(id, LogLevel::Warn, format!("set-diagnostics on {path}: {dropped} with an empty message or hidden characters dropped"));
+        }
         list.truncate(limits::MARKS_PER_FILE);
         let entry = self.cfg.exts.providers.diagnostics.entry(path.clone()).or_default();
         entry.retain(|(e, _)| e != id);
@@ -802,6 +826,27 @@ impl Workbench {
             self.cfg.exts.providers.diagnostics.remove(&path);
         }
         self.refresh_diagnostics(&[path], cx);
+    }
+
+    fn may_set_diagnostics(&self, id: &str, path: &str, open: bool, cx: &App) -> Result<(), String> {
+        let reg = crate::ext::current();
+        let active = reg.active.iter().find(|a| a.id() == id).ok_or("the extension is not active")?;
+        let declared = &active.manifest.contributions.diagnostics;
+        if declared.is_empty() {
+            return Err("the manifest declares no [[diagnostics]]".into());
+        }
+        let language = language_id(path);
+        if !declared.iter().any(|d| d.languages.is_empty() || d.handles(&language)) {
+            return Err(format!("[[diagnostics]] does not list its language, {language}"));
+        }
+        if !open && self.extension_scope(active, cx).relative(path).is_none() {
+            return Err("it is neither in the workspace nor open in an editor".into());
+        }
+        let files = self.cfg.exts.providers.diagnostics.iter().filter(|(p, l)| p.as_str() != path && l.iter().any(|(e, _)| e == id)).count();
+        if files >= limits::DIAGNOSTIC_FILES {
+            return Err(format!("it has diagnostics on {files} files already, the most one extension may; clear some first"));
+        }
+        Ok(())
     }
 
     fn on_clear_diagnostics(&mut self, id: &str, uri: Option<&str>, cx: &mut Context<Self>) {

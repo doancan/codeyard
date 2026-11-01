@@ -211,6 +211,20 @@ fn core_commands_need_what_they_imply(cx: &mut TestAppContext) {
     let active = wb.read_with(cx, |wb, cx| wb.active_editor_entity().map(|e| e.read(cx).path.clone()));
     assert_eq!(active.as_deref(), Some(format!("{root_s}/docs/guide.md").as_str()));
     assert_eq!(execute(&wb, cx, &format!("core:editor.open {}", uri("notes.txt"))), "denied read = [\"notes.txt\"] Why::NotDeclared");
+    // A symbolic link in a folder it may read leads nowhere else: not out of the workspace, not to another file.
+    #[cfg(unix)]
+    {
+        let away = cfg.join("away");
+        std::fs::create_dir_all(&away).unwrap();
+        std::fs::write(away.join("secret.md"), "secret\n").unwrap();
+        std::os::unix::fs::symlink(&away, root.join("docs/out")).unwrap();
+        std::os::unix::fs::symlink("../notes.txt", root.join("docs/notes.md")).unwrap();
+        let out = execute(&wb, cx, &format!("core:editor.open {}", uri("docs/out/secret.md")));
+        assert!(out.starts_with("denied") && out.contains("cannot be granted: it leads through a symbolic link"), "{out}");
+        assert_eq!(execute(&wb, cx, &format!("core:editor.open {}", uri("docs/notes.md"))), "denied read = [\"notes.txt\"] Why::NotDeclared");
+        let active = wb.read_with(cx, |wb, cx| wb.active_editor_entity().map(|e| e.read(cx).path.clone()));
+        assert_eq!(active.as_deref(), Some(format!("{root_s}/docs/guide.md").as_str()), "nothing else was opened");
+    }
 
     // Save All implies `write` on every file it would save.
     let edit = |wb: &Entity<Workbench>, cx: &mut VisualTestContext, rel: &str| {
@@ -277,7 +291,7 @@ fn the_perf_decoration_providers_decorate_and_answer(cx: &mut TestAppContext) {
         std::fs::write(dir.join(ext_manifest::FILE_NAME), manifest).unwrap();
         std::fs::write(dir.join("Cargo.toml"), "").unwrap();
         std::fs::write(dir.join(ext_pkg::COMPONENT), include_bytes!("../../ext-host/testdata/decorator.wasm")).unwrap();
-        crate::ext::install_file(&store, &dir).expect("installs from the folder");
+        crate::ext::install_file(&store, &dir, false).expect("installs from the folder");
     }
     let (wb, cx) = setup(cx, &cfg);
     let file = cfg.join("big.rs");
@@ -305,7 +319,7 @@ fn the_perf_view_lists_ten_thousand_rows(cx: &mut TestAppContext) {
     std::fs::write(dir.join(ext_manifest::FILE_NAME), manifest).unwrap();
     std::fs::write(dir.join("Cargo.toml"), "").unwrap();
     std::fs::write(dir.join(ext_pkg::COMPONENT), include_bytes!("../../ext-host/testdata/viewlist.wasm")).unwrap();
-    crate::ext::install_file(&crate::ext::store(&cfg), &dir).expect("installs from the folder");
+    crate::ext::install_file(&crate::ext::store(&cfg), &dir, false).expect("installs from the folder");
     let (wb, cx) = open_window(cx, &cfg);
     let id = wb.update_in(cx, |wb, window, cx| wb.open_ext_view_for_perf(window, cx)).expect("a view");
     assert_eq!(id, "perf.viewlist.rows");

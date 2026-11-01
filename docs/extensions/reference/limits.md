@@ -50,6 +50,8 @@ Every size, count and time limit of the extension platform. `cyx check` and the 
 | `PULL_REQUEST_DEADLINE_MILLIS` | 20 s | How long the Pull Requests view waits for a `[[pull-requests]]` provider, whose answers come from the network. A later answer is dropped like any provider's. |
 | `STATUS_TEXT_LEN` | 64 characters | Text of a status bar item. |
 | `MARKS_PER_FILE` | 1,000 | Diagnostics or decorations one extension may set on one file; the rest are dropped. |
+| `DIAGNOSTIC_FILES` | 1,000 | Files one extension may have diagnostics on at once; diagnostics for another file are dropped until it clears some. |
+| `DIAGNOSTIC_MESSAGE_LEN` | 4,096 characters | Characters of one diagnostic's message; a longer one is cut short. |
 | `NET_TIMEOUT_SECS` | 60 s | One `net` request, from the first connection to the last byte of the response, redirects included. |
 | `NET_REDIRECTS` | 5 | Redirects one `net` request follows; each is checked against `net` and the peer address rules again. |
 | `NET_REQUEST_BYTES` | 16 MiB | The body one `net` request sends. |

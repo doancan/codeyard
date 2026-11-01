@@ -824,7 +824,10 @@ fn extension_settings(active: &crate::ext::Active, cx: &App) -> Vec<(String, Opt
 /// An API error in plain words, with its fix when it is a denial.
 pub(super) fn explain(e: &v::Error) -> String {
     match e {
-        v::Error::Denied(d) => crate::i18n::tf("denied ({0}); add to [permissions]: {1}", &[&d.why.as_str(), &d.permission]),
+        v::Error::Denied(d) => match ext_manifest::parse_ungrantable_line(&d.permission) {
+            Some((call, reason)) => crate::i18n::tf("denied: {0}; this cannot be granted: {1}", &[&call, &reason]),
+            None => crate::i18n::tf("denied ({0}); add to [permissions]: {1}", &[&d.why.as_str(), &d.permission]),
+        },
         other => other.to_string(),
     }
 }

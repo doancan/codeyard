@@ -275,7 +275,7 @@ mod unix {
         let mut cmd = Command::new(exe);
         cmd.arg("--daemon").arg(socket).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
         // SAFETY: the closure runs between fork and exec, where only async-signal-safe calls are allowed. It makes just
-        // setsid and signal, captures nothing, and allocates nothing.
+        // setsid, signal, sigemptyset and sigprocmask, captures nothing, and allocates nothing (the set is on the stack).
         unsafe {
             cmd.pre_exec(|| {
                 libc::setsid();
@@ -283,6 +283,12 @@ mod unix {
                 // from a background job ignored SIGTERM and `kill` didn't stop it.
                 libc::signal(libc::SIGTERM, libc::SIG_DFL);
                 libc::signal(libc::SIGINT, libc::SIG_DFL);
+                // So is the signal mask of the thread that starts it. The app starts the terminal daemon from a
+                // background thread, and on macOS those are dispatch threads with SIGTERM and SIGINT blocked: the daemon
+                // then never saw a SIGTERM, and only SIGKILL stopped it.
+                let mut none: libc::sigset_t = std::mem::zeroed();
+                libc::sigemptyset(&mut none);
+                libc::sigprocmask(libc::SIG_SETMASK, &none, std::ptr::null_mut());
                 Ok(())
             });
         }

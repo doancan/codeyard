@@ -3117,7 +3117,6 @@ Interface scale of every window, from 0.75 (75%) to 2 (200%); View: Zoom In and 
 
 # Extensions: running code
 {} contains code, but codeyard-exthost is missing beside Codeyard	{} kod içeriyor, ancak Codeyard'ın yanında codeyard-exthost yok
-{} asks for permissions: install it from the Extensions view to review them	{} izin istiyor: izinleri görmek için Eklentiler görünümünden kurun
 {} crashed three times and is turned off until Codeyard restarts.	{} üç kez çöktü; Codeyard yeniden başlayana kadar kapalı.
 {} cannot run: codeyard-exthost is missing beside Codeyard.	{} çalışamıyor: Codeyard'ın yanında codeyard-exthost yok.
 {0} could not start: {1}	{0} başlatılamadı: {1}
@@ -3453,3 +3452,9 @@ Show in the Explorer	Gezginde göster
 Tab actions	Sekme eylemleri
 Terminals	Terminaller
 Views	Görünümler
+Nothing was installed. Run the command again with --accept-permissions to grant these, or install it from the Extensions view.	Hiçbir şey kurulmadı. Bu izinleri vermek için komutu --accept-permissions ile yeniden çalıştırın ya da eklentiyi Eklentiler görünümünden kurun.
+Why: {}	Neden: {}
+denied: {0}; this cannot be granted: {1}	reddedildi: {0}; buna izin verilemez: {1}
+{0} stays stopped: the registry revoked the installed version ({1}) and has no other version to install	{0} durdurulmuş kalıyor: kayıt, kurulu sürümü iptal etti ({1}) ve kurulabilecek başka sürüm yok
+{0} went back to version {1}: the registry revoked {2}.	{0}, {1} sürümüne geri döndü: kayıt {2} sürümünü iptal etti.
+{0} {1} ({2}) asks to:	{0} {1} ({2}) şunları istiyor:

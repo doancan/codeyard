@@ -417,7 +417,7 @@ fn check_host(h: &str) -> Result<(), String> {
     if h.contains("://") || h.contains('/') || h.contains(':') {
         return Err("must be a host name only, without scheme, port or path".into());
     }
-    if name.parse::<std::net::Ipv4Addr>().is_ok() || name.split('.').next_back().is_some_and(|l| l.bytes().all(|b| b.is_ascii_digit())) {
+    if crate::is_ip_address(name) {
         return Err("must be a name, not an IP address".into());
     }
     if name.len() > 253 || !name.contains('.') {

@@ -352,6 +352,15 @@ denied: the manifest does not declare net = ["api.example.com"]
    = fix: add to [permissions]:  net = ["api.example.com"]
 ```
 
+Some calls no manifest line can allow, and the denial says so instead of naming a line: a file outside the workspace (also through a symbolic link inside it that leads out), and a URL that names an IP address, since `net` lists host names only:
+
+```
+denied: read file:///etc/passwd
+   = fix: none: this cannot be granted, the file is outside the workspace, and extensions reach only files inside its folders
+```
+
+A link inside the workspace is checked as the file it leads to: `src/settings.txt -> ../.env` needs `read = [".env"]`.
+
 Other errors are `NotFound`, `Cancelled` (the user moved on), `Timeout`, `Invalid` (bad arguments; the message says which) and `Other`. A refusal for `revoked-by-user` means the user turned the permission off: tell them what stops working. In an untrusted folder an extension may read what it declared and show UI, but not send, write or run anything.
 
 ## Building and packaging

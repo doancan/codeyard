@@ -114,9 +114,19 @@ pub fn net_fetch(t: &dyn Transport, scope: &Scope, req: &v::HttpRequest, sink: &
         Err(e) => return Completion::Failed(e),
     };
     if !ext_manifest::net_allows(&scope.permissions.net, &host) {
-        return Completion::Failed(v::Error::Denied(v::Denied { permission: format!("net = [\"{host}\"]"), why: v::Why::NotDeclared }));
+        return Completion::Failed(v::Error::Denied(not_in_net(&host)));
     }
     done(t.send(&scope.permissions.net, req, None, sink, cancel))
+}
+
+/// The denial for a host `net` does not list: the line to add, or for an IP address, which `net` cannot list, why not.
+pub fn not_in_net(host: &str) -> v::Denied {
+    let permission = if ext_manifest::is_ip_address(host) {
+        ext_manifest::ungrantable_line(&format!("net {host}"), "it is an IP address, and net lists host names only; connect to the server by its host name")
+    } else {
+        format!("net = [\"{host}\"]")
+    };
+    v::Denied { permission, why: v::Why::NotDeclared }
 }
 
 /// The checks of `auth.fetch` that need no token: the permission, the folder's trust, and that the URL's host is one

@@ -135,6 +135,20 @@ pub fn entry_key(publisher: &Publisher, extension: &str, entry: &Entry) -> Strin
     format!("codeyard-ext:{hash}/{extension}/{kind}/{name}")
 }
 
+/// The system keychain is shared by every Codeyard profile on the machine. A profile with a state folder of its own
+/// (`CODEYARD_STATE_DIR`: a test run, a script) keeps its entries apart, under keys marked with that folder's hash
+/// (`codeyard-ext@<hash>:…`), so it neither reads nor replaces the user's accounts and secrets. `None`: the user's
+/// own profile, whose keys are unchanged.
+pub fn profile_key(key: &str, state_dir: Option<&Path>) -> String {
+    let Some(dir) = state_dir else { return key.to_string() };
+    let h = Sha256::digest(dir.to_string_lossy().as_bytes());
+    let hash: String = h[..8].iter().map(|b| format!("{b:02x}")).collect();
+    match key.split_once(':') {
+        Some((service, rest)) => format!("{service}@{hash}:{rest}"),
+        None => format!("{key}@{hash}"),
+    }
+}
+
 /// A signed-in account as the keychain keeps it.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Token {
