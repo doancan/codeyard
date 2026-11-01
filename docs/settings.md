@@ -255,7 +255,7 @@ status bar reports it.
 | `search.exclude` | list of globs | `[]` | Skip matching paths in Find in Files. |
 | `compare.folders.ignore` | list of globs | `[".git", "node_modules", "target"]` | Names and paths *Compare: Folders…* leaves out on both sides (gitignore syntax). |
 | `compare.folders.maxFiles` | number 100–5000000 | `50000` | Entries per side *Compare: Folders…* reads before it stops and reports that the result is partial. |
-| `workbench.startupEditor` | string | `welcome` | VS Code compatible alias of `window.startup`. |
+| `workbench.startupEditor` | string | `welcome` | Alias of `window.startup`, kept for settings imported from another editor. |
 | `editor.codeActionsOnSave` | object | `{}` | Code actions to run on save before formatting, e.g. `{ "source.organizeImports": "explicit" }`; each gives up after 2 s. |
 | `files.associations` | object of glob → language | `{}` | Force a language mode for matching files, e.g. `{ "*.tpl": "html" }`. |
 | `editor.formatters` | object of language → formatter | `{}` | Who formats a language: `"lsp"` or the id of an extension that formats it, e.g. `{ "toml": "you.taplo" }`. Without an entry the language server formats, or else the only extension that formats the language. |

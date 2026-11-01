@@ -12,7 +12,7 @@ roles; the build fails when a role is missing.
   files; the others (`codeyard-dark`, `codeyard-light` as the defaults, Nord, Dracula, high-contrast pair, …) are
   JSON files in `crates/theme/themes/` embedded at build time. The defaults follow the system appearance.
 - **User themes** are JSON files in `~/.config/codeyard/themes/` that set `"name"`, `"appearance"` and any subset of
-  `"color"`; missing roles fall back to the default dark or light palette. VS Code theme files are mapped
+  `"color"`; missing roles fall back to the default dark or light palette. Theme files from another editor are mapped
   (workbench colours and TextMate scopes).
 - **Contrast.** `Palette::contrast_failures` checks every text role against the backgrounds it is drawn on and is
   asserted for every built-in theme; user themes pass through `guard_contrast`, which nudges a failing foreground

@@ -23,7 +23,7 @@
 - **Apple silicon only.** Intel Macs are not a target: there is no universal build and no Intel CI. `LSMinimumSystemVersion` and
   `MACOSX_DEPLOYMENT_TARGET` are 11.0 (the first macOS release for Apple silicon).
 
-- Codeyard asks for no file access at start, like VS Code. macOS asks, in its own dialog, the first time a folder on Desktop, Documents,
+- Codeyard asks for no file access at start. macOS asks, in its own dialog, the first time a folder on Desktop, Documents,
   Downloads, iCloud Drive, a removable or a network volume is opened; the bundle carries the usage descriptions for them. Full Disk Access
   is optional and cannot be requested by an app: *Help: Grant Full Disk Access…* opens the page and shows the app in Finder to drag in.
 - Metal toolchain (Xcode) is needed to build GPUI.
@@ -77,6 +77,13 @@ Windows x64 is built and released as a ZIP and a setup EXE (unsigned, so SmartSc
   The `*-pc-windows-gnu` toolchains get them as on other systems.
 - Extensions: declarative extensions, the Extensions view and `cyx` work as on macOS, and the installer puts `cyx.exe` beside
   Codeyard. *Extensions: Install cyx Command in PATH* names that folder instead of linking (the PATH is the user's to edit).
+  Installed extensions **with code** do not run on Windows in 0.7.0: the AppContainer sandbox they need is off until it
+  passes on physical hardware (`ext_proto::appcontainer::VERIFIED`, checked by `scripts/check-exthost-sandbox-windows.ps1`).
+  Such an extension cannot be installed: its Market page (and an install from a file) says "*id* contains code, which
+  needs a sandbox this system does not provide: AppContainer has not passed the hardware check yet
+  (scripts/check-exthost-sandbox-windows.ps1)". Extensions without code (themes, languages, snippets, keymaps, schemas,
+  language servers) work. Authors can still run `cyx dev` and `cyx test` there: the extension in development runs without
+  the OS sandbox, behind WebAssembly and the app's permission checks, as on every system.
   The extension performance rows only warn on Windows until there is a Windows reference machine (`plugin-architecture.md` §15).
 - Not verified: real SSH authentication, mixed-DPI displays, physical keyboard and IME behaviour.
 - `scripts/check-windows.sh` is the quick cross-compile check from macOS or Linux (`x86_64-pc-windows-gnu`); it runs nothing.

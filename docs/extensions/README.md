@@ -3,6 +3,10 @@
 Extensions add themes, snippets, keymaps, languages and language servers without code, and commands, views and
 providers with code in TypeScript or Rust. You need only Codeyard for the first kind, and Node.js or Rust for the second.
 
+Two limits in this version: installed extensions with code do not run on Windows yet (`cyx dev` and `cyx test` do;
+extensions without code work everywhere), and the public registry is not online yet, so publish to your own registry
+or share `.cyx` files ([Publish](developer-guide.md#publish)).
+
 ## Start here
 
 **[Quick start](developer-guide.md#quick-start)**: `cyx new`, `cyx dev`, `cyx check`, `cyx package`. A theme takes a few
@@ -23,7 +27,7 @@ minutes; [your first command](developer-guide.md#your-first-command) a few more.
 | Testing | [Testing](testing.md) |
 | Debugging with the Extension Inspector | [Test and debug](developer-guide.md#test-and-debug) |
 | Publishing, pre-releases, the 48 h wait, yanking | [Publish](developer-guide.md#publish) |
-| Coming from VS Code | [Coming from VS Code](developer-guide.md#coming-from-vs-code) |
+| Coming from another editor | [Coming from another editor](developer-guide.md#coming-from-another-editor) |
 | Moving from API 0.1 | [Migrating to API 1.0](migrating-to-1.0.md) |
 | Something does not work | [Troubleshooting](developer-guide.md#troubleshooting) |
 

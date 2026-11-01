@@ -7,8 +7,10 @@ Short answers to the problems people actually hit. Messages are quoted as the ap
 macOS guards Desktop, Documents, Downloads, iCloud Drive and external drives. Codeyard asks for nothing at start; the first time you open a folder
 in one of them the system asks in its own dialog: answer **Allow**. Full Disk Access is optional (it also covers `~/Library` and every drive) and macOS
 never lists an app there by itself: run *Help: Grant Full Disk Access…*, press **+** in the page that opens (or drag Codeyard in from Finder) and turn it on.
-The builds are not signed with a developer certificate, so every release counts as a new app to macOS and the
-answers are asked again after an update; if an old entry stays listed but does not work, remove it with **−** and add it again. Unnotarized builds also need **right-click ▸ Open** on first launch, or `xattr -cr /Applications/Codeyard.app`.
+Release builds are signed with Developer ID and notarized by Apple, so they open normally on first launch. Older releases
+from before signing count as a new app to macOS after each update and need **right-click ▸ Open** on first launch (or
+`xattr -cr /Applications/Codeyard.app`); if an old entry stays listed but does not work, remove it with **−** and add it again.
+Windows builds are not code-signed, so SmartScreen may warn on first launch.
 
 ## SSH
 
@@ -63,6 +65,15 @@ stash first.
 | **Download Page** instead of *Install and Restart* | This copy cannot replace itself (debug build, bare binary, Linux, Windows ZIP, read-only location); the dialog gives the reason. Download the new version and replace the old one yourself. |
 | "Update installed" but the old version still runs | Restart: the dialog's **Restart Now** quits and opens the new version; *Later* only postpones it. |
 | You were never asked about update checks | Debug builds and windows started with `--do`/`--panel` never ask; closing the question with Esc snoozes it for 30 days. Set `"update.check"` yourself or use *Help: Check for Updates…*. |
+
+## Extensions
+
+| What you see | What it means and what to do |
+| --- | --- |
+| "… contains code, which needs a sandbox this system does not provide: AppContainer has not passed the hardware check yet …" (Windows) | Extensions with code do not run on Windows in this version. Extensions without code (themes, languages, snippets, keymaps) work. |
+| An extension cannot be found in the Market or by *Install from Registry…* | The public registry is not online yet. Install from a `.cyx` file, or add your own registry to `extensions.registries`. |
+| Codeyard misbehaves after installing an extension | Start it with `codeyard --no-extensions` (safe mode: no extension is loaded), then turn the extension off or uninstall it in the Extensions view. |
+| An extension you are writing fails | See the [developer guide's troubleshooting](extensions/developer-guide.md#troubleshooting) and `cyx explain <CODE>`. |
 
 ## Reporting a problem
 

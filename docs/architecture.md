@@ -2,8 +2,9 @@
 
 Codeyard is a native code editor written in Rust on GPUI. Design goals: low memory, fast start, one code path
 for local and SSH workspaces, no telemetry, no embedded web view. The core is complete on its own; extensions are optional and
-are being built to the design in [plugin-architecture.md](plugin-architecture.md): Wasm code in a separate sandboxed
-process, never in the app. Nothing on this page describes extension code yet.
+follow the design in [plugin-architecture.md](plugin-architecture.md): Wasm code in a separate sandboxed process
+(`codeyard-exthost`), never in the app. This page lists the extension crates; how they work (runtime, permissions,
+sandbox, registry) is described in plugin-architecture.md and [registry.md](registry.md).
 
 ## Workspace layout
 

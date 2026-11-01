@@ -32,9 +32,10 @@ What it is not:
 
 - **Complete core, optional extensions.** Features that people usually install an extension for (schema validation, spell
   check, a merge editor, `.http` requests, a debugger client) are built in, and Codeyard is complete without any extension.
-  Extensions are in development: they will add themes, languages, commands and integrations, run sandboxed with only the
-  permissions they declare, and cost nothing until used. The current release does not load extensions yet; see the
-  [design](docs/plugin-architecture.md).
+  Extensions add themes, languages, snippets, commands, views and integrations. Their code is WebAssembly that runs in a
+  separate sandboxed process with only the permissions it declares, and costs nothing until used. On Windows, extensions
+  with code do not run yet (themes, languages and other extensions without code do); see
+  [Extensions](docs/user-guide.md#extensions) and, for authors, [docs/extensions](docs/extensions/README.md).
 - **No telemetry, no account.** Requests go out when you start them and, if you choose daily update checks, when Codeyard looks for
   a new version: at most one successful check a day, which downloads two small files from github.com (the checksum list of the
   latest release and its signature). GitHub sees your IP address and that the request comes from `curl`; there are no cookies, no
@@ -42,14 +43,14 @@ What it is not:
   [what leaves your machine](docs/architecture.md#stack)).
 - **No embedded web view.** The interface is drawn by GPUI. Markdown preview is drawn natively too.
 
-How it sits next to other editors:
+What to expect next to other editors:
 
-- **VS Code** has a very large extension ecosystem and many more languages and integrations. Codeyard's extensions follow the
-  same model (one manifest, contribution points, a publish command) but run sandboxed, activate lazily and draw their UI natively
-  instead of in web views. It imports VS Code settings, shortcuts and themes.
-- **Zed** is also a native Rust editor built on GPUI. Codeyard is smaller in scope and has no collaboration and no
-  AI features; its remote editing runs a small static agent on the server and uses your own `ssh`.
-- **Helix** is a modal terminal editor. Codeyard is a graphical editor with conventional keys and mouse support.
+- **A smaller ecosystem.** There are far fewer extensions, languages and integrations than in the large editors. Extensions use
+  the familiar model (one manifest, contribution points, a publish command) but run sandboxed, activate lazily and draw their UI
+  natively instead of in web views. Codeyard imports settings, shortcuts and themes from another editor.
+- **Smaller in scope.** No collaboration and no AI features. Remote editing runs a small static agent on the server and uses
+  your own `ssh`.
+- **Graphical, not modal.** Conventional keys and mouse support, not a modal terminal editor.
 
 Numbers: every release is measured against the previous one. `scripts/perf` runs both builds side by side and blocks the
 release when startup, typing latency or memory regresses past its budget (see [Budgets and gates](docs/architecture.md#budgets-and-gates)).
@@ -73,6 +74,14 @@ read-only view.
   `.http` requests, log follow and filter, Markdown preview, hex view.
 - **Data tools.** Convert between JSON, YAML, TOML and `.env`, query a file with a jq-style language as you type, copy the path
   under the cursor, decode a JWT or a Unix timestamp. All local; see [Data tools](docs/user-guide.md#data-tools).
+- **Extensions.** Themes, languages and snippets without code; commands, views and providers in Rust or TypeScript with the
+  SDKs, built, tested and packaged with `cyx`. Install them from a `.cyx` file, a folder or a registry you run (the public
+  registry is not online yet); each install shows what the extension may do before it runs. See
+  [Extensions](docs/user-guide.md#extensions).
+- **Window layout your way.** A secondary side bar, editors, side views and terminals in windows of their own, and terminals
+  that keep running when Codeyard quits or restarts and come back with their output (`terminal.persistentSessionTimeout`).
+- **Accessibility.** The interface is exposed to screen readers on macOS and Windows, with keyboard access to every command,
+  interface zoom and contrast-checked themes. It has not been tested with a screen reader yet; see [ACCESSIBILITY.md](ACCESSIBILITY.md).
 - **Turkish interface.** The whole interface is translated to Turkish; the system language is followed by default
   (see [Interface language](docs/user-guide.md#interface-language)).
 
@@ -111,6 +120,7 @@ codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TE
 | [Settings reference](docs/settings.md) | every setting with its type, default and meaning (generated from the code) |
 | [Architecture](docs/architecture.md) | crates, workbench, stack choices, budgets |
 | [Remote development](docs/remote.md) | SSH, agent protocol, reconnecting, askpass, transfers |
+| [Extensions](docs/extensions/README.md) | writing, testing and publishing extensions: guides, SDKs, `cyx`, generated references |
 | [All technical documents](docs/README.md) | services, design tokens, accessibility, platforms, testing, releasing |
 | [Troubleshooting](docs/troubleshooting.md) | SSH, language servers, schemas, `.http`, reporting a problem |
 | [Changelog](CHANGELOG.md) | what changed in every version |

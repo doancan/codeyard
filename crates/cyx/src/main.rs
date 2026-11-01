@@ -64,7 +64,7 @@ usage:
   cyx test [FOLDER] [--fixtures FILE]        build the code and run each command and view in the extension host;
                                              FILE (default test/fixtures.json) answers its HTTP requests
   cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
-                                             convert a VS Code theme, snippets, keymap or language
+                                             convert another editor's theme, snippets, keymap or language
   cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL] [--target TRIPLE]
                                              sign it (no keys: GitHub Actions or a browser sign-in) and publish
                                              (native programs: every platform in native/, or the one named)

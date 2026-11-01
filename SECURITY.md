@@ -20,7 +20,12 @@ matter most are:
 - opening an untrusted folder or file causing code to run without the Workspace Trust prompt;
 - the SSH agent bridge, askpass socket, file transfer and `~/.ssh/config` editing;
 - the `.http` client sending files or environment variables the user did not approve;
-- schema, spell and parser code handling hostile input (crashes, unbounded memory or time).
+- schema, spell and parser code handling hostile input (crashes, unbounded memory or time);
+- extension code escaping the extension host's sandbox (reaching files, the network or processes it should not), or
+  reaching anything through the app that its granted permissions do not allow;
+- an extension installed, updated or given more permissions without the consent sheet (or a permission prompt) the user
+  should have seen;
+- a forged, replayed or rolled-back registry index, or a package whose signature or digest should not have been accepted.
 
 ## Design facts a reviewer may want
 
@@ -37,10 +42,16 @@ matter most are:
 - Until a folder is trusted: project settings cannot change `terminal.shell`, `lsp.servers` or schema associations, language
   servers do not start, schema downloads are limited to SchemaStore and `git status` runs with `core.fsmonitor` off
   (details: [architecture](docs/architecture.md#workspace-trust-in-one-place)).
-- Extensions are in development and the current release loads none. The planned security model (WebAssembly in a sandboxed
-  process, declared permissions enforced by the app, signed registry index, revocation) is in
-  [plugin-architecture.md](docs/plugin-architecture.md#6-permissions-and-security). The registry's root is signed by two of
-  three root keys, all held by the owner until a second maintainer takes one (see below).
+- Extensions: code extensions are WebAssembly components run by `codeyard-exthost`, one process per active extension, never
+  in the app. Before it loads any code the process locks itself down with the OS sandbox: on macOS a deny-default Seatbelt
+  profile; on Linux landlock (required), a seccomp filter and, where user namespaces allow, an empty network namespace. It may only
+  read its package and compiled code and write its own data folder; no network, no new processes. Everything else goes
+  through the app, which checks each call against the permissions the user granted on the consent sheet (and Workspace
+  Trust). On Windows the AppContainer sandbox has not passed its hardware check yet, so installed extensions with code do
+  not run there; extensions without code do. Details:
+  [plugin-architecture.md](docs/plugin-architecture.md#6-permissions-and-security). Registry packages are verified against
+  a signed index; the registry's root is signed by two of three root keys, all held by the owner until a second maintainer
+  takes one (see below).
 
 ## Extension registry keys
 
@@ -84,8 +95,9 @@ What the signature does not give you, and what is done about it:
 - **The installer is fetched from the tag of the verified version** (`releases/download/v<version>/`), not from `latest`, so a release
   published between the two requests cannot be mixed with the list. Its hash is checked before it is opened and again before it is
   installed.
-- **Gatekeeper.** An update installed by the app does not go through macOS's first-launch check, because `curl` does not set the
-  quarantine flag and Codeyard builds are not notarized yet. The protection is the signed checksum list, plus the check of the bundle
-  identifier, the version and `codesign --verify` before the app is replaced.
+- **Gatekeeper.** macOS releases are signed with Developer ID and notarized by Apple, but an update installed by the app does not go
+  through macOS's first-launch check, because `curl` does not set the quarantine flag. The protection is the signed checksum list,
+  plus the check of the bundle identifier, the version and `codesign --verify` before the app is replaced. Windows builds are not
+  code-signed.
 - **Helper programs** (`curl`, `hdiutil`, `ditto`, `plutil`, `codesign`) are run from their system paths, never found through `PATH`
   on macOS (on Windows the `curl.exe` of the system folder).

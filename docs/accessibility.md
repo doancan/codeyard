@@ -338,7 +338,7 @@ group only toggles it from the state that was read, and committing checks the re
 
 - Two high-contrast themes; every built-in theme passes WCAG AA (`cargo test -p theme`). After a theme is chosen or the
   colour settings change, a notice names the first pair below AA when the colours in use (theme plus
-  `workbench.colorCustomizations`) fail; a theme you wrote is kept as written, imported VS Code themes are repaired.
+  `workbench.colorCustomizations`) fail; a theme you wrote is kept as written, imported themes are repaired.
 - *Auto* picks *High Contrast Dark* or *Light* while the system asks for more contrast (macOS *Increase contrast*,
   a Windows high-contrast theme). `crates/app/src/system_prefs.rs` reads both system settings at startup and whenever a
   window comes forward.

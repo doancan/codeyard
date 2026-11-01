@@ -22,7 +22,7 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
         "`50000`",
         "Entries per side *Compare: Folders…* reads before it stops and reports that the result is partial.",
     ),
-    ("workbench.startupEditor", "string", "`welcome`", "VS Code compatible alias of `window.startup`."),
+    ("workbench.startupEditor", "string", "`welcome`", "Alias of `window.startup`, kept for settings imported from another editor."),
     (
         "editor.codeActionsOnSave",
         "object",

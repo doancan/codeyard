@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- "Preferences: Reset Settings to Defaults…" and a **Reset All Settings…** button on the Settings page, next to
+  **Open settings.jsonc**: after a confirmation, `settings.jsonc` is replaced by this version's template and the old
+  file is kept beside it as `settings.backup-<time>.jsonc`.
+
 - docs/accessibility.md: a manual screen-reader checklist (VoiceOver, NVDA, Narrator, JAWS and Orca), step by step,
   for the limits only a person with a screen reader can close: live focus, the editor's text, right-to-left text, the
   single reported cursor, what leaving a control sends instead of `Blur`, and the missing Linux adapter.
@@ -399,6 +403,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refuses one (#187).
 
 ### Changed
+
+- `git.autofetch` is on by default: a trusted folder fetches in the background every `git.autofetchPeriod` seconds
+  while its window is in front, so incoming commits show in Source Control without clicking Sync. Set it to `false`
+  to fetch only on Sync.
+- `terminal.confirmOnClose` defaults to `"never"`: closing a terminal no longer asks, even with a program running in
+  it. `"running"` brings the old question back.
 
 - Windows CI runs every test of the workspace (`cargo test --workspace`, no name filter); before, the app's tests ran
   through a list of name filters, so most of them, among them every extension test, never ran on Windows and new

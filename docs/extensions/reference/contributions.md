@@ -4,8 +4,8 @@
 
 What an extension adds to Codeyard. Each kind is an array of tables (`[[commands]]`) except `settings`. Ids are local: `refresh` in `you.deploy` becomes `you.deploy.refresh`. Contributions that run code need a `[code]` table ([Manifest](manifest.md#code)); the others work without any. The guides are the [developer guide](../developer-guide.md#contributions-that-run-your-code), [Commands](../commands.md) and [Views](../views.md).
 
-- [`[[themes]]`](#themes): A colour theme: a Codeyard or VS Code colour theme JSON file.
-- [`[[snippets]]`](#snippets): Snippets for one language, in the VS Code snippet format.
+- [`[[themes]]`](#themes): A colour theme: a Codeyard colour theme JSON file, or one from another editor's extension.
+- [`[[snippets]]`](#snippets): Snippets for one language, in the common JSON snippet format (`prefix`, `body`, `description`).
 - [`[[keymap-preset]]`](#keymap-preset): A whole keymap the user can pick with `"keymap.preset": "<extension id>/<label>"`.
 - [`[[keybindings]]`](#keybindings): A key binding for one of your commands, a dependency's command or a `core:` command. A key a built-in shortcut uses is left out.
 - [`[[languages]]`](#languages): A language for files no built-in language claims.
@@ -32,7 +32,7 @@ What an extension adds to Codeyard. Each kind is an array of tables (`[[commands
 
 ## themes
 
-`[[themes]]`: A colour theme: a Codeyard or VS Code colour theme JSON file.
+`[[themes]]`: A colour theme: a Codeyard colour theme JSON file, or one from another editor's extension.
 
 | Field | Type | Required | What it does |
 | --- | --- | --- | --- |
@@ -41,7 +41,7 @@ What an extension adds to Codeyard. Each kind is an array of tables (`[[commands
 
 ## snippets
 
-`[[snippets]]`: Snippets for one language, in the VS Code snippet format.
+`[[snippets]]`: Snippets for one language, in the common JSON snippet format (`prefix`, `body`, `description`).
 
 | Field | Type | Required | What it does |
 | --- | --- | --- | --- |

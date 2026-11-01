@@ -35,7 +35,7 @@ const THEME: &str = r##"{
 "##;
 
 const SNIPPETS: &str = r#"{
-  // VS Code snippet format. $1, ${2:default} are tab stops; $0 is where the cursor ends.
+  // Snippet format: $1, ${2:default} are tab stops; $0 is where the cursor ends.
   "Print": {
     "prefix": "pr",
     "body": ["println!(\"{}\", $1);", "$0"],

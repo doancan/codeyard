@@ -7,7 +7,7 @@
 //! The installed app is untouched until every check has passed.
 //!
 //! Gatekeeper: the files are fetched by `curl`, which does not set the quarantine flag, so macOS does not run its first-launch
-//! check on an app installed this way (Codeyard builds are not notarized yet). What protects the user instead is the signed
+//! check on an app installed this way (release builds are notarized, but nothing asks Gatekeeper here). What protects the user is the signed
 //! checksum list, the bundle identifier and version check and `codesign --verify`.
 
 use std::io;

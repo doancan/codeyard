@@ -1,6 +1,6 @@
 # Writing Codeyard extensions
 
-Themes, snippets, keymaps, languages, schemas and language servers without code; commands, views and providers in TypeScript or Rust with code extensions. If you have built a VS Code extension, most of this will feel familiar. Parts marked **(coming)** are not in this version yet. Start with the [index](README.md) for the guides and the generated references.
+Themes, snippets, keymaps, languages, schemas and language servers without code; commands, views and providers in TypeScript or Rust with code extensions. If you have built an extension for another editor, most of this will feel familiar. Start with the [index](README.md) for the guides and the generated references.
 
 <!-- toc -->
 - [Quick start](#quick-start)
@@ -11,7 +11,7 @@ Themes, snippets, keymaps, languages, schemas and language servers without code;
 - [Recipes](#recipes)
 - [Test and debug](#test-and-debug)
 - [Publish](#publish)
-- [Coming from VS Code](#coming-from-vs-code)
+- [Coming from another editor](#coming-from-another-editor)
 - [Troubleshooting](#troubleshooting)
 <!-- /toc -->
 
@@ -57,16 +57,16 @@ license = "MIT"
 
 [[themes]]
 label = "Midnight"
-path  = "themes/midnight.json"   # Codeyard or VS Code colour theme JSON
+path  = "themes/midnight.json"   # Codeyard colour theme JSON, or one from another editor
 
 [[snippets]]
 language = "rust"
-path     = "snippets/rust.json"  # VS Code snippet format
+path     = "snippets/rust.json"  # the common JSON snippet format
 ```
 
 Edit `themes/midnight.json`. The dev window updates as soon as you save. Codeyard checks text contrast and warns you if a colour pair is hard to read.
 
-Do you already have a VS Code theme, snippets, keymap or language configuration?
+Do you already have a theme, snippets, keymap or language configuration from another editor's extension?
 
 ```sh
 cyx import-vscode ./my-vscode-theme     # a folder or a .vsix
@@ -76,17 +76,17 @@ It converts everything it can and lists anything it could not convert.
 
 The same goes for other no-code contributions: `keymap-preset`, `keybindings`, `languages`, `json-schemas`, `yaml-schemas`, `settings` and `language-servers`. A few rules keep them predictable:
 
-- A key binding never takes a key a built-in shortcut uses; Codeyard leaves it out and says so. A keymap preset may, because the user picks it (`"keymap.preset": "you.emacs/Emacs"`).
+- A key binding never takes a key a built-in shortcut uses; Codeyard leaves it out and says so. A keymap preset may, because the user picks it (`"keymap.preset": "you.modal/Modal"`).
 - A language you add applies to files no built-in language claims. It can borrow a built-in grammar for highlighting (`grammar = "toml"`).
 - A language server is a program on `PATH` where the files are, or one inside your package ([Native programs](#native-programs)), so it works over SSH too.
 - Start Codeyard with `--no-extensions` to rule your extension out when something looks wrong.
 
 ## Your first command
 
-Commands, views, formatters, code actions, hover and completion need code, which `cyx` builds into a WebAssembly component. Write it in TypeScript (you need Node.js 22.18 or newer) or in Rust (you need Rust and `rustup target add wasm32-wasip2`). Both SDKs have the same API, 1.1; the full guides are [typescript.md](typescript.md) and [commands.md](commands.md).
+Commands, views, formatters, code actions, hover and completion need code, which `cyx` builds into a WebAssembly component. Write it in TypeScript (you need Node.js 22.18 or newer) or in Rust (you need Rust and `rustup target add wasm32-wasip2`). Both SDKs have the same API, 1.1; the full guides are [typescript.md](typescript.md) and [commands.md](commands.md). `@codeyard/extension` is not on npm yet, so a TypeScript extension takes the SDK from a Codeyard checkout with `--sdk` (`git clone https://github.com/doancan/codeyard ~/src/codeyard`).
 
 ```sh
-cyx new command hello --lang ts   # or: cyx new view hello --lang ts; leave out --lang ts for Rust
+cyx new command hello --lang ts --sdk ~/src/codeyard   # or: cyx new view …; leave out --lang ts and --sdk for Rust
 cd hello
 npm install && npm test           # unit tests against a mock Codeyard (Rust: cargo test)
 cyx test                          # the built extension in the real extension host
@@ -492,7 +492,7 @@ ctx.command("find-todos", async (ctx) => {
 });
 ```
 
-Codeyard does not ask for diagnostics on its own: your code pushes them with `setDiagnostics` when its data changes, as with VS Code's `DiagnosticCollection`.
+Codeyard does not ask for diagnostics on its own: your code pushes them with `setDiagnostics` when its data changes, like a diagnostic collection elsewhere.
 
 Codeyard shows pushed diagnostics only when the manifest has a `[[diagnostics]]` table, for files of the languages it
 lists (all of them when it lists none), in the workspace or open in an editor. A message is cut short after 4096
@@ -613,6 +613,11 @@ While a debugger is attached, nothing times out. `storage` keeps data across ses
 
 ## Publish
 
+The public registry is not online yet. Until it is, publish to your own registry (`yard init` sets one up, see
+[registry.md](../registry.md); point `cyx publish` at it with `--registry URL`, and users add it to
+`extensions.registries`), or share the `.cyx` from `cyx package`, which installs from a file. Everything below works
+the same against your own registry.
+
 ```sh
 cyx publish --dry-run   # check everything and show the install sheet; nothing is signed or sent
 cyx publish
@@ -629,7 +634,7 @@ The first publish claims your publisher name (the part of the id before the dot)
 Good to know:
 - **Themes, snippets and other no-code packs** reach users immediately.
 - **Updates with code** reach users who already have an earlier version after **48 hours**, and `cyx publish` tells you when. Users can press **Update now**. Someone installing the extension takes the newest version at once, so a first publish has no wait. The registry reads whether a package has code from the package itself and marks it in its index.
-- **Code extensions on the public registry** are not accepted yet: for now it takes data-only extensions (themes, snippets, keymaps, languages, language servers). `cyx publish` says so when the registry refuses; share the `.cyx` from `cyx package` meanwhile, which installs from a file.
+- **Code extensions** are accepted by invitation: a registry takes code only from the publisher names its operator lists in `invited` (`yard.json`, see [registry.md](../registry.md)); everyone else may publish data-only extensions (themes, snippets, keymaps, languages, language servers). `cyx publish` says so when the registry refuses; on your own registry, invite yourself.
 - **Native programs** ([Native programs](#native-programs)) are accepted by invitation: the registry's operator lists your publisher name. `cyx publish` signs and uploads one package per platform in `native/` (`--target <triple>` publishes one; you can add a platform to a version later, with the same manifest and README). Your first native program stays unlisted until a reviewer approves it; `cyx publish` says so. After that your native programs are listed like any code update.
 - **Pre-releases** are versions with a suffix (`1.2.0-beta.1`). They go out at once, only to users who opted in for your extension. `cyx publish --pre-release` makes sure the version has one.
 - If a release is broken, `cyx yank 1.2.0` hides it from installs and users on it roll back right away; `cyx restore 1.2.0` brings it back. `cyx deprecate 1.2.0 --replacement you.other` points users elsewhere. Version numbers are never reused, so publish the fix as `1.2.1`.
@@ -677,9 +682,11 @@ A file the manifest names but a rule leaves out is an error that says which rule
 before you publish. When a `.cyxignore` line leaves out the manifest, the component or a file the manifest names, the
 error names that line.
 
-## Coming from VS Code
+## Coming from another editor
 
-| VS Code | Codeyard |
+The left column uses the names of the most widely used extension API.
+
+| Elsewhere | Codeyard |
 | --- | --- |
 | `package.json` `contributes` | `codeyard-extension.toml` |
 | `activationEvents` | Inferred. Use `workspace-contains` if needed. There is no `*` |

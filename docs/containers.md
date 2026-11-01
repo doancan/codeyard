@@ -120,7 +120,7 @@ an SSH source folder remains unsupported.
   No CLI, Node runtime or Docker engine is installed or downloaded automatically.
 - The CLI handles image, Dockerfile and Compose setup, features and lifecycle hooks.
   Subsequent agent commands use `devcontainer exec`, preserving the configured
-  `remoteUser`, `remoteEnv` and environment probing. VS Code extensions are not loaded.
+  `remoteUser`, `remoteEnv` and environment probing. Extensions written for other editors are not loaded.
 - **Docker: Rebuild Dev Container…** rereads the source configuration and reviews it
   again before replacing the container. Save open changes first. Named volumes are
   retained; files installed only in the container's writable layer are not preserved.

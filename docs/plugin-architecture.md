@@ -1,7 +1,9 @@
 # Codeyard extension platform
 
-**Status:** accepted 2026-10-28. Work is tracked in the extension platform epic on the Codeyard project. The current
-release has no extension support yet; this document describes what is being built and in which order.
+**Status:** accepted 2026-10-28. Phases 0 to 3 of the [roadmap](#14-roadmap) shipped in 0.7.0, with Extension API 1.0
+and 1.1. Two parts are still pending: extension code on Windows (AppContainer waits for its hardware check; declarative
+extensions work there) and the public registry, which is not online yet (self-hosted registries and `.cyx` files work).
+Work is tracked in the extension platform epic on the Codeyard project.
 
 The design is deliberately small enough for a small team to build and run in its first year. Anything that did not
 earn its place is in [Later](#13-later) with a one-line reason.
@@ -11,19 +13,19 @@ mentions §3, §6.2, §8, §10 or §11.
 
 ## 1. Summary
 
-The model is VS Code's: one manifest, contribution points, activation events, a typed API, a scaffold, a
-debug loop and a publish command. That model produced a large ecosystem, so we copy it. We fix only the four
-problems that hurt VS Code users.
+The model is the one the largest editor ecosystems use: one manifest, contribution points, activation events, a
+typed API, a scaffold, a debug loop and a publish command. That model produced large ecosystems, so we copy it. We
+fix only the four problems that hurt their users.
 
-| VS Code problem | Codeyard answer |
+| Problem elsewhere | Codeyard answer |
 | --- | --- |
 | Every extension can do anything the user can do | Code runs as WebAssembly in a sandboxed process and can reach only what its manifest declares. The app checks every call |
 | Eager activation slows startup | Activation is inferred from contributions and there is no `*`. 100 installed extensions cost under 5 ms at startup and start no process |
 | Webviews are heavy, inconsistent and an XSS surface | Extension UI is a tree of built-in elements drawn by GPUI with the user's theme and accessibility support |
 | Supply-chain attacks through stolen tokens and keys | Keyless publishing from CI, a registry-signed index, a re-prompt when permissions grow, a 48 h wait before new code reaches users, and revocation within 24 h |
 
-We keep VS Code's contribution names and its colour theme and snippet formats, so existing themes and
-snippets work unchanged.
+We keep the familiar contribution names and the widely used colour theme and snippet JSON formats, so existing
+themes and snippets work unchanged.
 
 Authors need five concepts: **manifest, contributions, activation, permissions, publish.** Everything else
 (`when` expressions, untrusted folders, limits, storage) is reference material and is not needed for a first
@@ -159,9 +161,9 @@ Codeyard version from the API items and contribution points used (each has a `si
 
 | Contribution | Needs code | Notes |
 | --- | --- | --- |
-| `themes` | no | Codeyard or VS Code colour theme JSON; contrast always repaired with `guard_contrast`. Id `ext:<publisher.name>/<file stem>` |
-| `snippets` | no | VS Code snippet format |
-| `keymap-preset` | no | Vim, Emacs, Sublime: a file in `keybindings.jsonc` format. Chosen with the `keymap.preset` setting; may override defaults |
+| `themes` | no | Codeyard colour theme JSON, or the JSON theme format other editors' extensions use; contrast always repaired with `guard_contrast`. Id `ext:<publisher.name>/<file stem>` |
+| `snippets` | no | The common JSON snippet format (`prefix`, `body`, `description`) |
+| `keymap-preset` | no | Another editor's or a modal key layout: a file in `keybindings.jsonc` format. Chosen with the `keymap.preset` setting; may override defaults |
 | `keybindings` | no | For your own or core (`core:workbench.toggleZenMode`) commands; no permission, since only the user's key press runs them. A key a built-in binding or the chosen preset uses is never taken: the binding is left out with a warning. `when` takes `editor`, `terminal`, `file-tree`, `scm`, `search` and `editor.language == '…'` |
 | `languages` | no | File names and extensions, a built-in grammar to highlight with, comment tokens. Only for files no built-in language claims (`files.associations` changes a built-in one) |
 | `json-schemas`, `yaml-schemas`, `settings` | no | Settings appear under "Extensions › Name" |
@@ -553,7 +555,7 @@ Settings: `extensions.autoUpdate` (`off | notify | install`, default `install`),
 | 1 | How code runs | Wasm components in `codeyard-exthost`, never in the app | Sandbox by construction; no JIT or third-party code in the app |
 | 2 | Process model | One process per active code extension, exits when idle | One rule; an escape gets one extension; crash blame is trivial |
 | 3 | OS sandbox | Required for installed code; `cyx dev` may run the author's own folder without it | Kept for safety: Wasm alone is one bug from the user's files. Dev exception so every platform can author |
-| 4 | Manifest | One TOML file, activation inferred, no engines field, always-prefixed ids | VS Code's shape with less to repeat and no namespace traps |
+| 4 | Manifest | One TOML file, activation inferred, no engines field, always-prefixed ids | The familiar shape with less to repeat and no namespace traps |
 | 5 | Permissions | Declared, enforced in the app broker, one `risk(set)` function | One place to audit; read + send is what makes exfiltration |
 | 6 | UI | 22 declarative elements drawn by GPUI, no webviews | No XSS; themes and accessibility for free; low memory |
 | 7 | Remote | Wasm on the UI machine; host calls through `Host` | Local and SSH share one path; the agent stays untouched |
@@ -576,12 +578,12 @@ Settings: `extensions.autoUpdate` (`off | notify | install`, default `install`),
 
 ## 14. Roadmap
 
-| Phase | Scope | Exit |
-| --- | --- | --- |
-| **0: Measure, then declarative** (5 wk) | Week 1: spans, `scripts/perf/*`, baseline of today's editor. Then `ext-manifest`, `ext-pkg`, `ext-core`, lock, declarative contributions, Extensions view, `--no-extensions`, `cyx new/dev/check/package`, `import-vscode` for themes and snippets, quickstart. Extension language servers count as `run` from the start | A/A run shows no false regression; startup and idle-memory rows green; theme check ≤ 10 s; fuzz green |
-| **1: Signed registry** (5 wk) | Yard, keyless publish, client verification, version status, `codeyard/publish` action, Market with local search. Data-only publishing open to everyone | Search row green; 0 registry requests for users with no extensions; canary revocation within 24 h |
-| **2: Code extensions, API 0.x** (12 wk) | Entry: notarized release pipeline. Week 1 spike: spawn, memory per process, compile, hot reload, and a go/no-go for TypeScript against the memory and cold-activation ceilings (if no-go, TypeScript follows Rust by one release). Then exthost, broker, macOS and Linux sandboxes, SDKs, commands, views, formatters, code actions, GitHub and OAuth auth, Inspector, hot reload, `cyx test`. Windows code ships when AppContainer passes on physical hardware | Activation, provider, memory, crash and hot-reload rows green; hostile fixtures pass; 0 extension-caused app crashes; informal sessions with new authors before GA |
-| **3: GA, API 1.0** | Hover, completion, code lens, inlay hints, SCM and PR providers; native programs by invitation with human review | All `block` rows green for 2 releases with no waivers |
+| Phase | Scope | Exit | Status |
+| --- | --- | --- | --- |
+| **0: Measure, then declarative** (5 wk) | Week 1: spans, `scripts/perf/*`, baseline of today's editor. Then `ext-manifest`, `ext-pkg`, `ext-core`, lock, declarative contributions, Extensions view, `--no-extensions`, `cyx new/dev/check/package`, `import-vscode` for themes and snippets, quickstart. Extension language servers count as `run` from the start | A/A run shows no false regression; startup and idle-memory rows green; theme check ≤ 10 s; fuzz green | Shipped in 0.7.0, Windows included |
+| **1: Signed registry** (5 wk) | Yard, keyless publish, client verification, version status, `codeyard/publish` action, Market with local search. Data-only publishing open to everyone | Search row green; 0 registry requests for users with no extensions; canary revocation within 24 h | Shipped in 0.7.0 (client, `yard`, publish action, Market). The public registry is not online yet: `PUBLIC` in `ext_registry.rs` is `None` until the root key ceremony; self-hosted registries work |
+| **2: Code extensions, API 0.x** (12 wk) | Entry: notarized release pipeline. Week 1 spike: spawn, memory per process, compile, hot reload, and a go/no-go for TypeScript against the memory and cold-activation ceilings (if no-go, TypeScript follows Rust by one release). Then exthost, broker, macOS and Linux sandboxes, SDKs, commands, views, formatters, code actions, GitHub and OAuth auth, Inspector, hot reload, `cyx test`. Windows code ships when AppContainer passes on physical hardware | Activation, provider, memory, crash and hot-reload rows green; hostile fixtures pass; 0 extension-caused app crashes; informal sessions with new authors before GA | Shipped in 0.7.0 with the macOS and Linux sandboxes, Rust and TypeScript. Windows code pending: `ext_proto::appcontainer::VERIFIED` is false until `scripts/check-exthost-sandbox-windows.ps1` passes on physical hardware |
+| **3: GA, API 1.0** | Hover, completion, code lens, inlay hints, SCM and PR providers; native programs by invitation with human review | All `block` rows green for 2 releases with no waivers | Shipped in 0.7.0 as API 1.0, with API 1.1 (additions only) in the same release. Windows code pending as in Phase 2 |
 
 ## 15. Decisions taken on the open questions
 

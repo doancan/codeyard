@@ -19,10 +19,10 @@ are not used for destructive tests. No real SSH host is contacted by the walkthr
 | Area | Evidence collected | Remaining acceptance work |
 | --- | --- | --- |
 | Editor and navigation | Native quick open, Rust syntax, tab and text exposure; workspace editor regression suite | IME, RTL, mixed DPI and long sessions on real Windows hardware |
-| Explorer | Native keyboard navigation; expanded empty-folder regression; path-based accessibility actions | Multi-selection, bulk operations and accessibility beyond the row limit |
-| Git | Native Source Control (graph, worktrees, sync, stashes and repository selection in the accessibility tree); disposable index/commit action tests; existing branch, sync, conflict and local-remote tests | Large change sets |
-| Rust IDE | Native server-independent manifest lookup and real program/test debugging; actual virtual-workspace, named-target and required-feature builds | Unified user-selected feature/profile settings, macros/module remapping and the real SSH/Windows adapter matrix |
-| Customization | Existing settings catalog, JSONC, keybinding/import and theme tests | Full-interface scaling and a discoverable Rust configuration preset |
+| Explorer | Native keyboard navigation; expanded empty-folder regression; path-based accessibility actions; multi-selection and bulk operations (Q11) and a bounded accessible range (Q10), delivered as of 2026-11-01 | None beyond the platform rows below |
+| Git | Native Source Control (graph, worktrees, sync, stashes and repository selection in the accessibility tree); disposable index/commit action tests; existing branch, sync, conflict and local-remote tests; large change sets virtualized (Q09, delivered as of 2026-11-01) | None beyond the platform rows below |
+| Rust IDE | Native server-independent manifest lookup and real program/test debugging; actual virtual-workspace, named-target and required-feature builds | Feature/profile settings shared by Run and Debug (Q07) and the Rust setup preset (Q12) delivered as of 2026-11-01; macros/module remapping and the real SSH/Windows adapter matrix remain |
+| Customization | Existing settings catalog, JSONC, keybinding/import and theme tests; full-interface scaling (Q08) and the Rust setup preset (Q12) shipped as of 2026-11-01 | Q08's native walkthrough across themes, languages and screen readers |
 | Accessibility | Real macOS AX tree; AccessKit consumer validation; focus/action regression tests; every panel, page, dialog and drawn control with its frame and action ([accessibility.md](accessibility.md)); measured polling cost | VoiceOver, NVDA and Narrator speech/rotor sessions and real Windows UI Automation on hardware; Linux AT-SPI |
 | Reliability/performance | Build, Clippy, architecture/docs/i18n gates, workspace tests and final Retina memory/size budgets | Startup/frame timings, long sessions and active-AT CPU cost |
 
@@ -84,23 +84,27 @@ Q05 and Q06: extend the integrated landmark bounds to controls/text, then Search
 menus. Each view needs semantic roles, state, actionable errors, predictable reading order and focus restoration.
 Test the complete task with VoiceOver on macOS and NVDA/Narrator on Windows. AX dumps alone do not certify speech.
 Include the native interface-scaling walkthrough (Q08) and bounded visible-range navigation (Q10) before claiming broad accessibility.
+Status 2026-11-01: Q10 is delivered; Q08's interface scaling is implemented and shipped, and its native walkthrough is
+still pending.
 
 ### Pass 3: remaining Rust project workflows and developer customization
 
-Core target discovery shipped in Pass 1. Continue Q07 with a unified user-selected features/profile model shared by
-Run, Debug and Testing; cover explicit module remapping, macro-generated cases and cross-root path dependencies.
-Extend the actual Cargo/adapter acceptance matrix over a test SSH host and native Windows.
+Delivered as of 2026-11-01: Q07 (#196) builds the picked target with `rust.features`, `rust.noDefaultFeatures`,
+`rust.profile` and `rust.targetDir`, locally and over SSH, and Q12 (#200) adds "Preferences: Apply Rust Setup…" and
+"Preferences: Reset Rust Setup…". Still open from the original scope: explicit module remapping, macro-generated cases,
+cross-root path dependencies, and the actual Cargo/adapter acceptance matrix on native Windows.
 The new Cargo/DAP, product and accessibility regressions are also selected by Windows CI; real hardware/adapter
 acceptance remains separate from these native automated fixtures.
 
-Q12: expose presets through existing settings and tasks rather than adding another configuration format.
-Keep VS Code imports, folder-specific settings, custom launch files and user keybindings working.
+Q12 exposes its preset through existing settings rather than another configuration format. Settings imported from
+another editor, folder-specific settings, custom launch files and user keybindings keep working.
 
 ### Pass 4: Explorer and Git at project scale
 
-Q11: selection and bulk file operations first. Then Q09: measure and optimize large change sets, graph navigation,
-long paths and refresh stability. Extend the same actions to assistive technology. Include partial staging,
-renames, conflicts, dirty branch switches, an unpublished branch and a rejected push in the acceptance matrix.
+Delivered as of 2026-11-01: Q11 (#206) Explorer multi-selection and bulk copy, move and delete, locally and over SSH;
+Q09 (#190) a virtualized change list that keeps its frame time for 1k and 10k changes and keeps focus and scroll
+through refreshes. Both are reachable from assistive technology. Graph navigation and long paths at project scale
+have no separate measurement yet.
 
 ### Pass 5: release evidence and final polish
 
@@ -113,7 +117,7 @@ English/Turkish, dark/light/high-contrast appearances and narrow editor splits.
 
 - File, terminal, Git and server operations share `Host`; hermetic SSH tests exercise the remote path.
 - Semantic theme tokens, built-in contrast checks, reduced-motion settings and Turkish translations already exist.
-- Settings preserve JSONC comments; VS Code settings, themes and shortcuts have import paths.
+- Settings preserve JSONC comments; settings, themes and shortcuts from another editor have import paths.
 - Rust already has completion, navigation, macro expansion, related diagnostics, LSP configuration, tasks,
   testing and formatter-aware debugging. These are tested capabilities, not missing-feature backlog items.
 - Git already has stage/unstage, partial hunks, conflicts, branches, graph, sync, local history and pull requests.

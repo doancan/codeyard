@@ -17,7 +17,7 @@ platform or assistive-technology journey.
 - Terminal wheel events accumulate fractional rows. `terminal.scrollSensitivity`
   (0.1–10, default 2) applies to wheel and trackpad motion, including alternate-screen
   scrolling and mouse reports. Changing modes/gestures does not carry fractional motion
-  into another program. VS Code's corresponding setting imports to this key.
+  into another program. The corresponding setting of another editor imports to this key.
 - Source Control file menus preserve whether the selected row is staged. Open Changes,
   Open File, Stage/Unstage and confirmed Discard use existing operations. Conflict rows
   keep marker validation and do not offer Discard; tracked files do not offer ignore.
@@ -142,7 +142,7 @@ were not verified locally. Remote project-size measurement is intentionally unav
 remote workspaces display local computer resources with that explanation. Background
 macOS captures sometimes required raising or resizing the QA window before displaying
 fresh pixels; the cause and automatic redraw timing are not established. New Turkish
-resource labels were authored by Codex; no independent native-speaker review is recorded.
+resource labels were drafted by the coding agent; no independent native-speaker review is recorded.
 Release validation should retain these limits alongside the successful local checks.
 
 

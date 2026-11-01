@@ -22,8 +22,11 @@ You need Node.js 22.18 or newer. Nothing else: the first build installs esbuild 
 
 ## Your first command
 
+`@codeyard/extension` is not on npm yet, so point `--sdk` at a Codeyard checkout (see [The SDK package](#the-sdk-package)):
+
 ```sh
-cyx new command hello --lang ts      # or: cyx new view hello --lang ts
+git clone https://github.com/doancan/codeyard ~/src/codeyard   # once, for the SDK
+cyx new command hello --lang ts --sdk ~/src/codeyard   # or: cyx new view hello --lang ts --sdk …
 cd hello
 npm install                          # the SDK, its types and TypeScript
 npm test                             # unit tests against a mock Codeyard

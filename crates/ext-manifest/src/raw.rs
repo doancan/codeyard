@@ -27,10 +27,10 @@ pub struct RawManifest {
     /// `false` keeps the extension off in untrusted folders. By default it runs there, but cannot send, write or run anything.
     pub untrusted: Option<bool>,
 
-    /// A colour theme: a Codeyard or VS Code colour theme JSON file.
+    /// A colour theme: a Codeyard colour theme JSON file, or one from another editor's extension.
     #[serde(default)]
     pub themes: Vec<S<RawFileEntry>>,
-    /// Snippets for one language, in the VS Code snippet format.
+    /// Snippets for one language, in the common JSON snippet format (`prefix`, `body`, `description`).
     #[serde(default)]
     pub snippets: Vec<S<RawSnippets>>,
     /// A whole keymap the user can pick with `"keymap.preset": "<extension id>/<label>"`.

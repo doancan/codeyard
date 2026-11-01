@@ -447,7 +447,7 @@ Make it yours:
   change single colors with `"workbench.colorCustomizations": { "accent": "#ff8800",
   "[Quarry]": { "syntax-string": "#a6e22e" } }` (roles are the names in the theme files; an
   entry in `[brackets]` applies to that theme only), or "Theme: Save Current Colors as User
-  Theme…" to keep your tweaks as a theme file. VS Code color themes dropped into
+  Theme…" to keep your tweaks as a theme file. Color themes from another editor dropped into
   `~/.config/codeyard/themes` are imported.
 - **Icons:** "Theme: Pick File Icon Theme…" previews Minimal (default), Codeyard, Language Badges,
   Colorful Folders, Apple / GitHub (solid blue folders, outline files with a language dot),
@@ -462,7 +462,7 @@ Make it yours:
   `files.associations` (`{ "*.tpl": "html" }`) next to the options listed below.
 - **Snippets:** type a prefix and press Tab (`fn`, `for`, `def`, `html5`…); "Snippets: Insert
   Snippet…" lists them. "Preferences: Configure User Snippets" opens
-  `~/.config/codeyard/snippets/<language>.json` in the VS Code snippet format (`global.json`
+  `~/.config/codeyard/snippets/<language>.json` in the common JSON snippet format (`global.json`
   applies to every file).
 
 ## Source control, Timeline and more
@@ -521,6 +521,9 @@ its keys; picking one adds a line for it to `keybindings.jsonc` and opens the fi
 `~/.config/codeyard/settings.jsonc` and `keybindings.jsonc` (comments and trailing commas are
 fine). Changes apply on save; mistakes show in the status bar instead of being ignored.
 A project can override settings in `.codeyard/settings.jsonc` (or `.vscode/settings.json`).
+To start over, "Preferences: Reset Settings to Defaults…" (or **Reset All Settings…** on the Settings
+page, next to **Open settings.jsonc**) replaces `settings.jsonc` with this version's default file after
+you confirm; the old file is kept beside it as `settings.backup-<time>.jsonc`.
 
 **Workspace Trust.** A folder you open can carry settings, tasks and debug configurations that run
 programs. Until you trust a folder, its project settings cannot set `terminal.shell`, `lsp.servers` or schema
@@ -638,8 +641,8 @@ sees your IP address and that the request comes from `curl`. No cookies are kept
 nothing about you, your files or your machine is sent beyond what any web request carries.
 
 **What it does not do.** Codeyard never installs anything without your confirmation, and an update that Codeyard installs does not go
-through macOS's first-launch check (Gatekeeper), because the files come from `curl` and Codeyard builds are not notarized yet. What
-protects you instead is the signed checksum list (see *How it is verified*).
+through macOS's first-launch check (Gatekeeper), because the files come from `curl`; macOS releases are signed with Developer ID
+and notarized, and what protects an in-app update is the signed checksum list (see *How it is verified*).
 
 **When.** The setting `"update.check"` (your own `settings.jsonc` or the Settings page; a folder's `.codeyard/settings.jsonc` cannot
 set it) takes:
@@ -693,7 +696,7 @@ Windows installations made by the setup program run the installer silently and r
 ## Themes
 
 Readability is built in: every text, status and syntax color is checked against every surface it can sit on (WCAG AA,
-103 pairs); a built-in or imported VS Code theme that falls short is repaired when it loads by moving only the failing
+103 pairs); a built-in or imported theme that falls short is repaired when it loads by moving only the failing
 foreground colors the smallest step toward black or white. Theme files you wrote yourself and your own
 `workbench.colorCustomizations` are applied as written.
 
@@ -716,14 +719,18 @@ Your own themes go in `~/.config/codeyard/themes/*.json`:
 Missing roles fall back to the default dark or light theme. The full role list is in
 `crates/theme/design/tokens.json`.
 
-**VS Code themes:** drop the theme's `.json` file (from its extension's `themes/` folder)
+**Themes from another editor:** drop the theme's `.json` file (from its extension's `themes/` folder)
 into the same directory. Workbench colors and syntax colors (TextMate scopes) are mapped
 to the editor's roles; comments and trailing commas are fine.
 
 ## Extensions
 
 Extensions add themes, snippets, keymap presets, key bindings, languages, JSON and YAML schemas, settings and language
-servers, and extensions with code add commands. *Extensions: Show Extensions* in the command
+servers. Extensions with code add commands, views, formatters, code actions, hover and completion, code lenses, inlay
+hints, source control and pull request providers (see *What extensions with code add* below). On Windows, extensions
+with code do not run yet in this version: the sandbox they need has not passed its check on real hardware, so they
+cannot be installed there (the extension's page says "… contains code, which needs a sandbox this system does not
+provide"); extensions without code work. *Extensions: Show Extensions* in the command
 palette (or the blocks icon in the activity bar, or *View › Extensions*) lists what is installed, turned-off ones
 included, with a search field. What comes with Codeyard is built in and always on.
 
@@ -760,8 +767,8 @@ until Codeyard quits; **Deny** refuses that call and the later ones of that kind
 and the refusal is listed under *Recent denials*. Programs on your own computer and clipboard writes do not ask.
 
 An extension's process may use up to 512 MB of memory. On macOS and Linux Codeyard checks every few seconds while one
-runs and stops one that uses more, with a message that says so; on Windows the system enforces the limit. That counts
-as a crash.
+runs and stops one that uses more, with a message that says so; on Windows the system will enforce the limit once
+extensions with code run there. That counts as a crash.
 
 On the page of an extension with code:
 
@@ -850,8 +857,9 @@ language only applies to files no built-in language claims. Extension language s
 and your own `lsp.servers` entry for the same language wins.
 
 **From a registry.** *Extensions: Install from Registry…* takes an id (`publisher.name`, or `publisher.name@1.2.0` for
-one version) and finds it in your registries: the public one, and any in `extensions.registries` (a company's own,
-for example). Before the sheet opens, Codeyard checks the registry's signed list, the package against it and the
+one version) and finds it in your registries: the ones in `extensions.registries` (a company's own, for example) and
+the public one. The public registry is not online yet in this version, so until it is, install from your own registry
+or from a `.cyx` file. Before the sheet opens, Codeyard checks the registry's signed list, the package against it and the
 publisher's signature; any failure installs nothing and says which check failed. The sheet names the publisher, and
 the first install pins it: if a later version comes from someone else, the sheet says so in red and the keyboard
 starts on *Cancel*. It does the same when the registry's list is more than 3 days old. Packages are installed on this
@@ -1113,7 +1121,7 @@ last only for that debug session (the debugger's id for a value means nothing in
 the adapter's exception filters, and several threads get a list; local variables also appear at
 the end of the lines that use them. `Debug: Edit Breakpoint…` makes a conditional breakpoint (`i == 3`),
 a logpoint (`log: i is {i}`) or a hit-count one (`hit: >= 5`). Node needs Microsoft's js-debug:
-`Debug: Install JavaScript Debugger` fetches it once (VS Code's copy is used when installed).
+`Debug: Install JavaScript Debugger` fetches it once (a copy another editor already installed is used when found).
 Over SSH the adapter runs on the server; Go and Node adapters talk TCP and are reached through a
 port forward on the shared SSH connection. `CODEYARD_DAP_TRACE=1` prints the protocol when a
 configuration misbehaves. `"stopOnEntry": true` pauses the program before it runs and the Debug Console says
@@ -1567,7 +1575,7 @@ server** (so `localhost` services work); `"http.runOn": "local"` sends it from y
 ## Terminal
 
 **Images over SSH.** Copy an image and press Ctrl+V in a remote terminal (⌘V on macOS). Codeyard saves it as a
-private temporary file on the remote host and pastes its path, so programs such as Codex can attach it. Images are
+private temporary file on the remote host and pastes its path, so programs running there, such as command-line assistants, can attach it. Images are
 limited to 32 MiB. The file remains available in the remote `/tmp` directory until the host cleans it up.
 
 **Shell integration.** zsh, bash and fish mark each prompt and command, with no setup:
@@ -1654,7 +1662,7 @@ status/logs, Dev Container creation, rebuild and cancellation are described in
 [Container environments](containers.md), along with current platform limits.
 
 Uses your system `ssh` and `~/.ssh/config`. Pick a host in the workspace switcher (⌃R) or type a name.
-The last remote folder only opens again at start if `"window.startup"` is `"continue"`. After connecting, a folder prompt opens (like VS Code):
+The last remote folder only opens again at start if `"window.startup"` is `"continue"`. After connecting, a folder prompt opens:
 type a path (`~` is your home folder), pick sub-folders from the list to step into them, and press
 Enter on the first row to open the typed path. Esc keeps the home folder. `⌘O` opens the same prompt
 on a remote host.

@@ -25,15 +25,15 @@ behind it is in [docs/accessibility.md](docs/accessibility.md).
 ## What works today
 
 **Keyboard.** Every command is in the command palette (⇧⌘P on macOS, Ctrl+Shift+P on Windows), and *Help: Keyboard Shortcuts
-Reference* lists each command with its keys. Shortcuts can be changed in `keybindings.json`, and VS Code key bindings can be
-imported. The update dialog can be used entirely with Tab, Shift+Tab, Enter, Space and Esc.
+Reference* lists each command with its keys. Shortcuts can be changed in `keybindings.json`, and key bindings from another editor
+can be imported. The update dialog can be used entirely with Tab, Shift+Tab, Enter, Space and Esc.
 
 **Seeing the screen.**
 - *High Contrast Dark* and *High Contrast Light* themes. The *Auto* theme follows the system's light or dark setting, and
   switches to the high-contrast pair while the system asks for more contrast (*Increase contrast* on macOS, a contrast theme on
   Windows).
 - If the colours in use fall below WCAG AA (a theme you wrote, or `workbench.colorCustomizations`), a notice says which pair
-  and by how much when you choose the theme or change the colours. Imported VS Code themes are repaired automatically.
+  and by how much when you choose the theme or change the colours. Imported themes are repaired automatically.
 - ⌘= / ⌘- / ⌘0 (Ctrl on Windows) scale the whole interface from 75% to 200% (text, controls, menus, dialogs and
   accessibility bounds together) or reset it to 100%. The value is saved as `ui.scale` and applies to every window. The
   `editor.fontSize` and `terminal.fontSize` settings (6–48) set the editor and terminal text size within that scale.
@@ -61,16 +61,29 @@ animations* on Windows). `editor.cursorBlinking: "solid"` stops only the cursor.
   spoken as it arrives; an expression can be typed and evaluated);
 - the Problems panel: the counts (spoken as they change), each problem with its file, line and column, opening it, and its
   Quick Fix, whose fixes come as a picker;
+- the pages: the merge editor (each conflict, both sides' text and every accept button), the folder comparison (options,
+  rows with their status, copy and delete), the diff and the large-file view line by line, the Markdown preview's headings,
+  paragraphs and links, the Welcome page's tiles and recent folders, the data query bar and the containers' pages;
+- the controls drawn in and around the editor: gutter breakpoints, fold buttons and Git marks, sticky scope lines,
+  merge-conflict links, Send Request, the colour picker (hue, saturation, brightness and opacity as sliders) and the
+  terminal's find bar;
+- the window's chrome: the activity bar's views and Manage button, the title bar's Back, Forward and file search, the caption
+  buttons and menu bar on Windows, every status bar item (each does what its click does), the panel's buttons, and the
+  buttons of the editor tabs and of every side view;
+- the Extensions view (Installed and Market, the search field, each extension's page with its permission switches), the
+  consent sheet shown before an install (a modal dialog with every line and Install and Cancel), and the side bar views
+  extensions add;
+- editors, side views and terminals moved into windows of their own, with the same tree as in the main window;
 - Run and Debug, Testing, Remote Explorer and Ports, the Settings and Keyboard Shortcuts pages (a rejected value is said
   at once), and open context menus, which every list row (Explorer included) opens from a "More Actions…" button;
 - confirmations, which are the system's own dialogs: Escape answers the button that changes nothing (in every
   language), Cancel leaves the keyboard where it was, and a failure afterwards interrupts speech;
 - the command palette and every other picker (go to file, symbols, themes, branches…): the query, the list and the selected
   row, spoken as it changes. Activating a row picks it;
-- the terminal: the text on screen and the cursor position;
+- the terminal: the text on screen and the cursor position; its history is reached by scrolling;
 - the status bar items as text;
 - notices as live regions. An error interrupts speech, other notices wait their turn;
-- the update dialog: title, text, progress and buttons.
+- the update dialog: title, text, progress and buttons. On macOS it is a window of its own with its own tree.
 
 The tree is only built when an assistive technology asks for it, so it costs nothing when no assistive technology is running.
 `CODEYARD_NO_A11Y=1` turns it off.
@@ -91,12 +104,9 @@ These are the important gaps, in rough order of how much they get in the way. Th
   text, right-to-left text included, have the bounds they are drawn at, at every zoom level and in windows of their
   own, so a magnifier can follow the caret. In right-to-left text the editor's own caret can be drawn away from the
   character a magnifier follows.
-- The editor exposes about 300 lines around the caret, not the whole file. Only the primary selection is exposed, not extra
-  cursors. Folding and wrapped lines are not reflected. The terminal exposes the screen, not the scrollback.
-- Only editor and terminal text can be enlarged. The rest of the interface (sidebar, tabs, status bar, menus, dialogs) keeps a
-  fixed size; the system's display scaling (*Larger Text* on macOS, *Scale* on Windows) enlarges everything.
-- On macOS the update window is separate from the editor window, and a screen reader reaches only its title there. The
-  status bar item and *Help: Check for Updates…* lead to the same choices.
+- The editor exposes 300 lines at a time, centred on the caret (scrolling moves the range), not the whole file. Only the
+  primary selection is exposed, not extra cursors. A folded line is in the text but has no position on screen.
+- An extension view's own controls have no on-screen position yet (the Extensions list's rows do).
 - Updates reach the assistive technology up to a quarter of a second after the screen changes.
 
 ## Reporting a barrier
