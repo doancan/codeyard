@@ -491,6 +491,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `scripts/perf/run.sh` measured nothing when another window covered its window: the measured app is never activated
+  (it must not take the keyboard), so its window opened behind the front app's windows, and macOS draws nothing in a
+  covered window. With `CODEYARD_PERF_ON_TOP` the window stays above normal windows and on every Space, without
+  activating the app. A build that has a scenario's hook (the baseline too) must now give all of its samples and every
+  memory scene a value, or the run stops with a message; before, a baseline's missing samples were left out of the
+  comparison without a word. A baseline runs with its own `codeyard-exthost`: the candidate's answered none of the
+  older app's provider requests.
+
 - Typing in a large file with every region folded took about twice as long as with nothing folded (22 ms against
   11 ms a key in a 50 000-line file): the folded lines were worked out again from the fold marks several times per
   key, and the fold ends were found by looking up every line anew. The folded lines are now kept until the text or

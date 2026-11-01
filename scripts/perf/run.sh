@@ -37,9 +37,10 @@ trap 'exit 130' INT TERM
 
 cargo build --release -q -p app -p cyx -p ext-host
 # New files, not the old ones overwritten: macOS kills a binary rewritten in place (its cached code signature).
-rm -f "$OUT/codeyard-candidate" "$OUT/codeyard-exthost" "$OUT/codeyard-baseline"
+rm -f "$OUT/codeyard-candidate" "$OUT/codeyard-exthost" "$OUT/codeyard-baseline" "$OUT/codeyard-exthost-baseline"
 cp target/release/codeyard "$OUT/codeyard-candidate"
-# Code extensions run in codeyard-exthost beside the app; both builds use this one.
+# Code extensions run in codeyard-exthost beside the app. A baseline that has one runs with its own (launch, below):
+# the app and the exthost of different commits need not agree on every call.
 cp target/release/codeyard-exthost "$OUT/codeyard-exthost"
 names=(candidate)
 commits=("$(git rev-parse HEAD)")
@@ -51,8 +52,11 @@ if [ -n "$baseline" ]; then
   git worktree prune
   [ -d "$wt" ] || git worktree add -q --detach "$wt" "$rev"
   # Its own target directory: sharing one would rebuild both revisions on every run.
-  (cd "$wt" && CARGO_TARGET_DIR="$PWD/../target-$rev" cargo build --release -q -p app)
+  packages=(-p app)
+  git cat-file -e "$rev:crates/ext-host/Cargo.toml" 2>/dev/null && packages+=(-p ext-host)
+  (cd "$wt" && CARGO_TARGET_DIR="$PWD/../target-$rev" cargo build --release -q "${packages[@]}")
   cp "$OUT/target-$rev/release/codeyard" "$OUT/codeyard-baseline"
+  [ ${#packages[@]} = 4 ] && cp "$OUT/target-$rev/release/codeyard-exthost" "$OUT/codeyard-exthost-baseline"
   names+=(baseline)
   commits+=("$rev")
   versions+=("$(git describe --tags --always "$rev")")
@@ -160,7 +164,11 @@ cp crates/ext-host/testdata/reload-b.wasm "$RELOAD_DIR/b.wasm"
 printf '[extension]\nid = "perf.reload"\nversion = "1.0.0"\nname = "Reload"\nlicense = "MIT"\n\n[code]\nentry = "Cargo.toml"\n\n[[commands]]\nid = "count"\ntitle = "Perf: Count"\n' > "$RELOAD_DIR/ext/codeyard-extension.toml"
 launch() { # app args... (background; $! is the pid)
   local app=$1; shift
-  CODEYARD_STATE_DIR="$TMP/state" CODEYARD_CONFIG_DIR="$TMP/config" CODEYARD_NO_DOCK_ICON=1 "$app" "$@" >/dev/null 2>&1 &
+  local exthost="$OUT/codeyard-exthost"
+  [ "$app" = "$OUT/codeyard-baseline" ] && [ -f "$OUT/codeyard-exthost-baseline" ] && exthost="$OUT/codeyard-exthost-baseline"
+  # On top: a measured window is never activated, and one that other windows cover draws nothing (perf.rs, keep_drawn).
+  CODEYARD_STATE_DIR="$TMP/state" CODEYARD_CONFIG_DIR="$TMP/config" CODEYARD_NO_DOCK_ICON=1 CODEYARD_PERF_ON_TOP=1 CODEYARD_EXTHOST="$exthost" \
+    "$app" "$@" >/dev/null 2>&1 &
 }
 # A scripted run quits by itself (CODEYARD_PERF_EXIT); a build without the hooks never does, so stop it after 30 s.
 run_scripted() { # app args...
@@ -174,6 +182,17 @@ run_scripted() { # app args...
   pid=""
 }
 count() { grep -c "\"$1\"" "$2" || true; } # metric file
+# Whether build k has a scenario's hook (its environment variable in perf.rs): a baseline from before the scenario
+# has no samples for it and is not compared; every build that has it must give all its samples, or the run stops.
+has_hook() { # k VARIABLE
+  [ "${names[$1]}" = candidate ] || [ "$aa" = 1 ] || git grep -q "$2" "${commits[$1]}" -- crates/app/src/perf.rs
+}
+# Builds before CODEYARD_PERF_ON_TOP open their measured window behind the other windows: covered, it draws nothing.
+for k in "${!names[@]}"; do
+  if has_hook "$k" CODEYARD_PERF_EXIT && ! has_hook "$k" CODEYARD_PERF_ON_TOP; then
+    echo "perf: ${names[$k]} (${versions[$k]}) does not keep its window on top: no other window may cover it" >&2
+  fi
+done
 
 for n in "${names[@]}"; do : > "$TMP/$n.jsonl"; done
 
@@ -192,7 +211,7 @@ for i in $(seq 1 "$runs"); do
     CODEYARD_PERF="$TMP/welcome.jsonl" run_scripted "$OUT/codeyard-${names[$k]}"
     grep -v '"startup.extensions_ms"' "$TMP/welcome.jsonl" >> "$CODEYARD_PERF" || true
     if [ "$(count startup.first_frame_ms "$TMP/welcome.jsonl")" != 1 ]; then
-      if [ "$i" = 1 ] && [ "${names[$k]}" = baseline ]; then
+      if ! has_hook "$k" CODEYARD_PERF_EXIT; then
         echo "perf: the baseline has no CODEYARD_PERF hooks; it is compared on memory only" >&2
         untimed="$untimed$k "
         continue
@@ -214,7 +233,7 @@ for i in $(seq 1 "$runs"); do
     cp crates/app/testdata/big.rs "$TMP/big.rs"
     : > "$TMP/words.jsonl"
     CODEYARD_PERF="$TMP/words.jsonl" CODEYARD_PERF_WORDS=40 run_scripted "$OUT/codeyard-${names[$k]}" "$TMP/big.rs"
-    if [ "${names[$k]}" = candidate ] && { [ "$(count typing.keystroke_frame_words_ms "$TMP/words.jsonl")" != 40 ] || ! grep -q "^\(ab \)\{13\}a" "$TMP/big.rs"; }; then
+    if has_hook "$k" CODEYARD_PERF_WORDS && { [ "$(count typing.keystroke_frame_words_ms "$TMP/words.jsonl")" != 40 ] || ! grep -q "^\(ab \)\{13\}a" "$TMP/big.rs"; }; then
       echo "perf: the words run of ${names[$k]} did not type and draw 40 keys; the window must be visible and nothing else may type into it" >&2
       exit 1
     fi
@@ -231,7 +250,7 @@ for i in $(seq 1 "$runs"); do
     # The Market with 10 000 extensions: keystroke to the results, and to the frame that shows them; 40 keys.
     : > "$TMP/market.jsonl"
     CODEYARD_PERF="$TMP/market.jsonl" CODEYARD_PERF_MARKET=40 PROFILE_FROM="$MARKET_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}"
-    if [ "$(count market.search_ms "$TMP/market.jsonl")" != 40 ] && [ "${names[$k]}" = candidate ]; then
+    if has_hook "$k" CODEYARD_PERF_MARKET && [ "$(count market.search_ms "$TMP/market.jsonl")" != 40 ]; then
       echo "perf: the Market run of ${names[$k]} did not show results for 40 keys; is the window visible and the fixture served?" >&2
       exit 1
     fi
@@ -242,7 +261,7 @@ for i in $(seq 1 "$runs"); do
     : > "$TMP/deco.jsonl"
     CODEYARD_PERF="$TMP/deco.jsonl" CODEYARD_PERF_DECORATIONS=40 CODEYARD_PERF_PROVIDERS=40 PROFILE_FROM="$DECO_PROFILE" \
       run_scripted "$OUT/codeyard-${names[$k]}" "$TMP/big.rs"
-    if [ "${names[$k]}" = candidate ] && { [ "$(count typing.keystroke_frame_decorations_ms "$TMP/deco.jsonl")" != 40 ] ||
+    if has_hook "$k" CODEYARD_PERF_DECORATIONS && { [ "$(count typing.keystroke_frame_decorations_ms "$TMP/deco.jsonl")" != 40 ] ||
       [ "$(count extensions.provider_overhead_ms "$TMP/deco.jsonl")" -lt 40 ]; }; then
       echo "perf: the decorations run of ${names[$k]} did not type 40 keys and ask the providers 40 times; is codeyard-exthost built and the window visible?" >&2
       exit 1
@@ -252,7 +271,7 @@ for i in $(seq 1 "$runs"); do
     cp crates/app/testdata/big.rs "$TMP/big.rs"
     : > "$TMP/comp.jsonl"
     CODEYARD_PERF="$TMP/comp.jsonl" CODEYARD_PERF_COMPLETION=40 PROFILE_FROM="$COMP_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}" "$TMP/big.rs"
-    if [ "${names[$k]}" = candidate ] && [ "$(count typing.keystroke_frame_completion_ms "$TMP/comp.jsonl")" != 40 ]; then
+    if has_hook "$k" CODEYARD_PERF_COMPLETION && [ "$(count typing.keystroke_frame_completion_ms "$TMP/comp.jsonl")" != 40 ]; then
       echo "perf: the completion run of ${names[$k]} did not type 40 keys; is codeyard-exthost built and the window visible?" >&2
       exit 1
     fi
@@ -262,7 +281,7 @@ for i in $(seq 1 "$runs"); do
     cp crates/app/testdata/big.rs "$TMP/big.rs"
     : > "$TMP/lens.jsonl"
     CODEYARD_PERF="$TMP/lens.jsonl" CODEYARD_PERF_LENSES=40 PROFILE_FROM="$LENS_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}" "$TMP/big.rs"
-    if [ "${names[$k]}" = candidate ] && [ "$(count typing.keystroke_frame_lenses_ms "$TMP/lens.jsonl")" != 40 ]; then
+    if has_hook "$k" CODEYARD_PERF_LENSES && [ "$(count typing.keystroke_frame_lenses_ms "$TMP/lens.jsonl")" != 40 ]; then
       echo "perf: the lenses run of ${names[$k]} did not type 40 keys; is codeyard-exthost built and the window visible?" >&2
       exit 1
     fi
@@ -270,7 +289,7 @@ for i in $(seq 1 "$runs"); do
     # The view with 10 000 rows: 40 PageDown keys, keystroke to frame.
     : > "$TMP/views.jsonl"
     CODEYARD_PERF="$TMP/views.jsonl" CODEYARD_PERF_VIEWS=40 PROFILE_FROM="$VIEW_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}"
-    if [ "${names[$k]}" = candidate ] && [ "$(count views.keystroke_frame_ms "$TMP/views.jsonl")" != 40 ]; then
+    if has_hook "$k" CODEYARD_PERF_VIEWS && [ "$(count views.keystroke_frame_ms "$TMP/views.jsonl")" != 40 ]; then
       echo "perf: the view run of ${names[$k]} did not press 40 keys in the extension view; is codeyard-exthost built and the window visible?" >&2
       exit 1
     fi
@@ -280,7 +299,7 @@ for i in $(seq 1 "$runs"); do
     cp "$RELOAD_DIR/a.wasm" "$RELOAD_DIR/ext/extension.wasm"
     : > "$TMP/reload.jsonl"
     CODEYARD_PERF="$TMP/reload.jsonl" CODEYARD_PERF_RELOAD=10 run_scripted "$OUT/codeyard-${names[$k]}" --extension-dev "$RELOAD_DIR/ext"
-    if [ "${names[$k]}" = candidate ] && [ "$(count extensions.hot_reload_ms "$TMP/reload.jsonl")" != 10 ]; then
+    if has_hook "$k" CODEYARD_PERF_RELOAD && [ "$(count extensions.hot_reload_ms "$TMP/reload.jsonl")" != 10 ]; then
       echo "perf: the hot reload run of ${names[$k]} did not swap in 10 builds; is codeyard-exthost built?" >&2
       exit 1
     fi
@@ -305,7 +324,7 @@ for i in $(seq 1 "$mem_runs"); do
       kill "$pid" 2>/dev/null || true
       wait "$pid" 2>/dev/null || true
       pid=""
-      case "$v" in ''|*[!0-9]*) echo "perf: no measurement for $metric (${names[$k]})" >&2 ;;
+      case "$v" in ''|*[!0-9]*) echo "perf: no measurement for $metric (${names[$k]})" >&2; exit 1 ;;
         *) printf '{"metric":"%s","value":%s}\n' "$metric" "$v" >> "$TMP/${names[$k]}.jsonl" ;;
       esac
     done
