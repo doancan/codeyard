@@ -508,6 +508,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     does not rewrite `extension.wasm`.
   - `cyx check` shows warnings after an error. Globs accept a leading `./` only, as globs.md now says.
 
+- Typing with line wrapping on in a large file looked every line up anew to lay out the screen lines: in a 50 000-line
+  file a key took 15.7 ms against 9.2 ms in plain text on an M4 Pro, and 34 to 50 ms on the Windows CI runner, where
+  the test's budget (50 ms) failed now and then. The lines are now read in one pass (11.6 ms; turning wrapping on
+  7.7 → 4.1 ms).
+
 - Extension authoring, second outside-author trial:
   - In an untrusted folder a refused write, `net` or other sending call says the folder is untrusted, not that the user
     turned the permission off, and the fix line is the right one.
