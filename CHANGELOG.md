@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cyx new` pins a Rust extension's SDK to the tag of the `cyx` release that wrote it (a preview `cyx` before 0.7.0
   follows `main`, since no release has the SDK yet). The contributions reference lists the built-in language ids and
   key names.
+- Screen readers reach the editor's drawn controls: gutter breakpoints, fold buttons and Git marks, sticky scope
+  lines, merge-conflict links and Send Request; the color picker's hue, saturation, brightness and opacity as
+  sliders; the terminal's find bar; the terminal's history by scrolling; and the update window on macOS has its own
+  accessibility tree. Expand and Collapse from Windows UI Automation work on every node that folds.
+
+- Screen readers read and drive the pages: the merge editor (each conflict, both sides' text and every accept
+  button), the folder comparison (options, rows with their status and the copy and delete buttons), the diff and the
+  large-file view line by line, the Markdown preview's headings, paragraphs and links, the Welcome page's tiles and
+  recent folders, the data query bar and the containers' overview, details and logs.
 
 - Screen readers reach every button drawn in the side views: the Explorer's header buttons, section headers, open
   editors, favorites, outline and timeline; Source Control's Refresh, More Actions and stashes; the Search view's
@@ -439,6 +448,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and reports every unknown manifest field at once. `cyx check --fix` lists every missing permission it cannot add,
   and for TypeScript says what to add by hand. `cyx package -o` into a missing folder fails before the build. A list
   or table with too many rows says to show fewer, not to "send at most 10000 at a time".
+- `cyx dev` notes the sources before its first build, so a file saved while it builds, checks the extension or
+  starts Codeyard is rebuilt on the next poll instead of being missed until the next save.
 
 - Unit tests no longer start an installed language server from generic editor and workbench fixtures: under test
   `lsp.enabled` defaults to off and LSP integration tests turn it on explicitly. The shipped default stays on.

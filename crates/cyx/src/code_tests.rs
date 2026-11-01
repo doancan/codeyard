@@ -240,8 +240,8 @@ fn cyx_dev_rebuilds_on_save() {
             while !wasm.exists() {
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
-            // After cyx has started the stand-in and looked at the sources once.
-            std::thread::sleep(std::time::Duration::from_millis(800));
+            // The first build is done: cyx noted the sources before it, so this save is seen however long the check
+            // and the stand-in's start take.
             let code = std::fs::read_to_string(&src).unwrap().replace("Hello, {name}!", "Hi, {name}!");
             std::fs::write(&src, code).unwrap();
         })

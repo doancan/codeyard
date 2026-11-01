@@ -140,6 +140,17 @@ impl Workbench {
             Sort::Memory => "M",
         };
         text_cell(label, width, p)
+            .relative()
+            .child(crate::a11y_controls::control(
+                crate::a11y_controls::Control::button(crate::i18n::t("Containers"), format!("sort:{key}"), crate::i18n::tf("Sort by {}", &[&label]), |_, _| {})
+                    .selected(selected)
+                    .on_entity(cx.entity().downgrade(), move |this: &mut Self, window, cx| {
+                        if let Some(focus) = &this.remote.docker.monitor.browser.overview.focus {
+                            window.focus(focus);
+                        }
+                        this.sort_container_overview(sort, cx);
+                    }),
+            ))
             .debug_selector(move || format!("overview-sort-{label}"))
             .flex()
             .items_center()
@@ -192,23 +203,37 @@ impl Workbench {
             .pb(px(theme::SPACE[3]))
             .flex()
             .gap(px(theme::SPACE[2]))
-            .child(
+            .child(crate::a11y_controls::click_on(
                 button("overview-tab", if b.overview.details { crate::i18n::t("← Containers") } else { crate::i18n::t("Overview") }, p)
-                    .when(!b.overview.details, |s| s.bg(c(p.surface_active)).text_color(c(p.accent)))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.remote.docker.monitor.browser.overview.details = false;
-                        cx.notify();
-                    })),
-            )
+                    .when(!b.overview.details, |s| s.bg(c(p.surface_active)).text_color(c(p.accent))),
+                crate::a11y_controls::Control::button(
+                    crate::i18n::t("Containers"),
+                    "overview-tab",
+                    if b.overview.details { crate::i18n::t("← Containers") } else { crate::i18n::t("Overview") }.to_string(),
+                    |_, _| {},
+                ),
+                cx,
+                |this, _, _, cx| {
+                    this.remote.docker.monitor.browser.overview.details = false;
+                    cx.notify();
+                },
+            ))
             .when_some(b.selected.clone().filter(|_| !b.overview.details), |d, id| {
-                d.child(
+                d.child(crate::a11y_controls::click_on(
                     button("selected-tab", crate::i18n::t("Selected container"), p)
-                        .when(b.overview.details, |s| s.bg(c(p.surface_active)).text_color(c(p.accent)))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            let tab = this.remote.docker.monitor.browser.tab;
-                            this.select_container(id.clone(), tab, cx);
-                        })),
-                )
+                        .when(b.overview.details, |s| s.bg(c(p.surface_active)).text_color(c(p.accent))),
+                    crate::a11y_controls::Control::button(
+                        crate::i18n::t("Containers"),
+                        "selected-tab",
+                        crate::i18n::t("Selected container").to_string(),
+                        |_, _| {},
+                    ),
+                    cx,
+                    move |this, _, _, cx| {
+                        let tab = this.remote.docker.monitor.browser.tab;
+                        this.select_container(id.clone(), tab, cx);
+                    },
+                ))
             })
             .into_any_element()
     }
@@ -229,49 +254,60 @@ impl Workbench {
         for (label, filter) in
             [(crate::i18n::t("All"), StatusFilter::All), (crate::i18n::t("Running"), StatusFilter::Running), (crate::i18n::t("Stopped"), StatusFilter::Stopped)]
         {
-            status_filters = status_filters.child(
+            status_filters = status_filters.child(crate::a11y_controls::click_on(
                 button(SharedString::from(format!("overview-filter-{label}")), label, p)
                     .bg(c(p.surface_hover))
-                    .when(b.status_filter == filter && !b.overview.attention, |s| s.bg(c(p.surface_active)).text_color(c(p.accent)))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        let b = &mut this.remote.docker.monitor.browser;
-                        b.status_filter = filter;
-                        b.overview.attention = false;
-                        cx.notify();
-                    })),
-            );
+                    .when(b.status_filter == filter && !b.overview.attention, |s| s.bg(c(p.surface_active)).text_color(c(p.accent))),
+                crate::a11y_controls::Control::button(crate::i18n::t("Containers"), format!("overview-filter-{label}"), label.to_string(), |_, _| {}),
+                cx,
+                move |this, _, _, cx| {
+                    let b = &mut this.remote.docker.monitor.browser;
+                    b.status_filter = filter;
+                    b.overview.attention = false;
+                    cx.notify();
+                },
+            ));
         }
         let mut toolbar = div().flex_1().min_w(px(320.)).flex().flex_wrap().items_center().justify_end().gap(px(theme::SPACE[2])).child(status_filters);
         if b.status_filter != StatusFilter::All || b.overview.attention || !b.query.trim().is_empty() {
-            toolbar = toolbar.child(button("overview-clear", crate::i18n::t("Clear filters"), p).on_click(cx.listener(|this, _, _, cx| {
-                let b = &mut this.remote.docker.monitor.browser;
-                b.status_filter = StatusFilter::All;
-                b.overview.attention = false;
-                b.query.clear();
-                if let Some(field) = b.field.clone() {
-                    field.update(cx, |field, cx| field.set_text("", cx));
-                }
-                cx.notify();
-            })));
-        }
-        toolbar = toolbar.child(
-            button("overview-attention", crate::i18n::t("Needs attention"), p)
-                .when(b.overview.attention, |s| s.bg(c(p.surface_active)).text_color(c(p.accent)))
-                .on_click(cx.listener(|this, _, _, cx| {
+            toolbar = toolbar.child(crate::a11y_controls::click_on(
+                button("overview-clear", crate::i18n::t("Clear filters"), p),
+                crate::a11y_controls::Control::button(crate::i18n::t("Containers"), "overview-clear", crate::i18n::t("Clear filters").to_string(), |_, _| {}),
+                cx,
+                |this, _, _, cx| {
                     let b = &mut this.remote.docker.monitor.browser;
-                    b.overview.attention = !b.overview.attention;
                     b.status_filter = StatusFilter::All;
+                    b.overview.attention = false;
+                    b.query.clear();
+                    if let Some(field) = b.field.clone() {
+                        field.update(cx, |field, cx| field.set_text("", cx));
+                    }
                     cx.notify();
-                })),
-        );
-        toolbar =
-            toolbar.child(button("overview-columns", crate::i18n::t("Columns"), p).when(b.overview.columns_open, |s| s.bg(c(p.surface_active))).on_click(
-                cx.listener(|this, _, _, cx| {
-                    let o = &mut this.remote.docker.monitor.browser.overview;
-                    o.columns_open = !o.columns_open;
-                    cx.notify();
-                }),
+                },
             ));
+        }
+        toolbar = toolbar.child(crate::a11y_controls::click_on(
+            button("overview-attention", crate::i18n::t("Needs attention"), p)
+                .when(b.overview.attention, |s| s.bg(c(p.surface_active)).text_color(c(p.accent))),
+            crate::a11y_controls::Control::button(crate::i18n::t("Containers"), "overview-attention", crate::i18n::t("Needs attention").to_string(), |_, _| {}),
+            cx,
+            |this, _, _, cx| {
+                let b = &mut this.remote.docker.monitor.browser;
+                b.overview.attention = !b.overview.attention;
+                b.status_filter = StatusFilter::All;
+                cx.notify();
+            },
+        ));
+        toolbar = toolbar.child(crate::a11y_controls::click_on(
+            button("overview-columns", crate::i18n::t("Columns"), p).when(b.overview.columns_open, |s| s.bg(c(p.surface_active))),
+            crate::a11y_controls::Control::button(crate::i18n::t("Containers"), "overview-columns", crate::i18n::t("Columns").to_string(), |_, _| {}),
+            cx,
+            |this, _, _, cx| {
+                let o = &mut this.remote.docker.monitor.browser.overview;
+                o.columns_open = !o.columns_open;
+                cx.notify();
+            },
+        ));
         let mut view = div().flex_1().min_w_0().min_h_0().flex().flex_col().pt(px(theme::SPACE[4])).gap(px(theme::SPACE[3])).child(
             div()
                 .px(px(theme::SPACE[5]))
@@ -287,13 +323,17 @@ impl Workbench {
         if b.overview.columns_open {
             view = view.child(div().px(px(theme::SPACE[5])).flex().flex_wrap().gap(px(theme::SPACE[2])).children(columns().into_iter().enumerate().map(
                 |(index, (label, _))| {
-                    button(SharedString::from(format!("overview-column-{index}")), label, p)
-                        .when(b.overview.columns[index], |s| s.bg(c(p.surface_active)).text_color(c(p.accent)))
-                        .on_click(cx.listener(move |this, _, _, cx| {
+                    crate::a11y_controls::click_on(
+                        button(SharedString::from(format!("overview-column-{index}")), label, p)
+                            .when(b.overview.columns[index], |s| s.bg(c(p.surface_active)).text_color(c(p.accent))),
+                        crate::a11y_controls::Control::button(crate::i18n::t("Containers"), format!("overview-column-{index}"), label.to_string(), |_, _| {}),
+                        cx,
+                        move |this, _, _, cx| {
                             let value = &mut this.remote.docker.monitor.browser.overview.columns[index];
                             *value = !*value;
                             cx.notify();
-                        }))
+                        },
+                    )
                 },
             )));
         }
@@ -351,6 +391,7 @@ impl Workbench {
             let id = row.id.clone();
             let logs_id = id.clone();
             let action_id = id.clone();
+            let (action_name, row_id) = (row.name.clone(), id.clone());
             let usage = (row.state == "running").then(|| m.usage.iter().find(|u| u.id == row.id)).flatten();
             let last = (row.state == "running").then(|| m.history.get(&row.id).and_then(|h| h.back())).flatten();
             let value = |s: Option<&str>| s.filter(|s| !s.is_empty()).unwrap_or("—").to_string();
@@ -363,8 +404,16 @@ impl Workbench {
                 value(Some(&row.ports)),
                 value(history::project(row)),
             ];
+            let heard = [row.image.clone(), row.status.clone(), values[1].clone(), values[2].clone()].join(" · ");
             let mut line = div()
                 .id(SharedString::from(format!("overview-row-{id}")))
+                .relative()
+                .child(crate::a11y_controls::control(
+                    crate::a11y_controls::Control::new(crate::i18n::t("Containers"), format!("row:{id}"), accesskit::Role::ListItem, row.name.clone())
+                        .description(heard)
+                        .selected(b.selected.as_ref() == Some(&id))
+                        .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| this.select_container(row_id.clone(), Tab::Resources, cx)),
+                ))
                 .debug_selector({
                     let id = id.clone();
                     move || format!("overview-row-{id}")
@@ -401,38 +450,54 @@ impl Workbench {
                     .items_center()
                     .justify_end()
                     .gap(px(theme::SPACE[1]))
-                    .child(button(SharedString::from(format!("overview-logs-{logs_id}")), crate::i18n::t("Logs"), p).flex_none().on_click(cx.listener(
+                    .child(crate::a11y_controls::click_on(
+                        button(SharedString::from(format!("overview-logs-{logs_id}")), crate::i18n::t("Logs"), p).flex_none(),
+                        crate::a11y_controls::Control::button(
+                            crate::i18n::t("Containers"),
+                            format!("overview-logs-{logs_id}"),
+                            crate::i18n::t("Logs").to_string(),
+                            |_, _| {},
+                        ),
+                        cx,
                         move |this, _, _, cx| {
                             cx.stop_propagation();
                             this.select_container(logs_id.clone(), Tab::Logs, cx);
                         },
-                    )))
-                    .child(
+                    ))
+                    .child(crate::a11y_controls::click_on(
                         button(SharedString::from(format!("overview-actions-{action_id}")), "…", p)
                             .w(px(28.))
                             .flex_none()
-                            .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Actions").into())).into())
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                cx.stop_propagation();
-                                this.show_menu(
-                                    vec![
-                                        MenuItem::new(crate::i18n::t("Open files")),
-                                        MenuItem::new(crate::i18n::t("Terminal")),
-                                        MenuItem::new(crate::i18n::t("Copy container ID")),
-                                    ],
-                                    vec![
-                                        MenuCmd::Container(ContainerAction::Files),
-                                        MenuCmd::Container(ContainerAction::Terminal),
-                                        MenuCmd::Container(ContainerAction::CopyId),
-                                    ],
-                                    Vec::new(),
-                                    MenuTarget { path: action_id.clone(), is_dir: false, tab: None },
-                                    window.mouse_position(),
-                                    window,
-                                    cx,
-                                );
-                            })),
-                    ),
+                            .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Actions").into())).into()),
+                        crate::a11y_controls::Control::button(
+                            crate::i18n::t("Containers"),
+                            format!("overview-actions-{action_id}"),
+                            crate::i18n::t("Actions").to_string(),
+                            |_, _| {},
+                        )
+                        .description(action_name.clone()),
+                        cx,
+                        move |this, _, window, cx| {
+                            cx.stop_propagation();
+                            this.show_menu(
+                                vec![
+                                    MenuItem::new(crate::i18n::t("Open files")),
+                                    MenuItem::new(crate::i18n::t("Terminal")),
+                                    MenuItem::new(crate::i18n::t("Copy container ID")),
+                                ],
+                                vec![
+                                    MenuCmd::Container(ContainerAction::Files),
+                                    MenuCmd::Container(ContainerAction::Terminal),
+                                    MenuCmd::Container(ContainerAction::CopyId),
+                                ],
+                                Vec::new(),
+                                MenuTarget { path: action_id.clone(), is_dir: false, tab: None },
+                                window.mouse_position(),
+                                window,
+                                cx,
+                            );
+                        },
+                    )),
             );
             table = table.child(line);
         }
