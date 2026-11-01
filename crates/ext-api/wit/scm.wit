@@ -1,4 +1,4 @@
-package codeyard:api@1.0.0;
+package codeyard:api@1.1.0;
 
 /// Source control providers (`[[scm]]`): what the Source Control view and the gutter show for a folder the provider
 /// claims. The host asks with `request.scm-status`, `request.scm-original` and `request.scm-validate`; buttons run the

@@ -22,6 +22,7 @@ pub mod bindings {
 pub use wit_bindgen;
 
 use bindings::codeyard::api as w;
+use bindings::exports::codeyard::api::events as ev;
 use bindings::exports::codeyard::api::guest as g;
 
 #[path = "wasm_scm.rs"]
@@ -55,6 +56,41 @@ impl<E: Extension> g::Guest for Glue<E> {
 
     fn event(ticket: u64, event: w::types::StreamEvent) {
         guest::event(ticket, event.into());
+    }
+}
+
+impl<E: Extension> ev::Guest for Glue<E> {
+    fn documents(watch: u64, events: Vec<ev::DocumentEvent>) {
+        let events = events
+            .into_iter()
+            .map(|e| DocumentEvent {
+                change: match e.change {
+                    ev::DocumentChange::Opened => DocumentChange::Opened,
+                    ev::DocumentChange::Changed => DocumentChange::Changed,
+                    ev::DocumentChange::Saved => DocumentChange::Saved,
+                },
+                uri: e.uri,
+                language: e.language,
+                version: e.version,
+                text: e.text,
+            })
+            .collect();
+        guest::documents(watch, events);
+    }
+
+    fn files(watch: u64, events: Vec<ev::FileEvent>) {
+        let events = events
+            .into_iter()
+            .map(|e| FileEvent {
+                change: match e.change {
+                    ev::FileChange::Created => FileChange::Created,
+                    ev::FileChange::Changed => FileChange::Changed,
+                    ev::FileChange::Deleted => FileChange::Deleted,
+                },
+                uri: e.uri,
+            })
+            .collect();
+        guest::files(watch, events);
     }
 }
 
@@ -183,6 +219,18 @@ pub(crate) fn every(seconds: u32) -> u64 {
 
 pub(crate) fn clear_timer(id: u64) {
     w::timers::clear(id);
+}
+
+pub(crate) fn watch_documents(text: bool) -> Result<u64, Error> {
+    w::watch::documents(text).map_err(Into::into)
+}
+
+pub(crate) fn watch_files(glob: &str) -> Result<u64, Error> {
+    w::watch::files(glob).map_err(Into::into)
+}
+
+pub(crate) fn stop_watch(id: u64) {
+    w::watch::stop(id);
 }
 
 pub(crate) fn invalidate(view: &str) {

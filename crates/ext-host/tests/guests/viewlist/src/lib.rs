@@ -47,4 +47,11 @@ impl Guest for ViewList {
     fn event(_: Ticket, _: StreamEvent) {}
 }
 
+// Watches nothing; API 1.1 components export `events` all the same.
+impl exports::codeyard::api::events::Guest for ViewList {
+    fn documents(_: u64, _: Vec<exports::codeyard::api::events::DocumentEvent>) {}
+
+    fn files(_: u64, _: Vec<exports::codeyard::api::events::FileEvent>) {}
+}
+
 export!(ViewList);

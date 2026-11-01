@@ -109,7 +109,7 @@ pub(super) fn fetch_image(t: &dyn Transport, scope: &Scope, url: &str) -> Result
         let d = if ext_manifest::net_allows(&scope.revoked.net, &host) {
             v::Denied { permission: "net".into(), why: v::Why::RevokedByUser }
         } else {
-            ext_fetch::not_in_net(&host)
+            ext_fetch::not_in_net(scope, &host)
         };
         return Err(v::Error::Denied(d));
     }

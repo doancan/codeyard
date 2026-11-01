@@ -367,7 +367,8 @@ impl Workbench {
                     format!("{}: {perms_text}", crate::i18n::t("Permissions")),
                     self.extension_permissions(&m, high_risk_line(&m), p),
                 ))
-                .children(self.extension_accounts_section(&m, p, cx)),
+                .children(self.extension_accounts_section(&m, p, cx))
+                .children(self.extension_hosts_section(&m, p, cx)),
         )
         .into_any_element()
     }

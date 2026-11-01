@@ -49,7 +49,10 @@ impl Denied {
                     format!("the built-in github account signs requests only to its own API hosts; send the request to {host} with fetch (net) instead")
                 }
                 Some((provider, host)) => format!("add \"{host}\" to hosts in the [[oauth]] table with id = \"{provider}\""),
-                None => format!("add to [permissions]:  {}", self.permission),
+                None => match user_host(&self.permission) {
+                    Some(host) => format!("the user has not allowed \"{host}\": they add it on the extension page with Allow Host…"),
+                    None => format!("add to [permissions]:  {}", self.permission),
+                },
             },
             Why::RevokedByUser => {
                 format!("the user turned off `{}` on the extension page; tell them what stops working without it", self.permission)
@@ -177,6 +180,12 @@ fn oauth_host(permission: &str) -> Option<(&str, &str)> {
 fn ungrantable(permission: &str) -> Option<(&str, &str)> {
     let (call, rest) = permission.split_once(" (cannot be granted: ")?;
     Some((call, rest.strip_suffix(')')?))
+}
+
+/// The host of a refused request from an extension with `net-from-setting` to a server the user has not allowed:
+/// `net-from-setting host = "git.example.com"`.
+fn user_host(permission: &str) -> Option<&str> {
+    permission.strip_prefix("net-from-setting host = \"")?.strip_suffix('"')
 }
 
 /// The manifest line for a permission when the call gives nothing more specific.

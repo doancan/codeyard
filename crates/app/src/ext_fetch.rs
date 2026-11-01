@@ -114,15 +114,18 @@ pub fn net_fetch(t: &dyn Transport, scope: &Scope, req: &v::HttpRequest, sink: &
         Err(e) => return Completion::Failed(e),
     };
     if !ext_manifest::net_allows(&scope.permissions.net, &host) {
-        return Completion::Failed(v::Error::Denied(not_in_net(&host)));
+        return Completion::Failed(v::Error::Denied(not_in_net(scope, &host)));
     }
     done(t.send(&scope.permissions.net, req, None, sink, cancel))
 }
 
-/// The denial for a host `net` does not list: the line to add, or for an IP address, which `net` cannot list, why not.
-pub fn not_in_net(host: &str) -> v::Denied {
+/// The denial for a host `net` does not list: for an IP address, which `net` cannot list, why not; with
+/// `net-from-setting`, the user's fix (they allow the host on the extension page); else the line to add.
+pub fn not_in_net(scope: &Scope, host: &str) -> v::Denied {
     let permission = if ext_manifest::is_ip_address(host) {
         ext_manifest::ungrantable_line(&format!("net {host}"), "it is an IP address, and net lists host names only; connect to the server by its host name")
+    } else if scope.permissions.net_from_setting.is_some() {
+        ext_manifest::user_host_line(host)
     } else {
         format!("net = [\"{host}\"]")
     };

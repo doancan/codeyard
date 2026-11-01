@@ -136,6 +136,14 @@ impl Workbench {
                 eff.permissions.net.push(i.host);
             }
         }
+        // Servers the user allowed for `net-from-setting` join `net` while that switch is on, in a trusted folder.
+        if eff.permissions.net_from_setting.is_some() {
+            for h in self.extension_user_hosts(active.id()) {
+                if !eff.permissions.net.contains(&h) {
+                    eff.permissions.net.push(h);
+                }
+            }
+        }
         // Programs inside the package: the workspace host's platform's package, fetched from the registry when needed.
         let programs = active.manifest.has_native_programs().then(|| {
             let registries = crate::ext_registry::registries(cx.global::<Settings>());
@@ -325,7 +333,16 @@ impl Workbench {
     }
 
     fn stop_idle_extensions(&mut self) {
-        let idle: Vec<String> = self.cfg.exts.code.procs.iter().filter(|(_, p)| p.idle_for() > ext_runtime::IDLE).map(|(id, _)| id.clone()).collect();
+        // A running watch keeps an exthost, as a timer does by firing.
+        let idle: Vec<String> = self
+            .cfg
+            .exts
+            .code
+            .procs
+            .iter()
+            .filter(|(id, p)| p.idle_for() > ext_runtime::IDLE && !self.extension_watches(id))
+            .map(|(id, _)| id.clone())
+            .collect();
         for id in idle {
             if let Some(p) = self.cfg.exts.code.procs.remove(&id) {
                 std::thread::spawn(move || p.stop());
@@ -349,6 +366,7 @@ impl Workbench {
             Event::Message(_) => {}
             Event::Exited { crashed, reason } => {
                 self.on_extension_exited(id, crashed, cx);
+                self.forget_extension_watches(id);
                 let code = &mut self.cfg.exts.code;
                 code.procs.remove(id);
                 code.record().exited(id);
@@ -413,6 +431,7 @@ impl Workbench {
             }
             Notify::Invalidate { view } => self.on_ext_view_invalidate(id, &view, window, cx),
             Notify::ScmRefresh { provider } => self.on_ext_scm_refresh(id, &provider, window, cx),
+            n @ (Notify::WatchDocuments { .. } | Notify::WatchFiles { .. } | Notify::StopWatch { .. }) => self.on_extension_watch(id, n, cx),
             // Status items, diagnostics and decorations (#104).
             n @ (Notify::SetStatusItem { .. }
             | Notify::RemoveStatusItem { .. }

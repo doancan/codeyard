@@ -1,4 +1,4 @@
-package codeyard:api@1.0.0;
+package codeyard:api@1.1.0;
 
 /// Pull (merge) request providers: `[[pull-requests]]` in the manifest. The host asks with `request.pull-requests`
 /// and the extension answers with `response.pull-requests`. The provider calls its forge with `auth.fetch`, so it never

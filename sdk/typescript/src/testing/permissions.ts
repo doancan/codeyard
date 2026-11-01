@@ -13,6 +13,8 @@ export interface Permissions {
   clipboard: "none" | "read" | "write" | "read-write";
   terminal: boolean;
   commands: string[];
+  /** `net-from-setting`: the setting whose host the user may allow on the extension page. */
+  netFromSetting?: string;
 }
 
 export function permissionsOf(manifest: Table): Permissions {
@@ -29,6 +31,7 @@ export function permissionsOf(manifest: Table): Permissions {
     clipboard: clipboard === "read" || clipboard === "write" || clipboard === "read-write" ? clipboard : "none",
     terminal: p.terminal === true,
     commands: list("commands"),
+    ...(typeof p["net-from-setting"] === "string" ? { netFromSetting: p["net-from-setting"] } : {}),
   };
 }
 

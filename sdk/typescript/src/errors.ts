@@ -70,11 +70,18 @@ function ungrantable(permission: string): [string, string] | undefined {
   return [permission.slice(0, at), permission.slice(at + " (cannot be granted: ".length, -1)];
 }
 
+/** The host of a refused fetch to a host the user has not allowed for `net-from-setting`: `net-from-setting host = "h"`. */
+function userHost(permission: string): string | undefined {
+  return /^net-from-setting host = "(.*)"$/.exec(permission)?.[1];
+}
+
 function fixFor(permission: string, why: Why): string {
   const cannot = ungrantable(permission);
   if (cannot) return `none: this cannot be granted, ${cannot[1]}`;
   switch (why) {
     case "not-declared": {
+      const h = userHost(permission);
+      if (h !== undefined) return `the user has not allowed "${h}": they add it on the extension page with Allow Host…`;
       const o = oauthHost(permission);
       if (o?.[0] === "github") return `the built-in github account signs requests only to its own API hosts; send the request to ${o[1]} with fetch (net) instead`;
       if (o) return `add "${o[1]}" to hosts in the [[oauth]] table with id = "${o[0]}"`;

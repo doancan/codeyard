@@ -67,6 +67,8 @@ mod editor_grid_tests;
 mod editors_glue;
 #[path = "workbench_ext.rs"]
 mod ext_glue;
+#[path = "workbench_ext_hosts.rs"]
+mod ext_hosts_glue;
 #[path = "workbench_ext_scm.rs"]
 mod ext_scm_glue;
 #[path = "ext_ui_render.rs"]
@@ -75,6 +77,8 @@ mod ext_ui_glue;
 mod ext_view_glue;
 #[path = "workbench_ext_views.rs"]
 mod ext_views_glue;
+#[path = "workbench_ext_watch.rs"]
+mod ext_watch_glue;
 #[path = "workbench_extras.rs"]
 mod extras_glue;
 #[path = "workbench_file_batch.rs"]
@@ -2034,6 +2038,7 @@ impl Workbench {
         self.attach_lsp(&ed, cx);
         self.apply_task_problems(&ed, cx);
         self.attach_extensions(&ed, window, cx);
+        self.attach_ext_watch(&ed, window, cx);
         self.schedule_schema(&ed, Duration::ZERO, cx);
         self.attach_speller(&ed, cx);
         self.apply_breakpoints_to(&ed, cx);
@@ -2069,7 +2074,8 @@ impl Workbench {
             let ed = self.tabs.editors[ix].clone();
             self.refresh_active_flags(cx);
             self.tabs.open_error = None;
-            self.reveal_location(ed, (line, col), fix, window, cx);
+            self.reveal_location(ed.clone(), (line, col), fix, window, cx);
+            self.select_for_extension(&ed, cx);
             self.persist_session(cx);
             cx.notify();
             return;

@@ -2,7 +2,7 @@
 
 <!-- Generated from crates/ext-api/wit: run `UPDATE_DOCS=1 cargo test -p ext-api reference` after changing it. -->
 
-`codeyard:api@1.0.0`. Authors use an SDK, which wraps these calls; this page says what each one does and which permission it needs. Calls that return a `ticket` finish later: the SDK turns them into async functions (Rust) or Promises (TypeScript).
+`codeyard:api@1.1.0`. Authors use an SDK, which wraps these calls; this page says what each one does and which permission it needs. Calls that return a `ticket` finish later: the SDK turns them into async functions (Rust) or Promises (TypeScript).
 
 Every item has the API version that added it. Within a major version a minor only adds: an extension that uses only items of 1.0 runs on every 1.x. An item newer than its interface says so with *since*; `cyx` works out the oldest Codeyard an extension needs from the items it uses.
 
@@ -184,6 +184,16 @@ Needs `read = ["<glob>"]` in `[permissions]`. Since 1.0.0.
 - `find-files(glob: string, max: u32) -> ticket`: Completes with `uris`: files matching `glob` under the workspace folders, at most `max`.
 - `search(query: search-query) -> ticket`: Streams `search-match` events, then completes with `done`.
 
+## `watch`
+
+Events about open documents and workspace files, delivered to the guest's `events` export (the SDKs call your handlers). Needs `read`: an event comes only for a path the extension may read, the same rule as for reading it. An active watch keeps the exthost running, like a timer.
+
+Needs `read = ["<glob>"]` in `[permissions]`. Since 1.1.0.
+
+- `documents(text: bool) -> result<u64, error>`: Deliver `events.documents` when a document opens (the documents already open arrive first), changes or is saved. Changes are debounced: one event with the latest version once typing pauses. With `text`, each event carries the document's whole text. Returns the watch's id, or `invalid` past the limit of watches.
+- `files(glob: string) -> result<u64, error>`: Deliver `events.files` when files matching `glob` (relative to the workspace folders, as in `read`) are created, changed or deleted, by Codeyard or anything else. Coalesced: one event per file, at most one batch a second. Returns the watch's id, or `invalid` for a bad glob or past the limit of watches.
+- `stop(id: u64)`: Stop a watch.
+
 ## `workspace-write`
 
 Changing workspace files. Needs `write` on the paths.
@@ -316,3 +326,16 @@ Exported by the SDK; authors do not call it. Since 1.0.0.
 - `cancel(id: u64)`: The host no longer waits for request `id` (the user moved on).
 - `complete(ticket: ticket, result: completion)`: A ticket finished.
 - `event(ticket: ticket, event: stream-event)`: Streamed data for a ticket that has not finished.
+
+## `events`
+
+Events a watch asked for (`watch`). The SDKs export it and route each event to its handler; the host calls it only for a component that exports it, so components built against 1.0 run unchanged.
+
+Exported by the SDK; authors do not call it. Since 1.1.0.
+
+- type `document-change`: enum `opened | changed | saved`
+- type `document-event`: record `{ change: document-change, uri: uri, language: string, version: u32, text: option<string> }`
+- type `file-change`: enum `created | changed | deleted`
+- type `file-event`: record `{ change: file-change, uri: uri }`
+- `documents(watch: u64, events: list<document-event>)`: Events of a `watch.documents` watch, oldest first.
+- `files(watch: u64, events: list<file-event>)`: Events of a `watch.files` watch, one per file.

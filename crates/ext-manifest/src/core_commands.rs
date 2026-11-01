@@ -41,6 +41,8 @@ pub enum Argument {
     None,
     /// A `file://` URI, required.
     FileUri,
+    /// A `file://` URI, or `{"uri": …, "selection": range}` to select a range and scroll to it; required.
+    FileLocation,
     /// A task's label; without one the task list opens for the user to choose.
     OptionalTaskLabel,
 }
@@ -50,13 +52,14 @@ impl Argument {
         match self {
             Argument::None => "none",
             Argument::FileUri => "a `file://` URI (required)",
+            Argument::FileLocation => "a `file://` URI, or `{\"uri\": …, \"selection\": range}` (required)",
             Argument::OptionalTaskLabel => "a task's label (optional)",
         }
     }
 
     /// Whether the command can run with no argument, as menus and key bindings run it.
     pub fn optional(self) -> bool {
-        self != Argument::FileUri
+        !matches!(self, Argument::FileUri | Argument::FileLocation)
     }
 }
 
@@ -86,7 +89,13 @@ pub const CORE_COMMANDS: [CoreCommand; 9] = [
     c("workbench.showProblems", "View: Problems", "Opens the Problems panel.", Argument::None, Implies::Nothing),
     c("workbench.saveAll", "File: Save All", "Saves every open file with unsaved changes.", Argument::None, Implies::WriteUnsaved),
     c("editor.formatDocument", "Editor: Format Document", "Formats the active file.", Argument::None, Implies::WriteActiveFile),
-    c("editor.open", "", "Opens a workspace file in the editor.", Argument::FileUri, Implies::ReadArgument),
+    c(
+        "editor.open",
+        "",
+        "Opens a workspace file in the editor; with a selection, selects that range and scrolls to it.",
+        Argument::FileLocation,
+        Implies::ReadArgument,
+    ),
     c("tasks.run", "Tasks: Run Task…", "Runs the task with this label; with no label, opens the task list.", Argument::OptionalTaskLabel, Implies::RunTask),
 ];
 
@@ -113,6 +122,11 @@ pub fn reference() -> String {
         let title = if c.title.is_empty() { "—".to_string() } else { format!("*{}*", c.title) };
         out.push_str(&format!("| `core:{}` | {title} | {} | {} | {} |\n", c.id, c.argument.describe(), c.implies.describe(), c.summary));
     }
+    out.push_str(
+        "\nA `range` is `{\"start\": {\"line\": 9, \"character\": 0}, \"end\": {\"line\": 9, \"character\": 4}}`: zero-based lines \
+         and UTF-16 columns, as everywhere in the API. The selection form of `editor.open` needs Codeyard 0.7.0 (API 1.1); \
+         the SDKs' `open_in_editor` and `openInEditor` send it.\n",
+    );
     out.push_str(
         "\n`tasks.run` with a label runs only a task whose command is one program with its arguments (no `&&`, pipes \
          or redirections), and that program must be in `run`. A task an extension provides runs in that extension, \

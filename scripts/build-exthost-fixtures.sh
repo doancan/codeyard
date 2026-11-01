@@ -11,6 +11,8 @@
 # WebAssembly toolchain; run this after changing the guest or the WIT.
 # testdata/probe-0.1.wasm is not rebuilt: it is the probe as built against API 0.1.0, kept to show that the exthost
 # still runs 0.x components during the move to 1.0 (tests/exthost.rs, a_component_built_against_0_1_still_runs).
+# testdata/probe-1.0.wasm is not rebuilt either: the probe as built against API 1.0.0, without the `events` export of 1.1,
+# kept to show that 1.0 components run unchanged on later 1.x hosts (tests/exthost.rs, a_component_built_against_1_0_runs_unchanged).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 target=$(mktemp -d "${TMPDIR:-/tmp}/exthost-fixtures.XXXXXX")

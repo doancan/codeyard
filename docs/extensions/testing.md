@@ -11,6 +11,7 @@ There are two kinds of test, and a new extension from `cyx new command`, `cyx ne
 - [What the test can check](#what-the-test-can-check)
 - [Permissions in tests](#permissions-in-tests)
 - [Accounts in tests](#accounts-in-tests)
+- [Watches and servers in tests](#watches-and-servers-in-tests)
 - [cyx test](#cyx-test)
 - [HTTP fixtures for cyx test](#http-fixtures-for-cyx-test)
 - [TypeScript](#typescript)
@@ -130,6 +131,29 @@ host.instance("gitlab", "git.example.com");  // a self-managed instance the user
 
 TypeScript: `host.declineSignIn(provider)`, `host.signedOut(provider)`, `host.signIn(provider, label)`, `host.instance(provider, host)`. A token the service refuses is its answer, so give the request a `401` fixture.
 
+## Watches and servers in tests
+
+Watches (`ctx.on_documents`, `ctx.on_files`) get events when the test changes documents and files. Like Codeyard, the
+mock sends them only for paths the manifest's `read` allows, a file event only when the watch's glob matches, and
+`opened` for the documents already open when a document watch starts:
+
+```rust
+host.open_document("src/a.rs", "rust", "fn a() {}");   // document watches get `opened`
+host.edit_document("src/a.rs", "fn a() {} // TODO"); // `changed`, version 2
+host.save_document("src/a.rs");                       // `saved`
+host.create_file("src/b.rs", "fn b() {}");            // file watches whose glob matches get `created`
+host.change_file("src/b.rs", "fn b() { 1 }");
+host.delete_file("src/b.rs");
+host.allow_host("github.example.com");                // the user allowed this server for `net-from-setting`
+```
+
+Until `allow_host`, a request from an extension with `net-from-setting` to a host outside `net` is refused with
+`net-from-setting host = "github.example.com"`, whose fix says the user allows it on the extension page.
+
+TypeScript: `await host.openDocument(path, language, text)`, `await host.editDocument(path, text)`,
+`await host.saveDocument(path)`, `await host.createFile(path, contents)`, `await host.changeFile(path, contents)`,
+`await host.deleteFile(path)` and `host.allowHost(host)`.
+
 ## Hot reload
 
 `host.reload::<MyExtension>()` (TypeScript: `await host.reload(extension)`) does what `cyx dev` does with a new build: `deactivate`, forget everything registered, then `activate` with the reason `reload`. Storage is kept, and with it what the extension put in `ctx.state`:
@@ -175,6 +199,10 @@ error[CY0201]: net/fetch needs a permission the manifest does not declare
 
 Each `[[pull-requests]]` provider is asked for the open requests of a remote on its first host,
 `https://<host>/example/repo.git`, signed with its `auth` account.
+
+Each watch the extension starts gets a file of its own, named after its glob (or the first `read` glob):
+a document watch sees it opened, changed and saved, a file watch sees it created, changed and deleted. A trap in a
+handler fails the test. For `net-from-setting`, the host in the setting's default stands in for one the user allowed.
 
 ## HTTP fixtures for cyx test
 

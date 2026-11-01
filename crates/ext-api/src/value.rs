@@ -556,6 +556,9 @@ pub enum Notify {
     ClearDiagnostics { uri: Option<Uri> },
     SetDecorations { uri: Uri, set: String, decorations: Vec<Decoration> },
     ScmRefresh { provider: String },
+    WatchDocuments { id: u64, text: bool },
+    WatchFiles { id: u64, glob: String },
+    StopWatch { id: u64 },
 }
 
 impl Notify {
@@ -576,6 +579,9 @@ impl Notify {
             Notify::ClearDiagnostics { .. } => "languages/clear-diagnostics",
             Notify::SetDecorations { .. } => "languages/set-decorations",
             Notify::ScmRefresh { .. } => "scm/refresh",
+            Notify::WatchDocuments { .. } => "watch/documents",
+            Notify::WatchFiles { .. } => "watch/files",
+            Notify::StopWatch { .. } => "watch/stop",
         }
     }
 }
@@ -583,3 +589,36 @@ impl Notify {
 /// WIT functions the exthost answers itself, without a frame: from what the app sent at start (`env`, `settings`,
 /// the workspace folders) or from the extension's own data folder (`storage`).
 pub const LOCAL: [&str; 7] = ["env/info", "settings/get", "workspace/folders", "storage/get", "storage/set", "storage/delete", "storage/keys"];
+
+/// `events.document-change`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DocumentChange {
+    Opened,
+    Changed,
+    Saved,
+}
+
+/// `events.document-event`: what a `watch.documents` watch receives.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DocumentEvent {
+    pub change: DocumentChange,
+    pub uri: Uri,
+    pub language: String,
+    pub version: u32,
+    pub text: Option<String>,
+}
+
+/// `events.file-change`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FileChange {
+    Created,
+    Changed,
+    Deleted,
+}
+
+/// `events.file-event`: what a `watch.files` watch receives.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileEvent {
+    pub change: FileChange,
+    pub uri: Uri,
+}

@@ -69,7 +69,8 @@ fn check_runs_the_import_check_on_the_component() {
     assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
     assert!(report.warnings[0].starts_with("warning: extension.wasm was built against API 0.1.0;"), "{}", report.warnings[0]);
     assert!(report.warnings[0].contains("migrating-to-1.0.md"), "{}", report.warnings[0]);
-    assert!(report.warnings[0].contains("Codeyard still runs it while extensions move to API 1.0.0"), "{}", report.warnings[0]);
+    let moving = format!("Codeyard still runs it while extensions move to API {}", ext_api::VERSION);
+    assert!(report.warnings[0].contains(&moving), "{}", report.warnings[0]);
     std::fs::write(dir.join(ext_pkg::COMPONENT), b"\0asm\x01\0\0\0").unwrap();
     let e = check(&dir).unwrap_err();
     assert!(e.contains("error[CY0700]: extension.wasm is a core WebAssembly module, not a component"), "{e}");

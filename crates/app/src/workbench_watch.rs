@@ -46,6 +46,11 @@ impl Workbench {
         paths.extend(self.repo_watch_paths());
         paths.sort();
         paths.dedup();
+        // Extensions' file watches get what the watcher's cap leaves, so Codeyard's own paths are never dropped.
+        let budget = agent::watch::MAX_PATHS.saturating_sub(paths.len());
+        paths.extend(self.ext_watched_paths(budget));
+        paths.sort();
+        paths.dedup();
         if paths != self.watched {
             self.remote.host.watch(paths.clone());
             self.watched = paths;
@@ -70,6 +75,7 @@ impl Workbench {
         let changed: Vec<String> = changes.iter().map(|(p, _)| p.clone()).collect();
         self.refresh_repos_for(&changed, cx);
         self.ext_scm_files_changed(&changed);
+        self.ext_files_changed(&changes, cx);
         if let Some(g) = &self.vcs.status {
             let prefix = format!("{}/", g.root.trim_end_matches('/'));
             let git_dir = g.git_dir.as_ref().map(|d| format!("{}/", d.trim_end_matches('/')));
