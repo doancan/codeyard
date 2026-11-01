@@ -299,6 +299,11 @@ impl Picker {
         &self.query
     }
 
+    /// The query as the screen shows it: dots for a secret.
+    pub fn shown_query(&self) -> String {
+        if self.masked() { "•".repeat(self.query.chars().count()) } else { self.query.clone() }
+    }
+
     /// For the accessibility tree (a11y.rs): at most `limit` rows, with where they were painted in `window`.
     pub fn a11y_view(&self, limit: usize, window: &Window) -> PickerA11y {
         let frame = |k: PickFrame| self.painted.physical(&k, window);
@@ -309,7 +314,7 @@ impl Picker {
             frames: (0..self.rows.len().min(limit)).map(|i| frame(PickFrame::Row(i))).collect(),
             placeholder: self.placeholder.to_string(),
             message: self.message.as_ref().map(|m| m.to_string()),
-            query: if self.masked() { "•".repeat(self.query.chars().count()) } else { self.query.clone() },
+            query: self.shown_query(),
             rows: self.rows.iter().take(limit).map(|r| (r.label.to_string(), r.detail.as_ref().map(|d| d.to_string()))).collect(),
             rows_total: self.rows.len(),
             selected: (!self.rows.is_empty()).then_some(self.selected),
@@ -750,7 +755,7 @@ impl Render for Picker {
                             // Cursor at the start, placeholder dimmed.
                             d.child(caret).child(div().text_color(c(p.text_muted)).child(self.placeholder.clone()))
                         } else {
-                            let shown = if self.masked() { "•".repeat(self.query.chars().count()) } else { self.query.clone() };
+                            let shown = self.shown_query();
                             if self.initial_selected {
                                 d.text_color(c(p.text)).child(div().bg(c(p.selection)).child(shown)).child(caret)
                             } else {

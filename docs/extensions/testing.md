@@ -3,7 +3,9 @@
 There are two kinds of test, and a new extension from `cyx new command`, `cyx new view` or `cyx new pull-requests` comes with both set up:
 
 - **Unit tests** with `cargo test` (Rust) or `npm test` (TypeScript, [below](#typescript)). They run on your computer, in milliseconds, against a mock Codeyard: fake files, fixture HTTP responses, recorded processes, scripted answers and a virtual clock.
-- **`cyx test`** builds the real component and runs it in Codeyard's extension host: it activates the extension, runs every command and draws every view, checking each tree as Codeyard does.
+- **`cyx test`** builds the real component and runs it in Codeyard's extension host: it activates the extension, runs every command, draws every view and asks every provider once, checking each answer as Codeyard does.
+
+Both check every call with Codeyard's own rules (the `ext-manifest` crate, and for TypeScript a copy tested against it): the same globs, paths, URLs, status bar rule and size limits. A test that passes is a call Codeyard makes.
 
 <!-- toc -->
 - [Unit tests](#unit-tests)
@@ -13,7 +15,7 @@ There are two kinds of test, and a new extension from `cyx new command`, `cyx ne
 - [Accounts in tests](#accounts-in-tests)
 - [Watches and servers in tests](#watches-and-servers-in-tests)
 - [cyx test](#cyx-test)
-- [HTTP fixtures for cyx test](#http-fixtures-for-cyx-test)
+- [Fixtures for cyx test](#fixtures-for-cyx-test)
 - [TypeScript](#typescript)
 - [In CI](#in-ci)
 <!-- /toc -->
@@ -93,6 +95,7 @@ host.read("out.txt");     // a file after the extension wrote it
 host.storage();           // the key-value store
 host.status_items();
 host.diagnostics("src/main.rs");
+host.decorations("src/main.rs");  // by decoration set
 host.invalidated();       // views asked to draw again
 host.applied_edits();
 host.secrets();           // the keychain entries (`secrets`), as the extension left them
@@ -103,7 +106,7 @@ host.denied();            // every refused call
 
 ## Permissions in tests
 
-`MockHost::new()` reads the `codeyard-extension.toml` next to your `Cargo.toml` and refuses what it does not allow, the way Codeyard does: a request to an undeclared host, a read outside the `read` globs, a program not in `run`, an `auth.fetch` to a host that is not one of the account's (`[[oauth]] hosts`, or GitHub's API hosts). The refusal is the same `Error::Denied` the extension gets in Codeyard, with the fix:
+`MockHost::new()` reads the `codeyard-extension.toml` next to your `Cargo.toml` and refuses what it does not allow, the way Codeyard does: a request to an undeclared host, a read outside the `read` globs, a path outside the workspace folder (`src/../../etc/passwd`, `%2e%2e` included), a program not in `run`, an `auth.fetch` to a host that is not one of the account's (`[[oauth]] hosts`, or GitHub's API hosts). The refusal is the same `Error::Denied` the extension gets in Codeyard, with the fix:
 
 ```
 denied: the manifest does not declare net = ["api.github.com"]
@@ -116,6 +119,15 @@ An `auth.fetch` to a host that is not one of the account's names that host and t
 denied: the manifest does not declare [[oauth]] gitlab hosts = ["evil.example.org"]
    = fix: add "evil.example.org" to hosts in the [[oauth]] table with id = "gitlab"
 ```
+
+Globs mean what they mean in Codeyard ([globs](reference/globs.md)): `read = ["main.rs"]` is the file at the top of the folder, not `src/main.rs`. The other rules are Codeyard's too:
+
+- A URL Codeyard never fetches (`http://`, a user name or password in it) fails with `invalid`, even when a fixture exists for it. One that names an IP address, and a path outside the workspace, are denied with `(cannot be granted: …)` and the fix `none: this cannot be granted, …`, since no manifest entry allows them.
+- `set_status_item` refuses an id the manifest does not declare in `[[status-bar]]` and a text that is empty or longer than 64 characters.
+- An answer (a command's result, a view's tree) over 8 MiB fails its request with `invalid: the result is 20 MiB; at most 8 MiB`.
+- `open_external` works only while the extension handles a user action (a command, a view event), not from a provider or a timer.
+
+`on_settings_changed` and `every` handlers may return `Result<()>`, so `?` works in them; an error goes to the extension's log (`host.logs()`).
 
 ## Accounts in tests
 
@@ -180,13 +192,23 @@ you.hello 0.1.0
 ok
 ```
 
-`cyx test` builds `extension.wasm`, checks its imports against the manifest, and runs it in `codeyard-exthost`, the same extension host Codeyard uses, with the same memory and time limits. A scripted Codeyard answers the extension's calls: pickers and inputs are dismissed, there is no active document, and there is no network, no files and no programs (those calls fail with a message, which counts as an answer). Every call is first checked against the manifest's permissions.
+`cyx test` builds `extension.wasm`, checks its imports against the manifest, and runs it in `codeyard-exthost`, the same extension host Codeyard uses, with the same memory and time limits. A scripted Codeyard answers the extension's calls: pickers and inputs are dismissed, there is no active document, files and HTTP responses come only from [the fixtures](#fixtures-for-cyx-test), and there are no programs. Every call is first checked with Codeyard's rules and the manifest's permissions.
+
+It runs, in order:
+
+- every command, with no arguments unless the fixtures give some;
+- every view, drawn once;
+- every provider once (formatter, code actions, hover, completion, code lenses, inlay hints, tasks, source control), with a sample document: the first file of the fixtures' `files` (in the provider's first language), or an empty one;
+- every `[[pull-requests]]` provider, asked for the open requests of a remote on its first host, `https://<host>/example/repo.git`, signed with its `auth` account.
+
+An error is an answer only when the handler first asked for something `cyx test` cannot give offline: an HTTP request without a fixture, a file the fixtures do not have, a program. Any other error fails the test: an exception, a command that is declared but not registered (`no command 'x' is registered`), an answer over 8 MiB. After a trap or a request left unanswered, `cyx test` starts the extension host again and goes on, so one run reports every problem.
 
 It fails when:
 
-- `activate` returns an error, or a command or view does not answer within 20 seconds;
+- `activate` returns an error, or an `async activate` rejects after an `await` (the log shows `activate failed: …`);
+- a command, view or provider fails as above, or does not answer within 20 seconds;
 - a view draws a tree Codeyard would refuse; the reason is printed as Codeyard shows it;
-- the extension traps (a panic, running out of memory, computing too long); the trap is printed with its frames;
+- the extension traps (a panic, running out of memory, computing too long); the trap is printed with the extension's own frames first (the Rust runtime's panic handling is left out, names are demangled);
 - **any call is refused**, even if the extension handles the error. The refusal is printed with its fix:
 
 ```
@@ -197,17 +219,14 @@ error[CY0201]: net/fetch needs a permission the manifest does not declare
 
 `cyx test` finds `codeyard-exthost` next to `cyx` (both ship with Codeyard), or uses `CODEYARD_EXTHOST`.
 
-Each `[[pull-requests]]` provider is asked for the open requests of a remote on its first host,
-`https://<host>/example/repo.git`, signed with its `auth` account.
-
 Each watch the extension starts gets a file of its own, named after its glob (or the first `read` glob):
 a document watch sees it opened, changed and saved, a file watch sees it created, changed and deleted. A trap in a
 handler fails the test. For `net-from-setting`, the host in the setting's default stands in for one the user allowed.
 
-## HTTP fixtures for cyx test
+## Fixtures for cyx test
 
-`cyx test` reaches no network. To run the success path of a command or provider that fetches, give it answers in
-`test/fixtures.json` (or another file with `cyx test --fixtures FILE`):
+`cyx test` reaches no network and no files. To run the success path of a command or provider that fetches or reads,
+give it answers in `test/fixtures.json` (or another file with `cyx test --fixtures FILE`):
 
 ```json
 {
@@ -229,6 +248,28 @@ handler fails the test. For `net-from-setting`, the host in the setting's defaul
 - The answer is for `net.fetch` and `auth.fetch` alike, after the usual checks: a host not in `net`, or not one of the
   account's hosts, is still refused and fails the test. An `auth.fetch` is answered as if the account were signed in.
 - A request without a fixture fails with a message naming the URL and the file, which counts as an answer.
+- A URL Codeyard never fetches (`http://`, `https://user:pw@…`, an IP address) is refused in the file itself.
+
+Workspace files are text by path, relative to the extension's folder (which `cyx test` opens as the workspace). Reads
+are checked against `read` first, so `.git/config` needs `read = [".git/config"]`, as in Codeyard:
+
+```json
+{
+  "files": {
+    ".git/config": "[remote \"origin\"]\n\turl = https://github.com/you/app.git\n",
+    "src/main.rs": "fn main() {}\n"
+  }
+}
+```
+
+`find-files` lists the fixture files its glob matches and `read` allows. The first file is also the sample document the
+providers are asked about.
+
+A command that needs arguments gets them from `commands`, by its local id; the value is any JSON:
+
+```json
+{ "commands": { "collect": "TODO: write the docs" } }
+```
 
 The `test/` and `tests/` folders at the top of an extension are left out of its package, so fixtures and tests never
 ship.
@@ -236,9 +277,9 @@ ship.
 For a TypeScript extension, a thrown error's stack trace shows the TypeScript file and line, from the bundle's source map:
 
 ```
-  ✓ command boom answers (with an error: it broke
+  ✗ command boom failed: it broke
     at explode (src/extension.ts:4:9)
-    at activate/< (src/extension.ts:18:5))
+    at activate/< (src/extension.ts:18:5)
 ```
 
 A call to an interface the manifest grants nothing for (a file read without `read`) never reaches the extension host, because the component does not import it ([typescript.md](typescript.md#building-and-packaging)); the SDK refuses it with the same fix, and `cyx test` fails on it too.
@@ -272,7 +313,13 @@ Everything is the Rust mock's, in camelCase, and the calls that drive the extens
 so it checks with a copy of its rules generated from crates/ext-ui; a test in Codeyard's repository runs both on the
 same few hundred trees and requires the same verdicts.
 
-`new MockHost()` reads `codeyard-extension.toml` from the folder `npm test` runs in; `new MockHost({ manifest })` takes the text, and `MockHost.allowAll()` allows everything. While a mock is active it is the global `fetch`, so npm packages such as Octokit reach its fixtures and never the network; `host.dispose()` gives `fetch` back.
+The rules on paths, URLs, status items, answer sizes and links are Codeyard's, as in the Rust mock ([Permissions in tests](#permissions-in-tests)); the mock has a copy of them, and a test in Codeyard's repository runs it on the cases Codeyard's own rules judged.
+
+`new MockHost()` reads `codeyard-extension.toml` from the folder `npm test` runs in; `new MockHost({ manifest })` takes the text, and `MockHost.allowAll()` allows everything. From the moment it is made it is the global `fetch`, so npm packages such as Octokit, and the test itself, reach its fixtures and never the network; `host.dispose()` gives `fetch` back. Dispose mocks in the reverse order you made them (`t.after(() => host.dispose())` does).
+
+`activate` may be `async`. Requests wait until its Promise settles, so what it registers after an `await` is there. If it rejects, the activation fails as in Codeyard: `await host.activate(extension)` rejects with `activate failed: …`, the log has the same line, and every request fails with it.
+
+Each `MockHost` starts the SDK afresh, but your module is loaded once per test file, so its top-level variables (a cached client, a timer handle) carry over from one test to the next. Reset them in `activate`, or import the module afresh for a test: `await import("../src/extension.ts?case=2")`.
 
 ## In CI
 

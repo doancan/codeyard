@@ -136,10 +136,11 @@ pub struct RawCode {
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RawPermissions {
-    /// Workspace globs the code may read. `.env*` and `.git/` must be named explicitly.
+    /// Workspace globs the code may read, matched against the whole path ([globs](globs.md)): `main.rs` is the file at
+    /// the top, `**/main.rs` one in any folder. `.env*` and `.git/` must be named explicitly.
     #[serde(default)]
     pub read: Vec<S<String>>,
-    /// Workspace globs the code may write.
+    /// Workspace globs the code may write ([globs](globs.md)).
     #[serde(default)]
     pub write: Vec<S<String>>,
     /// Hosts the code may reach over HTTPS: `api.example.com`, or `*.example.com` for its subdomains.

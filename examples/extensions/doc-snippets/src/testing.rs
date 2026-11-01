@@ -82,6 +82,7 @@ host.read("out.txt");     // a file after the extension wrote it
 host.storage();           // the key-value store
 host.status_items();
 host.diagnostics("src/main.rs");
+host.decorations("src/main.rs");  // by decoration set
 host.invalidated();       // views asked to draw again
 host.applied_edits();
 host.secrets();           // the keychain entries (`secrets`), as the extension left them

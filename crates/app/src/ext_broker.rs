@@ -39,20 +39,15 @@ impl Scope {
         if sends && !self.trusted { v::Why::UntrustedWorkspace } else { v::Why::NotDeclared }
     }
 
-    /// The workspace-relative path of `path` and its root, if it is inside one.
+    /// The workspace-relative path of `path`, if it is inside a root (`ext_manifest::relative`).
     pub fn relative(&self, path: &str) -> Option<String> {
-        let path = normalize(path)?;
-        self.roots.iter().find_map(|root| {
-            let root = root.trim_end_matches('/');
-            let rest = path.strip_prefix(root)?;
-            if rest.is_empty() { Some(String::new()) } else { rest.strip_prefix('/').map(str::to_string) }
-        })
+        ext_manifest::relative(&self.roots, path)
     }
 
+    /// The rule the mock hosts and `cyx test` share (`ext_manifest::globs_allow`): credentials and repository internals
+    /// must be named, never reached by a wide glob.
     fn allowed(globs: &[String], rel: &str) -> bool {
-        // Credentials and repository internals must be named, never reached by a wide glob.
-        let hidden = rel.split('/').any(|p| p.starts_with(".env") || p == ".git");
-        globs.iter().any(|g| crate::globs::path_matches(g, rel) && (!hidden || g.split('/').any(|p| p.starts_with(".env") || p == ".git")))
+        ext_manifest::globs_allow(globs, rel)
     }
 
     /// The denial for `kind` (`read`, `net` …) of `target`: the user's switch when one they turned off matches it, else
@@ -134,10 +129,10 @@ impl Scope {
     }
 }
 
-/// No entry reaches outside the workspace, so the denial says that instead of a line to add.
+/// No entry reaches outside the workspace, so the denial says that instead of a line to add
+/// (`ext_manifest::outside_line`, which the mock hosts and `cyx test` use too).
 fn outside(kind: &str, path: &str) -> v::Error {
-    let reason = "the file is outside the workspace, and extensions reach only files inside its folders";
-    v::Error::Denied(v::Denied { permission: ext_manifest::ungrantable_line(&format!("{kind} {path}"), reason), why: v::Why::NotDeclared })
+    v::Error::Denied(v::Denied { permission: ext_manifest::outside_line(kind, path), why: v::Why::NotDeclared })
 }
 
 /// A path inside the workspace whose symbolic links lead out of it.
@@ -210,54 +205,7 @@ pub fn may_read_on_disk(host: &dyn Host, scope: &Scope, uri: &str) -> Result<Str
 }
 
 /// A `file://` URI or a plain path → an absolute path with `/` separators and no `.`/`..` parts, or none.
-pub fn normalize(uri_or_path: &str) -> Option<String> {
-    let raw = uri_or_path.strip_prefix("file://").unwrap_or(uri_or_path);
-    let decoded = percent_decode(raw)?;
-    let s = decoded.replace('\\', "/");
-    // `/C:/x` from a Windows file URI is `C:/x`.
-    let s = match s.as_bytes() {
-        [b'/', d, b':', ..] if d.is_ascii_alphabetic() => s[1..].to_string(),
-        _ => s,
-    };
-    let absolute = s.starts_with('/') || s.as_bytes().get(1) == Some(&b':');
-    if !absolute {
-        return None;
-    }
-    let (prefix, rest) = match s.strip_prefix('/') {
-        Some(rest) => ("/", rest),
-        None => s.split_at(3),
-    };
-    let mut parts: Vec<&str> = Vec::new();
-    for p in rest.split('/') {
-        match p {
-            "" | "." => {}
-            ".." => {
-                parts.pop()?;
-            }
-            p => parts.push(p),
-        }
-    }
-    Some(format!("{prefix}{}", parts.join("/")))
-}
-
-fn percent_decode(s: &str) -> Option<String> {
-    let b = s.as_bytes();
-    let mut out = Vec::with_capacity(b.len());
-    let mut i = 0;
-    while i < b.len() {
-        if b[i] == b'%' {
-            let h = s.get(i + 1..i + 3)?;
-            out.push(u8::from_str_radix(h, 16).ok()?);
-            i += 3;
-        } else {
-            out.push(b[i]);
-            i += 1;
-        }
-    }
-    let out = String::from_utf8(out).ok()?;
-    // A decoded NUL or control character in a path is never legitimate.
-    (!out.chars().any(char::is_control)).then_some(out)
-}
+pub use ext_manifest::normalize;
 
 pub fn uri(path: &str) -> String {
     if path.starts_with('/') { format!("file://{path}") } else { format!("file:///{path}") }
@@ -310,7 +258,7 @@ pub fn run(host: &dyn Host, scope: &Scope, call: &Start, sink: &dyn Sink, cancel
                     if found.len() >= *max as usize {
                         break;
                     }
-                    if crate::globs::path_matches(glob, &rel) && Scope::allowed(&scope.permissions.read, &rel) {
+                    if ext_manifest::glob::path_matches(glob, &rel) && Scope::allowed(&scope.permissions.read, &rel) {
                         found.push(format!("{}/{rel}", root.trim_end_matches('/')));
                     }
                 }

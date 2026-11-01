@@ -60,6 +60,7 @@ fn hello(dir: &Path, compiled: &Path, sha: [u8; 32], granted: &[&str], untrusted
         },
         settings: vec![("interval".into(), Some("60".into()))],
         folders: vec!["file:///work".into()],
+        status_items: vec!["state".into()],
         reason: "command:echo".into(),
         // Windows sandboxes the exthost from the parent (an AppContainer), which these tests do not do.
         sandbox: cfg!(unix),
@@ -160,6 +161,38 @@ fn commands_run_and_tickets_complete() {
     assert!(h.exit().success());
     // `deactivate` ran and storage is on disk.
     assert!(d.join("data/storage").join(hex("deactivated")).exists());
+}
+
+/// An answer over `CALL_BYTES` fails its request with `invalid` and the exthost goes on; before, it was dropped and the
+/// request waited until its deadline.
+#[test]
+fn an_answer_over_the_call_limit_fails_its_request() {
+    let d = dir("huge");
+    let (c, sha) = compile(&d);
+    let mut h = Host::start(hello(&d, &c, sha, &[], false)).ready();
+    let id = h.command("huge", "");
+    assert_eq!(h.answer(id).0, Err(ext_api::value::Error::Invalid("the result is 20 MiB; at most 8 MiB".into())));
+    assert_eq!(h.json("echo", "[1]"), "[1]");
+}
+
+/// `set-status-item` refuses what the app would not show, with the app's words: an id not in `[[status-bar]]`, a text
+/// longer than `STATUS_TEXT_LEN`.
+#[test]
+fn a_status_item_is_checked_as_the_app_checks_it() {
+    let d = dir("status");
+    let (c, sha) = compile(&d);
+    let mut h = Host::start(hello(&d, &c, sha, &[], false)).ready();
+    let id = h.command("status", "");
+    let (answer, seen) = h.answer(id);
+    assert_eq!(answer, Ok(Response::Json("Ok(())".into())), "{seen:?}");
+    assert!(seen.iter().any(|m| matches!(m, ToApp::Notify(Notify::SetStatusItem { item }) if item.id == "state")), "{seen:?}");
+    let id = h.command("status-undeclared", "");
+    let (answer, seen) = h.answer(id);
+    assert!(
+        matches!(&answer, Ok(Response::Json(j)) if j.starts_with("Err(") && j.contains("status item") && j.contains("other") && j.contains("is not declared")),
+        "{answer:?}"
+    );
+    assert!(!seen.iter().any(|m| matches!(m, ToApp::Notify(Notify::SetStatusItem { .. }))), "{seen:?}");
 }
 
 /// A component built against API 0.1.0 (the probe as it was before 1.0, kept as testdata/probe-0.1.wasm) still runs:

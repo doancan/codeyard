@@ -92,6 +92,18 @@ impl Workbench {
         self.show_overlay(picker, OverlayKind::Input(purpose), window, cx);
     }
 
+    /// [`show_input`](Self::show_input), masked on screen and never prefilled: for a password or token.
+    pub(super) fn show_secret_input(&mut self, purpose: InputPurpose, verb: &'static str, placeholder: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.asking() {
+            return;
+        }
+        if self.overlay.is_some() {
+            self.close_overlay(window, cx);
+        }
+        let picker = cx.new(|cx| Picker::new(vec![PickSource::Secret { verb }], placeholder, "", None, cx));
+        self.show_overlay(picker, OverlayKind::Input(purpose), window, cx);
+    }
+
     pub fn start_create(&mut self, dir: String, is_dir: bool, window: &mut Window, cx: &mut Context<Self>) {
         let (verb, placeholder) = if is_dir {
             (crate::i18n::t("Create folder"), crate::i18n::t("Name of the new folder"))

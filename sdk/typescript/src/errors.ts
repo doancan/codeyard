@@ -148,19 +148,23 @@ export function describe(e: unknown): string {
   return frames.length ? `${head}\n${frames.map((f) => `    at ${f}`).join("\n")}` : head;
 }
 
-/** V8 (`    at fn (file:1:2)`) and SpiderMonkey (`fn@file:1:2`) stacks as `fn (file:1:2)`. */
+/**
+ * V8 (`    at fn (file:1:2)`) and SpiderMonkey (`fn@file:1:2`) stacks as `fn (file:1:2)`. The JavaScript engine's own
+ * `initializer.js` is named without the temporary folder it was built in.
+ */
 export function stackFrames(stack: string): string[] {
   const out: string[] = [];
+  const at = (file: string) => file.replace(/^.*[\\/](initializer\.js:)/, "$1");
   for (const raw of stack.split("\n")) {
     const line = raw.trim();
     if (!line) continue;
     const v8 = /^at (?:(.+?) \()?(.+?:\d+:\d+)\)?$/.exec(line);
     if (v8) {
-      out.push(v8[1] ? `${v8[1]} (${v8[2]})` : `<anonymous> (${v8[2]})`);
+      out.push(`${v8[1] || "<anonymous>"} (${at(v8[2]!)})`);
       continue;
     }
     const sm = /^(.*)@(.+?:\d+:\d+)$/.exec(line);
-    if (sm) out.push(`${sm[1] || "<anonymous>"} (${sm[2]})`);
+    if (sm) out.push(`${sm[1] || "<anonymous>"} (${at(sm[2]!)})`);
   }
   return out;
 }

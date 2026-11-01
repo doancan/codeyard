@@ -1,0 +1,6 @@
+{
+  "commands": {
+    "commit": { "provider": "jj", "root": "file:///work", "message": "Fix the parser" },
+    "restore": { "provider": "jj", "root": "file:///work" }
+  }
+}

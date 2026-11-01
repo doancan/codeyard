@@ -41,6 +41,7 @@ Generated from the code, so they say what this version of Codeyard does. A test 
 | [cyx](reference/cli.md) | Every `cyx` command, option and environment variable | `crates/cyx/src/main.rs` |
 | [Errors](reference/errors.md) | Every error code, what it means and its fix | `crates/ext-manifest`, `crates/ext-core` |
 | [Limits](reference/limits.md) | Every size, count and time limit | `crates/ext-manifest/src/limits.rs` |
+| [Globs](reference/globs.md) | How `read`, `write` and `workspace-contains` globs match | `crates/ext-manifest/src/glob.rs` (checked, not generated) |
 
 After changing what a page is made from, write it again:
 

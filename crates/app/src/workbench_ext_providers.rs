@@ -705,21 +705,18 @@ impl Workbench {
     fn on_set_status_item(&mut self, id: &str, mut item: v::StatusItem, cx: &mut Context<Self>) {
         let reg = crate::ext::current();
         let Some(active) = reg.active.iter().find(|e| e.id() == id) else { return };
-        let full = format!("{id}.{}", item.id);
-        if !active.manifest.contributions.status_items.iter().any(|s| s.id == full) {
-            self.log_extension(id, LogLevel::Warn, format!("status item \"{}\" is not declared in [[status-bar]]; it is not shown", item.id));
-            return;
+        // The exthost refuses the same items first (`ext_manifest::calls::check_status_item`); nothing it sends is trusted.
+        let declared = |local: &str| active.manifest.contributions.status_items.iter().any(|s| s.id == format!("{id}.{local}"));
+        match ext_manifest::calls::check_status_item(Some(&declared), &item.id, &item.text, item.tooltip.as_deref()) {
+            Ok(text) => {
+                item.text = text;
+                item.tooltip = item.tooltip.as_deref().and_then(|t| shown_text(t, limits::ITEM_LEN));
+            }
+            Err(e) => {
+                self.log_extension(id, LogLevel::Warn, format!("{e}; it is not shown"));
+                return;
+            }
         }
-        let Some(text) = shown_text(&item.text, limits::STATUS_TEXT_LEN) else {
-            self.log_extension(
-                id,
-                LogLevel::Warn,
-                format!("status item \"{}\": its text must be 1 to {} visible characters", item.id, limits::STATUS_TEXT_LEN),
-            );
-            return;
-        };
-        item.text = text;
-        item.tooltip = item.tooltip.as_deref().and_then(|t| shown_text(t, limits::ITEM_LEN));
         let list = &mut self.cfg.exts.providers.status;
         match list.iter_mut().find(|(e, i)| e == id && i.id == item.id) {
             Some(slot) => slot.1 = item,

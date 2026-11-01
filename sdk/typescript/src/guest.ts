@@ -77,6 +77,19 @@ export function installGlobals(): () => void {
   };
 }
 
+/**
+ * An `async activate`: settles with its error, or undefined once it finished. The export cannot wait for it (an export
+ * never waits on I/O), so requests wait instead, and fail with its error if it rejects.
+ */
+let activation: Promise<string | undefined> | undefined;
+/** What `activation` settled to: `{ error }` when it rejected. */
+let activated: { error: string | undefined } | undefined;
+
+/** How the last `activate` ended: pending (`undefined`), done, or failed with `error`. The mock host waits on it. */
+export function activationOutcome(): { error: string | undefined } | undefined {
+  return activation ? activated : { error: undefined };
+}
+
 /** The guest exports for `extension`, calling the host through `bindings`. */
 export function start(extension: ExtensionModule, bindings: Bindings): Guest {
   if (typeof extension.activate !== "function") {
@@ -84,10 +97,14 @@ export function start(extension: ExtensionModule, bindings: Bindings): Guest {
   }
   install(bindings);
   resetHandlers();
+  activation = undefined;
+  activated = undefined;
   return {
     activate({ reason }) {
       handlers.reason = reason;
       restoreState(reason);
+      activation = undefined;
+      activated = undefined;
       let r: unknown;
       try {
         r = extension.activate(ctx);
@@ -95,8 +112,22 @@ export function start(extension: ExtensionModule, bindings: Bindings): Guest {
         // `result<_, string>`: a thrown string is the error.
         throw describe(e);
       }
-      // `activate` may be async; what it awaits finishes in the background, and a failure is logged.
-      if (r && typeof (r as Promise<unknown>).then === "function") background(r as Promise<unknown>);
+      // `activate` may be async. Its rejection fails the activation: logged as `activate failed: …` (which `cyx test`
+      // reports), and every request answers with it.
+      if (r && typeof (r as Promise<unknown>).then === "function") {
+        activation = Promise.resolve(r).then(
+          () => {
+            activated = { error: undefined };
+            return undefined;
+          },
+          (e) => {
+            const error = describe(e);
+            activated = { error };
+            host().log.log("error", `activate failed: ${error}`);
+            return error;
+          },
+        );
+      }
     },
     deactivate() {
       try {
@@ -108,7 +139,12 @@ export function start(extension: ExtensionModule, bindings: Bindings): Guest {
       saveState();
     },
     handle(id, request) {
-      handle(id, request);
+      // Requests that arrive while an `async activate` runs wait for it, so what it registers after an `await` is there.
+      if (!activation) return handle(id, request);
+      void activation.then((error) => {
+        if (error === undefined) handle(id, request);
+        else respond(id, { tag: "err", val: toWit(CodeyardError.other(`activate failed: ${error.split("\n")[0]}`)) });
+      });
     },
     cancel(id) {
       handlers.cancelledRequests.add(id);

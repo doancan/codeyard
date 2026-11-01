@@ -355,7 +355,7 @@ fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
             Some("remove [activation]: themes, snippets, languages and other no-code contributions are always on".into());
     }
     for g in raw.activation.iter().flat_map(|a| &a.workspace_contains) {
-        if let Err(e) = check_workspace_glob(g.get_ref()) {
+        if let Err(e) = crate::glob::check(g.get_ref()) {
             cx.err(C::BadPath, g.span(), format!("activation.workspace-contains '{}' {e}", g.get_ref()));
         }
         activation.push(Activation::WorkspaceContains(g.get_ref().clone()));
@@ -494,29 +494,9 @@ fn oauth(cx: &mut Ctx, raw: &[S<RawOAuth>], perms_raw: Option<&RawPermissions>, 
     out
 }
 
-/// A glob as `watch.files` takes it: the same rules as a `read` glob.
+/// A glob as `watch.files` takes it: the same rules as a `read` glob (`crate::glob::check`).
 pub fn check_watch_glob(g: &str) -> Result<(), String> {
-    check_workspace_glob(g).map_err(|e| format!("the glob '{g}' {e}"))
-}
-
-fn check_workspace_glob(g: &str) -> Result<(), String> {
-    if g.is_empty() || g.len() > limits::ITEM_LEN {
-        return Err(format!("must be 1 to {} characters", limits::ITEM_LEN));
-    }
-    if g.starts_with('/') || g.starts_with('~') || g.contains('\\') || g.contains(':') {
-        return Err("must be relative to the workspace and '/'-separated".into());
-    }
-    if g.contains(['{', '}']) {
-        return Err("must not use {a,b} alternatives; list each glob separately".into());
-    }
-    if g.chars().any(is_deceptive) {
-        return Err("contains an invisible or control character".into());
-    }
-    let body = g.strip_prefix("./").unwrap_or(g);
-    if body.split('/').any(|p| p.is_empty() || p == "." || p == "..") {
-        return Err("must not contain '.', '..' or empty parts".into());
-    }
-    Ok(())
+    crate::glob::check(g).map_err(|e| format!("the glob '{g}' {e}"))
 }
 
 /// `core:` followed by a command id as the command palette lists it: ASCII letters, digits and `-`, in dot-separated
@@ -589,8 +569,8 @@ fn list(cx: &mut Ctx, what: &str, items: &[S<String>], check: impl Fn(&str) -> R
 }
 
 fn permissions(cx: &mut Ctx, p: &RawPermissions) -> Permissions {
-    let read = list(cx, "read", &p.read, check_workspace_glob);
-    let write = list(cx, "write", &p.write, check_workspace_glob);
+    let read = list(cx, "read", &p.read, crate::glob::check);
+    let write = list(cx, "write", &p.write, crate::glob::check);
     let net = list(cx, "net", &p.net, check_host);
     let auth = list(cx, "auth", &p.auth, check_id_part);
     let run = list(cx, "run", &p.run, check_program);
@@ -796,7 +776,7 @@ fn contributions(cx: &mut Ctx, raw: &RawManifest, id: &ExtId, perms: &Permission
                     .file_match
                     .iter()
                     .map(|g| {
-                        if let Err(e) = check_workspace_glob(g.get_ref()) {
+                        if let Err(e) = crate::glob::check(g.get_ref()) {
                             cx.err(C::BadPath, g.span(), format!("{what} file-match '{}' {e}", g.get_ref()));
                         }
                         g.get_ref().clone()
@@ -1082,7 +1062,7 @@ fn code_contributions(
 
 /// An `[[scm]]` marker: a path relative to the folder, without wildcards (`.hg`, `.jj/repo`).
 fn check_marker(m: &str) -> Result<(), String> {
-    check_workspace_glob(m)?;
+    crate::glob::check(m)?;
     if m.contains(['*', '?', '[', ']']) {
         return Err("must be a plain name, without wildcards".into());
     }

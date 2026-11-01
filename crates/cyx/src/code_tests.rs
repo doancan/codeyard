@@ -269,6 +269,116 @@ codeyard_extension::export!(Counter);
     std::fs::remove_dir_all(&root).unwrap();
 }
 
+/// One run reports every problem, with Codeyard's rules: a trap restarts the exthost and the rest still runs; an error
+/// is an answer only after something `cyx test` cannot give offline; files come from the fixtures; the 8 MiB answer
+/// limit, the status bar rule and the providers are checked too. Before, the first trap ended the run, a command that
+/// returned any error (or had no handler) passed, and a 20 MiB answer timed out.
+#[test]
+fn cyx_test_reports_every_problem_in_one_run() {
+    let Some(exthost) = toolchain() else { return };
+    let root = tmp("all");
+    let dir = root.join("all-problems");
+    scaffold::create_with(&dir, Kind::Command, "all-problems", "you", Some(&repo().to_string_lossy())).unwrap();
+    let manifest_path = dir.join(ext_manifest::FILE_NAME);
+    let manifest = std::fs::read_to_string(&manifest_path).unwrap();
+    let mut more = String::new();
+    for id in ["boom", "missing", "bug", "offline", "config", "huge", "status"] {
+        more.push_str(&format!("\n[[commands]]\nid    = \"{id}\"\ntitle = \"{id}\"\n"));
+    }
+    more.push_str(
+        "\n[[status-bar]]\nid = \"state\"\n\n[[hover]]\nlanguages = [\"rust\"]\n\n[permissions]\nread = [\".git/config\"]\nnet  = [\"api.example.com\"]\n",
+    );
+    std::fs::write(&manifest_path, format!("{manifest}{more}")).unwrap();
+    let code = r#"use codeyard_extension::prelude::*;
+
+struct AllProblems;
+
+fn explode(n: usize) -> usize {
+    let v: Vec<usize> = Vec::new();
+    v[n]
+}
+
+impl Extension for AllProblems {
+    fn activate(ctx: Context) -> Result<()> {
+        ctx.command("hello", async |_ctx, _args| Ok("hi"));
+        ctx.command("boom", async |_ctx, _args| Ok(explode(3)));
+        ctx.command("bug", async |_ctx, _args| -> Result<()> { Err(Error::other("a bug")) });
+        ctx.command("offline", async |ctx, _args| Ok(ctx.fetch(Request::get("https://api.example.com/x")).await?.status));
+        ctx.command("config", async |ctx, _args| {
+            let folder = ctx.folders().first().cloned().unwrap_or_default();
+            ctx.read_text(&format!("{folder}/.git/config")).await
+        });
+        ctx.command("huge", async |_ctx, _args| Ok("x".repeat(20 << 20)));
+        ctx.command("status", async |ctx, _args| ctx.set_status_item(StatusItem { id: "other".into(), text: "Hi".into(), ..Default::default() }));
+        ctx.hover(async |_ctx, doc, _position| Ok(Some(Hover::new(format!("{} lines", doc.text.lines().count())))));
+        Ok(())
+    }
+}
+
+codeyard_extension::export!(AllProblems);
+"#;
+    std::fs::write(dir.join("src/lib.rs"), code).unwrap();
+    std::fs::create_dir_all(dir.join("test")).unwrap();
+    std::fs::write(dir.join("test/fixtures.json"), r#"{ "files": { ".git/config": "[core]\n\tbare = false\n" } }"#).unwrap();
+    std::fs::copy(repo().join("examples/extensions/hello-command/Cargo.lock"), dir.join("Cargo.lock")).unwrap();
+    build::build_in(&dir, Some(&target_dir())).unwrap();
+    let manifest = build::manifest(&dir).unwrap();
+    let fixtures = crate::fixtures::Fixtures::load(&dir, None).unwrap();
+    let run = harness::run(&dir, &manifest, &exthost, &fixtures).unwrap();
+    let lines = run.lines.join("\n");
+    let failures = run.failures.join("\n");
+    assert!(lines.contains("✓ command hello answers"), "{lines}");
+    // The panic: the extension's own frame, demangled, with the runtime's panic handling left out.
+    assert!(failures.contains("the extension trapped"), "{failures}");
+    assert!(failures.contains("at all_problems::explode"), "{failures}");
+    assert!(!failures.contains("_ZN") && !failures.contains("at std::") && !failures.contains("at core::"), "{failures}");
+    assert!(lines.contains("(the extension host was started again)"), "{lines}");
+    assert!(failures.contains("command missing failed: not found: no command 'missing' is registered"), "{failures}");
+    assert!(failures.contains("command bug failed: a bug"), "{failures}");
+    assert!(lines.contains("✓ command offline answers (with an error, after no fixture for GET https://api.example.com/x"), "{lines}");
+    assert!(lines.contains("✓ command config answers"), "{lines}");
+    assert!(failures.contains("command huge failed: invalid: the result is 20 MiB; at most 8 MiB"), "{failures}");
+    assert!(failures.contains("status item \"other\" is not declared"), "{failures}");
+    assert!(lines.contains("✓ hover answers"), "{lines}");
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// An `async activate` that rejects after an `await` fails the activation; a command that throws is a failure, not an
+/// answer; the JavaScript engine's own file is named without the folder it was built in.
+#[test]
+fn cyx_test_fails_an_async_activate_and_a_throwing_command() {
+    let Some(exthost) = toolchain() else { return };
+    if !node() {
+        return;
+    }
+    let root = tmp("ts-async");
+    let dir = root.join("late");
+    scaffold::create_in(&dir, Kind::Command, "late", "you", None, scaffold::Lang::TypeScript).unwrap();
+    let manifest_path = dir.join(ext_manifest::FILE_NAME);
+    let manifest = std::fs::read_to_string(&manifest_path).unwrap();
+    std::fs::write(&manifest_path, format!("{manifest}\n[permissions]\nnet = [\"api.example.com\"]\n")).unwrap();
+    let code = r#"import type { Context } from "@codeyard/extension";
+
+export async function activate(ctx: Context) {
+  ctx.command("hello", () => (undefined as unknown as { name: string }).name);
+  const r = await fetch("https://api.example.com/config");
+  if (!r.ok) throw new Error(`no config (${r.status})`);
+}
+"#;
+    std::fs::write(dir.join("src/extension.ts"), code).unwrap();
+    std::fs::write(dir.join("test/fixtures.json"), r#"{ "http": [{ "url": "https://api.example.com/config", "status": 503 }] }"#).unwrap();
+    build::build(&dir).unwrap();
+    let manifest = build::manifest(&dir).unwrap();
+    let fixtures = crate::fixtures::Fixtures::load(&dir, None).unwrap();
+    let run = harness::run(&dir, &manifest, &exthost, &fixtures).unwrap();
+    let failures = run.failures.join("\n");
+    let lines = run.lines.join("\n");
+    assert!(failures.contains("activate failed: no config (503)"), "{lines}");
+    assert!(failures.contains("command hello failed"), "{lines}");
+    assert!(!lines.contains("/initializer.js"), "{lines}");
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
 /// `cyx dev` with a stand-in for Codeyard that exits once `extension.wasm` is replaced: saving a source file rebuilds it.
 #[cfg(unix)]
 #[test]
