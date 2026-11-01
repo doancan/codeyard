@@ -72,7 +72,9 @@ impl DisplayMap {
         let mut starts = Vec::with_capacity(n + 1);
         let mut row = 0u32;
         let mut h = hidden.iter().peekable();
-        for line in 0..n {
+        // One pass over the lines: looking each line up anew (`line_len_chars`) costs a descent of the rope per line,
+        // which on a 50 000-line file with wrapping on was most of a keystroke.
+        for (line, text) in buffer.rope().lines().take(n).enumerate() {
             starts.push(row);
             while h.peek().is_some_and(|r| r.end <= line) {
                 h.next();
@@ -82,7 +84,11 @@ impl DisplayMap {
             }
             row += match cols {
                 // Tab is the widest character: a line this short surely fits (without reading the text).
-                Some(c) if buffer.line_len_chars(line) * tab.max(1) > c => wrap_points(&buffer.line(line), c, tab).len() as u32,
+                Some(c) if text.len_chars().saturating_sub(1) * tab.max(1) > c => {
+                    let len = text.len_chars();
+                    let len = if len > 0 && text.char(len - 1) == '\n' { len - 1 } else { len };
+                    if len * tab.max(1) > c { wrap_points(&text.slice(..len).to_string(), c, tab).len() as u32 } else { 1 }
+                }
                 _ => 1,
             };
         }
