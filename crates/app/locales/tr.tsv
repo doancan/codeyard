@@ -3453,3 +3453,28 @@ Show in the Explorer	Gezginde göster
 Tab actions	Sekme eylemleri
 Terminals	Terminaller
 Views	Görünümler
+(modified)	(değiştirildi)
+Collapse	Daralt
+Expand	Genişlet
+Open Editors	Açık Düzenleyiciler
+line {}	satır {}
+Removed	Kaldırıldı
+Show the Markdown source	Markdown kaynağını göster
+Sort by {}	{} ölçütüne göre sırala
+Unchanged	Değişmedi
+{} added	{} eklendi
+{} removed	{} kaldırıldı
+Breakpoint on line {}	{}. satırdaki kesme noktası
+Brightness	Parlaklık
+Color picker	Renk seçici
+Conflict at line {}	{}. satırdaki çakışma
+Find in Terminal	Terminalde Bul
+Fold line {}	{}. satırı katla
+Hue	Ton
+Line {} added	{}. satır eklendi
+Line {} changed	{}. satır değişti
+Lines deleted above line {}	{}. satırın üstünde satırlar silindi
+Opacity	Opaklık
+Saturation	Doygunluk
+Unfold line {}	{}. satırı aç
+disabled	devre dışı

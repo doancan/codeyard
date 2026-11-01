@@ -500,11 +500,19 @@ impl Workbench {
                         ui::icon_button("tests-refresh", "refresh-cw", crate::i18n::t("Refresh Tests"), p)
                             .on_click(cx.listener(|this, _, _, cx| this.refresh_tests(cx))),
                     )
-                    .child(ui::icon_button("tests-collapse", "chevrons-down-up", crate::i18n::t("Collapse All"), p).on_click(cx.listener(|this, _, _, cx| {
-                        let t = &mut this.jobs.tests;
-                        t.expanded.clear();
-                        cx.notify();
-                    }))),
+                    .child(
+                        ui::icon_button("tests-collapse", "chevrons-down-up", crate::i18n::t("Collapse All"), p)
+                            .relative()
+                            .child(self.ctl(crate::i18n::t("Testing"), "tests-collapse", crate::i18n::t("Collapse All"), cx, |this, _, cx| {
+                                this.jobs.tests.expanded.clear();
+                                cx.notify();
+                            }))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                let t = &mut this.jobs.tests;
+                                t.expanded.clear();
+                                cx.notify();
+                            })),
+                    ),
             );
         let muted = |s: SharedString| div().px(px(theme::SPACE[6])).py(px(theme::SPACE[2])).text_color(c(p.text_muted)).child(s);
         let body: AnyElement = if t.scanning && t.files.is_empty() {
@@ -576,7 +584,22 @@ impl Workbench {
             .text_size(px(text::SM.0))
             .child(header)
             .children(t.filter.clone().map(|f| {
+                let field = f.read(cx);
+                let (text, handle) = (field.text().to_string(), field.focus_handle(cx));
+                let access = crate::a11y_controls::control(
+                    crate::a11y_controls::Control::new(
+                        crate::i18n::t("Testing"),
+                        "tests-filter",
+                        accesskit::Role::TextInput,
+                        crate::i18n::t("Filter (e.g. text, path)"),
+                    )
+                    .value(text)
+                    .focus(handle.clone())
+                    .on_entity(cx.entity().downgrade(), move |_: &mut Self, w, _| w.focus(&handle)),
+                );
                 div()
+                    .relative()
+                    .child(access)
                     .mx(px(theme::SPACE[3]))
                     .mb(px(theme::SPACE[2]))
                     .px(px(theme::SPACE[2]))

@@ -20,10 +20,10 @@ are not used for destructive tests. No real SSH host is contacted by the walkthr
 | --- | --- | --- |
 | Editor and navigation | Native quick open, Rust syntax, tab and text exposure; workspace editor regression suite | IME, RTL, mixed DPI and long sessions on real Windows hardware |
 | Explorer | Native keyboard navigation; expanded empty-folder regression; path-based accessibility actions | Multi-selection, bulk operations and accessibility beyond the row limit |
-| Git | Native Source Control; disposable index/commit action tests; existing branch, sync, conflict and local-remote tests | Accessible graph, repository selection and large change sets |
+| Git | Native Source Control (graph, worktrees, sync, stashes and repository selection in the accessibility tree); disposable index/commit action tests; existing branch, sync, conflict and local-remote tests | Large change sets |
 | Rust IDE | Native server-independent manifest lookup and real program/test debugging; actual virtual-workspace, named-target and required-feature builds | Unified user-selected feature/profile settings, macros/module remapping and the real SSH/Windows adapter matrix |
 | Customization | Existing settings catalog, JSONC, keybinding/import and theme tests | Full-interface scaling and a discoverable Rust configuration preset |
-| Accessibility | Real macOS AX tree; AccessKit consumer validation; focus/action regression tests | VoiceOver speech/rotor, bounds, other panels/dialogs and real Windows UI Automation |
+| Accessibility | Real macOS AX tree; AccessKit consumer validation; focus/action regression tests; every panel, page, dialog and drawn control with its frame and action ([accessibility.md](accessibility.md)); measured polling cost | VoiceOver, NVDA and Narrator speech/rotor sessions and real Windows UI Automation on hardware; Linux AT-SPI |
 | Reliability/performance | Build, Clippy, architecture/docs/i18n gates, workspace tests and final Retina memory/size budgets | Startup/frame timings, long sessions and active-AT CPU cost |
 
 ## Verified findings
@@ -75,8 +75,8 @@ the containing workspace, choose a member crate before the workspace manifest, u
 read upward through unrelated parent folders. An out-of-date reply must not open a file in a new workspace.
 
 Use meaningful regressions before fixes, retain local/SSH behavior through `Host`, add Turkish strings and document
-the changed behavior. Source Control's graph, worktree accessibility, sync controls and full keyboard traversal remain separate work;
-this pass establishes accessible change inspection, staging and committing.
+the changed behavior. This pass established accessible change inspection, staging and committing; Source Control's
+graph, worktrees, sync controls and stashes followed (#214, and the side views' controls after it).
 
 ### Pass 2: complete the accessible task chain
 

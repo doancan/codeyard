@@ -211,6 +211,7 @@ fn terminal_rows_are_text_with_the_cursor_as_caret() {
         label: "Terminal 1 of 1".into(),
         runs: runs_for(vec![(0, rows[0].clone()), (5, rows[1].clone()), (10, rows[2].clone())], 3, 0),
         cursor: Some(12),
+        scroll: (0, 0),
     });
     s.focus = FocusSnap::Terminal;
     let tree = accesskit_consumer::Tree::new(s.to_tree(), true);

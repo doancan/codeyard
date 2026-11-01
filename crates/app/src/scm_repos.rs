@@ -341,6 +341,18 @@ impl ScmPanel {
             .child(
                 div()
                     .id(("scm-repo-fold", key as usize))
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::button(
+                            crate::i18n::t("Repositories"),
+                            format!("fold:{}", key as usize),
+                            if collapsed { crate::i18n::t("Expand") } else { crate::i18n::t("Collapse") },
+                            |_, _| {},
+                        )
+                        .description(repo.label.to_string())
+                        .expanded(!collapsed)
+                        .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| this.toggle_repo(key, cx)),
+                    ))
                     .flex_none()
                     .child(icon(if collapsed { "chevron-right" } else { "chevron-down" }, 14., p.text_muted))
                     .on_click(cx.listener(move |this, _, _, cx| {
