@@ -13,9 +13,15 @@ scripts/perf/compare.py target/perf/baseline.json target/perf/candidate.json
 
 `--aa` runs the working tree against itself instead: every row must pass, otherwise the machine is too noisy (close
 other apps, plug in the power, let it cool). `--runs` and `--mem-runs` change the number of runs (default 20 and 5). A
-full run takes about 35 minutes. The measured windows open in the background and never take the keyboard, but they
-must be visible: keep the display awake and stay on the same Space. A run that draws no frame or loses a key stops
-with a message instead of producing numbers. The baseline is built once in `target/perf/worktree-<commit>` and reused.
+full run takes about 35 minutes. The measured windows never take the keyboard: the app is not activated, so its window
+would open behind the windows of the app in front, and macOS draws nothing in a window that is covered entirely.
+`CODEYARD_PERF_ON_TOP` keeps the measured window above normal windows and on every Space instead (`keep_drawn` in
+`crates/app/src/perf.rs`); keep the display awake. A baseline from before that variable has no such hook: the run warns,
+and nothing may cover its window. Every build that has a scenario's hook must give all of that scenario's samples, and
+every memory scene a value; otherwise the run stops with a message instead of producing numbers (a baseline from before
+a scenario is not compared on it). The baseline is built once in `target/perf/worktree-<commit>` and reused, with
+its own `codeyard-exthost` when it has one (`CODEYARD_EXTHOST`): an app and an exthost of different commits need not
+agree on every call.
 
 ## What is measured
 
@@ -80,6 +86,11 @@ Run it on the reference Mac before tagging (`docs/releasing.md`) and commit `tar
 reruns the previous tag next to the candidate, so both are measured in the same session. Accepting a regression is one
 line in the release notes saying which metric and why. `docs/benchmarks/perf-baseline-2026-10-28.json` is the first
 record, taken before the platform work started. `docs/benchmarks/perf-2026-10-31.json` is the first with the extension
-rows, measured against v0.6.0; it is the record the extension rows were made blocking on. Both of its builds were
+rows, measured against v0.6.0; it is the record the extension rows were made blocking on. `docs/benchmarks/perf-2026-11-01.json` (main at
+838838e8) and `perf-2026-11-01-before-215.json` (58e18f21, main before the change for #215, which redraws after a
+background parse only for new colours on screen, once typing pauses) were measured side by side on an M4 Pro, 20 runs
+each, with no runtime shaders: `typing.keystroke_frame_words_ms` p95 22.6 → 22.5 ms and `typing.keystroke_frame_ms`
+24.5 → 24.6 ms (`compare.py`). On this Mac words typed at the top of the file were not slower than plain typing before
+the change either, so the 34.4 against 28.5 ms of the 2026-10-31 record (a runtime-shader build) did not show here. Both of its builds were
 made with `--features gpui/runtime_shaders` (that Mac has no Metal compiler), which compiles the shaders at startup;
 release builds do not.
