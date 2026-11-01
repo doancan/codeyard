@@ -5,13 +5,13 @@
 //! cyx dev [FOLDER] [-- CODEYARD ARGS…]   run Codeyard with the extension loaded from FOLDER; rebuilt and reloaded on save (dev.rs)
 //! cyx check [FOLDER] [--fix]             every problem with its file, line and fix; --fix adds missing permissions (fix.rs)
 //! cyx explain CODE                       what an error code means and how to fix it (explain.rs)
-//! cyx package [FOLDER] [-o FILE] [--no-build] [--target TRIPLE]  build the code (build.rs), then a reproducible .cyx
+//! cyx package [FOLDER] [-o FILE] [--dry-run] [--no-build] [--target TRIPLE]  build the code (build.rs), then a reproducible .cyx
 //!                                        (one per platform in native/ when the extension ships native programs)
 //! cyx test [FOLDER] [--fixtures FILE]    the built extension in codeyard-exthost against a scripted app (harness.rs)
 //! cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
 //! cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL] [--target TRIPLE]
-//! cyx yank | restore VERSION [FOLDER]    hide a version from installs, or bring it back
-//! cyx deprecate VERSION [FOLDER] [--replacement ID]
+//! cyx yank | restore VERSION [FOLDER] [--registry URL]   hide a version from installs, or bring it back
+//! cyx deprecate VERSION [FOLDER] [--replacement ID] [--registry URL]
 //! cyx yard <keygen|sign|verify> …        the registry operator's commands (yard.rs)
 //! ```
 //!
@@ -24,6 +24,7 @@ mod explain;
 mod fix;
 mod fixtures;
 mod harness;
+mod keys;
 mod net;
 mod oidc;
 mod publish;
@@ -56,7 +57,8 @@ usage:
                                              missing permissions to codeyard-extension.toml
   cyx explain CODE                           what an error code such as CY0201 means and how to fix it
   cyx package [FOLDER] [-o FILE|FOLDER]      build the code, then write a .cyx to install or publish
-                                             (--no-build: package the extension.wasm already there;
+                                             (--dry-run: list the files it would hold, write nothing;
+                                             --no-build: package the extension.wasm already there;
                                              --target TRIPLE: one platform's package of an extension with
                                              native programs in native/<TRIPLE>/; without it, every platform)
   cyx test [FOLDER] [--fixtures FILE]        build the code and run each command and view in the extension host;
@@ -66,8 +68,9 @@ usage:
   cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL] [--target TRIPLE]
                                              sign it (no keys: GitHub Actions or a browser sign-in) and publish
                                              (native programs: every platform in native/, or the one named)
-  cyx yank | restore VERSION [FOLDER]        hide a published version from installs, or bring it back
-  cyx deprecate VERSION [FOLDER] [--replacement ID]
+  cyx yank | restore VERSION [FOLDER] [--registry URL]
+                                             hide a published version from installs, or bring it back
+  cyx deprecate VERSION [FOLDER] [--replacement ID] [--registry URL]
   cyx yard <keygen|sign|verify> …           the registry operator's commands (cyx yard help)
   cyx --version
 
@@ -150,11 +153,28 @@ fn run(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         "package" => {
-            let (dir, out, build, target) = parse_package(rest)?;
-            if build {
-                build::build(&dir)?;
+            let p = parse_package(rest)?;
+            // A wrong -o fails now, not after a build that can take a while.
+            if let Some(o) = &p.out {
+                check_output(o)?;
             }
-            for (path, digest) in package_platforms(&dir, out.as_deref(), target.as_deref())? {
+            if p.build {
+                build::build(&p.dir)?;
+            }
+            for w in check(&p.dir)?.warnings {
+                eprintln!("{w}");
+            }
+            if p.dry_run {
+                for (name, files) in package_contents(&p.dir, p.target.as_deref())? {
+                    println!("{name} would hold {} files:", files.len());
+                    for (path, size) in files {
+                        println!("  {path}  ({size} bytes)");
+                    }
+                }
+                println!("Nothing was written. docs/extensions/developer-guide.md (\"What goes into a package\") says what is left out.");
+                return Ok(());
+            }
+            for (path, digest) in package_checked(&p.dir, p.out.as_deref(), p.target.as_deref())? {
                 println!("Wrote {}\ncontent digest {digest}", path.display());
             }
             Ok(())
@@ -228,7 +248,10 @@ fn print_fixes(f: &fix::Fixed) {
         }
     }
     if f.applied.is_empty() && f.left.is_empty() {
-        println!("Nothing to fix.");
+        println!("No permissions to add.");
+    }
+    if let Some(note) = &f.note {
+        println!("note: {note}");
     }
     println!();
 }
@@ -466,6 +489,16 @@ fn check_with(dir: &Path, options: ext_manifest::Options) -> Result<CheckReport,
             ext_manifest::FILE_NAME
         ));
     }
+    // The app does not bind a key a built-in shortcut uses.
+    for k in m.contributions.keybindings.iter().filter(|k| keys::is_builtin_key(&k.key)) {
+        warnings.push(format!(
+            "warning: key '{}' is a built-in shortcut, so Codeyard will not bind it to {}\n  --> {} [[keybindings]] key\n   = fix: pick a key no built-in uses, such as one with cmd-alt-shift or ctrl-alt-shift",
+            k.key,
+            k.command,
+            ext_manifest::FILE_NAME
+        ));
+    }
+    warnings.extend(unknown_languages(&m));
     // A client id left as the template wrote it passes every check and fails at the first sign-in (#187).
     for o in placeholder_client_ids(&m) {
         warnings.push(format!(
@@ -477,12 +510,21 @@ fn check_with(dir: &Path, options: ext_manifest::Options) -> Result<CheckReport,
     }
     // The package rules (files the manifest names, paths, sizes) as a full package build would apply them: for each
     // platform of an extension with native programs.
+    let mut secrets = Vec::new();
     if m.has_native_programs() {
         for t in native_platforms(dir)? {
-            check_files(dir, Some(&t), &m, &text)?;
+            secrets.extend(check_files(dir, Some(&t), &m, &text)?);
         }
     } else {
-        check_files(dir, None, &m, &text)?;
+        secrets.extend(check_files(dir, None, &m, &text)?);
+    }
+    secrets.sort();
+    secrets.dedup();
+    if !secrets.is_empty() {
+        warnings.push(format!(
+            "warning: left out of the package because they look like secrets: {}\n   = fix: keep keys and tokens outside the extension folder; a file that only looks like a secret can be renamed. docs/extensions/developer-guide.md (\"What goes into a package\") lists the rules",
+            secrets.join(", ")
+        ));
     }
     let requires = match (&m.code, std::fs::read(dir.join(ext_pkg::COMPONENT))) {
         (Some(_), Ok(wasm)) => ext_pkg::check_component(&wasm, &m).ok().map(|c| {
@@ -496,19 +538,30 @@ fn check_with(dir: &Path, options: ext_manifest::Options) -> Result<CheckReport,
     Ok(CheckReport { id: m.id.to_string(), version: m.version.to_string(), warnings, requires })
 }
 
-/// "It needs Codeyard 0.7.0 or newer (API 1.0.0: …)." for a component that passed the import check.
+/// "It needs Codeyard 0.7.0 or newer (API 1.0.0, …)." for a component that passed the import check. When this build
+/// is a preview of that release (the workspace version is still the one before it), it says this build runs it.
 pub(crate) fn requires(c: &ext_pkg::Component) -> String {
-    let codeyard = ext_api::codeyard_for(c.min_api).unwrap_or("(unreleased)");
-    format!("It needs Codeyard {codeyard} or newer (API {}, from the API items its code uses).", c.min_api)
+    requires_on(c, env!("CARGO_PKG_VERSION"))
+}
+
+fn requires_on(c: &ext_pkg::Component, build: &str) -> String {
+    let api = c.min_api;
+    match ext_api::codeyard_for(api) {
+        None => format!("It needs a Codeyard newer than any release (API {api}, from the API items its code uses)."),
+        Some(release) if ext_api::is_preview_of(build, release) => format!(
+            "It needs Codeyard {release} or newer (API {api}, from the API items its code uses). {release} is not released yet; this preview build ({build}) runs it."
+        ),
+        Some(release) => format!("It needs Codeyard {release} or newer (API {api}, from the API items its code uses)."),
+    }
 }
 
 /// A component built against a 0.x API, which Codeyard still runs during the move to 1.0.
 pub(crate) fn transition_warning(c: &ext_pkg::Component) -> String {
     format!(
-        "warning: {} was built against API {}; Codeyard {} still runs it, but registries no longer take it and a later Codeyard will refuse it\n  --> {}\n   = fix: rebuild with the current SDK (`cyx package`); docs/extensions/migrating-to-1.0.md lists what changed",
+        "warning: {} was built against API {}; Codeyard still runs it while extensions move to API {}, but registries no longer take it and a later Codeyard will refuse it\n  --> {}\n   = fix: rebuild with the current SDK (`cyx package`); docs/extensions/migrating-to-1.0.md lists what changed",
         ext_pkg::COMPONENT,
         c.built_for,
-        env!("CARGO_PKG_VERSION"),
+        ext_api::VERSION,
         ext_pkg::COMPONENT
     )
 }
@@ -527,8 +580,9 @@ fn native_platforms(dir: &Path) -> Result<Vec<String>, String> {
     Ok(targets)
 }
 
-fn check_files(dir: &Path, target: Option<&str>, m: &ext_manifest::Manifest, text: &str) -> Result<(), String> {
-    let files = ext_pkg::collect_dir_for(dir, target).map_err(|e| format!("error: {e}"))?;
+/// Build the package in memory to apply every package rule; the paths left out as secrets.
+fn check_files(dir: &Path, target: Option<&str>, m: &ext_manifest::Manifest, text: &str) -> Result<Vec<String>, String> {
+    let ext_pkg::Collected { files, secrets } = ext_pkg::collect(dir, target).map_err(|e| format!("error: {e}"))?;
     let check_files: Vec<ext_pkg::Entry> = if m.missing_why() {
         // Validate the rest as if `why` were there, so the author sees every other problem now.
         files
@@ -545,11 +599,39 @@ fn check_files(dir: &Path, target: Option<&str>, m: &ext_manifest::Manifest, tex
     };
     let platform = target.map(|t| format!(" (for {t})")).unwrap_or_default();
     match ext_pkg::write(check_files) {
-        Ok(_) => Ok(()),
+        Ok(_) => Ok(secrets),
         Err(ext_pkg::Error::Manifest(errors)) => Err(render(&errors, text)),
         Err(ext_pkg::Error::Component(errors)) => Err(errors.iter().map(|d| d.render(ext_pkg::COMPONENT, "")).collect::<Vec<_>>().join("\n")),
         Err(e) => Err(format!("error{platform}: {e}")),
     }
+}
+
+/// A warning per language id that is neither built in nor added by this extension: a typo, or a language a dependency
+/// adds.
+fn unknown_languages(m: &ext_manifest::Manifest) -> Vec<String> {
+    let c = &m.contributions;
+    let mut used: Vec<String> = c.snippets.iter().map(|s| s.language.clone()).collect();
+    used.extend(c.language_servers.iter().flat_map(|s| s.languages.iter().cloned()));
+    used.extend(c.provider_languages());
+    let mut seen = Vec::new();
+    used.into_iter()
+        .filter(|id| !ext_manifest::LANGUAGE_IDS.contains(&id.as_str()) && !c.languages.iter().any(|l| &l.id == id))
+        .filter(|id| {
+            let first = !seen.contains(id);
+            seen.push(id.clone());
+            first
+        })
+        .map(|id| {
+            let fix = match keys::closest_language(&id) {
+                Some(close) => format!("did you mean '{close}'?"),
+                None => "use a language id from reference/contributions.md (Language ids), or add the language with [[languages]]".into(),
+            };
+            format!(
+                "warning: '{id}' is not a language Codeyard knows, and this extension does not add it: nothing uses it unless a dependency adds that language\n  --> {}\n   = fix: {fix}",
+                ext_manifest::FILE_NAME
+            )
+        })
+        .collect()
 }
 
 /// `[[oauth]]` tables whose `client-id` is still a placeholder: `your-client-id`, `<client id>`, `example-…`.
@@ -581,37 +663,92 @@ fn render(errors: &[ext_manifest::Diagnostic], text: &str) -> String {
     out.join("\n\n")
 }
 
-/// The folder, the output file, whether to build first (not with `--no-build`), and the platform.
-fn parse_package(rest: &[String]) -> Result<(PathBuf, Option<PathBuf>, bool, Option<String>), String> {
-    let usage = "usage: cyx package [FOLDER] [-o FILE] [--no-build] [--target TRIPLE]";
-    let (mut dir, mut out, mut build, mut target) = (None, None, true, None);
+/// `cyx package`'s arguments.
+struct PackageArgs {
+    dir: PathBuf,
+    out: Option<PathBuf>,
+    /// Build first (not with `--no-build`).
+    build: bool,
+    /// List the files, write nothing (`--dry-run`).
+    dry_run: bool,
+    target: Option<String>,
+}
+
+fn parse_package(rest: &[String]) -> Result<PackageArgs, String> {
+    let usage = "usage: cyx package [FOLDER] [-o FILE] [--dry-run] [--no-build] [--target TRIPLE]";
+    let (mut dir, mut out, mut build, mut dry_run, mut target) = (None, None, true, false, None);
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "-o" | "--output" => out = Some(PathBuf::from(it.next().ok_or(usage)?)),
             "--no-build" => build = false,
+            "--dry-run" => dry_run = true,
             "--target" => target = Some(it.next().ok_or(usage)?.clone()),
+            s if s.starts_with('-') => return Err(format!("cyx package: unknown option {s}\n{usage}")),
             _ => dir = Some(a.clone()),
         }
     }
-    Ok((folder(dir.as_ref())?, out, build, target))
+    Ok(PackageArgs { dir: folder(dir.as_ref())?, out, build, dry_run, target })
+}
+
+/// `-o` names an existing folder, or a file in one.
+fn check_output(out: &Path) -> Result<(), String> {
+    if out.is_dir() {
+        return Ok(());
+    }
+    let text = out.to_string_lossy();
+    let folder = if text.ends_with('/') || text.ends_with(std::path::MAIN_SEPARATOR) { Some(out) } else { out.parent().filter(|p| !p.as_os_str().is_empty()) };
+    match folder {
+        Some(f) if !f.is_dir() => {
+            Err(format!("error: -o {}: the folder {} does not exist\n   = fix: create it first, or pick another -o", out.display(), f.display()))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// A file in a package and its size in bytes.
+type FileSize = (String, usize);
+
+/// What `cyx package --dry-run` lists for a checked folder: per package (`<id>-<version>[-<triple>].cyx`), its files
+/// and sizes.
+fn package_contents(dir: &Path, target: Option<&str>) -> Result<Vec<(String, Vec<FileSize>)>, String> {
+    let m = build::manifest(dir)?;
+    package_targets(dir, target)?
+        .iter()
+        .map(|t| {
+            let files = ext_pkg::collect_dir_for(dir, t.as_deref()).map_err(|e| format!("error: {e}"))?;
+            let (bytes, _) = ext_pkg::write(files).map_err(|e| format!("error: {e}"))?;
+            let package = ext_pkg::read(&bytes).map_err(|e| format!("error: {e}"))?;
+            let list = package.files.values().map(|e| (e.path.clone(), e.data.len())).collect();
+            Ok((ext_pkg::file_name(&m, t.as_deref()), list))
+        })
+        .collect()
 }
 
 /// `cyx package` after the build: one package, or for an extension with native programs one per platform
 /// (`<id>-<version>-<triple>.cyx`), only `target`'s when it is given.
 pub fn package_platforms(dir: &Path, out: Option<&Path>, target: Option<&str>) -> Result<Vec<(PathBuf, ext_pkg::ContentDigest)>, String> {
     check(dir)?;
-    let native = build::manifest(dir)?.has_native_programs();
-    let targets: Vec<Option<String>> = match (native, target) {
-        (false, None) => vec![None],
-        (false, Some(_)) => return Err("error: --target is for extensions with native programs (a `run` entry inside the package)".into()),
-        (true, Some(t)) => vec![Some(t.to_string())],
-        (true, None) => native_platforms(dir)?.into_iter().map(Some).collect(),
-    };
+    package_checked(dir, out, target)
+}
+
+/// [`package_platforms`] for a folder `check` accepted.
+fn package_checked(dir: &Path, out: Option<&Path>, target: Option<&str>) -> Result<Vec<(PathBuf, ext_pkg::ContentDigest)>, String> {
+    let targets = package_targets(dir, target)?;
     if out.is_some_and(|o| !o.is_dir()) && targets.len() > 1 {
         return Err("error: -o names one file, but this extension has a package per platform\n   = fix: add --target TRIPLE, or give -o a folder".into());
     }
     targets.iter().map(|t| package_one(dir, out, t.as_deref())).collect()
+}
+
+/// The platforms to package: none (one package) without native programs, else `target` or every one in `native/`.
+fn package_targets(dir: &Path, target: Option<&str>) -> Result<Vec<Option<String>>, String> {
+    Ok(match (build::manifest(dir)?.has_native_programs(), target) {
+        (false, None) => vec![None],
+        (false, Some(_)) => return Err("error: --target is for extensions with native programs (a `run` entry inside the package)".into()),
+        (true, Some(t)) => vec![Some(t.to_string())],
+        (true, None) => native_platforms(dir)?.into_iter().map(Some).collect(),
+    })
 }
 
 fn package_one(dir: &Path, out: Option<&Path>, target: Option<&str>) -> Result<(PathBuf, ext_pkg::ContentDigest), String> {

@@ -90,7 +90,9 @@ The same calls as the Rust SDK, in camelCase:
 | `ctx.state().get` / `set` / `delete` / `keys` | `ctx.state.get` / `set` / `delete` / `keys`: in memory, kept across a hot reload in `cyx dev` |
 | `ctx.setting::<T>(key)`, `ctx.on_settings_changed` | `ctx.setting<T>(key)`, `ctx.onSettingsChanged` |
 | `ctx.active_document`, `ctx.selections`, `ctx.apply_edits`, `ctx.set_diagnostics`, `ctx.set_decorations` | `ctx.activeDocument`, `ctx.selections`, `ctx.applyEdits`, `ctx.setDiagnostics`, `ctx.setDecorations` |
-| `ctx.read_file`, `ctx.read_text`, `ctx.stat`, `ctx.find_files`, `ctx.write_file` | `ctx.readFile`, `ctx.readText`, `ctx.stat`, `ctx.findFiles`, `ctx.search`, `ctx.writeFile` |
+| `ctx.read_file`, `ctx.read_many`, `ctx.read_text`, `ctx.stat`, `ctx.find_files`, `ctx.search` | `ctx.readFile`, `ctx.readMany`, `ctx.readText`, `ctx.stat`, `ctx.findFiles`, `ctx.search` |
+| `ctx.write_file`, `ctx.delete_file`, `ctx.rename`, `ctx.create_directory` | `ctx.writeFile`, `ctx.deleteFile`, `ctx.rename`, `ctx.createDirectory` |
+| `ctx.open_external`, `ctx.execute` | `ctx.openExternal`, `ctx.execute` (a core command needs `permissions.commands`) |
 | `ctx.fetch`, `ctx.fetch_as`, `ctx.session` | the global `fetch` (or `ctx.fetch`), `fetch(url, { auth: "github" })`, `ctx.authFetch("github")`, `ctx.session` |
 | `ctx.spawn`, `ctx.run` | `ctx.spawn(command)` (`for await (const chunk of process)`, `await process.wait()`), `ctx.run(command)` |
 | `ctx.secret`, `ctx.set_secret`, `ctx.delete_secret` | `ctx.secret`, `ctx.setSecret`, `ctx.deleteSecret`; ask for a secret with `ctx.input({ prompt, password: true })` |

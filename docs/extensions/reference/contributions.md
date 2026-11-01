@@ -273,3 +273,11 @@ What an extension adds to Codeyard. Each kind is an array of tables (`[[commands
 | `label` | string | yes | Shown next to each request. |
 | `hosts` | array of strings | yes | The hosts of the remotes it claims; `*.example.com` works as in `net`. |
 | `auth` | string | no | An account from `[permissions] auth`, passed to the code as `remote.account`. |
+
+## Key names
+
+A `key` is one to four keystrokes separated by spaces (`ctrl-k ctrl-r`), each modifiers and one key joined by `-`. Modifiers: `cmd`, `ctrl`, `alt`, `shift`, `fn`, `super`, `win`, `secondary`. `secondary` is `cmd` on macOS and `ctrl` elsewhere. A key is one character (`a`, `1`, `/`; `ctrl--` is the minus key), `f1` to `f35`, or one of `enter`, `escape`, `tab`, `space`, `backspace`, `delete`, `insert`, `home`, `end`, `pageup`, `pagedown`, `up`, `down`, `left`, `right`, `menu`. A key a built-in shortcut uses is not bound; `cyx check` warns about it.
+
+## Language ids
+
+The languages Codeyard gives files itself, for `language` and `languages` fields and `editor.language`: `c`, `cpp`, `csharp`, `css`, `go`, `html`, `java`, `javascript`, `javascriptreact`, `json`, `jsonc`, `kotlin`, `less`, `lua`, `markdown`, `php`, `plaintext`, `python`, `ruby`, `rust`, `scss`, `shellscript`, `sql`, `swift`, `toml`, `typescript`, `typescriptreact`, `yaml`. An extension's `[[languages]]` adds its own ids. `cyx check` warns about an id that is neither one of these nor one the extension adds (a dependency may add it).

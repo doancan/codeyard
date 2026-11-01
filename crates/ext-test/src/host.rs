@@ -132,7 +132,11 @@ impl State {
             Call::ReadFile(uri) | Call::Stat(uri) => path("read", uri, false),
             Call::ReadDocument(uri) if Some(uri.as_str()) != active => path("read", uri, false),
             Call::FindFiles { glob, .. } => check(&|p| !p.read.is_empty(), format!(r#"read = ["{glob}"]"#), false),
-            Call::WriteFile { uri, .. } | Call::DeleteFile(uri) => path("write", uri, true),
+            // Each path as the app checks it; the first one refused names the line.
+            Call::ReadMany(uris) => uris.iter().find_map(|u| path("read", u, false)),
+            Call::Search(q) => check(&|p| !p.read.is_empty(), format!(r#"read = ["{}"]"#, q.include.first().map_or("**", String::as_str)), false),
+            Call::WriteFile { uri, .. } | Call::DeleteFile(uri) | Call::CreateDirectory(uri) => path("write", uri, true),
+            Call::Rename { from, to } => path("write", from, true).or_else(|| path("write", to, true)),
             // A command may edit the active document without `write` (docs/plugin-architecture.md §5.2).
             Call::ApplyEdits { uri, .. } if Some(uri.as_str()) != active => path("write", uri, true),
             Call::Fetch(r) => {
@@ -257,6 +261,23 @@ impl State {
                 Some(_) => (none, Completion::Done),
                 None => (none, not_found(uri)),
             },
+            Call::ReadMany(uris) => {
+                let files = uris.into_iter().map(|u| (u.clone(), self.files.get(&u).cloned().ok_or(Error::NotFound(u)))).collect();
+                (none, Completion::Files(files))
+            }
+            // Plain text only: the mock does not run regular expressions.
+            Call::Search(q) => {
+                let readable = |u: &Uri| relative(u).is_some_and(|rel| self.permissions.as_ref().is_none_or(|p| p.allows_read(&rel)));
+                (search(&self.files, &q, readable), Completion::Done)
+            }
+            Call::Rename { from, to } => match self.files.remove(&from) {
+                Some(b) => {
+                    self.files.insert(to, b);
+                    (none, Completion::Done)
+                }
+                None => (none, not_found(from)),
+            },
+            Call::CreateDirectory(_) => (none, Completion::Done),
             Call::AuthFetch { request: r, .. } if r.headers.iter().any(|(n, _)| n.trim().eq_ignore_ascii_case("authorization")) => {
                 (none, Completion::Failed(Error::Invalid("the authorization header is added by Codeyard; remove it from the request".into())))
             }
@@ -481,4 +502,32 @@ impl Host for Shared {
         s.status_items.insert(item.id.clone(), item);
         Ok(())
     }
+}
+
+/// The mock's `workspace.search`: plain-text matches in the fake files the extension may read, line by line.
+fn search(files: &BTreeMap<Uri, Vec<u8>>, q: &SearchQuery, readable: impl Fn(&Uri) -> bool) -> Vec<StreamEvent> {
+    // ASCII case folding keeps byte offsets, so a match's range is found in the line as it is.
+    let fold = |t: &str| if q.case_sensitive { t.to_string() } else { t.to_ascii_lowercase() };
+    let pattern = fold(&q.pattern);
+    let mut out = Vec::new();
+    for (uri, bytes) in files.iter().filter(|(u, _)| readable(u)) {
+        // The app hands `include` to ripgrep's walker, where a glob without `/` names a file in any folder, as in
+        // `.gitignore` (unlike `read` globs).
+        let rel = relative(uri).unwrap_or_default();
+        let name = rel.rsplit('/').next().unwrap_or_default();
+        let included = |g: &String| if g.contains('/') { ext_manifest::glob::path_matches(g, &rel) } else { ext_manifest::glob::name_matches(g, name) };
+        if !q.include.is_empty() && !q.include.iter().any(included) {
+            continue;
+        }
+        for (n, line) in String::from_utf8_lossy(bytes).lines().enumerate() {
+            let Some(at) = fold(line).find(&pattern).filter(|_| !pattern.is_empty()) else { continue };
+            if out.len() >= q.max as usize {
+                return out;
+            }
+            let (start, end) = (line[..at].chars().count() as u32, line[..at + pattern.len()].chars().count() as u32);
+            let pos = |character| types::Position { line: n as u32, character };
+            out.push(StreamEvent::SearchMatch { uri: uri.clone(), range: types::Range { start: pos(start), end: pos(end) }, line: line.to_string() });
+        }
+    }
+    out
 }

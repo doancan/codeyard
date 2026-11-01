@@ -124,7 +124,7 @@ impl Validator {
         }
         if kind.has_rows() {
             if n > limits::UI_ROWS_PER_PAGE {
-                self.problem(format!("has {n} rows; send at most {} at a time", limits::UI_ROWS_PER_PAGE));
+                self.problem(too_many_rows(kind, n));
             }
             if node.children.iter().any(|c| c.key.is_none()) {
                 self.problem(format!("every row of a {kind} needs a key"));
@@ -349,5 +349,15 @@ impl Validator {
         if let Err(e) = HttpsUrl::parse(u.as_str()) {
             self.problem(format!("the URL {e}"));
         }
+    }
+}
+
+/// A list or table has no pages, so the fix is fewer rows; a tree sends the rest a page at a time (e2e trial: "send at
+/// most 10000 at a time" for a list, which cannot).
+fn too_many_rows(kind: Kind, n: usize) -> String {
+    let max = limits::UI_ROWS_PER_PAGE;
+    match kind {
+        Kind::Tree => format!("has {n} rows; a tree takes at most {max} at a time: send the rest as later pages with `more`"),
+        _ => format!("has {n} rows; a {kind} takes at most {max}: show fewer, such as the newest, or let the user filter them"),
     }
 }
