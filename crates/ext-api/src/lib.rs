@@ -34,6 +34,13 @@ pub fn codeyard_for(api: Version) -> Option<&'static str> {
     RELEASES.iter().find(|(v, _)| *v >= api).map(|(_, c)| *c)
 }
 
+/// Whether a build of Codeyard or `cyx` with version `build` (the workspace version) comes before `release`: a preview
+/// of it, as the main branch is until the release. Such a build already has the release's API, so it runs what needs
+/// that release. A version that does not parse is not a preview.
+pub fn is_preview_of(build: &str, release: &str) -> bool {
+    matches!((Version::parse(build), Version::parse(release)), (Some(b), Some(r)) if b < r)
+}
+
 /// The package's WIT files, by name.
 pub const WIT: [(&str, &str); 6] = [
     ("types.wit", include_str!("../wit/types.wit")),

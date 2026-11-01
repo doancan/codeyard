@@ -54,13 +54,23 @@ fn check_runs_the_import_check_on_the_component() {
     let report = check(&dir).unwrap();
     assert!(report.warnings.is_empty(), "{:?}", report.warnings);
     // The minimum Codeyard comes from the API items the component uses (#147).
-    assert_eq!(report.requires.as_deref(), Some("It needs Codeyard 0.7.0 or newer (API 1.0.0, from the API items its code uses)."));
+    let c = ext_pkg::check_component(ext_pkg::testing::COMPONENT, &build::manifest(&dir).unwrap()).unwrap();
+    assert_eq!(report.requires, Some(requires(&c)));
+    assert_eq!(requires_on(&c, "0.7.0"), "It needs Codeyard 0.7.0 or newer (API 1.0.0, from the API items its code uses).");
+    // A build before that release (the main branch while the workspace is still 0.6.0) runs it: it must not say
+    // otherwise (e2e trial).
+    assert_eq!(
+        requires_on(&c, "0.6.0"),
+        "It needs Codeyard 0.7.0 or newer (API 1.0.0, from the API items its code uses). 0.7.0 is not released yet; this preview build (0.6.0) runs it."
+    );
     // A 0.1 build still passes, with a warning that says to rebuild.
     std::fs::write(dir.join(ext_pkg::COMPONENT), ext_pkg::testing::COMPONENT_0_1).unwrap();
     let report = check(&dir).unwrap();
     assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
     assert!(report.warnings[0].starts_with("warning: extension.wasm was built against API 0.1.0;"), "{}", report.warnings[0]);
     assert!(report.warnings[0].contains("migrating-to-1.0.md"), "{}", report.warnings[0]);
+    let moving = format!("Codeyard still runs it while extensions move to API {}", ext_api::VERSION);
+    assert!(report.warnings[0].contains(&moving), "{}", report.warnings[0]);
     std::fs::write(dir.join(ext_pkg::COMPONENT), b"\0asm\x01\0\0\0").unwrap();
     let e = check(&dir).unwrap_err();
     assert!(e.contains("error[CY0700]: extension.wasm is a core WebAssembly module, not a component"), "{e}");

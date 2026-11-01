@@ -17,7 +17,13 @@ pub struct Fixed {
     pub applied: Vec<String>,
     /// Fix lines that need the author: the line and why.
     pub left: Vec<(String, String)>,
+    /// For TypeScript and JavaScript code, whose hosts, files and programs `cyx` cannot see: what to add by hand.
+    pub note: Option<String>,
 }
+
+/// TypeScript imports every interface its permissions grant, so the import check cannot say which host a `fetch`
+/// needs; `cyx test` and the Inspector can, when the call is refused.
+pub const SCRIPT_NOTE: &str = "TypeScript and JavaScript code reaches the host through the SDK, so cyx cannot see which hosts, files or programs it uses. Add the line from the CY0201 message that `cyx test` or the Inspector printed, such as net = [\"api.example.com\"]";
 
 /// Apply every fix the checks find to the manifest in `dir`; repeats while fixes uncover others (the import check runs
 /// only once the manifest itself passes).
@@ -38,6 +44,13 @@ pub fn fix(dir: &Path) -> Result<Fixed, String> {
         }
         std::fs::write(&path, new).map_err(|e| format!("error: cannot write {}: {e}", path.display()))?;
         out.applied.extend(round.applied);
+    }
+    let script = crate::build::manifest(dir)
+        .ok()
+        .and_then(|m| m.code)
+        .is_some_and(|c| matches!(c.language, ext_manifest::CodeLanguage::TypeScript | ext_manifest::CodeLanguage::JavaScript));
+    if script && out.applied.is_empty() {
+        out.note = Some(SCRIPT_NOTE.into());
     }
     Ok(out)
 }
@@ -68,7 +81,11 @@ pub fn apply(text: &str, diagnostics: &[Diagnostic]) -> Result<(String, Fixed), 
     let mut doc: DocumentMut = text.parse().map_err(|e| format!("error: {} is not valid TOML: {e}", ext_manifest::FILE_NAME))?;
     let mut fixed = Fixed::default();
     for d in diagnostics.iter().filter(|d| d.code == Code::NotDeclared) {
-        let Some(line) = d.fix.as_deref().and_then(|f| f.strip_prefix(PREFIX)).map(str::trim) else { continue };
+        let Some(line) = d.fix.as_deref().and_then(|f| f.strip_prefix(PREFIX)).map(str::trim) else {
+            // Not a line to add (an `auth` with no provider to sign in to): the author decides.
+            fixed.left.push((d.message.clone(), d.fix.clone().unwrap_or_else(|| "see `cyx check`".into())));
+            continue;
+        };
         if line.contains('<') {
             fixed.left.push((line.to_string(), "put in the real value".into()));
             continue;
@@ -178,6 +195,11 @@ mod tests {
         assert_eq!(out, "[extension]\nid = \"a.b\"\n\n[permissions]\nclipboard = \"read\"\n");
         assert_eq!(f.applied, ["clipboard = \"read\""]);
         assert_eq!(f.left.iter().map(|(l, _)| l.as_str()).collect::<Vec<_>>(), ["net = [\"<host>\"]", "auth = [\"github\"]"]);
+        // A missing permission that is not a line to add is listed too, never skipped (e2e trial: "Nothing to fix."
+        // and then a CY0201 error).
+        let unknown = Diagnostic::new(Code::NotDeclared, "permissions.auth 'acme' is not a built-in provider and has no [[oauth]] table").fix("add [[oauth]]");
+        let (_, f) = apply(text, &[unknown]).unwrap();
+        assert_eq!(f.left, [("permissions.auth 'acme' is not a built-in provider and has no [[oauth]] table".to_string(), "add [[oauth]]".to_string())]);
         // Reading and writing the clipboard is `read-write`.
         let (out, _) = apply(&out, &[missing("clipboard = \"write\"")]).unwrap();
         assert!(out.ends_with("clipboard = \"read-write\"\n"), "{out}");
@@ -197,6 +219,20 @@ mod tests {
         assert!(text.starts_with(manifest) && text.ends_with("\n[permissions]\nrun = [\"taplo\"]\n"), "{text}");
         // Running a program is high risk: `why` is the author's to write, so check still says so.
         assert!(crate::check(&dir).unwrap_err().contains("CY0202"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// TypeScript's hosts cannot be inferred: --fix says what to add instead of "Nothing to fix." (e2e trial).
+    #[test]
+    fn typescript_gets_a_note_on_what_to_add() {
+        let dir = std::env::temp_dir().join(format!("cyx-fix-ts-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest = "[extension]\nid = \"you.ts\"\nversion = \"0.1.0\"\nname = \"Ts\"\nlicense = \"MIT\"\n\n[code]\nentry = \"src/extension.ts\"\n\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n";
+        std::fs::write(dir.join(ext_manifest::FILE_NAME), manifest).unwrap();
+        let f = fix(&dir).unwrap();
+        assert!(f.applied.is_empty() && f.left.is_empty(), "{f:?}");
+        assert_eq!(f.note.as_deref(), Some(SCRIPT_NOTE));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

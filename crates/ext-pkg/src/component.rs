@@ -96,12 +96,12 @@ pub(crate) fn check_against(wasm: &[u8], manifest: &Manifest, host: &Host) -> Re
                 let transition = version.in_transition() && !version.same_line(host.version);
                 if !transition && !version.same_line(host.version) {
                     if version > host.version {
-                        problems.push(newer(format!("the extension uses API {version}; this Codeyard has {}", host.version)));
+                        problems.push(newer(format!("the extension uses API {version}; this Codeyard has API {}", host.version)));
                     } else {
                         problems.push(
                             Diagnostic::new(
                                 Code::BadComponent,
-                                format!("the extension was built against API {version}, which this Codeyard ({}) no longer runs", host.version),
+                                format!("the extension was built against API {version}, which this Codeyard (API {}) no longer runs", host.version),
                             )
                             .fix("rebuild it with the current SDK; docs/extensions/migrating-to-1.0.md says what changed"),
                         );
@@ -152,6 +152,15 @@ pub(crate) fn check_against(wasm: &[u8], manifest: &Manifest, host: &Host) -> Re
             .push(Diagnostic::new(Code::BadComponent, format!("{COMPONENT} does not export {}/guest", ext_api::PACKAGE)).fix("build it with the Codeyard SDK"));
     }
     if !problems.is_empty() {
+        // One per import otherwise: a component built against an old API names it in each of its imports.
+        let mut seen = Vec::new();
+        problems.retain(|d| {
+            let first = !seen.contains(d);
+            if first {
+                seen.push(d.clone());
+            }
+            first
+        });
         return Err(problems);
     }
     interfaces.sort();

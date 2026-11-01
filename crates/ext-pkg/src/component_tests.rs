@@ -160,7 +160,7 @@ fn a_newer_major_needs_a_newer_codeyard() {
     let (wasm, _) = build_from(v2, &["codeyard:api/log@2.0.0"], "codeyard:api/guest@2.0.0");
     let errs = check_component(&wasm, &manifest("")).unwrap_err();
     assert!(errs.iter().all(|d| d.code == Code::NeedsNewerCodeyard), "{errs:?}");
-    assert!(errs[0].to_string().contains(&format!("uses API 2.0.0; this Codeyard has {}", ext_api::VERSION)), "{}", errs[0]);
+    assert!(errs[0].to_string().contains(&format!("uses API 2.0.0; this Codeyard has API {}", ext_api::VERSION)), "{}", errs[0]);
 }
 
 /// The API's WIT with every version, the package's and each `@since`, set to `v`.
@@ -189,9 +189,11 @@ fn a_0_1_component_runs_during_the_transition() {
     assert!(!c.in_transition());
     // Another 0.x is refused with the migration guide.
     let v02 = |t: &str| as_version(t, "0.2.0");
-    let (wasm, _) = build_from(v02, &["codeyard:api/log@0.2.0"], "codeyard:api/guest@0.2.0");
+    let (wasm, _) = build_from(v02, &["codeyard:api/log@0.2.0", "codeyard:api/window@0.2.0"], "codeyard:api/guest@0.2.0");
     let errs = check_component(&wasm, &manifest("")).unwrap_err();
-    assert!(errs[0].to_string().contains(&format!("built against API 0.2.0, which this Codeyard ({}) no longer runs", ext_api::VERSION)), "{}", errs[0]);
+    // Said once, not once per import (e2e trial: 20 identical errors).
+    assert_eq!(errs.len(), 1, "{errs:?}");
+    assert!(errs[0].to_string().contains(&format!("built against API 0.2.0, which this Codeyard (API {}) no longer runs", ext_api::VERSION)), "{}", errs[0]);
     assert!(errs[0].to_string().contains("migrating-to-1.0.md"), "{}", errs[0]);
 }
 

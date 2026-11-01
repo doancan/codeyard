@@ -294,8 +294,23 @@ pub(crate) fn read_file(uri: &str) -> Ticket {
     w::workspace::read_file(uri)
 }
 
+pub(crate) fn read_many(uris: &[&str]) -> Ticket {
+    w::workspace::read_many(&uris.iter().map(|u| u.to_string()).collect::<Vec<_>>())
+}
+
 pub(crate) fn stat(uri: &str) -> Ticket {
     w::workspace::stat(uri)
+}
+
+pub(crate) fn search(q: &SearchQuery) -> Ticket {
+    w::workspace::search(&w::workspace::SearchQuery {
+        pattern: q.pattern.clone(),
+        regex: q.regex,
+        case_sensitive: q.case_sensitive,
+        whole_word: q.whole_word,
+        include: q.include.clone(),
+        max: q.max,
+    })
 }
 
 pub(crate) fn find_files(glob: &str, max: u32) -> Ticket {
@@ -308,6 +323,14 @@ pub(crate) fn write_file(uri: &str, contents: &[u8]) -> Ticket {
 
 pub(crate) fn delete_file(uri: &str) -> Ticket {
     w::workspace_write::delete(uri)
+}
+
+pub(crate) fn rename(from: &str, to: &str) -> Ticket {
+    w::workspace_write::rename(from, to)
+}
+
+pub(crate) fn create_directory(uri: &str) -> Ticket {
+    w::workspace_write::create_directory(uri)
 }
 
 fn http(r: &HttpRequest) -> w::types::HttpRequest {

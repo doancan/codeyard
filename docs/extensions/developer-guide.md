@@ -488,7 +488,7 @@ ctx.command("find-todos", async (ctx) => {
 });
 ```
 
-A `[[diagnostics]]` provider that Codeyard calls on its own, as you type, is **(coming)**.
+Codeyard does not ask for diagnostics on its own: your code pushes them with `setDiagnostics` when its data changes, as with VS Code's `DiagnosticCollection`.
 
 ### A language server
 
@@ -625,6 +625,45 @@ Good to know:
 - If a release is broken, `cyx yank 1.2.0` hides it from installs and users on it roll back right away; `cyx restore 1.2.0` brings it back. `cyx deprecate 1.2.0 --replacement you.other` points users elsewhere. Version numbers are never reused, so publish the fix as `1.2.1`.
 - `--registry URL` (or `CODEYARD_REGISTRY`) publishes to another registry, such as a local one from `yard init`.
 
+### What goes into a package
+
+A package holds what Codeyard reads when it runs your extension, and nothing else: anyone can download a published
+package and read every file in it. `cyx package --dry-run` lists the files without writing anything, and `cyx check`,
+`cyx package` and `cyx publish` all apply the same rules, as does `cyx dev`.
+
+In the package:
+- `codeyard-extension.toml`, and for code `extension.wasm` (with `extension.js.map` for TypeScript, so stack traces
+  name your `.ts` lines);
+- the files the manifest names: icon, themes, snippets, keymap presets, schemas;
+- `README.md`, `LICENSE`, `CHANGELOG.md` and any other file your extension reads from its package;
+- for native programs, the platform's files from `native/<triple>/`.
+
+Left out:
+- **Secrets**, wherever they are: `.env` and `.env.*`, `*.key`, `*.pem`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, SSH
+  keys (`id_rsa`, `id_ed25519`, …), `.npmrc`, `.netrc`, `.pypirc`, `.git-credentials` and `credentials.json`. `cyx`
+  names each one it left out, so you know it is in the folder. A file whose contents hold a private key
+  (`-----BEGIN … PRIVATE KEY-----`) stops packaging whatever its name: move it out of the folder.
+- **Hidden files and folders** (`.git`, `.github`, `.gitignore`, `.vscode`), and `target`, `node_modules`, OS litter.
+- **Source and build input**: `src/` at the top of the folder, `*.rs` and `*.ts` files, `Cargo.toml`, `Cargo.lock`,
+  `build.rs`, `package.json`, `package-lock.json`, other lock files and `tsconfig.json`. Your code reaches users as
+  `extension.wasm`; a `package.json` would also publish local paths such as an `--sdk` checkout.
+- **Tests**: `test/` and `tests/` at the top of the folder.
+- Old packages (`*.cyx`).
+
+To leave out more, list it in `.cyxignore`, one pattern per line (`#` starts a comment). `*` matches any characters but
+`/`; a pattern without `/` matches a name anywhere (`*.psd`, `drafts`), one with `/` the path from the top
+(`docs/internal`, `/notes.md`), and a trailing `/` matches folders only:
+
+```text
+# design files and notes
+*.psd
+drafts/
+/notes.md
+```
+
+A file the manifest names but a rule leaves out is an error that says which rule, so a theme in `src/` is caught
+before you publish.
+
 ## Coming from VS Code
 
 | VS Code | Codeyard |
@@ -644,7 +683,7 @@ Good to know:
 | `globalState` / `workspaceState` | `ctx.storage` |
 | `SecretStorage` | `secrets` permission. For sign-in, prefer `auth` |
 | `authentication.getSession` | `auth = ["github"]` |
-| `DiagnosticCollection` | `[[diagnostics]]` provider |
+| `DiagnosticCollection` | `[[diagnostics]]` + `ctx.setDiagnostics`: your code pushes them when it wants |
 | `fs`, `child_process` | `read`/`write` permissions with `ctx.readFile` / `ctx.writeFile`, `run` with `ctx.spawn` |
 | `extensionKind` | Not needed. The same extension works locally and over SSH |
 | Colour themes, snippets, language config | Work unchanged, or use `cyx import-vscode` |
@@ -665,6 +704,6 @@ Every error message shows a fix line. `cyx explain <CODE>` prints what a code me
 | Command missing from the palette | Check the id. Commands are shown as `Title`, but the full id is `you.ext.id` |
 | Provider never shows results | It answered too late. Return quickly and move slow work into `progress` |
 | Language server does not start | Add the program to `run`, trust the folder, and check that the program is on the workspace machine's PATH |
-| `cyx: command not found` | Run **Extensions: Install cyx Command in PATH**. In CI, use `codeyard/setup-cyx` |
+| `cyx: command not found` | Run **Extensions: Install cyx Command in PATH**. In CI, use `doancan/codeyard/actions/setup-cyx` ([testing.md](testing.md#in-ci)) |
 | Extension disabled after crashes | Open the Inspector for the stack, then fix and reload. Users can **Reinstall previous version** |
 | My update hasn't reached users | Code updates wait 48 h. Use `--pre-release` for testers |

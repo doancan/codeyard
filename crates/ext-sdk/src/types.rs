@@ -129,6 +129,35 @@ pub struct FileEvent {
     pub uri: Uri,
 }
 
+/// What [`Context::search`](crate::Context::search) looks for (`workspace.search-query`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SearchQuery {
+    pub pattern: String,
+    pub regex: bool,
+    pub case_sensitive: bool,
+    pub whole_word: bool,
+    /// Only files matching these globs; empty means every file the extension may read.
+    pub include: Vec<String>,
+    /// At most this many matches.
+    pub max: u32,
+}
+
+impl SearchQuery {
+    /// A plain-text, case-insensitive search of every file the extension may read, for at most 1000 matches.
+    pub fn new(pattern: impl Into<String>) -> SearchQuery {
+        SearchQuery { pattern: pattern.into(), regex: false, case_sensitive: false, whole_word: false, include: Vec::new(), max: 1000 }
+    }
+}
+
+/// One line [`Context::search`](crate::Context::search) found.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SearchMatch {
+    pub uri: Uri,
+    pub range: Range,
+    /// The whole line the match is on.
+    pub line: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FileStat {
     pub is_dir: bool,

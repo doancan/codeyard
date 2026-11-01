@@ -174,6 +174,20 @@ fn manifest_and_contributions() -> (String, String) {
         let (form, s) = table_of(f, &all).expect("checked above");
         contrib.push_str(&format!("\n## {}\n\n`{form}`: {}\n\n{}", f.key, f.doc, field_table(s)));
     }
+    contrib.push_str(&format!(
+        "\n## Key names\n\nA `key` is one to four keystrokes separated by spaces (`ctrl-k ctrl-r`), each modifiers and one key \
+         joined by `-`. Modifiers: {}. `secondary` is `cmd` on macOS and `ctrl` elsewhere. A key is one character \
+         (`a`, `1`, `/`; `ctrl--` is the minus key), `f1` to `f35`, or one of {}. A key a built-in shortcut uses is not \
+         bound; `cyx check` warns about it.\n",
+        crate::KEY_MODIFIERS.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(", "),
+        crate::KEY_NAMES.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(", ")
+    ));
+    contrib.push_str(&format!(
+        "\n## Language ids\n\nThe languages Codeyard gives files itself, for `language` and `languages` fields and \
+         `editor.language`: {}. An extension's `[[languages]]` adds its own ids. `cyx check` warns about an id that is \
+         neither one of these nor one the extension adds (a dependency may add it).\n",
+        crate::LANGUAGE_IDS.iter().map(|m| format!("`{m}`")).collect::<Vec<_>>().join(", ")
+    ));
     (manifest, contrib)
 }
 

@@ -598,3 +598,5 @@ mod scm_tests;
 mod tests;
 #[cfg(test)]
 mod watch_tests;
+#[cfg(test)]
+mod workspace_tests;

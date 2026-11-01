@@ -50,7 +50,7 @@ mod tests {
 | `host.hover(doc, position)`, `host.completion(doc, position, trigger)` | asks the hover or completion provider (`trigger`: `Some(".")` for a trigger character) |
 | `host.code_lenses(doc, range)`, `host.resolve_code_lens(doc, lens)`, `host.click_code_lens(&lens)` | asks for the lenses of the lines in `range`, resolves one, runs a lens's command with its arguments |
 | `host.inlay_hints(doc, range)` | asks for the inlay hints of the lines in `range` |
-| `host.change_setting(key, json)` | changes a setting and tells the extension |
+| `host.change_setting(key, Some("30"))` | changes a setting (its JSON text; `None` resets it) and tells the extension |
 | `host.advance(Duration::from_secs(90))` | moves the virtual clock, firing timers that fall due |
 | `host.cancel_progress(id)` | presses Cancel on a progress notice |
 | `host.deactivate::<Hello>()` | stops the extension |
@@ -276,4 +276,4 @@ same few hundred trees and requires the same verdicts.
 
 ## In CI
 
-`cyx new` writes a publish workflow; to also test on every push, add a job that runs the unit tests: `cargo test` for Rust (no WebAssembly target needed), or `npm ci && npm test` for TypeScript (Node.js 22.18 or newer). `cyx test` needs Codeyard's extension host, and for Rust the `wasm32-wasip2` target, so run it where Codeyard (or `codeyard/setup-cyx`) is installed.
+`cyx new` writes a publish workflow; to also test on every push, add a job that runs the unit tests: `cargo test` for Rust (no WebAssembly target needed), or `npm ci && npm test` for TypeScript (Node.js 22.18 or newer). `cyx test` needs Codeyard's extension host, and for Rust the `wasm32-wasip2` target, so run it where Codeyard is installed, or install `cyx` and the extension host with the setup action, pinned to a commit like the publish action: `uses: doancan/codeyard/actions/setup-cyx@<commit>`.

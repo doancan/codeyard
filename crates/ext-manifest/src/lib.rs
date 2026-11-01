@@ -76,7 +76,7 @@ pub fn program_file(run: &str, target: &str) -> String {
 }
 
 pub use allow::glob_match;
-pub use validate::{Options, check_https_url, check_package_path, check_watch_glob, is_deceptive};
+pub use validate::{KEY_MODIFIERS, KEY_NAMES, Options, check_https_url, check_key, check_package_path, check_watch_glob, is_deceptive};
 
 /// Parse and validate a manifest, as install and publish do. Every problem is reported, not just the first.
 pub fn parse(text: &str) -> Result<Manifest, Vec<Diagnostic>> {
@@ -87,6 +87,40 @@ pub fn parse(text: &str) -> Result<Manifest, Vec<Diagnostic>> {
 pub fn parse_with(text: &str, options: Options) -> Result<Manifest, Vec<Diagnostic>> {
     validate::parse(text, options)
 }
+
+/// The language ids Codeyard gives files itself, sorted: what `editor.language`, snippets, language servers and
+/// providers name. An extension's `[[languages]]` adds more. The app's tables from file names to languages are tested
+/// against this list, and the contributions reference lists it.
+pub const LANGUAGE_IDS: &[&str] = &[
+    "c",
+    "cpp",
+    "csharp",
+    "css",
+    "go",
+    "html",
+    "java",
+    "javascript",
+    "javascriptreact",
+    "json",
+    "jsonc",
+    "kotlin",
+    "less",
+    "lua",
+    "markdown",
+    "php",
+    "plaintext",
+    "python",
+    "ruby",
+    "rust",
+    "scss",
+    "shellscript",
+    "sql",
+    "swift",
+    "toml",
+    "typescript",
+    "typescriptreact",
+    "yaml",
+];
 
 /// `publisher.name`. Serialized as its text and checked again when read back.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
