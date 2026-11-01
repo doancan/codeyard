@@ -80,7 +80,8 @@ pub(crate) fn check_against(wasm: &[u8], manifest: &Manifest, host: &Host) -> Re
 
     let mut problems = Vec::new();
     let mut interfaces = Vec::new();
-    let mut min_api = Version(1, 0, 0);
+    // `net-from-setting` is a manifest field of API 1.1; the imports below can only raise this.
+    let mut min_api = if manifest.permissions.net_from_setting.is_some() { Version(1, 1, 0) } else { Version(1, 0, 0) };
     let mut built_for: Option<Version> = None;
     let perms = &manifest.permissions;
     let newer = |m: String| Diagnostic::new(Code::NeedsNewerCodeyard, m).fix("update Codeyard");

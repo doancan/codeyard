@@ -59,6 +59,11 @@ impl Report {
     }
 }
 
+/// The file `core:editor.open`'s argument names, when it is one the command takes.
+fn editor_open_target(args_json: &str) -> Option<String> {
+    ext_manifest::file_location(&serde_json::from_str(args_json).unwrap_or_default()).map(|(uri, _)| uri)
+}
+
 /// Run the built component of the extension in `dir` (`extension.wasm`) with `exthost`; `fixtures` answer its
 /// requests.
 pub fn run(dir: &Path, manifest: &Manifest, exthost: &Path, fixtures: &Fixtures) -> Result<Report, String> {
@@ -404,6 +409,8 @@ struct App {
     watches: Vec<(u64, Option<String>, bool)>,
     /// The files the extension has diagnostics on now (a uri each), for the limit on how many.
     diagnostic_files: std::collections::BTreeSet<String>,
+    /// The reasons `set-diagnostics` was refused for, reported once each.
+    refused_diagnostics: std::collections::BTreeSet<String>,
 }
 
 impl App {
@@ -443,6 +450,7 @@ impl App {
             current: "activate".into(),
             watches: Vec::new(),
             diagnostic_files: Default::default(),
+            refused_diagnostics: Default::default(),
         };
         match app.frames.recv_timeout(WAIT) {
             Ok(Ok(ToApp::Ready { .. })) => Ok(app),
@@ -635,7 +643,10 @@ impl App {
             } else {
                 String::new()
             };
-            report.fail(format!("set-diagnostics on {uri} is refused by Codeyard: {why}{fix}"));
+            // Past the limit every further file is refused for the same reason: report it once.
+            if self.refused_diagnostics.insert(why.clone()) {
+                report.fail(format!("set-diagnostics on {uri} is refused by Codeyard: {why}{fix}"));
+            }
             return;
         }
         let shown: Vec<_> = diagnostics.iter().filter_map(|d| ext_manifest::calls::shown_diagnostic_message(&d.message)).collect();
@@ -680,6 +691,12 @@ impl App {
     /// The `invalid` error the app answers before any permission check: a URL Codeyard never fetches
     /// (`ext_manifest::calls::check_url`), an `authorization` header on a signed request.
     fn invalid(&self, call: &Start) -> Option<ApiError> {
+        if let Start::Execute { command, args_json } = call
+            && command == "core:editor.open"
+            && editor_open_target(args_json).is_none()
+        {
+            return ext_manifest::core_command(command).map(|c| ApiError::Invalid(c.bad_argument()));
+        }
         let request = match call {
             Start::Fetch { request } | Start::AuthFetch { request, .. } => request,
             _ => return None,
@@ -730,6 +747,14 @@ impl App {
                     .map(|_| ext_manifest::oauth_host_line(provider, &host))
             }
             Start::Spawn { command } if !p.allows_run(&command.program) => Some(format!(r#"run = ["{}"]"#, command.program)),
+            // A core command is listed in `permissions.commands`; `core:editor.open` also needs `read` on its file.
+            Start::Execute { command, args_json } if command.starts_with("core:") => {
+                if !p.commands.contains(command) {
+                    return Some(format!(r#"commands = ["{command}"]"#));
+                }
+                let uri = (command == "core:editor.open").then(|| editor_open_target(args_json)).flatten()?;
+                path(&uri, "read", &|r| p.allows_read(r))
+            }
             _ => None,
         }
     }
@@ -737,7 +762,9 @@ impl App {
     /// Stop the exthost; its refusals join the report (every refusal fails the test, even one the extension caught).
     fn stop(&mut self, report: &mut Report) {
         self.shutdown();
-        for d in std::mem::take(&mut self.denied) {
+        // The same refusal, repeated, is told once.
+        let mut seen = std::collections::HashSet::new();
+        for d in std::mem::take(&mut self.denied).into_iter().filter(|d| seen.insert(d.clone())) {
             report.failures.push(d.clone());
             report.lines.push(d);
         }

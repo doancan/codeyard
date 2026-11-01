@@ -2,9 +2,13 @@
 // glob.rs, allow.rs, calls.rs). This is a copy for the mock host; test/rule-cases.json holds cases judged by the Rust
 // rules, and test/rules.test.ts checks this copy against every one, so the two cannot drift.
 
+import { CALL_BYTES } from "../limits.ts";
+
+export { resultTooLarge } from "../limits.ts";
+
 /** The limits the mock enforces, from crates/ext-manifest/src/limits.rs (checked against rule-cases.json). */
 export const LIMITS = {
-  CALL_BYTES: 8 * 1024 * 1024,
+  CALL_BYTES,
   DATA_DIR_BYTES: 50 * 1024 * 1024,
   ITEM_LEN: 256,
   DIAGNOSTIC_FILES: 1000,
@@ -218,15 +222,6 @@ export function checkStatusItem(
   return { shown };
 }
 
-/** The error for an answer of `bytes`, if it is over the call limit. */
-export function resultTooLarge(bytes: number): string | undefined {
-  const MIB = 1 << 20;
-  if (bytes <= LIMITS.CALL_BYTES) return undefined;
-  const tenths = Math.max(Math.floor((bytes * 10 + MIB / 2) / MIB), Math.floor((LIMITS.CALL_BYTES * 10) / MIB) + 1);
-  const size = tenths % 10 === 0 ? `${tenths / 10}` : `${Math.floor(tenths / 10)}.${tenths % 10}`;
-  return `the result is ${size} MiB; at most ${LIMITS.CALL_BYTES / MIB} MiB`;
-}
-
 /**
  * A diagnostic's message as Codeyard shows it: trimmed, undefined when empty or with a character that could disguise
  * what it says (line breaks and tabs are fine), cut to DIAGNOSTIC_MESSAGE_LEN characters with a `…`.
@@ -279,4 +274,22 @@ export function languageId(own: { id: string; extensions: string[]; filenames: s
   const ext = dot < 0 ? undefined : name.slice(dot + 1).toLowerCase();
   const hit = own.find((l) => l.filenames.includes(name)) ?? (ext === undefined ? undefined : own.find((l) => l.extensions.some((e) => e.toLowerCase() === ext)));
   return hit?.id ?? "plaintext";
+}
+
+/** What `core:editor.open` says about an argument it cannot take (`CoreCommand::bad_argument`). */
+export const EDITOR_OPEN_ARGUMENT = "core:editor.open takes a `file://` URI, or `{\"uri\": …, \"selection\": range}` (required)";
+
+/** The file `core:editor.open`'s argument names: a URI, or `{uri, selection?}` whose selection has two positions of non-negative whole numbers. */
+export function editorOpenTarget(arg: unknown): string | undefined {
+  if (typeof arg === "string") return arg;
+  if (typeof arg !== "object" || arg === null || Array.isArray(arg)) return undefined;
+  const { uri, selection } = arg as { uri?: unknown; selection?: unknown };
+  if (typeof uri !== "string") return undefined;
+  if (selection === undefined || selection === null) return uri;
+  const position = (p: unknown) => {
+    const { line, character } = (p ?? {}) as { line?: unknown; character?: unknown };
+    return [line, character].every((n) => Number.isInteger(n) && (n as number) >= 0 && (n as number) <= 0xffffffff);
+  };
+  const { start, end } = selection as { start?: unknown; end?: unknown };
+  return position(start) && position(end) ? uri : undefined;
 }

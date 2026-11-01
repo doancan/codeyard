@@ -99,6 +99,33 @@ pub const CORE_COMMANDS: [CoreCommand; 9] = [
     c("tasks.run", "Tasks: Run Task…", "Runs the task with this label; with no label, opens the task list.", Argument::OptionalTaskLabel, Implies::RunTask),
 ];
 
+impl CoreCommand {
+    /// The `invalid` message for an argument the command cannot use.
+    pub fn bad_argument(&self) -> String {
+        format!("core:{} takes {}", self.id, self.argument.describe())
+    }
+}
+
+/// A line and a column, zero-based, UTF-16 columns.
+pub type Position = (u32, u32);
+
+/// `core:editor.open`'s argument: a `file://` URI, or `{"uri": …, "selection": {"start": {"line", "character"}, "end": …}}`.
+/// `None` when it is neither (the app, the mock hosts and `cyx test` refuse it with [`CoreCommand::bad_argument`]).
+pub fn file_location(arg: &serde_json::Value) -> Option<(String, Option<(Position, Position)>)> {
+    if let Some(uri) = arg.as_str() {
+        return Some((uri.to_string(), None));
+    }
+    let uri = arg.get("uri")?.as_str()?.to_string();
+    let position = |p: &serde_json::Value| -> Option<Position> {
+        Some((u32::try_from(p.get("line")?.as_u64()?).ok()?, u32::try_from(p.get("character")?.as_u64()?).ok()?))
+    };
+    let selection = match arg.get("selection") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(s) => Some((position(s.get("start")?)?, position(s.get("end")?)?)),
+    };
+    Some((uri, selection))
+}
+
 /// The listed core command `id` names, with or without `core:`.
 pub fn core_command(id: &str) -> Option<&'static CoreCommand> {
     let id = id.strip_prefix("core:").unwrap_or(id);

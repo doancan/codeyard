@@ -200,6 +200,30 @@ fn results() -> Value {
     [0, limits::CALL_BYTES, limits::CALL_BYTES + 1, 20 << 20].iter().map(|b| json!({ "bytes": b, "error": result_too_large(*b) })).collect()
 }
 
+/// `core:editor.open`'s argument: the file it names, and the message for one it cannot take.
+fn editor_open() -> Value {
+    let args = [
+        json!("file:///work/a.rs"),
+        json!({ "uri": "file:///work/a.rs" }),
+        json!({ "uri": "file:///work/a.rs", "selection": { "start": { "line": 1, "character": 2 }, "end": { "line": 3, "character": 4 } } }),
+        json!({ "uri": "file:///work/a.rs", "selection": null }),
+        json!({ "uri": "file:///work/a.rs", "selection": { "start": { "line": -1, "character": 0 }, "end": { "line": 0, "character": 0 } } }),
+        json!({ "uri": "file:///work/a.rs", "selection": { "start": { "line": 0, "character": 0 } } }),
+        json!({ "uri": 1 }),
+        json!({}),
+        json!([]),
+        json!(["file:///work/a.rs"]),
+        json!(7),
+        Value::Null,
+        json!(true),
+    ];
+    let message = crate::core_command("core:editor.open").map(|c| c.bad_argument());
+    json!({
+        "message": message,
+        "arguments": args.iter().map(|a| json!({ "arg": a, "uri": crate::file_location(a).map(|(uri, _)| uri) })).collect::<Vec<_>>(),
+    })
+}
+
 fn cases() -> Value {
     json!({
         "limits": {
@@ -218,6 +242,7 @@ fn cases() -> Value {
         "urls": urls(),
         "statusItems": status_items(),
         "results": results(),
+        "editorOpen": editor_open(),
         "diagnostics": diagnostics(),
         "outside": [
             { "kind": "read", "path": "file:///etc/passwd", "line": crate::outside_line("read", "file:///etc/passwd") },

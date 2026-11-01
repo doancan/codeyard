@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { builtinLanguage, checkDiagnosticsTarget, checkStatusItem, checkUrl, globsAllow, ipAddressLine, LIMITS, outsideLine, pathMatches, relative, resultTooLarge, shownDiagnosticMessage } from "../src/testing/rules.ts";
+import { builtinLanguage, checkDiagnosticsTarget, checkStatusItem, checkUrl, EDITOR_OPEN_ARGUMENT, editorOpenTarget, globsAllow, ipAddressLine, LIMITS, outsideLine, pathMatches, relative, resultTooLarge, shownDiagnosticMessage } from "../src/testing/rules.ts";
 
 const cases = JSON.parse(readFileSync(new URL("./rule-cases.json", import.meta.url), "utf8")) as {
   limits: Record<string, number>;
@@ -21,6 +21,7 @@ const cases = JSON.parse(readFileSync(new URL("./rule-cases.json", import.meta.u
   };
   statusItems: { declared: string[] | null; id: string; text: string; tooltip: string | null; expect: { shown: string } | { error: string } }[];
   results: { bytes: number; error: string | null }[];
+  editorOpen: { message: string; arguments: { arg: unknown; uri: string | null }[] };
 };
 
 test("the limits are Codeyard's", () => {
@@ -70,4 +71,9 @@ test("diagnostics are checked as in Codeyard", () => {
     assert.equal(checkDiagnosticsTarget(c.declared ?? undefined, c.language, c.reachable, c.otherFiles) ?? null, c.error, JSON.stringify(c));
   }
   for (const c of cases.diagnostics.languages) assert.equal(builtinLanguage(c.path) ?? null, c.language, c.path);
+});
+
+test("core:editor.open takes the arguments Codeyard takes", () => {
+  assert.equal(EDITOR_OPEN_ARGUMENT, cases.editorOpen.message);
+  for (const c of cases.editorOpen.arguments) assert.equal(editorOpenTarget(c.arg) ?? null, c.uri, JSON.stringify(c.arg));
 });

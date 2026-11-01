@@ -320,14 +320,25 @@ fn yard_fixture_is_a_signed_index_of_made_up_extensions() {
 }
 
 #[test]
-fn the_publish_workflow_pins_every_action_to_a_commit() {
+fn the_publish_workflow_pins_what_signs_to_a_commit_or_says_why_not() {
     let uses: Vec<&str> = scaffold::PUBLISH_WORKFLOW.lines().filter_map(|l| l.trim().strip_prefix("- uses: ")).collect();
     assert_eq!(uses.len(), 2, "{uses:?}");
     for line in uses {
         let rev = line.split_once('@').map(|(_, r)| r.split_whitespace().next().unwrap_or("")).unwrap_or("");
-        assert!(rev.len() == 40 && rev.bytes().all(|b| b.is_ascii_hexdigit()), "not pinned to a commit: {line}");
-        assert!(line.contains(" # "), "a pin says what it is: {line}");
+        let commit = rev.len() == 40 && rev.bytes().all(|b| b.is_ascii_hexdigit());
+        // Before the release that can publish API 1.1 code exists, the publish action follows main, and says so above it.
+        let pre_release = rev == "main" && line.contains("actions/publish@") && scaffold::PUBLISH_WORKFLOW.contains("# Pre-release: main until");
+        assert!(commit || pre_release, "not pinned to a commit: {line}");
+        assert!(pre_release || line.contains(" # "), "a pin says what it is: {line}");
     }
+}
+
+/// The action must build what the extension needs: the pinned `v0.6.0` could not publish API 1.1 code.
+#[test]
+fn the_publish_action_installs_what_a_code_extension_builds_with() {
+    let action = include_str!("../../../actions/publish/action.yml");
+    assert!(action.contains("rustup target add wasm32-wasip2"), "Rust extensions need the WebAssembly target");
+    assert!(action.contains("actions/setup-node@") && action.contains("package.json"), "TypeScript extensions need Node.js");
 }
 
 /// `cyx yard check`, what the monitor and the canary run: a healthy registry passes, an index or online key about to
