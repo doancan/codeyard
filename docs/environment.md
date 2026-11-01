@@ -43,6 +43,7 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_PERF_VIEWS` | With `CODEYARD_PERF`: after startup, open the first installed extension view, wait until it is drawn and has the keyboard, then press PageDown this many times, recording key press to drawn frame for each. |
 | `CODEYARD_PERF_RELOAD` | With `CODEYARD_PERF` and `--extension-dev <folder>`: after startup, run the extension's first command, then put the other of two builds in place (`a.wasm` and `b.wasm` beside the folder) and run it again: once unrecorded (it fills the compile cache), then, after a pause, this many times, recording each new build's time to its first answer. |
 | `CODEYARD_PERF_EXIT` | With `CODEYARD_PERF`: quit when the scripted scenario is done. |
+| `CODEYARD_PERF_ON_TOP` | macOS: keep the first window above normal windows and on every Space, without activating the app, so a measured run is drawn while other windows would cover it; set by `scripts/perf/run.sh`. |
 | `CODEYARD_DO_DELAY_MS` | Delay before `--do "Command;Command"` runs its commands. |
 | `CODEYARD_DUMP_DOCK` | Print the Dock menu to stderr a few seconds after start; with a number, click that row. |
 | `CODEYARD_DAEMON_GRACE`, `CODEYARD_DAEMON_IDLE` | Seconds the server-side agent daemon waits for a lost client and before exiting with no sessions (defaults 300 and 600). |

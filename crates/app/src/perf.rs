@@ -28,6 +28,8 @@
 //!   swap fills the incremental compile cache and is not recorded; after a pause, each of the `n` others records its
 //!   new build's first answer under `extensions.hot_reload_ms` (workbench_ext_dev.rs).
 //! - `CODEYARD_PERF_EXIT=1`: quit when the scenario is done.
+//! - `CODEYARD_PERF_ON_TOP=1` (macOS, works without `CODEYARD_PERF`): keep the first window above normal windows,
+//!   without activating the app, so that it is drawn while other windows would cover it (see `keep_drawn`).
 //!
 //! Whenever `CODEYARD_PERF` is set, a key that reaches an extension view is recorded as `views.keystroke_frame_ms`.
 
@@ -277,8 +279,37 @@ async fn reload_scenario(handle: WindowHandle<Workbench>, n: usize, cx: &mut gpu
     RELOAD_WARMING.store(false, Ordering::Relaxed);
 }
 
+/// macOS draws no frame for a window that other windows cover entirely (GPUI stops its display link while the window
+/// is occluded). A measured run never activates the app, so that it never takes the keyboard; its window then opens
+/// behind the frontmost app's windows and, covered, draws nothing to measure. The floating level keeps it above normal
+/// windows without activating the app or making the window key, and on every Space.
+#[cfg(target_os = "macos")]
+fn keep_drawn(window: &Window) {
+    use objc2::msg_send;
+    use objc2::runtime::AnyObject;
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    let Ok(handle) = HasWindowHandle::window_handle(window) else { return };
+    let RawWindowHandle::AppKit(h) = handle.as_raw() else { return };
+    // NSFloatingWindowLevel; NSWindowCollectionBehaviorCanJoinAllSpaces.
+    const FLOATING: isize = 3;
+    const ALL_SPACES: usize = 1;
+    // SAFETY: `ns_view` is GPUI's live NSView of this window, used on the main thread while the window is open.
+    unsafe {
+        let view = &*h.ns_view.as_ptr().cast::<AnyObject>();
+        let ns_window: *mut AnyObject = msg_send![view, window];
+        let Some(ns_window) = ns_window.as_ref() else { return };
+        let behavior: usize = msg_send![ns_window, collectionBehavior];
+        let _: () = msg_send![ns_window, setCollectionBehavior: behavior | ALL_SPACES];
+        let _: () = msg_send![ns_window, setLevel: FLOATING];
+    }
+}
+
 /// Called once the first workbench window is open: records startup marks and runs the scripted scenario.
 pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
+    #[cfg(target_os = "macos")]
+    if std::env::var_os("CODEYARD_PERF_ON_TOP").is_some() {
+        handle.update(cx, |_, window, _| keep_drawn(window)).ok();
+    }
     if !enabled() {
         return;
     }
