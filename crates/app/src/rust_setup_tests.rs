@@ -91,3 +91,14 @@ fn reset_settings_restores_the_template_and_keeps_a_backup(cx: &mut gpui::TestAp
     assert_eq!(backups.len(), 1, "the old file is kept");
     assert_eq!(std::fs::read_to_string(backups[0].path()).unwrap(), broken);
 }
+
+#[test]
+fn a_second_reset_in_the_same_second_keeps_the_first_backup() {
+    let dir = crate::qa_workbench_tests::fresh("reset-settings-twice");
+    let path = dir.join("settings.jsonc");
+    std::fs::write(&path, "{ \"mine\": 1 }").unwrap();
+    let first = write_default_settings(&path).unwrap().unwrap();
+    let second = write_default_settings(&path).unwrap().unwrap();
+    assert_ne!(first, second);
+    assert_eq!(std::fs::read_to_string(first).unwrap(), "{ \"mine\": 1 }", "the user's own file survives");
+}

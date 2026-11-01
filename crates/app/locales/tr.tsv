@@ -3173,7 +3173,7 @@ Repository discovery failed	Depolar aranamadı
 Developer: Extension Inspector	Geliştirici: Eklenti Denetçisi
 Extension Inspector	Eklenti Denetçisi
 Running code extensions in this window: why they started, how long their calls took, what was denied. Nothing here leaves this computer.	Bu penceredeki kodlu eklentiler: neden başladıkları, çağrılarının ne kadar sürdüğü, neyin reddedildiği. Buradaki hiçbir şey bu bilgisayardan çıkmaz.
-Activated {0} times, last at {1} by {2}	{0} kez etkinleştirildi, son kez {1} saatinde, nedeni {2}
+Activated {0} time, last at {1} by {2}|Activated {0} times, last at {1} by {2}	{0} kez etkinleştirildi, son kez {1} saatinde, nedeni {2}
 Not activated in this window yet	Bu pencerede henüz etkinleştirilmedi
 No code extension is installed and enabled.	Kurulu ve etkin kodlu eklenti yok.
 Calls	Çağrılar

@@ -48,7 +48,7 @@ Accounts
 Act as your {} account	
 Actions	
 Activate Breakpoints	
-Activated {0} times, last at {1} by {2}	
+Activated {0} time, last at {1} by {2}|Activated {0} times, last at {1} by {2}	
 Activating the completed installation…	
 Add	
 Add Configuration…	

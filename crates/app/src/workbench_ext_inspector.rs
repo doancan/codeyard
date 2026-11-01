@@ -342,7 +342,12 @@ impl Workbench {
             line(
                 LineKind::Row,
                 match record.activations.get(id) {
-                    Some(a) => crate::i18n::tf("Activated {0} times, last at {1} by {2}", &[&a.count, &insp::clock(a.at), &a.reason]),
+                    Some(a) => crate::i18n::tn(
+                        "Activated {0} time, last at {1} by {2}",
+                        "Activated {0} times, last at {1} by {2}",
+                        a.count as usize,
+                        &[&insp::clock(a.at), &a.reason],
+                    ),
                     None => crate::i18n::t("Not activated in this window yet").to_string(),
                 },
                 None,

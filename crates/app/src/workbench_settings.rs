@@ -657,12 +657,13 @@ impl Workbench {
 
 gpui::actions!(workbench, [ApplyRustSetup, ResetRustSetup, ResetSettings]);
 
-/// `text` with the Rust setup written (`reset`: removed), and the unified diff of that change (empty: no change).
-/// Writes the template over `path`, first copying an existing file to `settings.backup-<unix seconds>.jsonc` beside it.
+/// Writes the template over `path`, first copying an existing file to `settings.backup-<unix seconds>.jsonc` beside it
+/// (`-<n>` added when that name is taken, so a second reset never overwrites the first backup).
 pub fn write_default_settings(path: &std::path::Path) -> std::io::Result<Option<std::path::PathBuf>> {
     let backup = if path.exists() {
         let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-        let backup = path.with_file_name(format!("settings.backup-{secs}.jsonc"));
+        let name = |n: u32| if n == 0 { format!("settings.backup-{secs}.jsonc") } else { format!("settings.backup-{secs}-{n}.jsonc") };
+        let backup = (0..).map(|n| path.with_file_name(name(n))).find(|p| !p.exists()).expect("a free backup name");
         std::fs::copy(path, &backup)?;
         Some(backup)
     } else {
@@ -672,6 +673,7 @@ pub fn write_default_settings(path: &std::path::Path) -> std::io::Result<Option<
     Ok(backup)
 }
 
+/// `text` with the Rust setup written (`reset`: removed), and the unified diff of that change (empty: no change).
 pub fn rust_setup_change(text: &str, s: &Settings, reset: bool) -> (String, String) {
     let new = settings::rust_setup(s).iter().fold(text.to_string(), |t, (path, v)| settings::set_path_in(&t, path, (!reset).then_some(v)));
     if new == text {

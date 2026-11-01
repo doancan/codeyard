@@ -2465,6 +2465,8 @@ fn terminals_ask_before_killing_a_program_split_where_the_shell_is_and_follow_pr
     };
     settings.terminal_profiles.insert(crate::terminal_profiles::os_key(std::env::consts::OS).into(), vec![profile]);
     settings.terminal_default_profile = Some("plain".into());
+    // The question is off by default ("never"); this test is about "running".
+    settings.terminal_confirm_close = "running".into();
     let (wb, cx) = crate::qa_integration_tests::setup_with(cx, settings);
     open(&wb, &dir, cx);
     cx.simulate_keystrokes("ctrl-`");
