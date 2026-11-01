@@ -1,15 +1,19 @@
 //! Syntax highlighting: tree-sitter, incremental. Only the visible byte range
 //! is queried; language queries compile on first use (an unused language costs no memory).
 
+use std::cell::RefCell;
 use std::ops::{ControlFlow, Range};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, mpsc};
 use std::time::{Duration, Instant};
 
 use ropey::Rope;
 use tree_sitter::{InputEdit, ParseOptions, Parser, Point, Query, QueryCursor, StreamingIterator, TextProvider, Tree};
 
 pub mod structural;
+
+#[cfg(test)]
+mod incremental_tests;
 
 /// Temadaki syntax rolleri.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -195,6 +199,20 @@ pub struct Syntax {
     tree: Option<Tree>,
     /// While a `ParseJob` runs: its number, and the edits made since it started (applied to its tree when it is back).
     job: Option<(u64, Vec<Edit>)>,
+    /// Byte ranges colored for display (`highlights_shown`) since the tree last changed: what a parse that lands is
+    /// compared on, to tell whether the screen needs a new frame.
+    shown: RefCell<Vec<Range<usize>>>,
+}
+
+/// More ranges than this (several views, or scrolling while the tree stays) are merged into one that covers them all.
+const SHOWN_MAX: usize = 8;
+
+/// A `ParseJob`'s tree replaced the old one (`Syntax::finish`).
+pub struct Landed {
+    /// Something shown since the tree last changed now has other colors: draw it again.
+    pub repaint: bool,
+    /// The edits made while the job ran, to reparse on top of its tree: run this one too (`ParseJob::run`).
+    pub next: Option<ParseJob>,
 }
 
 /// A reparse that did not fit in the time it was given (`Syntax::reparse_within`): finish it off the UI thread with
@@ -221,6 +239,20 @@ impl ParseJob {
         let parser = guard.get_or_insert_with(Parser::new);
         let tree = parser.set_language(&lang.ts).ok().and_then(|_| parser.parse_with_options(&mut reader(&rope), Some(&old), None));
         Parsed { id, tree }
+    }
+}
+
+/// Free a tree on a thread of its own. Freeing the tree of a large file whose parse recovered from an error across all
+/// of it (one node per token under the root) takes about 3 ms, and a tree is replaced on the UI thread. Trees share
+/// their nodes through atomic reference counts, so any thread may free one. Without that thread, the tree is freed here.
+fn retire(tree: Tree) {
+    static RETIRED: OnceLock<Option<mpsc::Sender<Tree>>> = OnceLock::new();
+    let sender = RETIRED.get_or_init(|| {
+        let (tx, rx) = mpsc::channel::<Tree>();
+        std::thread::Builder::new().name("syntax-free".into()).spawn(move || rx.into_iter().for_each(drop)).ok().map(|_| tx)
+    });
+    if let Some(Err(mpsc::SendError(tree))) = sender.as_ref().map(|tx| tx.send(tree)) {
+        drop(tree);
     }
 }
 
@@ -266,15 +298,24 @@ fn input_edit(e: &Edit) -> InputEdit {
 
 impl Syntax {
     pub fn new(lang: &'static Language, rope: &Rope) -> Option<Self> {
-        let mut s = Syntax { lang, tree: None, job: None };
+        let mut s = Syntax { lang, tree: None, job: None, shown: RefCell::default() };
         s.reparse(rope);
         s.tree.is_some().then_some(s)
     }
 
     /// Drop the tree (tab went to the background). A tree takes ~30x the source size.
     pub fn unload(&mut self) {
-        self.tree = None;
+        self.set_tree(None);
         self.job = None;
+    }
+
+    /// Every new tree goes through here: what was shown is no longer what the tree colors. The old tree is freed off
+    /// the caller's thread (`retire`).
+    fn set_tree(&mut self, tree: Option<Tree>) {
+        if let Some(old) = std::mem::replace(&mut self.tree, tree) {
+            retire(old);
+        }
+        self.shown.get_mut().clear();
     }
 
     pub fn is_loaded(&self) -> bool {
@@ -299,6 +340,7 @@ impl Syntax {
         if let Some(tree) = &mut self.tree {
             tree.edit(&input_edit(e));
         }
+        self.shown.get_mut().clear();
     }
 
     /// Reparse using the previous tree (only the changed part is processed).
@@ -307,10 +349,11 @@ impl Syntax {
         let mut guard = PARSER.lock().unwrap_or_else(|e| e.into_inner());
         let parser = guard.get_or_insert_with(Parser::new);
         if parser.set_language(&self.lang.ts).is_err() {
-            self.tree = None;
+            self.set_tree(None);
             return;
         }
-        self.tree = parser.parse_with_options(&mut reader(rope), self.tree.as_ref(), None);
+        let tree = parser.parse_with_options(&mut reader(rope), self.tree.as_ref(), None);
+        self.set_tree(tree);
     }
 
     /// `reparse`, but for at most `budget`. Mostly an edit reparses in a millisecond or two; one that unsettles the
@@ -329,27 +372,42 @@ impl Syntax {
         let mut guard = PARSER.lock().unwrap_or_else(|e| e.into_inner());
         let parser = guard.get_or_insert_with(Parser::new);
         if parser.set_language(&self.lang.ts).is_err() {
-            self.tree = None;
+            drop(guard);
+            self.set_tree(None);
             return None;
         }
         let start = Instant::now();
         let mut in_time = |_: &tree_sitter::ParseState| if start.elapsed() > budget { ControlFlow::Break(()) } else { ControlFlow::Continue(()) };
         let options = ParseOptions::new().progress_callback(&mut in_time);
-        if let Some(tree) = parser.parse_with_options(&mut reader(rope), Some(old), Some(options)) {
-            self.tree = Some(tree);
-            return None;
+        let tree = parser.parse_with_options(&mut reader(rope), Some(old), Some(options));
+        if tree.is_none() {
+            // Stopped: the parser would resume this parse next time; it is done from the start elsewhere instead.
+            parser.reset();
         }
-        // Stopped: the parser would resume this parse next time; it is done from the start elsewhere instead.
-        parser.reset();
-        let id = NEXT_JOB.fetch_add(1, Ordering::Relaxed);
-        self.job = Some((id, Vec::new()));
-        Some(ParseJob { id, lang: self.lang, old: old.clone(), rope: rope.clone() })
+        drop(guard);
+        match tree {
+            Some(tree) => {
+                self.set_tree(Some(tree));
+                None
+            }
+            None => self.start_job(rope),
+        }
     }
 
-    /// A `ParseJob` is back: its tree, moved by the edits made meanwhile, replaces the old one, and those edits are
-    /// reparsed (within `budget`, as `reparse_within`). An answer to a job this tree no longer waits for (the language
-    /// changed, the tab went to the background) is dropped.
-    pub fn finish(&mut self, parsed: Parsed, rope: &Rope, budget: Duration) -> Option<ParseJob> {
+    /// Hand the reparse of the current tree to a `ParseJob`.
+    fn start_job(&mut self, rope: &Rope) -> Option<ParseJob> {
+        let old = self.tree.clone()?;
+        let id = NEXT_JOB.fetch_add(1, Ordering::Relaxed);
+        self.job = Some((id, Vec::new()));
+        Some(ParseJob { id, lang: self.lang, old, rope: rope.clone() })
+    }
+
+    /// A `ParseJob` is back: its tree, moved by the edits made meanwhile, replaces the old one. Those edits are not
+    /// reparsed here, on the caller's thread: they go to the next job (`Landed::next`), coalesced into one reparse.
+    /// Only what the two trees parse differently (`Tree::changed_ranges`) is colored again, and only where something
+    /// was shown: `Landed::repaint` says whether any of it now has other colors. An answer to a job this tree no longer
+    /// waits for (the language changed, the tab went to the background) is dropped.
+    pub fn finish(&mut self, parsed: Parsed, rope: &Rope) -> Option<Landed> {
         let since = match &self.job {
             Some((id, _)) if *id == parsed.id => self.job.take().map(|(_, since)| since).unwrap_or_default(),
             _ => return None,
@@ -358,8 +416,28 @@ impl Syntax {
         for e in &since {
             tree.edit(&input_edit(e));
         }
-        self.tree = Some(tree);
-        if since.is_empty() { None } else { self.reparse_within(rope, budget) }
+        let shown = std::mem::take(self.shown.get_mut());
+        let repaint = match &self.tree {
+            Some(old) if !shown.is_empty() => {
+                let changed: Vec<Range<usize>> = old.changed_ranges(&tree).map(|r| r.start_byte..r.end_byte).collect();
+                shown.iter().any(|s| {
+                    changed.iter().any(|c| {
+                        let r = c.start.max(s.start)..c.end.min(s.end);
+                        !r.is_empty()
+                            && colors(&highlights_in(old, self.lang, rope, r.clone()), r.clone())
+                                != colors(&highlights_in(&tree, self.lang, rope, r.clone()), r.clone())
+                    })
+                })
+            }
+            _ => false,
+        };
+        self.set_tree(Some(tree));
+        if !repaint {
+            // What was shown has the same colors with this tree.
+            *self.shown.get_mut() = shown;
+        }
+        let next = if since.is_empty() { None } else { self.start_job(rope) };
+        Some(Landed { repaint, next })
     }
 
     /// A parse is running off the UI thread.
@@ -384,24 +462,57 @@ impl Syntax {
     /// (e.g. an escape inside a string) overrides the wide one, so spans come back
     /// wide -> narrow and the caller can apply them in order.
     pub fn highlights(&self, rope: &Rope, range: Range<usize>) -> Vec<(Range<usize>, Role)> {
-        let (Some(tree), Some((query, roles))) = (&self.tree, self.lang.query()) else { return Vec::new() };
-        let mut cursor = QueryCursor::new();
-        cursor.set_byte_range(range.clone());
-        let mut out: Vec<(Range<usize>, Role, usize)> = Vec::new();
-        let mut captures = cursor.captures(query, tree.root_node(), RopeText(rope));
-        while let Some((m, ix)) = captures.next() {
-            let cap = m.captures()[*ix];
-            if let Some(role) = roles[cap.index as usize] {
-                let r = cap.node.byte_range();
-                if r.end > range.start && r.start < range.end {
-                    out.push((r, role, m.pattern_index));
+        match &self.tree {
+            Some(tree) => highlights_in(tree, self.lang, rope, range),
+            None => Vec::new(),
+        }
+    }
+
+    /// `highlights`, for spans that are drawn: a parse that lands later is compared on this range (`finish`).
+    pub fn highlights_shown(&self, rope: &Rope, range: Range<usize>) -> Vec<(Range<usize>, Role)> {
+        if self.tree.is_some() {
+            let mut shown = self.shown.borrow_mut();
+            if !shown.iter().any(|r| r.start <= range.start && range.end <= r.end) {
+                shown.push(range.clone());
+                if shown.len() > SHOWN_MAX {
+                    let all = shown.iter().fold(range.clone(), |a, r| a.start.min(r.start)..a.end.max(r.end));
+                    *shown = vec![all];
                 }
             }
         }
-        // Wide first; for an identical range the pattern that comes first in the query wins (it is put last).
-        out.sort_by(|a, b| (b.0.end - b.0.start).cmp(&(a.0.end - a.0.start)).then(b.2.cmp(&a.2)));
-        out.into_iter().map(|(r, role, _)| (r, role)).collect()
+        self.highlights(rope, range)
     }
+
+    /// Something was drawn since the tree last changed (`highlights_shown`).
+    pub fn is_shown(&self) -> bool {
+        !self.shown.borrow().is_empty()
+    }
+}
+
+/// The role of each byte of `range`, run by run.
+fn colors(spans: &[(Range<usize>, Role)], range: Range<usize>) -> Vec<(usize, Option<Role>)> {
+    line_runs(range.start, range.end - range.start, spans)
+}
+
+/// `Syntax::highlights` on a given tree.
+fn highlights_in(tree: &Tree, lang: &'static Language, rope: &Rope, range: Range<usize>) -> Vec<(Range<usize>, Role)> {
+    let Some((query, roles)) = lang.query() else { return Vec::new() };
+    let mut cursor = QueryCursor::new();
+    cursor.set_byte_range(range.clone());
+    let mut out: Vec<(Range<usize>, Role, usize)> = Vec::new();
+    let mut captures = cursor.captures(query, tree.root_node(), RopeText(rope));
+    while let Some((m, ix)) = captures.next() {
+        let cap = m.captures()[*ix];
+        if let Some(role) = roles[cap.index as usize] {
+            let r = cap.node.byte_range();
+            if r.end > range.start && r.start < range.end {
+                out.push((r, role, m.pattern_index));
+            }
+        }
+    }
+    // Wide first; for an identical range the pattern that comes first in the query wins (it is put last).
+    out.sort_by(|a, b| (b.0.end - b.0.start).cmp(&(a.0.end - a.0.start)).then(b.2.cmp(&a.2)));
+    out.into_iter().map(|(r, role, _)| (r, role)).collect()
 }
 
 /// Color run for one line: `(byte length, role)` pieces covering the whole line.
@@ -745,7 +856,10 @@ fun main() {
         type_at(&mut s, &mut rope, 6, "a");
         assert!(s.reparse_within(&rope, Duration::from_secs(5)).is_none());
         let parsed = std::thread::spawn(move || job.run()).join().unwrap();
-        assert!(s.finish(parsed, &rope, Duration::from_secs(5)).is_none());
+        // The key typed meanwhile is reparsed by the next job, not on the thread that takes the answer.
+        let next = s.finish(parsed, &rope).expect("its own job").next.expect("a job for the edit made meanwhile");
+        assert!(s.parsing());
+        assert!(s.finish(next.run(), &rope).expect("its own job").next.is_none());
         assert!(!s.parsing());
         let full = Syntax::new(lang, &rope).unwrap();
         assert_eq!(s.tree.as_ref().unwrap().root_node().to_sexp(), full.tree.as_ref().unwrap().root_node().to_sexp());
@@ -762,7 +876,7 @@ fun main() {
         s.unload();
         s.ensure_loaded(&rope);
         let before = s.tree.as_ref().unwrap().root_node().to_sexp();
-        assert!(s.finish(job.run(), &rope, Duration::from_secs(5)).is_none());
+        assert!(s.finish(job.run(), &rope).is_none());
         assert_eq!(s.tree.as_ref().unwrap().root_node().to_sexp(), before);
         assert!(!s.parsing());
     }
