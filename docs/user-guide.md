@@ -1605,7 +1605,7 @@ the bottom or the right restores its size.
 
 **Safety.**
 
-- Closing a terminal while a program runs in it asks first and names the program (`terminal.confirmOnClose`).
+- Closing a terminal never asks by default. Set `terminal.confirmOnClose` to `running` to be asked when a program runs in it, or to `always`.
 - Pasted text cannot end bracketed paste early. Control characters are removed when the shell does not use bracketed
   paste (`terminal.sanitizePaste`).
 - A paste of several lines asks before it runs (`terminal.warnMultilinePaste`).

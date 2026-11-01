@@ -186,7 +186,7 @@ status bar reports it.
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
 | `terminal.allowClipboardWrite` | `true` / `false` | `false` | Let programs in the terminal write to the clipboard |
-| `terminal.confirmOnClose` | `running`, `always`, `never` | `running` | Ask before closing a terminal |
+| `terminal.confirmOnClose` | `running`, `always`, `never` | `never` | Ask before closing a terminal |
 | `terminal.defaultProfile` | text | empty | Profile new terminals use |
 | `terminal.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the terminal |
 | `terminal.lineHeight` | number 1–2 | `1.2` | Terminal row height, as a multiple of the font size |

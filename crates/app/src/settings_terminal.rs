@@ -53,3 +53,13 @@ pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>, obj: &Map<String, Valu
         s.terminal_warn_multiline = crate::terminal_paste::WarnMultiline::parse(&v).unwrap_or_default();
     }
 }
+
+#[cfg(test)]
+mod confirm_close_default_tests {
+    use crate::settings::Settings;
+
+    #[test]
+    fn closing_a_terminal_asks_nothing_by_default() {
+        assert_eq!(Settings::default().terminal_confirm_close, "never");
+    }
+}

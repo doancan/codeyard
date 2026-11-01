@@ -340,7 +340,7 @@ impl Default for Settings {
             terminal_scroll_sensitivity: 2.,
             terminal_allow_clipboard_write: false,
             terminal_shell_integration: true,
-            terminal_confirm_close: "running".into(),
+            terminal_confirm_close: "never".into(),
             terminal_profiles: Default::default(),
             terminal_default_profile: None,
             terminal_sanitize_paste: Default::default(),

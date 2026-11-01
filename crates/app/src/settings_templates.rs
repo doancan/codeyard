@@ -189,8 +189,8 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Pasting: "auto" removes control characters unless the shell reads the paste as text (bracketed paste), "always" or
   // "off"; bracketed-paste markers inside pasted text are always removed. A paste of several lines asks first
   // ("unbracketed": when the shell would run each line at once, "always" or "never").
-  // Closing a terminal asks first: "running" (a program other than the shell is in the foreground), "always", "never".
-  // "terminal.confirmOnClose": "running",
+  // Closing a terminal never asks by default; "running" asks when a program other than the shell is in the foreground, "always" asks every time.
+  // "terminal.confirmOnClose": "never",
   // Profiles for new terminals, per operating system of the machine they run on; "args" replace the login flag.
   // "terminal.profiles.macos": { "zsh": { "path": "/bin/zsh" }, "bash": { "path": "/bin/bash", "args": ["-l"], "env": { "LANG": "en_US.UTF-8" }, "color": "info" } },
   // "terminal.defaultProfile": "zsh",
