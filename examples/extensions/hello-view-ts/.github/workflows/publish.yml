@@ -12,6 +12,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Pre-release: main until the first Codeyard release that publishes API 1.1 code is tagged (v0.6.0 cannot). Release builds of
-      # cyx pin this to that release's commit; replace main with it then, so a moved branch cannot change what signs.
-      - uses: doancan/codeyard/actions/publish@main
+      - uses: doancan/codeyard/actions/publish@a6e55db0a4a7b401d0ea569a10291eae0cee977e # v0.7.0
