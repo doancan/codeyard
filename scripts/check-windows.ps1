@@ -21,16 +21,11 @@ function Invoke-Cargo {
 
 Invoke-Cargo -CargoArgs @('fmt', '--all', '--', '--check')
 Invoke-Cargo -CargoArgs @('clippy', '--locked', '--workspace', '--lib', '--bins', '--', '-D', 'warnings')
-Invoke-Cargo -CargoArgs @('test', '--release', '--locked', '--workspace', '--lib', '--', '--test-threads=1')
-# Native UI/path/keyboard and Rust Cargo/debug regressions. POSIX server fixtures remain on macOS/Linux.
-Invoke-Cargo -CargoArgs @(
-    'test', '--release', '--locked', '-p', 'app', '--bin', 'codeyard', '--',
-    'windows_', 'resize_', 'qa_sidebar_sash_drag', 'links::tests', 'terminal::tests', 'ui::path_tests',
-    'sysopen::tests', 'workspace_file::tests', 'vscode::tests', 'trash::', 'terminal_web_links',
-    'files_from_the_system', 'qa_workspace_file', 'markdown', 'docker', 'web_preview',
-    'rust_hardening', 'product_', 'a11y', 'worktree', 'explorer_', 'editor_grid',
-    '--test-threads=1', '--nocapture'
-)
+# Every test of the workspace (libraries, binaries, integration tests), with no name filter. What Windows does not
+# have is decided inside the test, never by leaving it out here: code that exists only on Unix is `#[cfg(unix)]`, and
+# a test whose tool is missing on this machine (sshd, a POSIX shell, the exthost's OS sandbox) prints a SKIPPED line
+# with the reason (docs/testing.md, "Windows"). Every test binary runs even after one fails, so one run shows every failure.
+Invoke-Cargo -CargoArgs @('test', '--release', '--locked', '--workspace', '--no-fail-fast', '--', '--test-threads=1', '--nocapture')
 if (-not $SkipStandalone) {
     Invoke-Cargo -CargoArgs @('build', '--release', '--locked', '-p', 'app')
     & "$PSScriptRoot/test-standalone-agents.ps1" -Executable 'target/release/codeyard.exe'

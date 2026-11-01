@@ -63,11 +63,7 @@ markers = [".toyvcs"]
 "#;
 
 fn skip() -> bool {
-    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
-        eprintln!("skipped: {why}");
-        return true;
-    }
-    false
+    !crate::ext_runtime::code_runs_for_test()
 }
 
 fn temp(name: &str) -> PathBuf {

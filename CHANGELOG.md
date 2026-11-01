@@ -396,6 +396,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Windows CI runs every test of the workspace (`cargo test --workspace`, no name filter); before, the app's tests ran
+  through a list of name filters, so most of them, among them every extension test, never ran on Windows and new
+  tests were left out silently. A test that needs what the runner lacks says so in a SKIPPED line with the reason:
+  the exthost's OS sandbox, a POSIX shell, sshd. macOS and Linux CI set `CODEYARD_REQUIRE_TOOLS=codeyard-exthost`, so
+  the extension tests cannot pass there by skipping. Fixed on the way, on Windows: a paused debug line, a file
+  opened from the command line or the Open dialog and a folder added to the workspace kept the `\\?\` prefix of a
+  canonical path, so they matched no tab, root or breakpoint; they now keep the workbench's form (`C:/...`).
+
 - The mock hosts (Rust and TypeScript) and `cyx test` judge diagnostics as Codeyard does: `set_diagnostics` needs a
   `[[diagnostics]]` declaration that lists the file's language, a file in the workspace or open in the editor, and at
   most 1000 files; messages with bidirectional or zero-width characters are dropped and ones over 4096 characters cut.
@@ -499,6 +507,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `ctx.every` instead of hanging, and a 20 MiB answer fails as `invalid` like it does in Rust.
   - The mock hosts and `cyx test` judge `core:editor.open` as Codeyard does (argument, URI, `read` on the file) and find
     fake files by the resolved path (`./`, `..`, `//`, `%2e`).
+- Typing in a large file with every region folded took about twice as long as with nothing folded (22 ms against
+  11 ms a key in a 50 000-line file): the folded lines were worked out again from the fold marks several times per
+  key, and the fold ends were found by looking up every line anew. The folded lines are now kept until the text or
+  the folds change and the fold ends come from one pass over the lines (15 ms a key; moving down 10 ms → 4 ms).
 
 - A command or view answer over 8 MiB fails its request with `invalid: the result is 20 MiB; at most 8 MiB`; it was
   dropped, the request waited until its deadline and the extension was counted as crashed.

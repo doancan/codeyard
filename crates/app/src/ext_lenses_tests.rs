@@ -1,6 +1,6 @@
 //! Code lenses and inlay hints from code extensions end to end (#143): the probe extension
 //! (crates/ext-host/testdata/probe.wasm) runs in a real codeyard-exthost and gives lenses and hints for TOML files.
-//! Skipped when codeyard-exthost is not built (`cargo test --workspace` always builds it).
+//! Skipped where codeyard-exthost cannot run (not built, or no OS sandbox: `ext_runtime::code_runs_for_test`).
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -45,11 +45,7 @@ languages = ["toml"]
 const PAUSE: Duration = Duration::from_millis(400);
 
 fn exthost_missing() -> bool {
-    let missing = crate::ext_runtime::exthost_path().is_none();
-    if missing {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
-    }
-    missing
+    !crate::ext_runtime::code_runs_for_test()
 }
 
 fn config_dir(name: &str) -> PathBuf {

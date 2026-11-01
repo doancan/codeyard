@@ -21,8 +21,7 @@ fn swap_build(dir: &Path, wasm: &[u8]) {
 
 #[gpui::test]
 fn a_new_build_replaces_the_running_exthost(cx: &mut TestAppContext) {
-    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
-        eprintln!("skipped: {why}");
+    if !crate::ext_runtime::code_runs_for_test() {
         return;
     }
     let cfg = config_dir("dev-reload");
@@ -59,8 +58,7 @@ fn a_new_build_replaces_the_running_exthost(cx: &mut TestAppContext) {
 /// build put in place is swapped in and asked the command, and the window settles once the new build has answered.
 #[gpui::test]
 fn the_perf_reload_swaps_in_a_build_and_asks_it(cx: &mut TestAppContext) {
-    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
-        eprintln!("skipped: {why}");
+    if !crate::ext_runtime::code_runs_for_test() {
         return;
     }
     let cfg = config_dir("dev-perf");

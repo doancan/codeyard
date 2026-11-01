@@ -34,7 +34,7 @@ fn project<'a>(cx: &'a mut TestAppContext, name: &str) -> Option<(Entity<Workben
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/a.rs"), A).unwrap();
     std::fs::write(root.join("src/b.rs"), format!("{}ğ😀 s\n", "// x\n".repeat(11))).unwrap();
-    let (a, b) = (root.join("src/a.rs").to_string_lossy().into_owned(), root.join("src/b.rs").to_string_lossy().into_owned());
+    let (a, b) = (crate::ui::local_path(&root.join("src/a.rs")), crate::ui::local_path(&root.join("src/b.rs")));
     let (ua, ub) = (path_to_uri(&a), path_to_uri(&b));
     let many: Vec<Value> = (0..22).map(|_| related(&ua, 3, 8, "also here")).collect();
     let publish = json!({ "method": "textDocument/publishDiagnostics", "params": { "uri": ua, "diagnostics": [
@@ -233,7 +233,7 @@ fn qa_diag_related_locations_over_ssh(cx: &mut TestAppContext) {
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/a.rs"), A).unwrap();
     std::fs::write(root.join("src/b.rs"), format!("{}ğ😀 s\n", "// x\n".repeat(11))).unwrap();
-    let (a, b) = (root.join("src/a.rs").to_string_lossy().into_owned(), root.join("src/b.rs").to_string_lossy().into_owned());
+    let (a, b) = (crate::ui::local_path(&root.join("src/a.rs")), crate::ui::local_path(&root.join("src/b.rs")));
     let publish = json!({ "method": "textDocument/publishDiagnostics", "params": { "uri": path_to_uri(&a), "diagnostics": [
         { "range": range(2, 15, 16), "severity": 1, "code": "E0382", "message": "borrow of moved value: `s`",
           "relatedInformation": [related(&path_to_uri(&b), 11, 4, "borrow later used here")] },
@@ -245,7 +245,7 @@ fn qa_diag_related_locations_over_ssh(cx: &mut TestAppContext) {
         cx.executor().advance_clock(std::time::Duration::from_secs(1));
         wb.read_with(cx, |wb, _| wb.ports_ready())
     });
-    let r = root.to_string_lossy().into_owned();
+    let r = crate::ui::local_path(&root);
     wb.update_in(cx, |wb, window, cx| wb.open_path(&r, window, cx));
     cx.run_until_parked();
     crate::qa_integration_tests::ssh_open_file(&wb, cx, &root.join("src/a.rs"));

@@ -42,13 +42,7 @@ description = "Your GitHub Enterprise host."
 "#;
 
 fn skipped() -> bool {
-    match crate::ext_runtime::code_runs_here(&"tests") {
-        Ok(()) => false,
-        Err(why) => {
-            eprintln!("skipped: {why}");
-            true
-        }
-    }
+    !crate::ext_runtime::code_runs_for_test()
 }
 
 fn temp(name: &str) -> PathBuf {

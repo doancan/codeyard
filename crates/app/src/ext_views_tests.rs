@@ -417,8 +417,7 @@ fn an_extension_cannot_cover_or_replace_the_consent_sheet(cx: &mut TestAppContex
 /// as `ui-event`, and its `ui.invalidate` draws the new count.
 #[gpui::test]
 fn a_real_extension_draws_its_view_and_hears_clicks(cx: &mut TestAppContext) {
-    if crate::ext_runtime::exthost_path().is_none() {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+    if !crate::ext_runtime::code_runs_for_test() {
         return;
     }
     let (wb, cx) = setup(cx, "probe", false);

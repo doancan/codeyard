@@ -20,6 +20,12 @@ pub(super) struct ParseState {
     repaint: Option<gpui::Task<()>>,
     /// When the tree last took an edit (the executor's clock, so tests can move it), to tell when typing paused.
     last_edit: Option<std::time::Instant>,
+    /// Frames asked for by `repaint_when_quiet` (tests tell them from frames other things ask for).
+    #[cfg(test)]
+    repaints: usize,
+    /// A test's budget in place of `SYNTAX_BUDGET`: whether a reparse fits 4 ms depends on the machine.
+    #[cfg(test)]
+    budget: Option<std::time::Duration>,
 }
 
 impl EditorView {
@@ -50,7 +56,11 @@ impl EditorView {
             });
         }
         self.parse.last_edit = Some(cx.background_executor().now());
-        if let Some(job) = syntax.reparse_within(self.buffer.rope(), SYNTAX_BUDGET) {
+        #[cfg(test)]
+        let budget = self.parse.budget.unwrap_or(SYNTAX_BUDGET);
+        #[cfg(not(test))]
+        let budget = SYNTAX_BUDGET;
+        if let Some(job) = syntax.reparse_within(self.buffer.rope(), budget) {
             self.parse_in_background(job, cx);
         }
     }
@@ -94,6 +104,10 @@ impl EditorView {
             this.update(cx, |e, cx| {
                 e.parse.repaint = None;
                 if e.syntax.as_ref().is_some_and(|s| !s.is_shown()) {
+                    #[cfg(test)]
+                    {
+                        e.parse.repaints += 1;
+                    }
                     cx.notify();
                 }
             })
@@ -117,6 +131,18 @@ impl EditorView {
     #[cfg(test)]
     pub fn syntax_repaint_waiting_for_test(&self) -> bool {
         self.parse.repaint.is_some()
+    }
+
+    /// Reparse within `budget` on a key instead of `SYNTAX_BUDGET`.
+    #[cfg(test)]
+    pub fn set_syntax_budget_for_test(&mut self, budget: std::time::Duration) {
+        self.parse.budget = Some(budget);
+    }
+
+    /// Frames asked for once typing paused, so far.
+    #[cfg(test)]
+    pub fn syntax_repaints_for_test(&self) -> usize {
+        self.parse.repaints
     }
 
     /// A frame drew text colored by the current tree.

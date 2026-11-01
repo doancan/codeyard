@@ -41,8 +41,9 @@ fn write(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
     p
 }
 
+/// A path in the form the workbench keeps (`ui::local_path`: `/` on Windows too), so open buffers are found by it.
 fn path_str(p: &Path) -> String {
-    p.to_string_lossy().into_owned()
+    crate::ui::local_path(p)
 }
 
 /// Put the panel in structural mode with this pattern and wait until the search is over.

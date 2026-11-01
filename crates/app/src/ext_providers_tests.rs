@@ -96,11 +96,7 @@ id = "probe"
 "#;
 
 fn exthost_missing() -> bool {
-    let missing = crate::ext_runtime::exthost_path().is_none();
-    if missing {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
-    }
-    missing
+    !crate::ext_runtime::code_runs_for_test()
 }
 
 fn config_dir(name: &str) -> PathBuf {
@@ -238,6 +234,8 @@ fn extension_commands_run_from_menus_keys_and_status_items(cx: &mut TestAppConte
 /// An extension binding never takes a built-in key, and an extension command is bound like a core one.
 #[gpui::test]
 fn extension_command_keys_are_bound(cx: &mut TestAppContext) {
+    // Only the bindings are looked at, the extension never runs: it loads where the exthost cannot (Windows).
+    let _offline = crate::ext_runtime::load_without_exthost_for_test();
     let cfg = config_dir("keys");
     let (_wb, cx) = setup(cx, &cfg, "{}");
     let bound = cx.update(|_, cx| {
@@ -385,7 +383,7 @@ fn pushed_diagnostics_are_declared_bounded_and_plain(cx: &mut TestAppContext) {
     use ext_manifest::limits;
     let ws = config_dir("pushed-diagnostics");
     std::fs::write(ws.join("a.toml"), "a = 1\n").unwrap();
-    let ws_s = std::fs::canonicalize(&ws).unwrap().to_string_lossy().replace('\\', "/");
+    let ws_s = crate::ui::canonical_for_test(&ws).to_string_lossy().into_owned();
     let active = |extra: &str| {
         let text = format!(
             "[extension]\nid = \"you.lint\"\nversion = \"1.0.0\"\nname = \"Lint\"\nlicense = \"MIT\"\n[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n{extra}"
