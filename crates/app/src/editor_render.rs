@@ -519,6 +519,27 @@ impl Render for EditorView {
                                                                 };
                                                                 let ring =
                                                                     bp.is_some_and(|m| m.disabled || matches!(m.verified, crate::debug_model::Verified::No(_)));
+                                                                // An existing breakpoint for the tree: pressing it removes it, as a click on the dot does
+                                                                // (F9 sets one at the caret).
+                                                                let heard = bp.map(|m| {
+                                                                    let state = match (&m.verified, m.disabled) {
+                                                                        (_, true) => crate::i18n::t("disabled").to_string(),
+                                                                        (crate::debug_model::Verified::No(why), _) => why.clone().unwrap_or_default(),
+                                                                        _ => m.condition.clone().or(m.log.clone()).unwrap_or_default(),
+                                                                    };
+                                                                    crate::a11y_controls::control(
+                                                                        crate::a11y_controls::Control::button(
+                                                                            this.name.to_string(),
+                                                                            format!("bp{ix}"),
+                                                                            crate::i18n::tf("Breakpoint on line {}", &[&(ix + 1)]),
+                                                                            |_, _| {},
+                                                                        )
+                                                                        .description(state)
+                                                                        .on_entity(cx.entity().downgrade(), move |e: &mut Self, _, cx| {
+                                                                            e.toggle_breakpoint_at(ix, cx)
+                                                                        }),
+                                                                    )
+                                                                });
                                                                 d.child(
                                                                     div()
                                                                         .id(("bp", row))
@@ -531,6 +552,7 @@ impl Render for EditorView {
                                                                         .items_center()
                                                                         .justify_center()
                                                                         .cursor(CursorStyle::PointingHand)
+                                                                        .children(heard)
                                                                         .child(
                                                                             div()
                                                                                 .w(px(9.))
@@ -581,6 +603,24 @@ impl Render for EditorView {
                                                                         .flex()
                                                                         .items_center()
                                                                         .cursor(CursorStyle::PointingHand)
+                                                                        .child(crate::a11y_controls::control(
+                                                                            crate::a11y_controls::Control::button(
+                                                                                this.name.to_string(),
+                                                                                format!("fold{ix}"),
+                                                                                if is_folded {
+                                                                                    crate::i18n::tf("Unfold line {}", &[&(ix + 1)])
+                                                                                } else {
+                                                                                    crate::i18n::tf("Fold line {}", &[&(ix + 1)])
+                                                                                },
+                                                                                |_, _| {},
+                                                                            )
+                                                                            .expanded(!is_folded)
+                                                                            .on_entity(cx.entity().downgrade(), move |e: &mut Self, _, cx| {
+                                                                                e.toggle_fold_line(ix);
+                                                                                cx.emit(EditorEvent::Changed);
+                                                                                cx.notify();
+                                                                            }),
+                                                                        ))
                                                                         .when(!is_folded, |d| d.opacity(0.).group_hover("gutter", |s| s.opacity(1.)))
                                                                         .child(icon(
                                                                             if is_folded { "chevron-right" } else { "chevron-down" },
@@ -601,7 +641,18 @@ impl Render for EditorView {
                                                             // Git: strip for added/changed lines, a notch at the top for deleted lines.
                                                             .when_some(this.git_marks.get(ix).copied().flatten().filter(|_| seg == 0), |d, m| {
                                                                 use crate::git::LineMark;
-                                                                let bar = div().absolute().right(px(theme::SPACE[3])).w(px(3.));
+                                                                let what = match m {
+                                                                    LineMark::Added => crate::i18n::tf("Line {} added", &[&(ix + 1)]),
+                                                                    LineMark::Modified => crate::i18n::tf("Line {} changed", &[&(ix + 1)]),
+                                                                    LineMark::DeletedAbove => crate::i18n::tf("Lines deleted above line {}", &[&(ix + 1)]),
+                                                                };
+                                                                let bar =
+                                                                    div().absolute().right(px(theme::SPACE[3])).w(px(3.)).child(crate::a11y_controls::said(
+                                                                        this.name.to_string(),
+                                                                        format!("git{ix}"),
+                                                                        accesskit::Role::Label,
+                                                                        what,
+                                                                    ));
                                                                 d.child(match m {
                                                                     LineMark::Added => bar.top_0().bottom_0().bg(c(p.success)),
                                                                     LineMark::Modified => bar.top_0().bottom_0().bg(c(p.info)),
@@ -612,16 +663,34 @@ impl Render for EditorView {
                                                     .when_some(
                                                         this.eol_hint(ix).filter(|_| seg == 0 && inline_blame.as_ref().is_none_or(|(l, ..)| *l != ix)),
                                                         |d, hint| {
+                                                            let lens_label = hint.to_string();
                                                             let a = annotation("line-end-hint", hint.into(), p.text_muted, 0.65);
                                                             // A line with an extension lens runs it on click.
                                                             d.child(a.when(this.ext_lenses_on(ix).next().is_some(), |a| {
-                                                                a.cursor_pointer().on_mouse_down(
-                                                                    MouseButton::Left,
-                                                                    cx.on(move |e, _: &MouseDownEvent, _, cx| {
-                                                                        cx.stop_propagation();
-                                                                        e.click_ext_lens(ix, cx);
-                                                                    }),
-                                                                )
+                                                                a.cursor_pointer()
+                                                                    .relative()
+                                                                    .child(crate::a11y_controls::control(
+                                                                        crate::a11y_controls::Control::button(
+                                                                            this.name.to_string(),
+                                                                            format!("lens{ix}"),
+                                                                            lens_label,
+                                                                            |_, _| {},
+                                                                        )
+                                                                        .description(crate::i18n::tf("line {}", &[&(ix + 1)]))
+                                                                        .on_entity(
+                                                                            cx.entity().downgrade(),
+                                                                            move |e: &mut Self, _, cx| {
+                                                                                e.click_ext_lens(ix, cx);
+                                                                            },
+                                                                        ),
+                                                                    ))
+                                                                    .on_mouse_down(
+                                                                        MouseButton::Left,
+                                                                        cx.on(move |e, _: &MouseDownEvent, _, cx| {
+                                                                            cx.stop_propagation();
+                                                                            e.click_ext_lens(ix, cx);
+                                                                        }),
+                                                                    )
                                                             }))
                                                         },
                                                     )
@@ -704,6 +773,17 @@ impl Render for EditorView {
                                             let line = *line;
                                             div()
                                                 .id(("sticky", line))
+                                                .relative()
+                                                .child(crate::a11y_controls::control(
+                                                    crate::a11y_controls::Control::new(
+                                                        self.name.to_string(),
+                                                        format!("sticky{line}"),
+                                                        accesskit::Role::Link,
+                                                        text.to_string(),
+                                                    )
+                                                    .description(crate::i18n::tf("line {}", &[&(line + 1)]))
+                                                    .on_entity(cx.entity().downgrade(), move |e: &mut Self, w, cx| e.go_to_line(line + 1, w, cx)),
+                                                ))
                                                 .h(px(line_h))
                                                 .w_full()
                                                 .flex()

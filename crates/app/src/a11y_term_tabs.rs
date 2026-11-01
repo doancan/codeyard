@@ -20,7 +20,25 @@ pub(super) fn terminal_snap(term: &Entity<crate::terminal::TerminalView>, ix: us
     let cursor = cursor.and_then(|(row, col)| starts.get(row).map(|s| s + col.min(rows[row].chars().count())));
     let painted = term.read(cx).a11y_layout(&rows, &starts);
     let runs = runs_painted(starts.into_iter().zip(rows).collect(), total, 0, &painted, scale);
-    TerminalSnap { label: tf("Terminal {0} of {1}", &[&(ix + 1), &count]), runs, cursor }
+    let scroll = term.read(cx).a11y_scroll();
+    TerminalSnap { label: tf("Terminal {0} of {1}", &[&(ix + 1), &count]), runs, cursor, scroll }
+}
+
+/// The terminal's history on its node: (lines scrolled back, lines of history). Scrolled in pages; the rows on screen
+/// are then those of the history.
+pub(super) fn history_scroll((back, history): (usize, usize), node: &mut Node) {
+    if history == 0 {
+        return;
+    }
+    node.set_scroll_y((history - back.min(history)) as f64);
+    node.set_scroll_y_min(0.);
+    node.set_scroll_y_max(history as f64);
+    if back < history {
+        node.add_action(Action::ScrollUp);
+    }
+    if back > 0 {
+        node.add_action(Action::ScrollDown);
+    }
 }
 
 /// A terminal tab of the focused group.

@@ -116,6 +116,13 @@ impl UpdateWindow {
     }
 }
 
+impl UpdateWindow {
+    /// The workbench whose update this window shows.
+    pub(crate) fn home(&self) -> WeakEntity<Workbench> {
+        self.wb.clone()
+    }
+}
+
 impl Render for UpdateWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let Some(wb) = self.wb.upgrade() else {
@@ -181,6 +188,11 @@ impl Workbench {
         // middle of an update then.
         cx.defer(move |cx| {
             let handle = cx.open_window(options, |window, cx| cx.new(|cx| UpdateWindow::new(wb.clone(), host, height, window, cx))).ok();
+            // Its own adapter: a screen reader in this window reads the dialog and presses its buttons.
+            #[cfg(any(target_os = "macos", windows))]
+            if let Some(handle) = handle {
+                super::a11y::platform::attach_with(handle.into(), super::a11y::windows_access::UPDATE_WINDOW, cx);
+            }
             wb.update(cx, |wb, _| {
                 wb.update.opening = false;
                 wb.update.window = handle;
