@@ -104,7 +104,7 @@ fn a_keystroke_never_waits_for_a_reparse_of_the_whole_file(cx: &mut TestAppConte
     assert!(deferred > 0, "every reparse ran on the keystroke");
     cx.run_until_parked();
     assert!(!ed.read_with(cx, |e, _| e.parsing_syntax_for_test()));
-    let text = ed.read_with(cx, |e, _| e.text());
+    let text = ed.read_with(cx, |e, _| e.buffer_text());
     assert!(text.starts_with("ab ab ab ab ab a/// "));
     let rope = buffer::Rope::from_str(&text);
     let full = syntax::Syntax::new(syntax::language_for_path("big.rs").unwrap(), &rope).unwrap();
@@ -116,7 +116,7 @@ fn a_keystroke_never_waits_for_a_reparse_of_the_whole_file(cx: &mut TestAppConte
 /// last 100.
 fn assert_colors_of_a_full_parse(ed: &Entity<EditorView>, lines: usize, cx: &mut VisualTestContext) {
     assert!(!ed.read_with(cx, |e, _| e.parsing_syntax_for_test()));
-    let rope = buffer::Rope::from_str(&ed.read_with(cx, |e, _| e.text()));
+    let rope = buffer::Rope::from_str(&ed.read_with(cx, |e, _| e.buffer_text()));
     let full = syntax::Syntax::new(syntax::language_for_path("big.rs").unwrap(), &rope).unwrap();
     for range in [0..rope.line_to_byte(lines), rope.line_to_byte(rope.len_lines() - 100)..rope.len_bytes()] {
         assert_eq!(ed.read_with(cx, |e, _| e.highlights_for_test(range.clone())), full.highlights(&rope, range));
@@ -140,7 +140,7 @@ fn every_kind_of_edit_reaches_the_syntax_tree(cx: &mut TestAppContext) {
         type_char(&ed, ch, cx);
     }
     cx.run_until_parked();
-    assert!(ed.read_with(cx, |e, _| e.text()).starts_with("fn /*/// "));
+    assert!(ed.read_with(cx, |e, _| e.buffer_text()).starts_with("fn /*/// "));
     assert_colors_of_a_full_parse(&ed, 200, cx);
     cx.write_to_clipboard(gpui::ClipboardItem::new_string("*/ struct P { a: \"ğ\" }\n".into()));
     cx.dispatch_action(crate::editor::Paste);
@@ -172,44 +172,42 @@ fn a_tree_that_lands_while_typing_waits_for_a_pause_to_draw(cx: &mut TestAppCont
     ed.update(cx, |e, cx| e.set_cursor_for_test(0, cx));
     cx.run_until_parked();
     // (a parse runs in the background, a frame drew the current tree's colors, a frame waits for a pause in typing)
+    // Other things may draw a frame meanwhile (a file watcher, the cursor); only the frames the tree asks for count.
     let state =
         |cx: &mut VisualTestContext| ed.read_with(cx, |e, _| (e.parsing_syntax_for_test(), e.syntax_shown_for_test(), e.syntax_repaint_waiting_for_test()));
-    let notified = Rc::new(RefCell::new(0usize));
-    let count = notified.clone();
-    let _watch = cx.update(|_, cx| cx.observe(&ed, move |_, _| *count.borrow_mut() += 1));
+    let repaints = |cx: &mut VisualTestContext| ed.read_with(cx, |e, _| e.syntax_repaints_for_test());
     let quiet = EditorView::SYNTAX_QUIET_FOR_TEST;
 
     // `f` before the first item: the reparse goes to the background and lands with the same colors on screen.
     type_char(&ed, "f", cx);
     assert_eq!(state(cx), (true, true, false), "the key's frame is drawn with the old tree");
     cx.run_until_parked();
-    assert_eq!(state(cx), (false, true, false), "a tree with the same colors on screen waits to draw them");
+    assert_eq!((state(cx).0, state(cx).2), (false, false), "a tree with the same colors on screen waits to draw them");
 
     // `fn`: the item after it is colored otherwise; the frame waits for typing to pause, and a frame drawn meanwhile
     // (here a refresh; mostly the next key) shows the new colors, so none is asked for.
     type_char(&ed, "n", cx);
     cx.run_until_parked();
-    assert_eq!(state(cx), (false, false, true));
+    assert_eq!((state(cx).0, state(cx).2), (false, true), "new colors wait for a pause");
     cx.update(|window, _| window.refresh());
     cx.run_until_parked();
     assert_eq!(state(cx), (false, true, true));
-    *notified.borrow_mut() = 0;
     cx.executor().advance_clock(quiet);
     cx.run_until_parked();
-    assert_eq!((state(cx), *notified.borrow()), ((false, true, false), 0), "new colors drawn twice");
+    assert_eq!((state(cx), repaints(cx)), ((false, true, false), 0), "new colors drawn twice");
 
-    // `fn `: nothing draws the new colors before the pause, so the pause does.
+    // `fn `: the pause draws the new colors, not before it, unless something else drew them first.
     type_char(&ed, " ", cx);
     cx.run_until_parked();
-    assert_eq!(state(cx), (false, false, true));
-    *notified.borrow_mut() = 0;
+    assert_eq!((state(cx).0, state(cx).2), (false, true));
     cx.executor().advance_clock(quiet - std::time::Duration::from_millis(1));
     cx.run_until_parked();
-    assert_eq!((state(cx), *notified.borrow()), ((false, false, true), 0), "drawn before typing paused");
+    assert_eq!((state(cx).2, repaints(cx)), (true, 0), "drawn before typing paused");
+    let drawn_by_something_else = state(cx).1;
     cx.executor().advance_clock(std::time::Duration::from_millis(1));
     cx.run_until_parked();
-    assert_eq!(*notified.borrow(), 1, "the new colors were never drawn");
-    assert_eq!(state(cx), (false, true, false));
+    assert_eq!(state(cx), (false, true, false), "the new colors were never drawn");
+    assert_eq!(repaints(cx), usize::from(!drawn_by_something_else));
     assert_colors_of_a_full_parse(&ed, 200, cx);
 }
 

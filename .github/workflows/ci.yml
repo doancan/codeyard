@@ -304,6 +304,16 @@ jobs:
         # The wall-clock budgets of the tests get the same allowance for a shared runner as on macOS and Linux.
         env:
           CODEYARD_TEST_TIMEOUT_SCALE: "3"
+      # A process a test leaves running loads the runner, and the tests after it time out: list what is left.
+      - name: Processes left running
+        if: always()
+        shell: pwsh
+        run: |
+          $since = (Get-Process -Id $PID).StartTime.AddHours(-3)
+          Get-CimInstance Win32_Process |
+            Where-Object { $_.CreationDate -gt $since -and $_.ProcessId -ne $PID -and $_.Name -notmatch '^(conhost|Runner\.|svchost|WmiPrvSE)' } |
+            ForEach-Object { $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; [pscustomobject]@{ Id = $_.ProcessId; Parent = $_.ParentProcessId; Cpu = $p.CPU; Started = $_.CreationDate; Command = $_.CommandLine } } |
+            Sort-Object Cpu -Descending | Select-Object -First 60 | Format-Table -AutoSize -Wrap | Out-String -Width 400
 
   windows-standalone:
     runs-on: windows-2022

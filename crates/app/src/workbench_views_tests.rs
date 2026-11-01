@@ -252,8 +252,9 @@ fn a_restart_starts_a_new_shell_in_the_group_without_replaying_anything(cx: &mut
         // the Enter key, which a Windows console needs (a Unix terminal turns it into `\n`).
         t.send(&format!("echo x > \"{}\"\r", marker.display()));
     });
-    assert!(wait(vcx, |_| marker.exists()), "the first shell ran the command");
-    std::fs::remove_file(&marker).unwrap();
+    // The file exists as soon as the shell opens it; it can be removed once the shell has written and closed it
+    // (Windows refuses to remove a file another process has open).
+    assert!(wait(vcx, |_| marker.exists() && std::fs::remove_file(&marker).is_ok()), "the first shell ran the command");
 
     let wb = restart_with_saved(wb, vcx, &home, None);
     assert!(wait(vcx, |vcx| wb.read_with(vcx, |wb, _| wb.editor_terminal_count() == 1)), "a terminal is back in the editor area");

@@ -1343,8 +1343,10 @@ fn qa_multi_root_search_quick_open_tasks_and_lsp(cx: &mut TestAppContext) {
     std::fs::create_dir_all(web.join("src")).unwrap();
     std::fs::write(web.join("src/app.c"), "int needle_web;\n").unwrap();
     std::fs::create_dir_all(web.join(".codeyard")).unwrap();
-    std::fs::write(web.join(".codeyard/tasks.jsonc"), r#"[ { "label": "build", "command": "pwd > cwd.txt && echo ${workspaceFolderBasename} > base.txt" } ]"#)
-        .unwrap();
+    // `pwd -W`: the shell on Windows is Git's bash, whose plain `pwd` gives `/c/Users/...`.
+    let pwd = if cfg!(windows) { "pwd -W" } else { "pwd" };
+    let tasks = format!(r#"[ {{ "label": "build", "command": "{pwd} > cwd.txt && echo ${{workspaceFolderBasename}} > base.txt" }} ]"#);
+    std::fs::write(web.join(".codeyard/tasks.jsonc"), tasks).unwrap();
     // Server: logs the rootUri from initialize.
     let log = api.join("roots.log");
     let script = api.join("root-ls.py");
@@ -1427,7 +1429,7 @@ while True:
     // Task: the active file is in the extra folder, so the command runs there.
     run(&wb, cx, "Tasks: Run Build Task");
     wait_for(cx, "task ran in the web root", |_| web.join("cwd.txt").exists() && web.join("base.txt").exists());
-    assert_eq!(std::fs::read_to_string(web.join("cwd.txt")).unwrap().trim(), web.to_string_lossy());
+    assert_eq!(std::fs::read_to_string(web.join("cwd.txt")).unwrap().trim(), crate::ui::local_path(&web));
     assert_eq!(std::fs::read_to_string(web.join("base.txt")).unwrap().trim(), web.file_name().unwrap().to_str().unwrap());
     assert!(!api.join("cwd.txt").exists(), "must not run in the first root");
 }
