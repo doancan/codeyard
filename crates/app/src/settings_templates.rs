@@ -148,7 +148,7 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "search.maxResults": 2000,
   // --- git-sync ---
   // Fetch in the background while the window is in front, every this many seconds (30 or more). Not in folders you have not trusted.
-  "git.autofetch": false,
+  "git.autofetch": true,
   "git.autofetchPeriod": 180,
   // Ask before Sync pulls or pushes (your own settings only: a folder cannot change it).
   "git.confirmSync": false,

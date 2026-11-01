@@ -1019,7 +1019,7 @@ first), `"git.rebaseWhenSync"` (pull with rebase), `"git.pruneOnFetch"` (default
 (default true), `"git.fetchOnPull"` (fetch every remote before pulling), `"git.postCommitCommand"`
 (`none`, `push` or `sync` after each commit), `"git.enableSmartCommit"` (default true: with nothing
 staged the commit button commits all tracked changes; off, it asks you to stage first) and
-`"git.autofetch"` with `"git.autofetchPeriod"` (off by default; fetches in the background every 180 s
+`"git.autofetch"` with `"git.autofetchPeriod"` (on by default; fetches in the background every 180 s
 or more while the window is in front, never in a folder you have not trusted, and a failure only
 shows in the sync item's tooltip). `git.confirmSync` and `git.postCommitCommand` are read from your
 own settings only: a repository cannot turn the question on or off or make your commits push by themselves.

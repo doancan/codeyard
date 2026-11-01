@@ -101,7 +101,7 @@ status bar reports it.
 
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
-| `git.autofetch` | `true` / `false` | `false` | Fetch from the remote in the background while the window is in front |
+| `git.autofetch` | `true` / `false` | `true` | Fetch from the remote in the background while the window is in front |
 | `git.autofetchPeriod` | number 30–86400 | `180` | Seconds between background fetches |
 | `git.confirmSync` | `true` / `false` | `false` | Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it |
 | `git.enableSmartCommit` | `true` / `false` | `true` | Commit all tracked changes when nothing is staged |

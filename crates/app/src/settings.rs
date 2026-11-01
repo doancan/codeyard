@@ -317,7 +317,7 @@ impl Default for Settings {
             files_exclude: vec![".git".into(), ".DS_Store".into()],
             search_max_results: 2000,
             // --- git-sync ---
-            git_autofetch: false,
+            git_autofetch: true,
             git_autofetch_period: 180,
             git_confirm_sync: false,
             git_rebase_when_sync: false,

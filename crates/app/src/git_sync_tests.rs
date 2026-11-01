@@ -12,7 +12,7 @@ use crate::workbench::Workbench;
 
 /// `settings` over the defaults, with the confirmation off unless a test is about it.
 fn quiet() -> Settings {
-    Settings { git_confirm_sync: false, ..Settings::default() }
+    Settings { git_confirm_sync: false, git_autofetch: false, ..Settings::default() }
 }
 
 struct Fixture {
