@@ -36,6 +36,51 @@ The tree, in the order a screen reader walks it:
   tab's name as description); the large-file, diff and page tabs (Settings, Welcome, Merge, Compare, Markdown,
   Containers, the Inspector, Language Services…) as tabs of the "Editor tabs" list with their Close buttons; and
   every other editor group's tabs in a group "Editor group 2", whose `Click` brings that group forward with the tab.
+- The side views' drawn controls, declared the same way: the Explorer's empty-state buttons (Open Folder, Open
+  recent), header buttons (New File, New Folder, Refresh, Expand and Collapse Folders), each section's header (a
+  `Button` with its count, expanded while open; `Click` folds it), the open editors (a `ListItem` each, selected while
+  in front, with Close), favorites, the outline (`TreeItem`s with their line, selected at the caret) and the timeline
+  (saved copies and commits), and its notes as labels; Source Control's Refresh and More Actions…, the Stashes header
+  and each stash's Apply, Pop and Drop (the stash as description), a repository's fold button; the Search view's
+  Clear field, Previous and Next result, Expand or Collapse all, Open in a Search Editor tab, Run again, Clear and, in
+  structural search, the pattern's language (`Click` takes the next one); Run and Debug's Remove All Breakpoints and
+  "Create a launch configuration" (`Link`); the Testing view's filter field (`TextInput` with its text, `Focus` gives
+  it the keyboard) and Collapse All; the Remote Explorer's per-group Refresh, a recent folder's Open in New Window and
+  Remove from Recent, a port's Open in Browser, Forward Port and Stop Forwarding (the folder or port as description);
+  the Extensions header (Install from File…, Install from Folder…, Refresh), the Market page's Show Installed; and an
+  installed extension's page in a group named after it: its heading, source, state, description, contributions and
+  permissions as labels, Enable or Disable, Uninstall…, Roll Back, Verify Files, Get or Stop Pre-releases, the update
+  card's button, the permission switches (`Switch`, toggled while on), each recent denial with Copy fix, the crash
+  card's buttons and the accounts' Sign Out, Remove and Add Instance…. A button drawn only on hover is in the tree
+  while its row is laid out.
+- The pages, declared the same way, each in a group named after it: the merge editor (its title as a heading, each
+  conflict as a heading with its lines, each side as a `Document` whose value is the side's text, Accept Current,
+  Accept Incoming, Accept Both and Both, Incoming First with the conflict as description, Accept All, Save File and
+  Close); the folder comparison (the option chips as `CheckBox`es, Stop, Scan Again, Copy Report and Export, each row
+  a `TreeItem` with both sides and its status as description, expanded for a folder, with Copy to the right or left
+  and Delete from either side); the diff (a heading with the comparison and counts, Toggle inline view, every line
+  drawn as a `ListItem` "Added, line 3: text", side by side or inline); the large-file view (its header, every line
+  drawn as a `ListItem` "line 12: text", selected when it is the found line, Follow as a `CheckBox`, the new-lines
+  button, the find field as a `SearchInput` that takes the keyboard and its count); the Markdown preview (each
+  block as a `Heading` or `Paragraph` with its text, each link as a `Link` with its address that opens it as a click
+  does, and Code); the Welcome page (its tiles with their shortcuts, each recent folder as a `ListItem` with Pin and
+  Remove from Recent, More…); the data query bar (its field, status and Close); and the containers' pages (the
+  navigation, filters, Clear filters, Needs attention, Columns and each column, the sort headers, each container as a
+  `ListItem` with its image, status and usage, Logs and Actions, the search field, the detail tabs, Open files,
+  Terminal, Refresh details, each value's Copy with the value as description, the log lines and the log buttons).
+- The editor's own drawn controls, in a group named after the file: each breakpoint in the gutter ("Breakpoint on line
+  2", its condition, log message, binding failure or "disabled" as description; `Click` removes it as a click on the
+  dot does, F9 sets one), each fold button ("Fold line 1" or "Unfold line 1", expanded while open), each Git mark
+  ("Line 3 changed", "Line 4 added", "Lines deleted above line 7"), an extension's lens at the end of a line, the
+  sticky scope lines (`Link`s to their line), a merge conflict's Accept Current, Incoming and Both Changes and Open
+  Merge Editor (`Link`s with "Conflict at line 2") and an `.http` request's Send Request. The color picker is a group
+  "Color picker": Hue (0–359), Saturation, Brightness and Opacity (0–100 %) as `Slider`s over the planes a drag sets
+  them in (Increment and Decrement step by 5, a value set from the tree is taken as typed; each change is written to
+  the file as a release of the mouse writes it), the color's text and HEX, RGB and HSL as `RadioButton`s. The
+  terminal's find bar is a group "Find in Terminal": the field (`SearchInput` with its text, `Focus` gives it the
+  keyboard), the match count as a status, Previous Match, Next Match and Close.
+- Controls' groups come after the views and the editor and before the status bar and the overlays, so AccessKit's hit
+  test finds a control drawn over the editor (a gutter mark, a link at the end of a line) rather than the editor.
 - One `Tree` per folder of the workspace: "Explorer", or "Explorer: name" when there are several. One `TreeItem` per
   row in a range of 1,000 rows: name, level, selected, expanded, set position in the whole tree. The range is centred
   on the selection while it is on screen, otherwise on the visible rows; the tree reports its scroll position in rows
@@ -238,9 +283,10 @@ The tree, in the order a screen reader walks it:
   files…").
 - While the update dialog (or the first-run question about update checks) is open: a modal `Dialog` with its title and text,
   a `ProgressIndicator` (0 to 100 while a download has a known size, without a value otherwise) and one `Button` per choice in
-  tab order; the focused button is the tree's focus. On macOS the dialog is a window of its own ("Software Update"); the
-  tree belongs to the editor window and still lists the dialog, but the separate window has no adapter yet, so a screen
-  reader reaches its title and nothing more there. The status bar item and *Help: Check for Updates…* are the way in.
+  tab order; the focused button is the tree's focus. On macOS the dialog is a window of its own ("Software Update") with
+  its own adapter: that window's tree is the dialog alone (titled "Software Update"), with the frames its card and
+  buttons were drawn at there, the focused button as its focus, and buttons that act as in the main window (whose tree
+  still lists the dialog). The status bar item and *Help: Check for Updates…* are the way in.
 - Geometry: the window, primary Explorer viewport, focused text-editor pane and status bar expose their painted bounds,
   and so do the individual rows and controls drawn on screen: Explorer rows, the editor tabs of the focused group, the
   status bar's items, the find bar's fields, status and buttons, Source Control's message field, commit button, group
@@ -313,8 +359,10 @@ group only toggles it from the state that was read, and committing checks the re
    and starts an `AsyncApp` task that sends the first full `TreeUpdate`.
 3. **Updates.** While active, a 250 ms loop takes a snapshot of the workbench, compares it with the last one and calls
    `update_if_active` only when it changed. On macOS it also reports window focus; the Windows adapter follows
-   `WM_SETFOCUS` / `WM_KILLFOCUS` itself. Polling is a simplification; observer-driven updates are the planned
-   replacement.
+   `WM_SETFOCUS` / `WM_KILLFOCUS` itself. Cost, measured in a release build with a 2,000-line file open, a folder of
+   200 files and the editor's 300-line range (754 nodes): a snapshot takes about 0.17 ms and the comparison 0.01 ms per
+   poll, and building the tree when something changed 0.06 ms, so about 0.1 % of one core at four polls a second. A
+   change reaches the screen reader within 250 ms; observer-driven updates would shorten that, not the cost.
 4. **Geometry.** Non-interactive canvas probes capture the primary Explorer viewport, focused editor body and status bar,
    and each row and control listed above, without drawing, taking focus or scheduling another frame. Each window keeps
    its own record (a side view in a window of its own is drawn by the workbench in that window's coordinates), cleared
@@ -380,8 +428,8 @@ probe as the workbench's lists (`painted.rs`).
   bidi level and places its glyphs left to right in the order DirectWrite gives them, so a Hebrew or Arabic run is drawn
   in reading order from the left; the tree reports that drawing, not the visual order the script needs. Both are GPUI's
   text layout, outside the tree; neither was checked with a right-to-left screen-reader user.
-- **Frames not recorded.** The update window on macOS (it has no adapter, see below) and an extension view's own nodes
-  (their frames are the extension's business; only the Extensions list's rows are the workbench's).
+- **Frames not recorded.** An extension view's own nodes: their frames are the extension's business (only the
+  Extensions list's rows are the workbench's), and extension-platform code is outside this work.
 - **Focus** was observed live on macOS only for Source Control: setting `AXFocused` on a change row of a dev build moved
   the keyboard cursor there and the row reported `Focused="1"` as the application's `AXFocusedUIElement`. Other focus
   paths (`TreeUpdate.focus`, `update_view_focus_state`) are covered by tests but not observed in a live window.
@@ -389,11 +437,15 @@ probe as the workbench's lists (`painted.rs`).
   list. Run offsets, the selection and
   set positions are document- or tree-relative, but the text value of the editor node starts at the range, so a
   client that counts characters from the node's value sees offsets relative to the first exposed line; the scroll
-  position and description give that line. Primary selection only; no multi-cursor or CRLF handling (right-to-left text: see above). A wrapped
-  line is split into a run per painted line; a folded line is in the text but has no frame.
-- The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
-  the keyboard as usual).
-- Not exposed: an installed extension's page and the Testing filter field.
+  position and description give that line. Only the primary selection is reported: AccessKit 0.25's `TextSelection`
+  holds one anchor and one focus, so the other cursors of a multi-cursor edit have no place in the tree. Line endings
+  need nothing of their own: the editor's text is held with LF whatever the file uses (the status bar's line-ending
+  item says which), so offsets in the tree count one character per line break. Right-to-left text: see above. A
+  wrapped line is split into a run per painted line; a folded line is in the text but has no frame.
+- The terminal exposes the rows on screen; its history is reached with `ScrollUp` and `ScrollDown` (a page each, as
+  Shift+Page Up/Down; the scroll position counts lines of history), after which the rows are those of the history on
+  screen. It is not written to from the tree: typing goes to the shell through the keyboard, as in any terminal, so
+  the shell's own line editing and programs reading raw keys keep working.
 - Keyboard: the Run and Debug lists (variables, watches, call stack, breakpoints), the Testing tree, the Remote
   Explorer, the Ports list and Source Control's change list are tab stops with a cursor row (Up/Down/Home/End, Enter as a click on the row, the focus
   colour on the list and the row). Shift+F10 and the Menu key (`list.showContextMenu`) open the row's menu under it; the
@@ -402,10 +454,19 @@ probe as the workbench's lists (`painted.rs`).
   list as it is now: when rows change under it, it stays inside the list and the key acts on the row it is on (a row
   without a menu opens none).
 - System confirmation dialogs on Linux are drawn by GPUI inside the window (there is no Linux adapter, see below).
-- Scroll actions only on the Explorer, the editor and Source Control's change list; no `Blur`. Explicit `Expand`/`Collapse` only in the Run and Debug, Testing and Remote Explorer
-  trees (elsewhere Click toggles).
-- The update window on macOS has no adapter of its own.
-- Linux (AT-SPI) is not implemented: it needs bounds, window events and an async D-Bus runtime.
+- Scroll actions are on the lists the tree exposes a range of (the Explorer, the editor, Source Control's change list,
+  the Search results, Language Services) and on the terminal's history; the other lists expose their rows up to the cap
+  given for each view above. No `Blur`: neither adapter in use (`accesskit_macos` 0.27, `accesskit_windows` 0.35) sends
+  it, so a node offering it could never receive it.
+- `Expand` and `Collapse`: the Run and Debug, Testing and Remote Explorer trees and the Search results handle them, and
+  so does every painted control with an expanded state (offered toward the other state only). UI Automation offers
+  them on any node with an expanded state; where a node folds on `Click` only, the request is taken as that click
+  when the node is in the other state, and does nothing when it already is in the state asked for.
+- Linux (AT-SPI) is not implemented. Linux is tracked apart from the shipped macOS and Windows builds
+  (`product-quality-plan.md`, Pass 5), and an adapter could not be verified here: `accesskit_unix` talks to the
+  AT-SPI bus over D-Bus, which needs a Linux session with a client such as Orca to check against. On Wayland a client
+  is never told where its window is on screen, so the frames it reports would be relative to the window, not the
+  screen.
 - Interface scale (`ui.scale`, zoom) is applied by GPUI at the window: the bounds reported to AccessKit are logical
   bounds × display scale × interface scale, so they match what is painted at every zoom level
   (`accessibility_bounds_follow_the_interface_scale`, `a11y_frames_tests.rs`). Checked natively at 100% and 200% with
@@ -413,12 +474,9 @@ probe as the workbench's lists (`painted.rs`).
 
 ## Order of work
 
-1. Screen-reader passes (VoiceOver, NVDA, Narrator) on real machines; fix what they find.
-2. Real focus tracking checked with screen readers, observer-driven updates.
-3. The remaining controls listed under "Not exposed".
-4. The editor proper: visible lines only with shaped character positions, correct absolute offsets, scroll actions,
-   multi-cursor policy, diagnostics announcements.
-5. The Linux adapter and regression tests against a real accessibility client.
+1. Screen-reader passes (VoiceOver, NVDA, Narrator) on real machines, with focus tracking observed live; fix what they
+   find.
+2. The Linux adapter, once GPUI's Linux backends give the app its window's bounds and focus.
 
 ## Geometry verification
 

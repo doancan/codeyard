@@ -23,6 +23,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The Rust and TypeScript mock hosts open, edit and save documents, change files and allow hosts; `cyx test` gives
     each watch a file to watch and treats the host in a `net-from-setting` setting's default as allowed.
 
+- Screen readers reach the editor's drawn controls: gutter breakpoints, fold buttons and Git marks, sticky scope
+  lines, merge-conflict links and Send Request; the color picker's hue, saturation, brightness and opacity as
+  sliders; the terminal's find bar; the terminal's history by scrolling; and the update window on macOS has its own
+  accessibility tree. Expand and Collapse from Windows UI Automation work on every node that folds.
+
+- Screen readers read and drive the pages: the merge editor (each conflict, both sides' text and every accept
+  button), the folder comparison (options, rows with their status and the copy and delete buttons), the diff and the
+  large-file view line by line, the Markdown preview's headings, paragraphs and links, the Welcome page's tiles and
+  recent folders, the data query bar and the containers' overview, details and logs.
+
+- Screen readers reach every button drawn in the side views: the Explorer's header buttons, section headers, open
+  editors, favorites, outline and timeline; Source Control's Refresh, More Actions and stashes; the Search view's
+  result buttons and structural language; Run and Debug's Remove All Breakpoints and launch link; the Testing filter;
+  the Remote Explorer's folder and port buttons; the Extensions header and an installed extension's whole page,
+  including its permission switches, denials, crash card and accounts. Each reports the frame it is drawn at and does
+  what its click does.
+
 - Screen readers reach the window's chrome and the controls drawn around the editor: the activity bar's views and its
   Manage button, the title bar's Back, Forward and file search, the caption buttons on Windows, every status bar
   item (each one does what its click does, including sync, ports, transfers, the terminal toggle, conflicts and the
@@ -429,6 +446,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `cyx dev` notes the sources before its first build, so a file saved while it builds, checks the extension or
+  starts Codeyard is rebuilt on the next poll instead of being missed until the next save.
+
 - Unit tests no longer start an installed language server from generic editor and workbench fixtures: under test
   `lsp.enabled` defaults to off and LSP integration tests turn it on explicitly. The shipped default stays on.
 - On a busy machine, closing a window could leave its terminals running for 5 minutes, and the last keys typed into a
@@ -490,6 +510,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- `minimatch` 11.0.1 in the TypeScript build tools and the extension host benchmark guest
+  (GHSA-g3hv-75wg-m249): a pattern with many brace and glob parts could take unbounded time to expand.
 - `wasmtime` and `wasmtime-wasi` 50.0.1 in `codeyard-exthost` (RUSTSEC-2026-0420, RUSTSEC-2026-0422,
   RUSTSEC-2026-0423, RUSTSEC-2026-0424): fixes for typed functions with `i31` or `nullref` arguments, cross-engine
   struct types, resources passed between components and the WASI host. Each extension still runs in its own exthost

@@ -314,4 +314,15 @@ impl ScmPanel {
             cx.emit(event());
         }
     }
+
+    /// The header's Refresh: what a click on it does.
+    pub(super) fn a11y_refresh(&mut self, cx: &mut Context<Self>) {
+        // A remote added since the graph was read shows up here (HEAD did not move, so nothing else reloads it).
+        self.load_graph(cx);
+        self.refresh_worktrees(cx);
+        cx.emit(ScmEvent::Refresh);
+        // Repositories created or removed since the last search (searched again only after a while).
+        cx.emit(ScmEvent::RefreshInventory);
+        cx.emit(ScmEvent::Ext(ExtEvent::Refresh));
+    }
 }

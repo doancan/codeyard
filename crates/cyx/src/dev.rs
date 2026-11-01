@@ -54,13 +54,16 @@ pub fn run(dir: &Path, extra: &[String]) -> Result<(), String> {
 
 /// `run` with Codeyard at `bin`, and cargo's output in `target_dir` instead of the crate's own `target/` (tests).
 pub fn run_with(dir: &Path, bin: &Path, extra: &[String], target_dir: Option<&Path>) -> Result<(), String> {
+    let dir = std::fs::canonicalize(dir).map_err(|e| format!("error: {}: {e}", dir.display()))?;
+    // The sources as they are before the first build: a file saved while it builds, while the check runs or while
+    // Codeyard starts is a change seen on the first poll, and is built then.
+    let mut seen = sources(&dir);
     // Start only something that loads: the window would otherwise open with an error the terminal explains better.
-    build::build_in(dir, target_dir)?;
-    let report = crate::check_dev(dir)?;
+    build::build_in(&dir, target_dir)?;
+    let report = crate::check_dev(&dir)?;
     for w in &report.warnings {
         eprintln!("{w}");
     }
-    let dir = std::fs::canonicalize(dir).map_err(|e| format!("error: {}: {e}", dir.display()))?;
     println!("Running {} with {} loaded. Save a file to reload; close the window to stop.", bin.display(), dir.display());
     let mut child = std::process::Command::new(bin)
         .arg("--extension-dev")
@@ -68,7 +71,6 @@ pub fn run_with(dir: &Path, bin: &Path, extra: &[String], target_dir: Option<&Pa
         .args(extra)
         .spawn()
         .map_err(|e| format!("error: cannot start {}: {e}", bin.display()))?;
-    let mut seen = sources(&dir);
     loop {
         if let Some(status) = child.try_wait().map_err(|e| format!("error: {e}"))? {
             return if status.success() { Ok(()) } else { Err(format!("Codeyard exited with {status}")) };

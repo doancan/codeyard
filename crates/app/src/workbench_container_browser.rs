@@ -188,28 +188,51 @@ impl Workbench {
                             .flex_wrap()
                             .items_center()
                             .gap(px(theme::SPACE[2]))
-                            .child(button("dashboard-refresh", crate::i18n::t("Refresh"), p).flex_none().on_click(cx.listener(|this, _, _, cx| {
-                                this.remote.docker.monitor.paused = false;
-                                this.refresh_container_monitor(cx);
-                            })))
-                            .child(
+                            .child(crate::a11y_controls::click_on(
+                                button("dashboard-refresh", crate::i18n::t("Refresh"), p).flex_none(),
+                                crate::a11y_controls::Control::button(
+                                    crate::i18n::t("Containers"),
+                                    "dashboard-refresh",
+                                    crate::i18n::t("Refresh").to_string(),
+                                    |_, _| {},
+                                ),
+                                cx,
+                                |this, _, _, cx| {
+                                    this.remote.docker.monitor.paused = false;
+                                    this.refresh_container_monitor(cx);
+                                },
+                            ))
+                            .child(crate::a11y_controls::click_on(
                                 button("dashboard-pause", if m.paused { crate::i18n::t("Resume updates") } else { crate::i18n::t("Pause updates") }, p)
-                                    .flex_none()
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.remote.docker.monitor.paused = !this.remote.docker.monitor.paused;
-                                        if !this.remote.docker.monitor.paused {
-                                            this.refresh_container_monitor(cx);
-                                        }
-                                        cx.notify();
-                                    })),
-                            )
+                                    .flex_none(),
+                                crate::a11y_controls::Control::button(
+                                    crate::i18n::t("Containers"),
+                                    "dashboard-pause",
+                                    if m.paused { crate::i18n::t("Resume updates") } else { crate::i18n::t("Pause updates") }.to_string(),
+                                    |_, _| {},
+                                ),
+                                cx,
+                                |this, _, _, cx| {
+                                    this.remote.docker.monitor.paused = !this.remote.docker.monitor.paused;
+                                    if !this.remote.docker.monitor.paused {
+                                        this.refresh_container_monitor(cx);
+                                    }
+                                    cx.notify();
+                                },
+                            ))
                             .when_some(selected, |d, container| d.child(self.container_detail_actions(container, p, cx)))
                             .when(selected.is_none(), |d| {
-                                d.child(
-                                    button("container-tools", crate::i18n::t("Container actions…"), p)
-                                        .flex_none()
-                                        .on_click(cx.listener(|this, _, window, cx| this.open_container_tools(window, cx))),
-                                )
+                                d.child(crate::a11y_controls::click_on(
+                                    button("container-tools", crate::i18n::t("Container actions…"), p).flex_none(),
+                                    crate::a11y_controls::Control::button(
+                                        crate::i18n::t("Containers"),
+                                        "container-tools",
+                                        crate::i18n::t("Container actions…").to_string(),
+                                        |_, _| {},
+                                    ),
+                                    cx,
+                                    |this, _, window, cx| this.open_container_tools(window, cx),
+                                ))
                             }),
                     ),
             );

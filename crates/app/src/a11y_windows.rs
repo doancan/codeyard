@@ -36,6 +36,34 @@ pub(in crate::workbench) const WORKBENCH: Hooks = Hooks {
     },
 };
 
+/// The update dialog's own window on macOS ("Software Update"): the dialog the main tree lists, with the frames it was
+/// drawn at in this window; its buttons act as in the main window.
+pub(in crate::workbench) const UPDATE_WINDOW: Hooks = Hooks {
+    snapshot: |root, window, cx| {
+        let home = root.downcast::<crate::workbench::update_window_glue::UpdateWindow>().ok()?.read(cx).home();
+        let wb = home.upgrade()?;
+        Some(update_window_snapshot(&wb.read(cx).a11y_snapshot(window, cx)))
+    },
+    action: |root, req, last, window, cx| {
+        let Ok(root) = root.downcast::<crate::workbench::update_window_glue::UpdateWindow>() else { return };
+        if let Some(wb) = root.read(cx).home().upgrade() {
+            wb.update(cx, |wb, cx| wb.a11y_action(req, last, window, cx));
+        }
+    },
+};
+
+/// The update window's tree from the workbench's: the dialog alone, its focus and this window's frames.
+pub(in crate::workbench) fn update_window_snapshot(full: &Snapshot) -> Snapshot {
+    Snapshot {
+        generation: full.generation,
+        title: crate::i18n::t("Software Update").to_string(),
+        geometry: full.geometry.clone(),
+        dialog: full.dialog.clone(),
+        focus: full.focus,
+        ..Snapshot::default()
+    }
+}
+
 /// An editor's own window.
 pub(in crate::workbench) const EDITOR_WINDOW: Hooks = Hooks {
     snapshot: |root, window, cx| Some(editor_window_snapshot(&root.downcast::<EditorWindow>().ok()?, window, cx)),

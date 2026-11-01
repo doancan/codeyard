@@ -3465,3 +3465,28 @@ It may send requests to {0} over HTTPS, with whatever it can read or store, such
 Let {0} connect to {1}?	{0}, {1} sunucusuna bağlanabilsin mi?
 Servers	Sunucular
 {0} may now connect to {1}.	{0} artık {1} sunucusuna bağlanabilir.
+(modified)	(değiştirildi)
+Collapse	Daralt
+Expand	Genişlet
+Open Editors	Açık Düzenleyiciler
+line {}	satır {}
+Removed	Kaldırıldı
+Show the Markdown source	Markdown kaynağını göster
+Sort by {}	{} ölçütüne göre sırala
+Unchanged	Değişmedi
+{} added	{} eklendi
+{} removed	{} kaldırıldı
+Breakpoint on line {}	{}. satırdaki kesme noktası
+Brightness	Parlaklık
+Color picker	Renk seçici
+Conflict at line {}	{}. satırdaki çakışma
+Find in Terminal	Terminalde Bul
+Fold line {}	{}. satırı katla
+Hue	Ton
+Line {} added	{}. satır eklendi
+Line {} changed	{}. satır değişti
+Lines deleted above line {}	{}. satırın üstünde satırlar silindi
+Opacity	Opaklık
+Saturation	Doygunluk
+Unfold line {}	{}. satırı aç
+disabled	devre dışı

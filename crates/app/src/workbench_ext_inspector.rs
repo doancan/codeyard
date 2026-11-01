@@ -200,6 +200,7 @@ impl Workbench {
         let m = e.manifest.clone();
         m.code.as_ref()?;
         let id = m.id.to_string();
+        let surface = m.name.to_string();
         let mut out = div().flex().flex_col().gap(px(theme::SPACE[1]));
         if self.cfg.exts.code.disabled.contains(&id) {
             out = out.child(self.crash_card(e, p, cx));
@@ -219,10 +220,16 @@ impl Workbench {
                     .items_center()
                     .gap(px(theme::SPACE[2]))
                     .debug_selector(move || format!("ext-switch-{i}"))
-                    .child(div().flex_1().min_w_0().text_color(c(if on { p.text } else { p.text_muted })).child(label))
+                    .child(div().flex_1().min_w_0().text_color(c(if on { p.text } else { p.text_muted })).child(label.clone()))
                     .child(
-                        row_button(("ext-switch", i), if on { crate::i18n::t("On") } else { crate::i18n::t("Off") }, p)
-                            .on_click(cx.listener(move |this, _, _, cx| this.set_extension_permission(&ext, &entry, !on, cx))),
+                        self.pressable(
+                            row_button(("ext-switch", i), if on { crate::i18n::t("On") } else { crate::i18n::t("Off") }, p),
+                            crate::a11y_controls::Control::new(surface.clone(), format!("switch:{i}:{label}"), accesskit::Role::Switch, label.to_string())
+                                .description(crate::i18n::t("Permission switches"))
+                                .toggled(on),
+                            cx,
+                            move |this, _, cx| this.set_extension_permission(&ext, &entry, !on, cx),
+                        ),
                     ),
             );
         }
@@ -232,15 +239,27 @@ impl Workbench {
             out = out.child(div().text_color(c(p.text_muted)).child(crate::i18n::t("None in this session.")));
         }
         for (i, (d, fix)) in denials.into_iter().enumerate() {
+            let text = Self::denial_text(&d).to_string();
             out = out.child(
                 div()
                     .flex()
                     .items_center()
                     .gap(px(theme::SPACE[2]))
                     .debug_selector(move || format!("ext-denial-{i}"))
-                    .child(div().flex_1().min_w_0().child(Self::denial_text(&d)))
+                    .child(
+                        div().flex_1().min_w_0().relative().child(Self::denial_text(&d)).child(crate::a11y_controls::control(
+                            crate::a11y_controls::Control::text(surface.clone(), format!("denial-text:{i}"), accesskit::Role::Label, text.clone())
+                                .description(crate::i18n::t("Recent denials")),
+                        )),
+                    )
                     .children(fix.map(|fix| {
-                        row_button(("ext-denial-fix", i), crate::i18n::t("Copy fix"), p).on_click(cx.listener(move |this, _, _, cx| this.copy_fix(&fix, cx)))
+                        self.pressable(
+                            row_button(("ext-denial-fix", i), crate::i18n::t("Copy fix"), p),
+                            crate::a11y_controls::Control::button(surface.clone(), format!("denial:{i}"), crate::i18n::t("Copy fix"), |_, _| {})
+                                .description(text.clone()),
+                            cx,
+                            move |this, _, cx| this.copy_fix(&fix, cx),
+                        )
                     })),
             );
         }
@@ -251,6 +270,8 @@ impl Workbench {
         let id = e.manifest.id.clone();
         let trap = self.cfg.exts.code.last_trap.get(id.as_str()).map(|t| insp::scrub(&t.message));
         let (back, copy, report) = (id.clone(), id.to_string(), id.to_string());
+        let surface = e.manifest.name.to_string();
+        let crash = |key: &'static str, label: &'static str| crate::a11y_controls::Control::button(surface.clone(), key, label, |_, _| {});
         let reportable = e.manifest.repository.as_deref().is_some_and(|r| insp::issue_url(r, "", "", "").is_some());
         div()
             .debug_selector(|| "ext-crash-card".into())
@@ -275,20 +296,26 @@ impl Workbench {
                     .flex_wrap()
                     .gap(px(theme::SPACE[2]))
                     .when(e.previous.is_some(), |d| {
-                        d.child(
-                            row_button("ext-crash-reinstall", crate::i18n::t("Reinstall Previous Version"), p)
-                                .on_click(cx.listener(move |this, _, w, cx| this.reinstall_previous_extension(back.clone(), w, cx))),
-                        )
+                        d.child(self.pressable(
+                            row_button("ext-crash-reinstall", crate::i18n::t("Reinstall Previous Version"), p),
+                            crash("ext-crash-reinstall", crate::i18n::t("Reinstall Previous Version")),
+                            cx,
+                            move |this, w, cx| this.reinstall_previous_extension(back.clone(), w, cx),
+                        ))
                     })
-                    .child(
-                        row_button("ext-crash-copy", crate::i18n::t("Copy Report"), p)
-                            .on_click(cx.listener(move |this, _, _, cx| this.copy_crash_report(&copy, cx))),
-                    )
+                    .child(self.pressable(
+                        row_button("ext-crash-copy", crate::i18n::t("Copy Report"), p),
+                        crash("ext-crash-copy", crate::i18n::t("Copy Report")),
+                        cx,
+                        move |this, _, cx| this.copy_crash_report(&copy, cx),
+                    ))
                     .when(reportable, |d| {
-                        d.child(
-                            row_button("ext-crash-report", crate::i18n::t("Report…"), p)
-                                .on_click(cx.listener(move |this, _, w, cx| this.report_crash(&report, w, cx))),
-                        )
+                        d.child(self.pressable(
+                            row_button("ext-crash-report", crate::i18n::t("Report…"), p),
+                            crash("ext-crash-report", crate::i18n::t("Report…")),
+                            cx,
+                            move |this, w, cx| this.report_crash(&report, w, cx),
+                        ))
                     }),
             )
     }

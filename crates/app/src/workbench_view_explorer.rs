@@ -315,6 +315,10 @@ impl Workbench {
                         .child(
                             div()
                                 .id("explorer-open-folder")
+                                .relative()
+                                .child(self.ctl(crate::i18n::t("Explorer"), "explorer-open-folder", crate::i18n::t("Open Folder"), cx, |this, w, cx| {
+                                    this.open_folder(&OpenFolder, w, cx)
+                                }))
                                 .h(px(28.))
                                 .flex()
                                 .items_center()
@@ -330,6 +334,14 @@ impl Workbench {
                         .child(
                             div()
                                 .id("explorer-recent")
+                                .relative()
+                                .child(self.ctl(
+                                    crate::i18n::t("Explorer"),
+                                    "explorer-recent",
+                                    crate::i18n::t("Open recent, or connect to a host… (⌃R)"),
+                                    cx,
+                                    |this, w, cx| this.show_project_switcher(w, cx),
+                                ))
                                 .w_full()
                                 .text_ellipsis()
                                 .cursor_pointer()
@@ -348,8 +360,20 @@ impl Workbench {
             .enumerate()
             .map(|(i, rel)| {
                 let rel = rel.clone();
+                let open_rel = rel.clone();
                 div()
                     .id(("favorite", i))
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::new(
+                            crate::i18n::t("★ Favorites"),
+                            rel.clone(),
+                            accesskit::Role::ListItem,
+                            ui::file_name(&rel).to_string(),
+                        )
+                        .description(parent_of(&rel))
+                        .on_entity(cx.entity().downgrade(), move |this, w, cx| this.open_favorite(open_rel.clone(), w, cx)),
+                    ))
                     .h(px(22.))
                     .w_full()
                     .flex()
@@ -388,6 +412,13 @@ impl Workbench {
                     div()
                         .id(("open-editor", ix))
                         .group(group.clone())
+                        .relative()
+                        .child(crate::a11y_controls::control(
+                            crate::a11y_controls::Control::new(crate::i18n::t("Open Editors"), format!("open:{path}"), accesskit::Role::ListItem, name.clone())
+                                .description(if dirty { crate::i18n::t("(modified)").to_string() } else { String::new() })
+                                .selected(active)
+                                .on_entity(cx.entity().downgrade(), move |this, w, cx| this.activate(ix, w, cx)),
+                        ))
                         .h(px(22.))
                         .w_full()
                         .flex()
@@ -400,7 +431,7 @@ impl Workbench {
                         .when(active, |d| d.bg(c(p.surface_active)))
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .child(crate::icon_theme::file_icon_el(&name, 14., p))
-                        .child(div().flex_none().text_color(c(mark.map_or(p.text, |m| m.color(p)))).child(name))
+                        .child(div().flex_none().text_color(c(mark.map_or(p.text, |m| m.color(p)))).child(name.clone()))
                         .child(
                             div()
                                 .flex_1()
@@ -417,6 +448,17 @@ impl Workbench {
                         } else {
                             div()
                                 .id(("open-editor-close", ix))
+                                .relative()
+                                .child(crate::a11y_controls::control(
+                                    crate::a11y_controls::Control::button(
+                                        crate::i18n::t("Open Editors"),
+                                        format!("close:{path}"),
+                                        crate::i18n::t("Close"),
+                                        |_, _| {},
+                                    )
+                                    .description(name.clone())
+                                    .on_entity(cx.entity().downgrade(), move |this, w, cx| this.close_editor_at(ix, w, cx)),
+                                ))
                                 .flex_none()
                                 .invisible()
                                 .group_hover(group, |s| s.visible())
@@ -447,12 +489,27 @@ impl Workbench {
         let (open_open, fav_open, tree_open, time_open) = (sec("open-editors"), sec("favorites"), sec("folders"), sec("timeline"));
         // Section header + toggle on click.
         let head = |id: &'static str, title: &str, count: Option<usize>, open: bool, cx: &mut Context<Self>| {
-            sections::header(SharedString::from(format!("sec-{id}")), title, count, open, p).debug_selector(move || format!("sec-{id}")).on_click(cx.listener(
-                move |this, _, _, cx| {
+            let label = match count {
+                Some(n) => format!("{title} ({n})"),
+                None => title.to_string(),
+            };
+            let toggle = crate::a11y_controls::control(
+                crate::a11y_controls::Control::button(crate::i18n::t("Explorer"), format!("sec-{id}"), label, |_, _| {}).expanded(open).on_entity(
+                    cx.entity().downgrade(),
+                    move |this: &mut Self, _, cx| {
+                        this.sections.toggle(id, id != "open-editors");
+                        this.persist_sections(cx);
+                    },
+                ),
+            );
+            sections::header(SharedString::from(format!("sec-{id}")), title, count, open, p)
+                .relative()
+                .child(toggle)
+                .debug_selector(move || format!("sec-{id}"))
+                .on_click(cx.listener(move |this, _, _, cx| {
                     this.sections.toggle(id, id != "open-editors");
                     this.persist_sections(cx);
-                },
-            ))
+                }))
         };
         // Bottom edge handle (dragging down grows) and top edge (dragging up grows).
         let sash = |id: &'static str, h: f32, sign: f32, cx: &mut Context<Self>| {
@@ -499,25 +556,54 @@ impl Workbench {
                     )
                     .child(
                         ui::icon_button("exp-new-file", "file-plus", crate::i18n::t("New File… (⌘N)"), p)
+                            .relative()
+                            .child(self.ctl(crate::i18n::t("Explorer"), "exp-new-file", crate::i18n::t("New File… (⌘N)"), cx, |this, w, cx| {
+                                this.new_file(&NewFile, w, cx)
+                            }))
                             .on_click(cx.listener(|this, _, window, cx| this.new_file(&NewFile, window, cx))),
                     )
                     .child(
                         ui::icon_button("exp-new-folder", "folder-plus", crate::i18n::t("New Folder…"), p)
+                            .relative()
+                            .child(
+                                self.ctl(crate::i18n::t("Explorer"), "exp-new-folder", crate::i18n::t("New Folder…"), cx, |this, w, cx| {
+                                    this.new_folder(w, cx)
+                                }),
+                            )
                             .on_click(cx.listener(|this, _, window, cx| this.new_folder(window, cx))),
                     )
                     .child(
                         ui::icon_button("exp-refresh", "refresh-cw", crate::i18n::t("Refresh Explorer"), p)
+                            .relative()
+                            .child(self.ctl(crate::i18n::t("Explorer"), "exp-refresh", crate::i18n::t("Refresh Explorer"), cx, |this, _, cx| {
+                                this.refresh_explorer(cx)
+                            }))
                             .on_click(cx.listener(|this, _, _, cx| this.refresh_explorer(cx))),
                     )
                     .child(
                         ui::icon_button("exp-expand", "chevrons-up-down", crate::i18n::t("Expand Folders (the selected one, or the open file's folders)"), p)
+                            .relative()
+                            .child(self.ctl(
+                                crate::i18n::t("Explorer"),
+                                "exp-expand",
+                                crate::i18n::t("Expand Folders (the selected one, or the open file's folders)"),
+                                cx,
+                                |this, _, cx| this.roots.primary.update(cx, |t, cx| t.expand_selected_recursive(cx)),
+                            ))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.roots.primary.update(cx, |t, cx| t.expand_selected_recursive(cx));
                             })),
                     )
-                    .child(ui::icon_button("exp-collapse", "square-minus", crate::i18n::t("Collapse Folders"), p).on_click(cx.listener(|this, _, _, cx| {
-                        this.roots.primary.update(cx, |t, cx| t.collapse_all(cx));
-                    }))),
+                    .child(
+                        ui::icon_button("exp-collapse", "square-minus", crate::i18n::t("Collapse Folders"), p)
+                            .relative()
+                            .child(self.ctl(crate::i18n::t("Explorer"), "exp-collapse", crate::i18n::t("Collapse Folders"), cx, |this, _, cx| {
+                                this.roots.primary.update(cx, |t, cx| t.collapse_all(cx))
+                            }))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.roots.primary.update(cx, |t, cx| t.collapse_all(cx));
+                            })),
+                    ),
             )
             .when(open_count > 0, |d| {
                 d.child(head("open-editors", &crate::i18n::tf("Open Editors ({})", &[&open_count]), None, open_open, cx)).when(open_open, |d| {
@@ -593,7 +679,20 @@ impl Workbench {
     /// TIMELINE body: the active file's commits, newest first.
     pub(super) fn timeline_rows(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         let note = |t: &str| {
-            div().px(px(theme::SPACE[6])).py(px(theme::SPACE[2])).text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(t.to_string()).into_any_element()
+            div()
+                .relative()
+                .child(crate::a11y_controls::control(crate::a11y_controls::Control::text(
+                    crate::i18n::t("Explorer"),
+                    format!("note:{t}"),
+                    accesskit::Role::Label,
+                    t,
+                )))
+                .px(px(theme::SPACE[6]))
+                .py(px(theme::SPACE[2]))
+                .text_color(c(p.text_muted))
+                .text_size(px(text::XS.0))
+                .child(t.to_string())
+                .into_any_element()
         };
         if self.timeline.key.is_none() {
             return note(crate::i18n::t("Open a file to see its history."));
@@ -609,6 +708,17 @@ impl Workbench {
                 let ago = crate::git::relative_time((now_ms.saturating_sub(l.at_ms) / 1000) as i64);
                 div()
                     .id(("timeline-local", ix))
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::new(
+                            crate::i18n::t("Timeline"),
+                            format!("local:{}", l.at_ms),
+                            accesskit::Role::ListItem,
+                            crate::i18n::tf("Saved · {}", &[&crate::git::short_ago(&ago)]),
+                        )
+                        .description(crate::i18n::t("Compare this saved copy with the editor"))
+                        .on_entity(cx.entity().downgrade(), move |this, w, cx| this.open_local_history(ix, w, cx)),
+                    ))
                     .w_full()
                     .h(px(30.))
                     .flex()
@@ -659,6 +769,17 @@ impl Workbench {
                 let tip = format!("{}\n{} · {} · {}", e.subject, e.author, e.when, e.short);
                 div()
                     .id(("timeline", ix))
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::new(
+                            crate::i18n::t("Timeline"),
+                            format!("commit:{}", e.short),
+                            accesskit::Role::ListItem,
+                            e.subject.clone(),
+                        )
+                        .description(format!("{} · {} · {}", e.author, e.when, e.short))
+                        .on_entity(cx.entity().downgrade(), move |this, w, cx| this.open_timeline_entry(ix, w, cx)),
+                    ))
                     .w_full()
                     .h(px(46.))
                     .flex()
@@ -769,7 +890,20 @@ impl Workbench {
     /// OUTLINE body: symbols, the one at the cursor highlighted.
     pub(super) fn outline_rows(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         let note = |t: &str| {
-            div().px(px(theme::SPACE[6])).py(px(theme::SPACE[2])).text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(t.to_string()).into_any_element()
+            div()
+                .relative()
+                .child(crate::a11y_controls::control(crate::a11y_controls::Control::text(
+                    crate::i18n::t("Explorer"),
+                    format!("note:{t}"),
+                    accesskit::Role::Label,
+                    t,
+                )))
+                .px(px(theme::SPACE[6]))
+                .py(px(theme::SPACE[2]))
+                .text_color(c(p.text_muted))
+                .text_size(px(text::XS.0))
+                .child(t.to_string())
+                .into_any_element()
         };
         let Some(ed) =
             self.tabs.active.and_then(|i| self.tabs.editors.get(i)).filter(|_| !self.tabs.diff_active && !self.tabs.large_active && !self.tabs.page_active)
@@ -801,6 +935,16 @@ impl Workbench {
                         Some(
                             div()
                                 .id(("outline", ix))
+                                .relative()
+                                .child({
+                                    let (open_path, name) = (path.clone(), s.name.to_string());
+                                    crate::a11y_controls::control(
+                                        crate::a11y_controls::Control::new(crate::i18n::t("Outline"), format!("{ix}:{name}"), accesskit::Role::TreeItem, name)
+                                            .description(crate::i18n::tf("line {}", &[&(s.line + 1)]))
+                                            .selected(here == Some(ix))
+                                            .on_entity(cx.entity().downgrade(), move |this, w, cx| this.open_location(open_path.clone(), line, 0, w, cx)),
+                                    )
+                                })
                                 .w_full()
                                 .h(px(22.))
                                 .flex()
