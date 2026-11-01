@@ -2,6 +2,7 @@
 # Copy this file to `<code>.tsv`, put the translation after the TAB (see docs/translating.md). A key containing `|` is a plural
 # entry: write one form per plural form of the language, separated by `|`. Do not edit the left column.
 (+{} more)	
+(modified)	
 (nothing)	
 (the lines are removed)	
 + Create new branch from…	
@@ -146,10 +147,12 @@ Branch {}
 Breadcrumbs	
 Break on Value Change	
 Breaking on: {}	
+Breakpoint on line {}	
 Breakpoints	
 Breakpoints are active.	
 Breakpoints are deactivated: the program runs past them.	
 Breaks when the value is written; for this debug session only.	
+Brightness	
 Bring a folder's tabs and unsaved changes back when you open it	
 Build and Open	
 Build failed: {}	
@@ -290,6 +293,7 @@ Codeyard {} is available
 Codeyard {} is available.	
 Codeyard {} is available. Click for details.	
 Codeyard {} is installed. Click for details.	
+Collapse	
 Collapse All	
 Collapse All Inside	
 Collapse Folders	
@@ -297,6 +301,7 @@ Collapse all results
 Color Theme	
 Color Theme…	
 Color matching brackets by nesting depth	
+Color picker	
 Color symbols by their meaning, from the language server	
 Color theme	
 Color theme of the whole window and the editor	
@@ -352,6 +357,7 @@ Compound “{}” has no configurations
 Configure Tasks…	
 Configure Terminal Settings	
 Conflict	
+Conflict at line {}	
 Conflict {0} of {1}	
 Connect	
 Connect in Current Window	
@@ -812,6 +818,7 @@ Every setting, with comments
 Everything resolved so far in this merge is discarded.	
 Existing custom server commands are preserved. Services start only in trusted folders. Closing this tab cancels an installation that has not reached activation.	
 Exit	
+Expand	
 Expand All Inside	
 Expand Emmet abbreviations (div.box>ul>li*3) with Tab	
 Expand Folders (the selected one, or the open file's folders)	
@@ -918,6 +925,7 @@ Find
 Find All References	
 Find in Files	
 Find in Folder…	
+Find in Terminal	
 Find in file (searched on the host)	
 Find in files	
 Find in selection (⌥⌘L)	
@@ -927,6 +935,7 @@ Focus Previous Terminal
 Focus Right Editor Group	
 Fold	
 Fold All	
+Fold line {}	
 Folder to clone into	
 Folders colored by purpose (src, tests, docs…) and colored file glyphs	
 Follow	
@@ -1083,6 +1092,7 @@ Host and client id of your {} server, such as git.example.com 3f2a9c
 Host name (from ~/.ssh/config) or user@host	
 Hover	
 Hover an option to preview the result.	
+Hue	
 Identical	
 Ignore Case	
 Ignore case unless the query has capital letters	
@@ -1221,9 +1231,12 @@ Line height in pixels
 Line numbers in the gutter	
 Line {0}: {1}	
 Line {0}: {1} → {2}	
+Line {} added	
 Line {} after the change	
+Line {} changed	
 Line {}: not committed yet	
 Line {}: {} · {}, {} · {}	
+Lines deleted above line {}	
 Lines kept in terminal history	
 Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)	
 Link copied.	
@@ -1533,8 +1546,10 @@ Only send it if you trust this file.
 Only the connection is removed; the remote repository itself is untouched.	
 Only the local tag is removed. A copy on a remote stays until you delete it there (Git: Delete Remote Tag…).	
 Only this host's entry is removed. The previous file is kept as config.codeyard-bak.	
+Opacity	
 Open	
 Open Changes	
+Open Editors	
 Open Editors ({})	
 Open File	
 Open File (HEAD)	
@@ -1835,6 +1850,7 @@ Remove which remote?
 Remove which worktree?	
 Remove worktree {}?	
 Remove “{}” from ~/.ssh/config?	
+Removed	
 Removed from favorites: {}	
 Removed remote {}	
 Removed worktree {}	
@@ -1954,6 +1970,7 @@ SSH Hosts
 SSH host	
 SSH {0}: {1}. Docker must be installed and accessible to the SSH user on the remote host.	
 Same apart from whitespace	
+Saturation	
 Saturday	
 Save	
 Save All	
@@ -2085,6 +2102,7 @@ Show indent guides
 Show line numbers in search results	
 Show lines matching (regular expression, case-insensitive), e.g. {}	
 Show spaces and tabs as marks	
+Show the Markdown source	
 Show the Open Editors list in the explorer	
 Show the activity bar	
 Show the author name on Source Control graph rows	
@@ -2113,6 +2131,7 @@ Snippets: Insert Snippet…
 Software Update	
 Solid blue folders like Finder, outline files with a language dot like GitHub	
 Solid folders colored and marked by purpose, solid files colored by language	
+Sort by {}	
 Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order)	
 Source Control	
 Source Control (⌃⇧G)	
@@ -2468,6 +2487,7 @@ Type {} to install it.
 TypeScript {} · TypeScript Language Server {} · HTML/CSS {}	
 UI font of the whole window (empty: system font)	
 Unavailable	
+Unchanged	
 Underline misspelled words in prose files and in code comments	
 Undid commit “{}”	
 Undo	
@@ -2479,6 +2499,7 @@ Unexpected text after the closing quote
 Unexpected “{}”	
 Unfold	
 Unfold All	
+Unfold line {}	
 Unhealthy	
 Uninstall	
 Uninstall {}?	
@@ -2721,6 +2742,7 @@ detached HEAD
 diff	
 different kinds	
 differs only in letter case	
+disabled	
 download failed	
 draft	
 e.g. 3000	
@@ -2802,6 +2824,7 @@ light
 limit needs a whole number	
 line {0}, column {1}	
 line {0}: {1}	
+line {}	
 lines {0}–{1}	
 link target differs	
 local agent, protocol test	
@@ -3099,6 +3122,7 @@ your words
 {} MB · image preview	
 {} YAML documents became one list.	
 {} accepted the connection but sent no reply.	
+{} added	
 {} already exists. Choose another name.	
 {} bookmark|{} bookmarks	
 {} bytes of output were lost while no window was attached	
@@ -3188,6 +3212,7 @@ your words
 {} parent module|{} parent modules	
 {} ports are forwarded	
 {} reference|{} references	
+{} removed	
 {} result in 1 file|{} results in 1 file	
 {} result|{} results	
 {} skipped	

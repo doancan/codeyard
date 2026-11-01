@@ -376,8 +376,16 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let shortcut = self.shortcut_of_boxed(action.boxed_clone(), cx);
+        let pressed = action.boxed_clone();
         div()
             .id(id)
+            .relative()
+            .child(crate::a11y_controls::control(
+                crate::a11y_controls::Control::button(crate::i18n::t("Welcome"), id, label, move |window, cx| {
+                    window.dispatch_action(pressed.boxed_clone(), cx)
+                })
+                .description(shortcut.clone().unwrap_or_default()),
+            ))
             .flex_1()
             .min_w_0()
             .h(px(56.))
@@ -461,9 +469,16 @@ impl Workbench {
                     Some(h) => format!("{h}:{}", r.path),
                     None => tilde(&r.path),
                 };
+                let opened = r.clone();
                 div()
                     .id(("w-recent", i))
                     .group(group.clone())
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::new(crate::i18n::t("Welcome"), format!("recent:{detail}"), accesskit::Role::ListItem, name.clone())
+                            .description(detail.clone())
+                            .on_entity(cx.entity().downgrade(), move |this: &mut Self, w, cx| this.open_recent(opened.clone(), w, cx)),
+                    ))
                     .h(px(40.))
                     .flex()
                     .items_center()
@@ -479,8 +494,8 @@ impl Workbench {
                             .min_w_0()
                             .flex()
                             .flex_col()
-                            .child(div().overflow_hidden().whitespace_nowrap().text_color(c(p.text)).child(name))
-                            .child(div().overflow_hidden().whitespace_nowrap().text_size(px(text::XXS.0)).text_color(c(p.text_muted)).child(detail)),
+                            .child(div().overflow_hidden().whitespace_nowrap().text_color(c(p.text)).child(name.clone()))
+                            .child(div().overflow_hidden().whitespace_nowrap().text_size(px(text::XXS.0)).text_color(c(p.text_muted)).child(detail.clone())),
                     )
                     .when(remote.is_some(), |d| {
                         d.child(
@@ -497,6 +512,7 @@ impl Workbench {
                     // On the right, on hover: pin (always visible if pinned) and remove from list.
                     .child({
                         let (pin_target, forget_target) = (r.clone(), r.clone());
+                        let (tree_pin, tree_forget) = (r.clone(), r.clone());
                         let button = |id: &'static str, glyph: &'static str, color: u32, tip: &'static str| {
                             div()
                                 .id((id, i))
@@ -524,6 +540,17 @@ impl Workbench {
                                     if pinned { crate::i18n::t("Unpin") } else { crate::i18n::t("Pin to the top") },
                                 )
                                 .when(!pinned, |d| d.invisible().group_hover(group.clone(), |s| s.visible()))
+                                .relative()
+                                .child(crate::a11y_controls::control(
+                                    crate::a11y_controls::Control::button(
+                                        crate::i18n::t("Welcome"),
+                                        format!("pin:{detail}"),
+                                        if pinned { crate::i18n::t("Unpin") } else { crate::i18n::t("Pin to the top") },
+                                        |_, _| {},
+                                    )
+                                    .description(name.clone())
+                                    .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| this.toggle_pin_recent(tree_pin.clone(), cx)),
+                                ))
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     cx.stop_propagation();
                                     this.toggle_pin_recent(pin_target.clone(), cx);
@@ -533,6 +560,17 @@ impl Workbench {
                                 button("w-forget", "x", p.text_muted, crate::i18n::t("Remove from Recent"))
                                     .invisible()
                                     .group_hover(group.clone(), |s| s.visible())
+                                    .relative()
+                                    .child(crate::a11y_controls::control(
+                                        crate::a11y_controls::Control::button(
+                                            crate::i18n::t("Welcome"),
+                                            format!("forget:{detail}"),
+                                            crate::i18n::t("Remove from Recent"),
+                                            |_, _| {},
+                                        )
+                                        .description(name.clone())
+                                        .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| this.forget_recent(tree_forget.clone(), cx)),
+                                    ))
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         cx.stop_propagation();
                                         this.forget_recent(forget_target.clone(), cx);
@@ -604,6 +642,10 @@ impl Workbench {
                                             d.child(
                                                 div()
                                                     .id("w-more")
+                                                    .relative()
+                                                    .child(self.ctl(crate::i18n::t("Welcome"), "w-more", crate::i18n::t("More…"), cx, |this, w, cx| {
+                                                        this.show_project_switcher(w, cx)
+                                                    }))
                                                     .px(px(theme::SPACE[4]))
                                                     .h(px(28.))
                                                     .flex()

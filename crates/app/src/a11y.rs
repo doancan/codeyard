@@ -229,6 +229,8 @@ pub struct TerminalSnap {
     pub runs: Vec<RunSnap>,
     /// Character index of the cursor, if it is on screen.
     pub cursor: Option<usize>,
+    /// Lines scrolled back into the history, and the history's length.
+    pub scroll: (usize, usize),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -458,15 +460,17 @@ impl Snapshot {
         root.set_description(self.layout.clone());
         let mut kids = Vec::new();
         self.chrome.append_tree(&mut nodes, &mut kids, &self.geometry);
-        // Painted controls by surface; the status bar's join its items below.
-        let (mut status_controls, mut tab_controls) = (Vec::new(), Vec::new());
+        // Painted controls by surface; the status bar's join its items below. Their groups come after the views and the
+        // editor, before the status bar and the overlays: they are drawn on top of what they sit in (a gutter mark over
+        // the editor, a link at the end of a line), and hit testing takes the last sibling as the one on top.
+        let (mut status_controls, mut tab_controls, mut control_groups) = (Vec::new(), Vec::new(), Vec::new());
         for (surface, ids) in crate::a11y_controls::append_nodes(&self.controls, &mut nodes) {
             if surface == t("Status bar") {
                 status_controls = ids;
             } else if surface == t("Editor tabs") {
                 tab_controls = ids;
             } else {
-                kids.push(crate::a11y_controls::group(surface, ids, &mut nodes));
+                control_groups.push(crate::a11y_controls::group(surface, ids, &mut nodes));
             }
         }
         if let Some(view) = &self.services {
@@ -722,6 +726,7 @@ impl Snapshot {
                 node.set_text_selection(TextSelection { anchor: p, focus: p });
             }
             node.set_value(term.runs.iter().map(|r| r.text.as_str()).collect::<String>());
+            term_tab_access::history_scroll(term.scroll, &mut node);
             nodes.push((TERMINAL, node));
             kids.push(TERMINAL);
         }
@@ -750,6 +755,7 @@ impl Snapshot {
         items.extend(status_controls);
         status.set_children(items);
         nodes.push((STATUS, status));
+        kids.extend(control_groups);
         kids.push(STATUS);
 
         // Notice: a live region, so a screen reader speaks it when it appears or changes.
@@ -1066,6 +1072,11 @@ impl Workbench {
         if last.generation != self.lsp.generation {
             return;
         }
+        match crate::a11y_controls::fold_as_click(req, || last.to_tree()) {
+            Some(Some(click)) => return self.a11y_action(&click, last, window, cx),
+            None => return,
+            Some(None) => {}
+        }
         if self.a11y_services_action(req, last, window, cx) {
             return;
         }
@@ -1201,6 +1212,11 @@ impl Workbench {
                 }
                 window.focus(&e.read(cx).focus_handle(cx));
                 e.update(cx, |e, cx| e.a11y_choose_completion(index, req.action == Action::Click, window, cx));
+            }
+            (Action::ScrollUp | Action::ScrollDown, TERMINAL) => {
+                if let Some(term) = self.a11y_terminal(window, cx).map(|(t, _, _)| t).or_else(|| self.active_terminal()) {
+                    term.update(cx, |t, cx| t.a11y_scroll_page(req.action == Action::ScrollUp, cx));
+                }
             }
             (Action::Focus, TERMINAL) => {
                 if let Some(term) = self.a11y_terminal(window, cx).map(|(t, _, _)| t).or_else(|| self.active_terminal()) {
@@ -1451,6 +1467,18 @@ mod views_tests;
 #[cfg(test)]
 #[path = "a11y_chrome_tests.rs"]
 mod chrome_tests;
+
+#[cfg(test)]
+#[path = "a11y_side_controls_tests.rs"]
+mod side_controls_tests;
+
+#[cfg(test)]
+#[path = "a11y_page_controls_tests.rs"]
+mod page_controls_tests;
+
+#[cfg(test)]
+#[path = "a11y_editor_controls_tests.rs"]
+mod editor_controls_tests;
 
 #[cfg(test)]
 #[path = "a11y_confirm_tests.rs"]

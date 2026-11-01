@@ -557,6 +557,12 @@ impl Render for CompareView {
                 .text_size(px(text::XS.0))
                 .cursor_pointer()
                 .child(crate::i18n::t(label).to_string())
+                .relative()
+                .child(crate::a11y_controls::control(
+                    crate::a11y_controls::Control::new(crate::i18n::t("Compare"), id, accesskit::Role::CheckBox, crate::i18n::t(label))
+                        .toggled(on)
+                        .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| this.set_option(set, rescan, cx)),
+                ))
                 .on_click(cx.listener(move |this, _, _, cx| this.set_option(set, rescan, cx)))
         };
         let action = |id: &'static str, label: &'static str, cx: &mut Context<Self>, run: fn(&mut Self, &mut Context<Self>)| {
@@ -572,6 +578,11 @@ impl Render for CompareView {
                 .text_size(px(text::XS.0))
                 .cursor_pointer()
                 .child(crate::i18n::t(label).to_string())
+                .relative()
+                .child(crate::a11y_controls::control(
+                    crate::a11y_controls::Control::button(crate::i18n::t("Compare"), id, crate::i18n::t(label), |_, _| {})
+                        .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| run(this, cx)),
+                ))
                 .on_click(cx.listener(move |this, _, _, cx| run(this, cx)))
         };
 
@@ -733,10 +744,33 @@ impl Render for CompareView {
                                     let (copy_right, copy_left) = (differs && can(Side::Left) && !busy, differs && can(Side::Right) && !busy);
                                     let (del_left, del_right) = (writable[0] && can(Side::Left) && !busy, writable[1] && can(Side::Right) && !busy);
                                     let path = row.path.clone();
+                                    let name = row.name().to_string();
                                     let small = |id: String, label: &'static str, tip: &'static str, on: bool, cx: &mut Context<Self>, ev: RowAction| {
                                         let path = path.clone();
+                                        let (tree_path, name) = (path.clone(), name.clone());
                                         div()
-                                            .id(SharedString::from(id))
+                                            .id(SharedString::from(id.clone()))
+                                            .relative()
+                                            .when(on, |d| {
+                                                d.child(crate::a11y_controls::control(
+                                                    crate::a11y_controls::Control::button(
+                                                        crate::i18n::t("Compare"),
+                                                        format!("{id}:{tree_path}"),
+                                                        crate::i18n::t(tip),
+                                                        |_, _| {},
+                                                    )
+                                                    .description(name)
+                                                    .on_entity(
+                                                        cx.entity().downgrade(),
+                                                        move |_: &mut Self, _, cx| {
+                                                            cx.emit(match ev {
+                                                                RowAction::Copy(dir) => CompareEvent::Copy(tree_path.clone(), dir),
+                                                                RowAction::Delete(side) => CompareEvent::Delete(tree_path.clone(), side),
+                                                            })
+                                                        },
+                                                    ),
+                                                ))
+                                            })
                                             .w(px(22.))
                                             .h(px(20.))
                                             .flex()
@@ -759,6 +793,26 @@ impl Render for CompareView {
                                     Some(
                                         div()
                                             .id(("compare-row", ix))
+                                            .relative()
+                                            .child({
+                                                let mut row_ctl = crate::a11y_controls::Control::new(
+                                                    crate::i18n::t("Compare"),
+                                                    format!("row:{}", row.path),
+                                                    accesskit::Role::TreeItem,
+                                                    row.name().to_string(),
+                                                )
+                                                .description(format!(
+                                                    "{} · {} · {}",
+                                                    side_text(row, Side::Left),
+                                                    status_text(row, scanning),
+                                                    side_text(row, Side::Right)
+                                                ))
+                                                .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| this.open_row(ix, cx));
+                                                if row.is_dir() {
+                                                    row_ctl = row_ctl.expanded(!folded);
+                                                }
+                                                crate::a11y_controls::control(row_ctl)
+                                            })
                                             .w_full()
                                             .h(px(ROW_H))
                                             .px(px(theme::SPACE[6]))

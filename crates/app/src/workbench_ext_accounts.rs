@@ -550,9 +550,15 @@ impl Workbench {
             row = match self.cfg.exts.accounts.known.get(&(ext.clone(), provider.clone())) {
                 Some(label) => {
                     let (ext, prov) = (ext.clone(), provider.clone());
-                    row.child(div().child(crate::i18n::tf("{0}: signed in as {1}", &[&name, label]))).child(
-                        action_button("ext-sign-out", crate::i18n::t("Sign Out"), p)
-                            .on_click(cx.listener(move |this, _, _, cx| this.sign_out_extension_account(ext.clone(), prov.clone(), cx))),
+                    let signed = crate::i18n::tf("{0}: signed in as {1}", &[&name, label]);
+                    row.child(div().child(signed.clone())).child(
+                        self.pressable(
+                            action_button("ext-sign-out", crate::i18n::t("Sign Out"), p),
+                            crate::a11y_controls::Control::button(m.name.to_string(), format!("sign-out:{provider}"), crate::i18n::t("Sign Out"), |_, _| {})
+                                .description(signed),
+                            cx,
+                            move |this, _, cx| this.sign_out_extension_account(ext.clone(), prov.clone(), cx),
+                        ),
                     )
                 }
                 None => row.child(div().text_color(c(p.text_muted)).child(crate::i18n::tf("{}: not signed in", &[&name]))),
@@ -560,13 +566,23 @@ impl Workbench {
             let (ext, prov) = (ext.clone(), provider.clone());
             if ext_manifest::split_account(&provider).1.is_some() {
                 row = row.child(
-                    action_button("ext-remove-instance", crate::i18n::t("Remove"), p)
-                        .on_click(cx.listener(move |this, _, _, cx| this.remove_extension_instance(ext.clone(), prov.clone(), cx))),
+                    self.pressable(
+                        action_button("ext-remove-instance", crate::i18n::t("Remove"), p),
+                        crate::a11y_controls::Control::button(m.name.to_string(), format!("remove:{provider}"), crate::i18n::t("Remove"), |_, _| {})
+                            .description(name.clone()),
+                        cx,
+                        move |this, _, cx| this.remove_extension_instance(ext.clone(), prov.clone(), cx),
+                    ),
                 );
             } else if found.and_then(|f| f.oauth).is_some_and(|o| o.instances) {
                 row = row.child(
-                    action_button("ext-add-instance", crate::i18n::t("Add Instance…"), p)
-                        .on_click(cx.listener(move |this, _, window, cx| this.start_add_extension_instance(ext.clone(), prov.clone(), window, cx))),
+                    self.pressable(
+                        action_button("ext-add-instance", crate::i18n::t("Add Instance…"), p),
+                        crate::a11y_controls::Control::button(m.name.to_string(), format!("add:{provider}"), crate::i18n::t("Add Instance…"), |_, _| {})
+                            .description(name.clone()),
+                        cx,
+                        move |this, window, cx| this.start_add_extension_instance(ext.clone(), prov.clone(), window, cx),
+                    ),
                 );
             }
             row

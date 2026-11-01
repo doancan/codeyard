@@ -62,3 +62,34 @@ fn a_terminal_window_exposes_its_terminal(cx: &mut gpui::TestAppContext) {
     assert_eq!(tree.state().root().role(), Role::Window);
     wb.update(vcx, |wb, cx| wb.close_all_terminals(cx));
 }
+
+/// The update dialog's own window (macOS): its tree is the dialog alone, titled as the window, with the focused button
+/// as its focus; nothing of the editor window comes along.
+#[test]
+fn the_update_window_holds_the_dialog_alone() {
+    let _en = crate::i18n::LangGuard::set("en");
+    let full = Snapshot {
+        title: "main.rs — proj".into(),
+        status: vec!["Ln 1, Col 1".into()],
+        dialog: Some(DialogSnap {
+            title: "Codeyard 1.2 is available".into(),
+            description: "What changed".into(),
+            progress: None,
+            buttons: vec!["Install and Restart".into(), "Later".into()],
+            focused: Some(1),
+        }),
+        ..Snapshot::default()
+    };
+    let snap = windows_access::update_window_snapshot(&full);
+    let update = snap.to_tree();
+    let tree = accesskit_consumer::Tree::new(update.clone(), true);
+    let state = tree.state();
+    let root = state.root();
+    assert_eq!(root.label().as_deref(), Some("Software Update"));
+    let dialog = root.children().find(|n| n.role() == Role::Dialog).expect("the dialog");
+    assert_eq!(dialog.label().as_deref(), Some("Codeyard 1.2 is available"));
+    let buttons: Vec<String> = dialog.children().filter(|n| n.role() == Role::Button).filter_map(|n| n.label()).collect();
+    assert_eq!(buttons, ["Install and Restart", "Later"]);
+    assert_eq!(state.focus().and_then(|n| n.label()).as_deref(), Some("Later"));
+    assert!(!update.nodes.iter().any(|(_, n)| n.label() == Some("Ln 1, Col 1")), "the status bar stays in the editor window");
+}

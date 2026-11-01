@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Screen readers reach the editor's drawn controls: gutter breakpoints, fold buttons and Git marks, sticky scope
+  lines, merge-conflict links and Send Request; the color picker's hue, saturation, brightness and opacity as
+  sliders; the terminal's find bar; the terminal's history by scrolling; and the update window on macOS has its own
+  accessibility tree. Expand and Collapse from Windows UI Automation work on every node that folds.
+
+- Screen readers read and drive the pages: the merge editor (each conflict, both sides' text and every accept
+  button), the folder comparison (options, rows with their status and the copy and delete buttons), the diff and the
+  large-file view line by line, the Markdown preview's headings, paragraphs and links, the Welcome page's tiles and
+  recent folders, the data query bar and the containers' overview, details and logs.
+
+- Screen readers reach every button drawn in the side views: the Explorer's header buttons, section headers, open
+  editors, favorites, outline and timeline; Source Control's Refresh, More Actions and stashes; the Search view's
+  result buttons and structural language; Run and Debug's Remove All Breakpoints and launch link; the Testing filter;
+  the Remote Explorer's folder and port buttons; the Extensions header and an installed extension's whole page,
+  including its permission switches, denials, crash card and accounts. Each reports the frame it is drawn at and does
+  what its click does.
+
 - Screen readers reach the window's chrome and the controls drawn around the editor: the activity bar's views and its
   Manage button, the title bar's Back, Forward and file search, the caption buttons on Windows, every status bar
   item (each one does what its click does, including sync, ports, transfers, the terminal toggle, conflicts and the
@@ -423,6 +440,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   version that may install, as a withdrawn one does, and `--update-extensions` says so when there is none.
 - A denied read or write outside the workspace, and a `fetch` to an IP address, told the author to add a line no
   manifest accepts. Both now say they cannot be granted, and why (Rust and TypeScript SDKs, the Inspector).
+- `cyx dev` notes the sources before its first build, so a file saved while it builds, checks the extension or
+  starts Codeyard is rebuilt on the next poll instead of being missed until the next save.
 - Unit tests no longer start an installed language server from generic editor and workbench fixtures: under test
   `lsp.enabled` defaults to off and LSP integration tests turn it on explicitly. The shipped default stays on.
 - On a busy machine, closing a window could leave its terminals running for 5 minutes, and the last keys typed into a

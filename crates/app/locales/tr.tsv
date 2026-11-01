@@ -3458,3 +3458,28 @@ denied: {0}; this cannot be granted: {1}	reddedildi: {0}; buna izin verilemez: {
 {0} stays stopped: the registry revoked the installed version ({1}) and has no other version to install	{0} durdurulmuş kalıyor: kayıt, kurulu sürümü iptal etti ({1}) ve kurulabilecek başka sürüm yok
 {0} went back to version {1}: the registry revoked {2}.	{0}, {1} sürümüne geri döndü: kayıt {2} sürümünü iptal etti.
 {0} {1} ({2}) asks to:	{0} {1} ({2}) şunları istiyor:
+(modified)	(değiştirildi)
+Collapse	Daralt
+Expand	Genişlet
+Open Editors	Açık Düzenleyiciler
+line {}	satır {}
+Removed	Kaldırıldı
+Show the Markdown source	Markdown kaynağını göster
+Sort by {}	{} ölçütüne göre sırala
+Unchanged	Değişmedi
+{} added	{} eklendi
+{} removed	{} kaldırıldı
+Breakpoint on line {}	{}. satırdaki kesme noktası
+Brightness	Parlaklık
+Color picker	Renk seçici
+Conflict at line {}	{}. satırdaki çakışma
+Find in Terminal	Terminalde Bul
+Fold line {}	{}. satırı katla
+Hue	Ton
+Line {} added	{}. satır eklendi
+Line {} changed	{}. satır değişti
+Lines deleted above line {}	{}. satırın üstünde satırlar silindi
+Opacity	Opaklık
+Saturation	Doygunluk
+Unfold line {}	{}. satırı aç
+disabled	devre dışı

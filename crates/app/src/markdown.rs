@@ -878,6 +878,7 @@ impl Render for MarkdownPreview {
         let source = self.source.read(cx);
         let name = source.name.to_string();
         let path = source.path.replace('\\', "/");
+        let surface = crate::i18n::tf("Preview of {}", &[&name]);
         let host = source.host_arc();
         let entity = cx.entity();
         let mut headings = Vec::new();
@@ -929,10 +930,19 @@ impl Render for MarkdownPreview {
                     .border_b_1()
                     .border_color(c(p.border))
                     .child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(crate::i18n::tf("Preview of {}", &[&name])))
-                    .child(crate::editor::button("markdown-code", crate::i18n::t("Code"), false, &p, {
-                        let entity = cx.entity();
-                        move |_, _, cx| entity.update(cx, |_, cx| cx.emit(PreviewEvent::Code))
-                    })),
+                    .child(
+                        div()
+                            .relative()
+                            .child(crate::editor::button("markdown-code", crate::i18n::t("Code"), false, &p, {
+                                let entity = cx.entity();
+                                move |_, _, cx| entity.update(cx, |_, cx| cx.emit(PreviewEvent::Code))
+                            }))
+                            .child(crate::a11y_controls::control(
+                                crate::a11y_controls::Control::button(surface.clone(), "code", crate::i18n::t("Code"), |_, _| {})
+                                    .description(crate::i18n::t("Show the Markdown source"))
+                                    .on_entity(cx.entity().downgrade(), |_: &mut Self, _, cx| cx.emit(PreviewEvent::Code)),
+                            )),
+                    ),
             )
             .child(
                 div().id("markdown-scroll").track_scroll(&self.scroll).flex_1().min_h_0().overflow_y_scroll().flex().flex_col().items_center().child(
@@ -947,11 +957,62 @@ impl Render for MarkdownPreview {
                         .gap(px(theme::SPACE[4]))
                         .px(px(theme::SPACE[9]))
                         .py(px(theme::SPACE[8]))
-                        .children(self.blocks.iter().enumerate().map(|(i, b)| block_view(b, &format!("md{i}"), &p, 0, false, Some(&document))))
+                        .children(self.blocks.iter().enumerate().map(|(i, b)| {
+                            div()
+                                .relative()
+                                .child(block_view(b, &format!("md{i}"), &p, 0, false, Some(&document)))
+                                .children(block_access(&surface, i, b, &document))
+                        }))
                         .when(self.blocks.is_empty(), |d| d.child(div().text_color(c(p.text_muted)).child(crate::i18n::t("The file is empty.")))),
                 ),
             )
     }
+}
+
+/// A block of the preview for the tree, where it is drawn: its text (a heading with its level) and its links, which
+/// open as a click on them does.
+fn block_access(surface: &str, i: usize, b: &Block, document: &DocumentContext) -> Vec<gpui::AnyElement> {
+    let text = plain_text(std::slice::from_ref(b));
+    let mut out = Vec::new();
+    if !text.is_empty() {
+        let role = if matches!(b, Block::Heading(..)) { accesskit::Role::Heading } else { accesskit::Role::Paragraph };
+        out.push(crate::a11y_controls::said(surface, format!("block{i}"), role, text).into_any_element());
+    }
+    for (k, (label, url)) in block_links(b).into_iter().enumerate() {
+        let link = document.link.clone();
+        out.push(
+            crate::a11y_controls::control(
+                crate::a11y_controls::Control::new(surface, format!("block{i}-link{k}"), accesskit::Role::Link, label)
+                    .description(url.clone())
+                    .on_press(move |window, cx| link(&url, window, cx)),
+            )
+            .into_any_element(),
+        );
+    }
+    out
+}
+
+/// The links of a block, nested ones included: (text, URL).
+fn block_links(b: &Block) -> Vec<(String, String)> {
+    fn spans(s: &[Span], out: &mut Vec<(String, String)>) {
+        out.extend(
+            s.iter().filter_map(|s| {
+                s.style.link.clone().filter(|_| s.style.image.is_none()).map(|u| (if s.text.is_empty() { u.clone() } else { s.text.clone() }, u))
+            }),
+        );
+    }
+    fn walk(b: &Block, out: &mut Vec<(String, String)>) {
+        match b {
+            Block::Heading(_, s) | Block::Paragraph(s) => spans(s, out),
+            Block::Quote(inner) => inner.iter().for_each(|b| walk(b, out)),
+            Block::List { items, .. } => items.iter().flat_map(|(_, inner)| inner).for_each(|b| walk(b, out)),
+            Block::Table { head, rows, .. } => std::iter::once(head).chain(rows).flatten().for_each(|c| spans(c, out)),
+            Block::Code { .. } | Block::Rule => {}
+        }
+    }
+    let mut out = Vec::new();
+    walk(b, &mut out);
+    out
 }
 
 fn heading_slug(title: &str) -> String {
