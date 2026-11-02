@@ -207,7 +207,7 @@ fn the_language_server_comes_back_after_a_reconnect(cx: &mut TestAppContext) {
     let dir = project("err-lsp-repo");
     std::fs::write(dir.join("a.c"), "int main(void) { return 0; }\n").unwrap();
     let script = formatting_server(&dir);
-    let settings = crate::settings::Settings { lsp_servers: c_server(&script), ..crate::settings::Settings::default() };
+    let settings = crate::settings::Settings { lsp_enabled: true, lsp_servers: c_server(&script), ..crate::settings::Settings::default() };
     let (wb, cx) = setup_with(cx, settings);
     wb.update_in(cx, |w, window, cx| w.connect(crate::test_sshd::ALIAS.into(), window, cx));
     wait_secs(cx, 30, "connected", |cx| {

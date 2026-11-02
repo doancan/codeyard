@@ -1,8 +1,8 @@
 //! Installed extensions as the app sees them: the set `ext_core` loads from the store and the lock file, minus the ones
 //! the user turned off, or nothing at all with `--no-extensions`. Every contribution reader (themes, snippets, keymaps,
 //! languages, schemas, settings, language servers) takes its entries from `current()`, so turning one off or installing
-//! one in another window changes all of them on the next settings reload. No extension code runs: Phase 0 extensions only
-//! contribute data (docs/plugin-architecture.md §5.1).
+//! one in another window changes all of them on the next settings reload. Extension code runs in `codeyard-exthost`
+//! (ext_runtime.rs); its contributions that need code are wired in workbench_ext_code.rs.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -112,9 +112,20 @@ pub fn dev_stamp() -> u64 {
     h.finish()
 }
 
+/// What the settings watcher compares besides the settings, keymap and lock files: the dev folder and the list of
+/// revoked versions (another window's update check may stop one).
+pub fn watch_stamp(cfg_dir: &Path) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    dev_stamp().hash(&mut h);
+    std::fs::metadata(store(cfg_dir).revoked_path()).and_then(|m| m.modified()).ok().hash(&mut h);
+    h.finish()
+}
+
 /// The dev folder as an extension, or the author-facing reason it cannot load (the same checks as `cyx check`).
 fn load_dev(dir: &Path) -> Result<Active, String> {
-    let files = ext_pkg::collect_dir(dir).map_err(|e| e.to_string())?;
+    // Native programs are checked as this machine's platform; a workspace on another one takes its `native/` folder.
+    let files = ext_pkg::collect_dir_for(dir, ext_pkg::folder_target(dir).as_deref()).map_err(|e| e.to_string())?;
     let (bytes, _) = ext_pkg::write(files).map_err(|e| e.to_string())?;
     let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
     Ok(Active { manifest: Arc::new(pkg.manifest), dir: dir.to_path_buf() })
@@ -192,10 +203,17 @@ pub fn reload_with(cfg_dir: Option<&Path>, enabled: bool) -> Vec<String> {
         Ok(loaded) => {
             let mut problems = loaded.problems;
             let mut active = Vec::new();
+            // Revoked by its registry, or depending on one that is: stopped until a newer version replaces it.
+            let stopped = ext_core::stopped(&loaded.extensions, &store.revoked());
             for e in loaded.extensions.into_iter().filter(|e| !e.disabled) {
-                // Installed by a newer Codeyard or synced from one: its code would not run here, so none of it applies.
-                if e.manifest.code.is_some() {
-                    problems.push(crate::i18n::tf("{} contains code, which this version does not run", &[&e.manifest.id]));
+                if let Some(why) = stopped.get(&e.manifest.id) {
+                    problems.push(stopped_line(&e.manifest.id, why));
+                    continue;
+                }
+                // Code runs in codeyard-exthost, which ships beside the app; without it none of the extension applies.
+                // Nothing here starts a process: the sandbox is checked when code first starts.
+                if let Some(Err(why)) = e.manifest.code.as_ref().map(|_| crate::ext_runtime::code_loads_here(&e.manifest.id)) {
+                    problems.push(why);
                     continue;
                 }
                 active.push(Active { dir: store.store_dir(&e.digest), manifest: Arc::new(e.manifest) });
@@ -226,6 +244,14 @@ pub fn reload_with(cfg_dir: Option<&Path>, enabled: bool) -> Vec<String> {
     }
     set(Arc::new(reg));
     problems
+}
+
+/// Why an extension does not run, for the status bar and its page.
+pub fn stopped_line(id: &ext_manifest::ExtId, why: &ext_core::Stopped) -> String {
+    match why {
+        ext_core::Stopped::Revoked { reason } => crate::i18n::tf("{0} was stopped: the registry revoked this version ({1})", &[id, reason]),
+        ext_core::Stopped::Dependency { on } => crate::i18n::tf("{0} was stopped: it needs {1}, which was stopped", &[id, on]),
+    }
 }
 
 /// Install the registry directly (tests).
@@ -278,24 +304,37 @@ pub fn language_context(lang: &str) -> Option<&str> {
     (!lang.is_empty() && lang.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')).then_some(lang)
 }
 
-/// One key binding contributed by an extension, ready for GPUI. `command` is a palette command id (`core:` removed).
+/// One key binding contributed by an extension, ready for GPUI. `command` is a palette command id (`core:` removed), or
+/// for an extension command its local id, with `extension` the extension that owns it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Binding {
     pub ext: String,
     pub key: String,
     pub command: String,
     pub when: Option<String>,
+    pub extension: Option<String>,
 }
 
 /// Every extension key binding, and one warning per binding that cannot apply.
 pub fn bindings() -> (Vec<Binding>, Vec<String>) {
     let (mut out, mut warnings) = (Vec::new(), Vec::new());
-    for ext in &current().active {
+    let reg = current();
+    for ext in &reg.active {
         for b in &ext.manifest.contributions.keybindings {
-            // Phase 0 extensions have no code, so only core commands can be bound.
-            let Some(command) = b.command.strip_prefix("core:") else {
-                warnings.push(format!("{}: {}", ext.id(), crate::i18n::tf("“{}” needs extension code, which this version does not run", &[&b.command])));
-                continue;
+            // A core command, or a command of this extension or a dependency (the manifest checked which): the owner must
+            // be active and have code.
+            let (command, extension) = match b.command.strip_prefix("core:") {
+                Some(command) => (command.to_string(), None),
+                None => {
+                    let owner = reg.active.iter().find(|o| b.command.strip_prefix(o.id()).is_some_and(|r| r.starts_with('.')));
+                    match owner.filter(|o| o.manifest.code.is_some() && o.manifest.contributions.commands.iter().any(|c| c.id == b.command)) {
+                        Some(o) => (b.command[o.id().len() + 1..].to_string(), Some(o.id().to_string())),
+                        None => {
+                            warnings.push(format!("{}: {}", ext.id(), crate::i18n::tf("“{}” is not the command of an active extension", &[&b.command])));
+                            continue;
+                        }
+                    }
+                }
             };
             let when = match b.when.as_deref().map(gpui_when).transpose() {
                 Ok(w) => w,
@@ -304,10 +343,29 @@ pub fn bindings() -> (Vec<Binding>, Vec<String>) {
                     continue;
                 }
             };
-            out.push(Binding { ext: ext.id().to_string(), key: b.key.clone(), command: command.to_string(), when });
+            out.push(Binding { ext: ext.id().to_string(), key: b.key.clone(), command, when, extension });
         }
     }
     (out, warnings)
+}
+
+/// `editor.formatters`: language id → `lsp` or the id of an extension that formats it. Wrong entries are warnings.
+pub fn formatters_setting(v: Option<&serde_json::Value>, warnings: &mut Vec<String>) -> Vec<(String, String)> {
+    use serde_json::Value;
+    let mut out = Vec::new();
+    match v {
+        None | Some(Value::Null) => {}
+        Some(Value::Object(m)) => {
+            for (lang, who) in m {
+                match who.as_str().map(str::trim) {
+                    Some(w) if !w.is_empty() => out.push((lang.clone(), w.to_string())),
+                    _ => warnings.push(crate::i18n::tf("editor.formatters.{}: expected “lsp” or an extension id", &[&lang])),
+                }
+            }
+        }
+        Some(_) => warnings.push(crate::i18n::tf("{0}: expected an object {1}", &[&"editor.formatters", &"{ \"toml\": \"you.formatter\" }"])),
+    }
+    out
 }
 
 /// The keymap preset chosen with `keymap.preset` (`<publisher.name>/<label>`): its file, in `keybindings.jsonc` format.
@@ -380,26 +438,25 @@ pub fn language_for(path: &str) -> Option<Language> {
 
 /// Language server entries for `lsp.servers`, before the user's own (the user's entry for the same key wins). Each
 /// extension server is entered under every language it serves. Programs come from `PATH` where the files are, so they
-/// work over SSH too; a program shipped inside the package waits for signed native packages.
-pub fn server_entries() -> (Vec<(String, Option<crate::lsp::ServerSpec>)>, Vec<String>) {
-    let (mut out, mut warnings) = (Vec::new(), Vec::new());
+/// work over SSH too; a program inside the package (`./bin/server`) starts from the copy pushed to the workspace's host
+/// and checked by hash there (`ext_programs`), its platform's package fetched from `registries` when needed.
+pub fn server_entries(cfg_dir: Option<&Path>, registries: &[ext_core::registry::Registry]) -> Vec<(String, Option<crate::lsp::ServerSpec>)> {
+    let mut out = Vec::new();
     for ext in &current().active {
         for s in &ext.manifest.contributions.language_servers {
-            if s.command.contains('/') {
-                warnings.push(format!(
-                    "{}: {}",
-                    ext.id(),
-                    crate::i18n::tf("“{}” ships inside the package; this version only starts language servers found on PATH", &[&s.command])
-                ));
-                continue;
-            }
+            let program = ext_manifest::is_package_program(&s.command).then(|| crate::ext_programs::PackageServer {
+                extension: ext.id().to_string(),
+                dir: ext.dir.clone(),
+                programs: crate::ext_programs::of_extension(cfg_dir.map(Path::to_path_buf), registries.to_vec(), ext.manifest.id.clone(), ext.dir.clone()),
+            });
             for lang in &s.languages {
                 let key = crate::lsp::key_for_language(lang).unwrap_or(lang.as_str()).to_string();
-                out.push((key, Some(crate::lsp::ServerSpec::from((s.command.clone(), s.args.clone())))));
+                let spec = crate::lsp::ServerSpec { program: program.clone(), ..crate::lsp::ServerSpec::from((s.command.clone(), s.args.clone())) };
+                out.push((key, Some(spec)));
             }
         }
     }
-    (out, warnings)
+    out
 }
 
 /// JSON and YAML schema associations, to follow the user's own: (file globs, absolute path of the schema file). The files
@@ -452,14 +509,96 @@ pub fn check_setting(key: &str, value: &serde_json::Value) -> Result<(), String>
     Err(crate::i18n::tf("{0}: expected {1}", &[&format!("\"{key}\""), &kind]))
 }
 
-/// Install a package file (`codeyard --install-extension`): the checks of the Extensions view, without its sheet.
-/// Data-only packages, as everywhere in this version.
-pub fn install_file(store: &ext_core::Store, path: &Path) -> Result<Manifest, String> {
-    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-    let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
-    if pkg.manifest.code.is_some() {
-        return Err(crate::i18n::tf("{} contains code, which this version does not run", &[&pkg.manifest.id]));
+/// The consent sheet's text and every other plain-words line of an extension.
+pub fn source_line(s: &ext_core::Source) -> String {
+    match s {
+        ext_core::Source::File { path } => crate::i18n::tf("Installed from the file {}", &[path]),
+        ext_core::Source::Folder { path } => crate::i18n::tf("Installed from the folder {}", &[path]),
+        ext_core::Source::Registry { registry, publisher } => crate::i18n::tf("From the {0} registry, published by {1}", &[registry, publisher]),
     }
-    let installed = store.install(&bytes, ext_core::Source::File { path: path.display().to_string() }).map_err(|e| e.to_string())?;
+}
+
+/// The consent sheet's lines (`Permissions::lines`) in the UI language.
+pub fn permission_lines(p: &ext_manifest::Permissions) -> Vec<String> {
+    use ext_manifest::{Clipboard, Line};
+    p.lines()
+        .iter()
+        .map(|l| match l {
+            Line::ReadAll => crate::i18n::t("Read all files in the workspace").to_string(),
+            Line::Read(g) => crate::i18n::tf("Read {}", &[g]),
+            Line::ReadSecrets => crate::i18n::t("Read files that can hold passwords and keys").to_string(),
+            Line::ChangeAll => crate::i18n::t("Change all files in the workspace").to_string(),
+            Line::Change(g) => crate::i18n::tf("Change {}", &[g]),
+            Line::ConnectAny => crate::i18n::t("Connect to any website").to_string(),
+            Line::Connect(h) => crate::i18n::tf("Connect to {} (any port)", &[h]),
+            Line::ConnectSetting(k) => crate::i18n::tf("Connect to a server you allow, named in its “{}” setting", &[k]),
+            Line::Account(a) => crate::i18n::tf("Act as your {} account", &[a]),
+            Line::Secrets => crate::i18n::t("Store secrets in your keychain").to_string(),
+            Line::Run(r) => crate::i18n::tf("Run {} with any arguments", &[r]),
+            Line::Clipboard(Clipboard::Read) => crate::i18n::t("Read the clipboard").to_string(),
+            Line::Clipboard(Clipboard::Write) => crate::i18n::t("Write to the clipboard").to_string(),
+            Line::Clipboard(_) => crate::i18n::t("Read and write the clipboard").to_string(),
+            Line::Terminal => crate::i18n::t("Type into terminals").to_string(),
+            Line::Commands(c) => crate::i18n::tf("Run Codeyard commands: {}", &[c]),
+        })
+        .collect()
+}
+
+/// The red line on the sheet and the detail page, for a High-risk permission set.
+pub fn high_risk_line(m: &Manifest) -> Option<String> {
+    let r = m.risk();
+    (r.level == ext_manifest::Level::High).then(|| {
+        if r.runs_code {
+            crate::i18n::t("High risk: this extension can run programs as you.").to_string()
+        } else {
+            crate::i18n::t("High risk: this extension can read private data and send it elsewhere.").to_string()
+        }
+    })
+}
+
+/// The consent sheet as text, for `codeyard --install-extension`: where the package comes from, what it asks for in
+/// the sheet's words, its high-risk line and the author's reason. `None` when it asks for no permission.
+pub fn permission_sheet(m: &Manifest, source: &ext_core::Source) -> Option<String> {
+    if m.permissions.is_empty() {
+        return None;
+    }
+    let mut out = crate::i18n::tf("{0} {1} ({2}) asks to:", &[&m.id, &m.version, &source_line(source)]);
+    for line in permission_lines(&m.permissions) {
+        out.push_str(&format!("\n  - {line}"));
+    }
+    if let Some(why) = &m.permissions.why {
+        out.push_str(&format!("\n  {}", crate::i18n::tf("Why: {}", &[why])));
+    }
+    if let Some(red) = high_risk_line(m) {
+        out.push_str(&format!("\n  {red}"));
+    }
+    Some(out)
+}
+
+/// Consent on the command line: running `codeyard --install-extension` is not consent to what a package asks for. One
+/// that asks for permissions installs only with `--accept-permissions`; without it the sheet is the error.
+pub fn command_line_consent(m: &Manifest, source: &ext_core::Source, accepted: bool) -> Result<(), String> {
+    match permission_sheet(m, source) {
+        Some(sheet) if !accepted => Err(format!(
+            "{sheet}\n{}",
+            crate::i18n::t("Nothing was installed. Run the command again with --accept-permissions to grant these, or install it from the Extensions view.")
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// Install a package file, or a folder packaged as `cyx package` would but without building it (`codeyard
+/// --install-extension`): the checks of the Extensions view, with its sheet as text. A package that asks for permissions
+/// installs only when `accepted` (`--accept-permissions`).
+pub fn install_file(store: &ext_core::Store, path: &Path, accepted: bool) -> Result<Manifest, String> {
+    let (bytes, source) = if path.is_dir() {
+        let files = ext_pkg::collect_dir_for(path, ext_pkg::folder_target(path).as_deref()).map_err(|e| e.to_string())?;
+        (ext_pkg::write(files).map_err(|e| e.to_string())?.0, ext_core::Source::Folder { path: path.display().to_string() })
+    } else {
+        (std::fs::read(path).map_err(|e| e.to_string())?, ext_core::Source::File { path: path.display().to_string() })
+    };
+    let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
+    command_line_consent(&pkg.manifest, &source, accepted)?;
+    let installed = store.install(&bytes, source).map_err(|e| e.to_string())?;
     Ok(installed.manifest)
 }

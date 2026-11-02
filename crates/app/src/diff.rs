@@ -39,6 +39,17 @@ pub struct DiffView {
     focus_handle: FocusHandle,
 }
 
+/// A diff line for the tree: whether it was added or removed, its number and its text.
+fn line_heard(sign: &str, line: Option<usize>, text: Option<&String>) -> String {
+    let what = match sign {
+        "+" => crate::i18n::t("Added"),
+        "-" => crate::i18n::t("Removed"),
+        _ => crate::i18n::t("Unchanged"),
+    };
+    let line = line.map(|n| crate::i18n::tf("line {}", &[&(n + 1)])).unwrap_or_default();
+    format!("{what}, {line}: {}", text.map(String::as_str).unwrap_or_default())
+}
+
 /// The rendered line text: tabs expand to four spaces (mark ranges are computed against this text).
 fn expand_tabs(line: &str) -> String {
     line.replace('\t', "    ")
@@ -202,12 +213,30 @@ impl Render for DiffView {
                     .child(icon("git-compare", 14., p.text_muted))
                     .child(div().text_color(c(p.text)).child(self.path.clone()))
                     .child(self.label.clone())
+                    .relative()
+                    .child(crate::a11y_controls::said(
+                        self.path.clone(),
+                        "summary",
+                        accesskit::Role::Heading,
+                        format!(
+                            "{} · {} · {}",
+                            self.label,
+                            crate::i18n::tf("{} added", &[&added]),
+                            if self.hunks.is_empty() { crate::i18n::t("No changes").to_string() } else { crate::i18n::tf("{} removed", &[&removed]) }
+                        ),
+                    ))
                     .child(div().flex_1())
                     .child(div().text_color(c(p.success)).child(format!("+{added}")))
                     .child(div().text_color(c(p.danger)).child(format!("−{removed}")))
                     .child(
                         div()
                             .id("diff-inline-toggle")
+                            .relative()
+                            .child(crate::a11y_controls::control(
+                                crate::a11y_controls::Control::button(self.path.clone(), "inline", crate::i18n::t("Toggle inline view"), |_, _| {})
+                                    .description(if self.inline { crate::i18n::t("Inline") } else { crate::i18n::t("Side by side") })
+                                    .on_entity(cx.entity().downgrade(), |this: &mut Self, w, cx| this.toggle_inline(&ToggleInline, w, cx)),
+                            ))
                             .cursor_pointer()
                             .px(px(theme::SPACE[3]))
                             .rounded(px(theme::radius::LG))
@@ -239,6 +268,12 @@ impl Render for DiffView {
                                                 git::InlineRow::Removed(a) => (Some(a), None, this.left.get(a), "-", Some(p.danger)),
                                                 git::InlineRow::Added(b) => (None, Some(b), this.right.get(b), "+", Some(p.success)),
                                             };
+                                            let heard = crate::a11y_controls::said(
+                                                this.path.clone(),
+                                                format!("i{ix}"),
+                                                accesskit::Role::ListItem,
+                                                line_heard(sign, old_n.or(new_n), text),
+                                            );
                                             let num = |n: Option<usize>| {
                                                 div()
                                                     .w(px(num_w))
@@ -254,6 +289,8 @@ impl Render for DiffView {
                                                 .h(px(line_h))
                                                 .flex()
                                                 .overflow_hidden()
+                                                .relative()
+                                                .child(heard)
                                                 .when_some(tint, |d, t| d.bg(ca(t, 0.16)))
                                                 .child(num(old_n))
                                                 .child(num(new_n))
@@ -285,7 +322,22 @@ impl Render for DiffView {
                                                 DiffRow::Same(a, b) => (Some(a), Some(b), false),
                                                 DiffRow::Changed(a, b) => (a, b, true),
                                             };
+                                            let path = this.path.clone();
                                             let side = |n: Option<usize>, lines: &Vec<String>, marks: &HashMap<usize, Vec<Range<usize>>>, tint: u32| {
+                                                let sign = match (changed, tint == p.danger) {
+                                                    (false, _) => " ",
+                                                    (true, true) => "-",
+                                                    (true, false) => "+",
+                                                };
+                                                let key = format!("{}{ix}", if tint == p.danger { "l" } else { "r" });
+                                                let heard = n.map(|n| {
+                                                    crate::a11y_controls::said(
+                                                        path.clone(),
+                                                        key,
+                                                        accesskit::Role::ListItem,
+                                                        line_heard(sign, Some(n), lines.get(n)),
+                                                    )
+                                                });
                                                 let bg = match (changed, n) {
                                                     (true, Some(_)) => Some(ca(tint, 0.16)),
                                                     // Line with no counterpart: empty, muted like strikethrough.
@@ -298,6 +350,8 @@ impl Render for DiffView {
                                                     .h(px(line_h))
                                                     .flex()
                                                     .overflow_hidden()
+                                                    .relative()
+                                                    .children(heard)
                                                     .when_some(bg, |d, bg| d.bg(bg))
                                                     .child(
                                                         div()

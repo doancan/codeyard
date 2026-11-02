@@ -1333,11 +1333,21 @@ mod tests {
         let src = d.join("big.bin");
         std::fs::write(&src, vec![1u8; 6_000_000]).unwrap();
         let cancel = AtomicBool::new(false);
-        // The "server" reads a little and hangs up cleanly: the write side sees a broken pipe.
-        let err = upload(&script("head -c 100 > /dev/null"), &src, "/srv", &cancel, |_| {}).unwrap_err().to_string();
+        // The "server" reports its staging file as the real one does, reads a little and hangs up cleanly: the write side
+        // sees a broken pipe.
+        let err =
+            upload(&script("printf '/srv/.codeyard-upload-abcd1234\\0'; head -c 100 > /dev/null"), &src, "/srv", &cancel, |_| {}).unwrap_err().to_string();
         assert!(err.contains("connection was lost"), "{err}");
         // The server dies with an error message: that message wins over the pipe error.
-        let err = upload(&script("head -c 100 > /dev/null; echo 'Disk quota exceeded' >&2; exit 1"), &src, "/srv", &cancel, |_| {}).unwrap_err().to_string();
+        let err = upload(
+            &script("printf '/srv/.codeyard-upload-abcd1234\\0'; head -c 100 > /dev/null; echo 'Disk quota exceeded' >&2; exit 1"),
+            &src,
+            "/srv",
+            &cancel,
+            |_| {},
+        )
+        .unwrap_err()
+        .to_string();
         assert!(err.contains("Disk quota exceeded"), "{err}");
         // Download: the server sends less than nothing and fails.
         let err = download(&script("echo 'cat: /x: Permission denied' >&2; exit 1"), "/x", false, &d.join("o"), &cancel, |_| {}).unwrap_err().to_string();

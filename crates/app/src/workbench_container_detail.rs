@@ -95,26 +95,36 @@ impl Workbench {
             .flex_wrap()
             .items_center()
             .gap(px(theme::SPACE[2]))
-            .child(button("detail-files", crate::i18n::t("Open files"), p).flex_none().on_click(cx.listener(move |this, _, window, cx| {
-                if let Some(context) = context.clone() {
-                    this.docker_container_picked(context, target.clone(), false, window, cx);
-                }
-            })))
-            .child(button("detail-terminal", crate::i18n::t("Terminal"), p).flex_none().on_click(cx.listener(move |this, _, window, cx| {
-                if this.refuse_if_dirty(cx) {
-                    return;
-                }
-                if let Some(context) = terminal_context.clone() {
-                    if let Ok(alias) = context.container_alias(&terminal_target.id) {
-                        if matches!(&this.remote.conn, Conn::Connected { alias: current } if current == &alias) {
-                            this.open_terminal(window, cx);
-                            return;
-                        }
-                        this.remote.docker.monitor.browser.terminal_target = Some(alias);
+            .child(crate::a11y_controls::click_on(
+                button("detail-files", crate::i18n::t("Open files"), p).flex_none(),
+                crate::a11y_controls::Control::button(crate::i18n::t("Containers"), "detail-files", crate::i18n::t("Open files").to_string(), |_, _| {}),
+                cx,
+                move |this, _, window, cx| {
+                    if let Some(context) = context.clone() {
+                        this.docker_container_picked(context, target.clone(), false, window, cx);
                     }
-                    this.docker_container_picked(context, terminal_target.clone(), false, window, cx);
-                }
-            })))
+                },
+            ))
+            .child(crate::a11y_controls::click_on(
+                button("detail-terminal", crate::i18n::t("Terminal"), p).flex_none(),
+                crate::a11y_controls::Control::button(crate::i18n::t("Containers"), "detail-terminal", crate::i18n::t("Terminal").to_string(), |_, _| {}),
+                cx,
+                move |this, _, window, cx| {
+                    if this.refuse_if_dirty(cx) {
+                        return;
+                    }
+                    if let Some(context) = terminal_context.clone() {
+                        if let Ok(alias) = context.container_alias(&terminal_target.id) {
+                            if matches!(&this.remote.conn, Conn::Connected { alias: current } if current == &alias) {
+                                this.open_terminal(window, cx);
+                                return;
+                            }
+                            this.remote.docker.monitor.browser.terminal_target = Some(alias);
+                        }
+                        this.docker_container_picked(context, terminal_target.clone(), false, window, cx);
+                    }
+                },
+            ))
             .into_any_element()
     }
 
@@ -136,12 +146,15 @@ impl Workbench {
             [(crate::i18n::t("Resources"), Tab::Resources), (crate::i18n::t("Ports and storage"), Tab::Details), (crate::i18n::t("Logs"), Tab::Logs)]
         {
             let id = container.id.clone();
-            tabs = tabs.child(
+            tabs = tabs.child(crate::a11y_controls::click_on(
                 button(SharedString::from(format!("container-detail-{label}")), label, p)
                     .bg(c(p.bg))
-                    .when(b.tab == tab, |s| s.bg(c(p.surface_active)).text_color(c(p.accent)))
-                    .on_click(cx.listener(move |this, _, _, cx| this.select_container(id.clone(), tab, cx))),
-            );
+                    .when(b.tab == tab, |s| s.bg(c(p.surface_active)).text_color(c(p.accent))),
+                crate::a11y_controls::Control::button(crate::i18n::t("Containers"), format!("container-detail-{label}"), label.to_string(), |_, _| {})
+                    .selected(b.tab == tab),
+                cx,
+                move |this, _, _, cx| this.select_container(id.clone(), tab, cx),
+            ));
         }
         view = view.child(tabs);
         let mut body = div()
@@ -202,14 +215,20 @@ impl Workbench {
                     );
                 let mut toolbar = div().flex().flex_wrap().items_center().gap(px(theme::SPACE[3]));
                 for (label, minutes) in [(crate::i18n::t("1 minute"), 1), (crate::i18n::t("5 minutes"), 5), (crate::i18n::t("15 minutes"), 15)] {
-                    toolbar = toolbar.child(
-                        button(SharedString::from(format!("container-period-{minutes}")), label, p)
-                            .when(b.minutes == minutes, |s| s.bg(c(p.surface_active)))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.remote.docker.monitor.browser.minutes = minutes;
-                                cx.notify();
-                            })),
-                    );
+                    toolbar = toolbar.child(crate::a11y_controls::click_on(
+                        button(SharedString::from(format!("container-period-{minutes}")), label, p).when(b.minutes == minutes, |s| s.bg(c(p.surface_active))),
+                        crate::a11y_controls::Control::button(
+                            crate::i18n::t("Containers"),
+                            format!("container-period-{minutes}"),
+                            label.to_string(),
+                            |_, _| {},
+                        ),
+                        cx,
+                        move |this, _, _, cx| {
+                            this.remote.docker.monitor.browser.minutes = minutes;
+                            cx.notify();
+                        },
+                    ));
                 }
                 body = body.child(div().w_full().flex().flex_wrap().items_center().gap(px(theme::SPACE[4])).child(info).child(toolbar));
                 let samples = m.history.get(&container.id);
@@ -287,10 +306,20 @@ impl Workbench {
                         .justify_between()
                         .gap(px(theme::SPACE[3]))
                         .child(section(crate::i18n::t("Container identity"), p))
-                        .child(button("inspect-refresh", crate::i18n::t("Refresh details"), p).on_click(cx.listener(move |this, _, _, cx| {
-                            this.remote.docker.monitor.browser.detail = None;
-                            this.select_container(id.clone(), Tab::Details, cx);
-                        }))),
+                        .child(crate::a11y_controls::click_on(
+                            button("inspect-refresh", crate::i18n::t("Refresh details"), p),
+                            crate::a11y_controls::Control::button(
+                                crate::i18n::t("Containers"),
+                                "inspect-refresh",
+                                crate::i18n::t("Refresh details").to_string(),
+                                |_, _| {},
+                            ),
+                            cx,
+                            move |this, _, _, cx| {
+                                this.remote.docker.monitor.browser.detail = None;
+                                this.select_container(id.clone(), Tab::Details, cx);
+                            },
+                        )),
                 );
                 let mut identity = inspection_card("container-identity", p)
                     .flex_row()
@@ -572,11 +601,15 @@ fn copy_row(id: impl Into<gpui::ElementId>, label: &'static str, value: &str, p:
                         .child(value.to_string()),
                 ),
         )
-        .child(button(id, crate::i18n::t("Copy"), p).flex_none().debug_selector(move || format!("container-copy-{label}")).on_click(cx.listener(
+        .child(crate::a11y_controls::click_on(
+            button(id, crate::i18n::t("Copy"), p).flex_none().debug_selector(move || format!("container-copy-{label}")),
+            crate::a11y_controls::Control::button(crate::i18n::t("Containers"), format!("copy:{label}"), crate::i18n::t("Copy").to_string(), |_, _| {})
+                .description(format!("{label}: {value}")),
+            cx,
             move |_, _, _, cx| {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(copy.clone()));
             },
-        )))
+        ))
 }
 
 /// Keep exposed-only ports and every IPv4/IPv6 binding; never invent a local URL.

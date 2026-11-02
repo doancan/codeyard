@@ -5,7 +5,7 @@
 use gpui::{AnyElement, Context, MouseButton, SharedString, div, prelude::*, px};
 use host::forward::LocalBind;
 
-use super::super::{MenuCmd, MenuTarget, Workbench, center};
+use super::super::{MenuCmd, MenuTarget, Workbench, a11y, center};
 use crate::menu::MenuItem;
 use crate::port_forwards::{ForwardSet, ForwardState, Origin, Protocol, failure_text};
 use crate::ports::ListeningPort;
@@ -108,7 +108,13 @@ const W_ACTIONS: f32 = 104.;
 
 impl Workbench {
     /// Right-click or "…" on a row.
-    fn open_port_menu(&mut self, row: &PortRow, position: gpui::Point<gpui::Pixels>, window: &mut gpui::Window, cx: &mut Context<Self>) {
+    pub(in crate::workbench) fn open_port_menu(
+        &mut self,
+        row: &PortRow,
+        position: gpui::Point<gpui::Pixels>,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
         let active = row.state == RowState::Active;
         if row.state == RowState::Listening {
             let items = vec![MenuItem::new(crate::i18n::t("Forward Port"))];
@@ -170,34 +176,56 @@ impl Workbench {
         let menu_row = row.clone();
         let mut actions = div().w(px(W_ACTIONS)).flex_none().flex().items_center().justify_end().gap(px(theme::SPACE[1]));
         if let Some(url) = row.url() {
-            actions = actions.child(
+            actions = actions.child(a11y::row_button(
                 ui::icon_button(("port-open", ix), "external-link", crate::i18n::t("Open in Browser"), p)
                     .on_click(cx.listener(move |_, _, _, cx| cx.open_url(&url))),
-            );
+                a11y::RowFrame::Port,
+                ix,
+                1,
+                cx,
+            ));
         }
         if row.state == RowState::Listening {
-            actions = actions.child(
+            actions = actions.child(a11y::row_button(
                 ui::icon_button(("port-fwd", ix), "plug", crate::i18n::t("Forward Port"), p)
                     .on_click(cx.listener(move |this, _, _, cx| this.forward_port(port, cx))),
-            );
+                a11y::RowFrame::Port,
+                ix,
+                4,
+                cx,
+            ));
         } else {
             if let Some(a) = row.address.clone().filter(|_| row.state == RowState::Active) {
-                actions = actions.child(
+                actions = actions.child(a11y::row_button(
                     ui::icon_button(("port-copy", ix), "copy", crate::i18n::t("Copy Address"), p)
                         .on_click(cx.listener(move |_, _, _, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(a.clone())))),
-                );
+                    a11y::RowFrame::Port,
+                    ix,
+                    2,
+                    cx,
+                ));
             }
             actions = actions
-                .child(
+                .child(a11y::row_button(
                     ui::icon_button(("port-stop", ix), "x", crate::i18n::t("Stop Forwarding"), p)
                         .on_click(cx.listener(move |this, _, _, cx| this.stop_forward(port, cx))),
-                )
-                .child(ui::icon_button(("port-more", ix), "ellipsis", crate::i18n::t("More Actions…"), p).on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, ev: &gpui::MouseDownEvent, window, cx| {
-                        cx.stop_propagation();
-                        this.open_port_menu(&menu_row, ev.position, window, cx);
-                    }),
+                    a11y::RowFrame::Port,
+                    ix,
+                    3,
+                    cx,
+                ))
+                .child(a11y::row_button(
+                    ui::icon_button(("port-more", ix), "ellipsis", crate::i18n::t("More Actions…"), p).on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, ev: &gpui::MouseDownEvent, window, cx| {
+                            cx.stop_propagation();
+                            this.open_port_menu(&menu_row, ev.position, window, cx);
+                        }),
+                    ),
+                    a11y::RowFrame::Port,
+                    ix,
+                    a11y::MENU_BUTTON,
+                    cx,
                 ));
         }
         div()
@@ -282,11 +310,18 @@ impl Workbench {
             let list = gpui::uniform_list(
                 "port-rows",
                 rows.len(),
-                cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
-                    range.filter_map(|ix| Some(this.port_row(ix, rows.get(ix)?, &p, cx))).collect()
+                cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
+                    range
+                        .filter_map(|ix| {
+                            let row = this.port_row(ix, rows.get(ix)?, &p, cx);
+                            Some(this.nav_row(a11y::RowFrame::Port, ix, row, window, cx))
+                        })
+                        .collect()
                 }),
             )
+            .track_scroll(self.row_scroll(a11y::RowFrame::Port))
             .size_full();
+            let list = self.row_list(a11y::RowFrame::Port, list, cx);
             div().flex_1().min_h_0().child(list).into_any_element()
         };
         div()

@@ -11,8 +11,9 @@ impl EditorView {
     }
 
     /// Save. With a language server, first the `editor.codeActionsOnSave` actions (one request per
-    /// kind, syncing the document in between), then `editor.formatOnSave` runs. Each step is
-    /// skipped if it does not answer within 2 s: the file is saved in every case.
+    /// kind, syncing the document in between), then `editor.formatOnSave` runs: with the extension chosen to format
+    /// the file (`editor.formatters`), else with the language server. Each step is skipped if it does not answer in
+    /// time (2 s for a server, the provider deadline for an extension): the file is saved in every case.
     pub fn save_now(&mut self, cx: &mut Context<Self>) {
         // The watcher can raise the banner an instant before a habitual Cmd+S lands; only a press after the user had time to read it overwrites.
         if self.conflict && self.conflict_at.is_some_and(|at| at.elapsed() < CONFLICT_GRACE) {
@@ -27,7 +28,8 @@ impl EditorView {
                 self.scoped(|f| f.format_on_save, s.format_on_save),
             )
         };
-        if self.lsp.is_none() || (kinds.is_empty() && !format_on_save) {
+        let ext_format = self.ext.save_formatter.clone().filter(|_| format_on_save);
+        if (self.lsp.is_none() && ext_format.is_none()) || (kinds.is_empty() && !format_on_save) {
             return self.write_to_disk(force, cx);
         }
         cx.spawn(async move |this, cx| {
@@ -48,7 +50,18 @@ impl EditorView {
                 })
                 .ok();
             }
-            if format_on_save {
+            let asked = match &ext_format {
+                Some(f) => this.update(cx, |e, _| e.format_job()).ok().and_then(|job| {
+                    let version = job.version;
+                    f(job, cx).map(|answer| (version, answer))
+                }),
+                None => None,
+            };
+            if let Some((version, answer)) = asked {
+                if let Ok(edits) = answer.await {
+                    this.update(cx, |e, cx| e.apply_lsp_edits_if_unchanged(version, &edits, cx)).ok();
+                }
+            } else if format_on_save {
                 let format = this.update(cx, |e, _| e.format_request().map(|(c, p)| (c, p, e.lsp_buffer_version()))).ok().flatten();
                 if let Some((client, params, version)) = format {
                     let result = cx
@@ -103,7 +116,7 @@ impl EditorView {
         (0..self.buffer.len_lines()).map(|l| self.buffer.line(l)).collect()
     }
 
-    #[cfg(test)]
+    /// The whole text (tests; extensions reading an open document).
     pub fn text(&self) -> String {
         String::from_utf8(self.buffer.to_bytes()).unwrap_or_default()
     }
@@ -137,10 +150,39 @@ impl EditorView {
         self.buffer.selected_texts()
     }
 
-    /// QA: first and last buffer line visible in the last paint.
-    #[cfg(test)]
-    pub fn qa_visible_lines(&self) -> Option<(usize, usize)> {
+    /// For the accessibility tree: each line segment drawn in the last paint (a wrapped line is several), with where
+    /// each character was drawn (right-to-left text where the platform placed it), in window coordinates. A selected
+    /// line end is drawn 0.4 lines wide, right of the text.
+    pub fn a11y_layout(&self) -> Vec<crate::painted::TextLine> {
+        self.visible
+            .iter()
+            .map(|v| {
+                let cells = crate::painted::char_cells(&v.text, &v.layout).into_iter().map(|(l, r)| (v.text_left + l, v.text_left + r)).collect();
+                crate::painted::TextLine {
+                    start: v.start,
+                    cells,
+                    end: v.text_left + v.layout.width,
+                    top: v.bounds.top(),
+                    bottom: v.bounds.bottom(),
+                    line_break: v.bounds.size.height * 0.4,
+                }
+            })
+            .collect()
+    }
+
+    /// First and last buffer line visible in the last paint.
+    pub fn visible_lines(&self) -> Option<(usize, usize)> {
         Some((self.visible.first()?.line, self.visible.last()?.line))
+    }
+
+    /// Accessibility scroll action: move the view `pages` screens down (up when negative), the caret stays.
+    pub fn a11y_scroll(&mut self, pages: isize, cx: &mut Context<Self>) {
+        let Some((first, last)) = self.visible_lines() else { return };
+        let page = (last - first).max(1) as isize;
+        let max = self.buffer.len_lines().saturating_sub(1) as isize;
+        let row = self.row_of_line((first as isize + pages * page).clamp(0, max) as usize);
+        self.scroll.scroll_to_item_strict(row, ScrollStrategy::Top);
+        cx.notify();
     }
 
     #[cfg(test)]
@@ -152,6 +194,11 @@ impl EditorView {
 
     pub fn version(&self) -> u64 {
         self.buffer.version()
+    }
+
+    /// The document's exact state: buffer epoch, undo version and a hash of its text.
+    pub fn doc_identity(&self) -> super::DocIdentity {
+        super::DocIdentity { epoch: self.epoch, version: self.buffer.version(), hash: proto::content_hash(self.buffer_text().as_bytes()) }
     }
 
     /// File was opened with mixed line endings (saving normalizes to a single style).
@@ -194,6 +241,16 @@ impl EditorView {
         view
     }
 
+    /// Runs `f` in the `slot` view (its cursors, find bar and popups) without changing the input home.
+    #[cfg_attr(not(any(test, target_os = "macos", windows)), allow(dead_code))]
+    pub fn in_slot<R>(&mut self, slot: usize, f: impl FnOnce(&mut Self) -> R) -> R {
+        let home = self.slot;
+        self.enter(slot);
+        let r = f(self);
+        self.enter(home);
+        r
+    }
+
     pub fn set_view_for_slot(&mut self, slot: usize, view: state::View) {
         let home = self.slot;
         self.enter(slot);
@@ -225,7 +282,7 @@ impl EditorView {
         let n = self.buffer.len_chars();
         self.buffer.replace(0..n, &text, false);
         self.buffer.set_cursor(0, false);
-        self.sync_syntax();
+        self.sync_syntax(cx);
         if base_hash != self.disk_hash {
             self.flag_conflict();
         }
@@ -251,6 +308,12 @@ impl EditorView {
 
     pub fn uses_host(&self, host: &Arc<dyn Host>) -> bool {
         std::ptr::addr_eq(Arc::as_ptr(&self.host), Arc::as_ptr(host))
+    }
+
+    /// Whether `host` is the same machine as this file's (this computer, or the same SSH host), even through another
+    /// connection (another window's).
+    pub fn on_same_machine(&self, host: &Arc<dyn Host>) -> bool {
+        self.uses_host(host) || (self.host.is_remote() == host.is_remote() && (!host.is_remote() || self.host.label() == host.label()))
     }
 
     /// The watcher reported that the file changed externally.
@@ -303,6 +366,7 @@ impl EditorView {
         self.saved_version = buffer.version();
         self.saved_line_ending = buffer.line_ending();
         self.buffer = buffer;
+        self.epoch = super::next_epoch();
         self.syntax = syntax;
         self.encoding = encoding;
         self.rules = rules;
@@ -382,7 +446,7 @@ impl EditorView {
             self.buffer.ensure_final_newline();
         }
         if trim || final_nl {
-            self.sync_syntax();
+            self.sync_syntax(cx);
         }
         let data = match self.encoded() {
             Ok(d) => d,
@@ -402,7 +466,8 @@ impl EditorView {
         self.error = None;
         let version = self.buffer.version();
         let line_ending = self.buffer.line_ending();
-        let expect = (!force).then_some(self.disk_hash);
+        // A file known to be deleted is saved back as new; otherwise the agent refuses to recreate a vanished file.
+        let expect = (!force && !self.deleted_on_disk).then_some(self.disk_hash);
         let (known, fallback) = (self.disk_hash, cx.global::<Settings>().fallback_encoding);
         let host = self.host.clone();
         let path = self.path.clone();
@@ -481,6 +546,7 @@ impl EditorView {
                         this.saved_version = buffer.version();
                         this.saved_line_ending = buffer.line_ending();
                         this.buffer = buffer;
+                        this.epoch = super::next_epoch();
                         this.syntax = syntax;
                         this.encoding = encoding;
                         this.rules = rules;

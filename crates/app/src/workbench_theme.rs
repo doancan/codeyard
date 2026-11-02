@@ -156,7 +156,7 @@ impl Workbench {
             let detail = match &t.source {
                 Source::Builtin => kind.to_string(),
                 Source::User(_) => crate::i18n::tf("{} · user", &[&kind]),
-                Source::VsCode(_) => crate::i18n::tf("{} · VS Code import", &[&kind]),
+                Source::VsCode(_) => crate::i18n::tf("{} · imported", &[&kind]),
                 Source::Extension { ext, .. } => crate::i18n::tf("{} · extension {}", &[&kind, ext]),
             };
             items.push(PickItem { label: t.name.clone().into(), detail: Some(detail.into()), keys: None });

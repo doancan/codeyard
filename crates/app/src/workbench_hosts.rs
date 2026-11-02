@@ -61,17 +61,9 @@ impl Workbench {
         match result {
             Ok(h) => {
                 let alias = h.alias.clone();
-                let detail =
-                    crate::i18n::t("Saved to ~/.ssh/config. Connecting uses your SSH keys and ssh-agent; a password prompt appears in this window if needed.");
-                let answer = window.prompt(
-                    gpui::PromptLevel::Info,
-                    &crate::i18n::tf("Added “{}”", &[&alias]),
-                    Some(detail),
-                    &[crate::i18n::t("Connect"), crate::i18n::t("Not Now")],
-                    cx,
-                );
+                let answer = crate::questions::host_added(&alias).ask(window, cx);
                 cx.spawn_in(window, async move |this, cx| {
-                    if answer.await == Ok(0) {
+                    if answer.await == Some(0) {
                         this.update_in(cx, |this, window, cx| this.connect(alias, window, cx)).ok();
                     }
                 })
@@ -163,15 +155,9 @@ impl Workbench {
                     cx.notify();
                     return;
                 }
-                let answer = window.prompt(
-                    gpui::PromptLevel::Warning,
-                    &crate::i18n::tf("Remove “{}” from ~/.ssh/config?", &[&alias]),
-                    Some(crate::i18n::t("Only this host's entry is removed. The previous file is kept as config.codeyard-bak.")),
-                    &[crate::i18n::t("Remove"), crate::i18n::t("Cancel")],
-                    cx,
-                );
+                let answer = crate::questions::remove_host(&alias).ask(window, cx);
                 cx.spawn_in(window, async move |this, cx| {
-                    if answer.await != Ok(0) {
+                    if answer.await != Some(0) {
                         return;
                     }
                     this.update(cx, |this, cx| {
@@ -292,18 +278,9 @@ impl Workbench {
     }
 
     fn confirm_key_setup(&mut self, alias: String, window: &mut Window, cx: &mut Context<Self>) {
-        let detail = crate::i18n::t(
-            "Your public key (~/.ssh/id_ed25519.pub; created if you have none) is added to the server's authorized_keys, so later connections need no password. You may be asked for the server's password once.",
-        );
-        let answer = window.prompt(
-            gpui::PromptLevel::Info,
-            &crate::i18n::tf("Set up key login for “{}”?", &[&alias]),
-            Some(detail),
-            &[crate::i18n::t("Set Up"), crate::i18n::t("Cancel")],
-            cx,
-        );
+        let answer = crate::questions::key_setup(&alias).ask(window, cx);
         cx.spawn(async move |this, cx| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 this.update(cx, |this, cx| {
                     let dir = dirs::home_dir().map(|h| h.join(".ssh"));
                     this.run_key_setup(alias, dir, None, cx)

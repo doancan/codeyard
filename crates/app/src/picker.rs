@@ -98,6 +98,20 @@ pub struct PickerA11y {
     pub selected: Option<usize>,
     /// Shown instead of rows when there are none.
     pub empty: Option<String>,
+    /// Where the picker, its query box, its list and each of the first rows were painted (physical pixels).
+    pub bounds: Option<accesskit::Rect>,
+    pub input: Option<accesskit::Rect>,
+    pub list: Option<accesskit::Rect>,
+    pub frames: Vec<Option<accesskit::Rect>>,
+}
+
+/// A part of the picker whose painted bounds the accessibility tree reports.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum PickFrame {
+    Picker,
+    Input,
+    List,
+    Row(usize),
 }
 
 struct Row {
@@ -127,10 +141,14 @@ pub struct Picker {
     matcher: Matcher,
     /// Number of recently opened files at the head of the file list (ranked first).
     recent: usize,
+    /// With several folders open: the first folder's name, so its files are found as `folder/path` like the others'.
+    first_folder: Option<String>,
     /// ":line(:column)" in the query (jump there when a file is picked).
     goto: Option<(usize, Option<usize>)>,
     focus_handle: FocusHandle,
     scroll: UniformListScrollHandle,
+    /// Where its parts were painted in the last frame (accessibility).
+    painted: crate::painted::WindowBounds<PickFrame>,
 }
 
 impl EventEmitter<PickerEvent> for Picker {}
@@ -159,9 +177,11 @@ impl Picker {
             selected: 0,
             matcher: Matcher::new(Config::DEFAULT.match_paths()),
             recent: 0,
+            first_folder: None,
             goto: None,
             focus_handle: cx.focus_handle(),
             scroll: UniformListScrollHandle::new(),
+            painted: Default::default(),
         };
         p.initial_selected = !p.query.is_empty() && p.sources.iter().any(|s| matches!(s, Source::Input { .. }));
         p.refilter();
@@ -191,7 +211,16 @@ impl Picker {
     /// File list arrived (or was refreshed).
     pub fn set_paths(&mut self, source: usize, new_paths: Vec<String>, was_truncated: bool, cx: &mut Context<Self>) {
         if let Some(Source::Paths { paths, folded, loading, truncated, .. }) = self.sources.get_mut(source) {
-            *folded = Arc::new(new_paths.iter().map(|p| p.chars().map(fuzzy::fold).collect()).collect());
+            // An extra folder's files are `folder › path`; they are searched as `folder / path`, so `folder/path` (as
+            // typed) finds them. The separator keeps its length, so the highlighted positions stay where they are.
+            // The first folder's files are searched as `first / path` when there are several folders.
+            let first = self.first_folder.as_ref().map(|f| format!("{f} / "));
+            let searched = |p: &String| match (&first, p.contains(crate::workbench::ROOT_SEP)) {
+                (_, true) => p.replacen(crate::workbench::ROOT_SEP, " / ", 1),
+                (Some(first), false) => format!("{first}{p}"),
+                (None, false) => p.clone(),
+            };
+            *folded = Arc::new(new_paths.iter().map(|p| searched(p).chars().map(fuzzy::fold).collect()).collect());
             *paths = Arc::new(new_paths);
             *loading = false;
             *truncated = was_truncated;
@@ -245,6 +274,11 @@ impl Picker {
         self.recent = n;
     }
 
+    /// Several folders are open and `name` is the first one's (call before `set_paths`).
+    pub fn set_first_folder(&mut self, name: Option<String>) {
+        self.first_folder = name;
+    }
+
     /// ":line(:column)" in the query.
     pub fn goto(&self) -> Option<(usize, Option<usize>)> {
         self.goto
@@ -265,12 +299,22 @@ impl Picker {
         &self.query
     }
 
-    /// For the accessibility tree (a11y.rs): at most `limit` rows.
-    pub fn a11y_view(&self, limit: usize) -> PickerA11y {
+    /// The query as the screen shows it: dots for a secret.
+    pub fn shown_query(&self) -> String {
+        if self.masked() { "•".repeat(self.query.chars().count()) } else { self.query.clone() }
+    }
+
+    /// For the accessibility tree (a11y.rs): at most `limit` rows, with where they were painted in `window`.
+    pub fn a11y_view(&self, limit: usize, window: &Window) -> PickerA11y {
+        let frame = |k: PickFrame| self.painted.physical(&k, window);
         PickerA11y {
+            bounds: frame(PickFrame::Picker),
+            input: frame(PickFrame::Input),
+            list: frame(PickFrame::List),
+            frames: (0..self.rows.len().min(limit)).map(|i| frame(PickFrame::Row(i))).collect(),
             placeholder: self.placeholder.to_string(),
             message: self.message.as_ref().map(|m| m.to_string()),
-            query: if self.masked() { "•".repeat(self.query.chars().count()) } else { self.query.clone() },
+            query: self.shown_query(),
             rows: self.rows.iter().take(limit).map(|r| (r.label.to_string(), r.detail.as_ref().map(|d| d.to_string()))).collect(),
             rows_total: self.rows.len(),
             selected: (!self.rows.is_empty()).then_some(self.selected),
@@ -373,8 +417,9 @@ impl Picker {
                     .map(|(i, hits)| {
                         let path = &paths[i];
                         let (dir, name) = path.rsplit_once('/').unwrap_or(("", path));
-                        // Highlight spans the whole path; the label is only the file name.
-                        let name_start = path.chars().count() - name.chars().count();
+                        // Highlight spans the whole searched text (with the first folder's name in front, if added);
+                        // the label is only the file name.
+                        let name_start = folded[i].chars().count() - name.chars().count();
                         Row {
                             pick: Some(Pick::Item { source: si, index: i }),
                             label: name.to_string().into(),
@@ -657,9 +702,10 @@ impl EntityInputHandler for Picker {
 }
 
 impl Render for Picker {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
         let entity = cx.entity();
+        self.painted.begin(window);
         let focus = self.focus_handle.clone();
         let rows = self.rows.len().min(MAX_ROWS);
         let selected = self.selected;
@@ -677,6 +723,8 @@ impl Render for Picker {
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::cut))
+            .relative()
+            .child(self.painted.probe(PickFrame::Picker))
             .w(px(layout::PALETTE_W))
             .flex()
             .flex_col()
@@ -707,7 +755,7 @@ impl Render for Picker {
                             // Cursor at the start, placeholder dimmed.
                             d.child(caret).child(div().text_color(c(p.text_muted)).child(self.placeholder.clone()))
                         } else {
-                            let shown = if self.masked() { "•".repeat(self.query.chars().count()) } else { self.query.clone() };
+                            let shown = self.shown_query();
                             if self.initial_selected {
                                 d.text_color(c(p.text)).child(div().bg(c(p.selection)).child(shown)).child(caret)
                             } else {
@@ -715,6 +763,7 @@ impl Render for Picker {
                             }
                         }
                     })
+                    .child(self.painted.probe(PickFrame::Input))
                     .child(
                         canvas(
                             |_, _, _| {},
@@ -737,7 +786,7 @@ impl Render for Picker {
                     .child(self.empty_message())
                     .into_any_element()
             } else {
-                uniform_list(
+                let list = uniform_list(
                     "picker-rows",
                     self.rows.len(),
                     cx.processor(move |this, range: Range<usize>, _window, cx| {
@@ -749,6 +798,8 @@ impl Render for Picker {
                                 });
                                 div()
                                     .id(ix)
+                                    .relative()
+                                    .child(this.painted.probe(PickFrame::Row(ix)))
                                     .w_full()
                                     .h(px(ROW_H))
                                     .flex()
@@ -807,8 +858,8 @@ impl Render for Picker {
                     }),
                 )
                 .track_scroll(self.scroll.clone())
-                .h(px(rows as f32 * ROW_H))
-                .into_any_element()
+                .h(px(rows as f32 * ROW_H));
+                div().relative().child(list).child(self.painted.probe(PickFrame::List)).into_any_element()
             })
             .when_some(footer, |d, f| d.child(div().px(px(theme::SPACE[4])).text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(f)))
     }

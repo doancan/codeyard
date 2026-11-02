@@ -8,7 +8,7 @@ use gpui::{Entity, TestAppContext, VisualTestContext};
 use crate::ui::ActiveTheme;
 use crate::workbench::Workbench;
 
-fn config_dir(name: &str) -> PathBuf {
+pub(crate) fn config_dir(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("codeyard-extview-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
@@ -22,17 +22,17 @@ fn manifest(id: &str, version: &str, rest: &str) -> String {
 const THEME: &str = r##"{"name":"x","colors":{"editor.background":"#101418","editor.foreground":"#d0d6dc"}}"##;
 
 /// A theme extension's files: the theme is `ext:<id>/t`.
-fn theme_files(id: &str, version: &str) -> Vec<(String, String)> {
+pub(crate) fn theme_files(id: &str, version: &str) -> Vec<(String, String)> {
     vec![("codeyard-extension.toml".into(), manifest(id, version, "[[themes]]\nlabel = \"Night\"\npath = \"t.json\"\n")), ("t.json".into(), THEME.into())]
 }
 
-fn install(cfg: &Path, files: &[(String, String)]) -> ext_core::Installed {
+pub(crate) fn install(cfg: &Path, files: &[(String, String)]) -> ext_core::Installed {
     let entries = files.iter().map(|(p, t)| ext_pkg::Entry { path: p.clone(), data: t.as_bytes().to_vec(), executable: false }).collect();
     let (bytes, _) = ext_pkg::write(entries).expect("test package is valid");
     crate::ext::store(cfg).install(&bytes, ext_core::Source::File { path: "/downloads/test.cyx".into() }).expect("installs")
 }
 
-fn setup<'a>(cx: &'a mut TestAppContext, cfg: &Path) -> (Entity<Workbench>, &'a mut VisualTestContext) {
+pub(crate) fn setup<'a>(cx: &'a mut TestAppContext, cfg: &Path) -> (Entity<Workbench>, &'a mut VisualTestContext) {
     cx.update(|cx| {
         crate::bind_keys(cx);
         cx.set_global(ActiveTheme(theme::DARK));
@@ -138,7 +138,7 @@ fn uninstall_asks_first_and_removes_it(cx: &mut TestAppContext) {
     wb.update_in(cx, |wb, window, cx| wb.uninstall_extension_for_test("you.night", window, cx));
     cx.run_until_parked();
     assert!(cx.has_pending_prompt(), "uninstall is confirmed first");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert_eq!(listed(&wb, cx).len(), 1, "Cancel keeps it");
     wb.update_in(cx, |wb, window, cx| wb.uninstall_extension_for_test("you.night", window, cx));
@@ -248,7 +248,7 @@ fn permission_lines_are_the_consent_sheet_words() {
     let sets = [
         "read = [\"vercel.json\"]\nnet = [\"api.vercel.com\"]",
         "read = [\"**/*.rs\", \".env\"]\nwrite = [\"src/*.rs\"]\nnet = [\"*.github.io\"]\nwhy = \"x\"",
-        "write = [\"**\"]\nauth = [\"github\", \"acme\"]\nsecrets = true\nwhy = \"x\"",
+        "write = [\"**\"]\nauth = [\"github\", \"acme\"]\nsecrets = true\nwhy = \"x\"\n[[oauth]]\nid = \"acme\"\nname = \"Acme\"\nauthorize-url = \"https://acme.example.com/a\"\ntoken-url = \"https://acme.example.com/t\"\nclient-id = \"c\"\nhosts = [\"api.acme.example.com\"]",
         "run = [\"vercel\"]\nclipboard = \"read-write\"\nterminal = true\ncommands = [\"core:workbench.toggleZenMode\"]\nwhy = \"x\"",
         "clipboard = \"read\"",
         "clipboard = \"write\"",
@@ -276,7 +276,10 @@ fn escape_cancels_the_consent_sheet(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn a_package_with_code_is_refused_with_the_reason(cx: &mut TestAppContext) {
+fn a_package_with_code_shows_the_consent_sheet(cx: &mut TestAppContext) {
+    if !crate::ext_runtime::code_runs_for_test() {
+        return;
+    }
     let cfg = config_dir("code");
     let src = cfg.join("code");
     write_folder(
@@ -286,12 +289,11 @@ fn a_package_with_code_is_refused_with_the_reason(cx: &mut TestAppContext) {
             ("src/main.ts".into(), "export {}".into()),
         ],
     );
+    std::fs::write(src.join(ext_pkg::COMPONENT), ext_pkg::testing::COMPONENT).unwrap();
     let (wb, cx) = setup(cx, &cfg);
     wb.update_in(cx, |wb, window, cx| wb.review_extension_for_test(&src.to_string_lossy(), false, window, cx));
     cx.run_until_parked();
-    let (error, text) = wb.read_with(cx, |wb, _| wb.notice_for_test()).unwrap();
-    assert!(error && text.contains("you.code contains code"), "{text}");
-    assert!(wb.update_in(cx, |wb, window, _| wb.consent_for_test(window)).is_none());
+    assert!(wb.update_in(cx, |wb, window, _| wb.consent_for_test(window)).is_some(), "{:?}", wb.read_with(cx, |wb, _| wb.notice_for_test()));
 }
 
 #[gpui::test]

@@ -30,6 +30,11 @@ pub(super) enum OverlayKind {
         purpose: InputPurpose,
         context: Option<InputContext>,
     },
+    /// `window.quick-pick` of a code extension: its ticket completes with the chosen row.
+    ExtPick {
+        extension: String,
+        ticket: u64,
+    },
     /// Language server results: locations (references), symbols, code actions.
     Locations(Vec<(String, u32, u32)>),
     Symbols(Vec<(u32, u32)>),
@@ -37,6 +42,8 @@ pub(super) enum OverlayKind {
         actions: Vec<crate::lsp::CodeAction>,
         client: Arc<crate::lsp::Client>,
     },
+    /// Quick fixes from the language server and code extensions together.
+    QuickFixes(Vec<super::providers_glue::QuickFix>),
     /// Project switcher (⌃R), remove from recents, favorites.
     Projects(Vec<projects::SwitchChoice>),
     ForgetRecent(Vec<RecentWorkspace>),
@@ -51,6 +58,8 @@ pub(super) enum OverlayKind {
     DebugConfigs(Vec<crate::debug_config::LaunchConfig>),
     /// A `pickString` input of a starting configuration: its options.
     LaunchInput(Vec<String>),
+    /// A `pickString` input of a task: the value of each row.
+    TaskInput(Vec<String>),
     /// "Debug: Add Configuration…": the snippets offered.
     LaunchTemplates(Vec<serde_json::Value>),
     /// "Terminal: New Terminal with Profile…": what each row opens.
@@ -69,7 +78,10 @@ pub(super) enum OverlayKind {
     },
     Stashes {
         refs: Vec<String>,
+        /// Each stash's message (its position alone may shift) and the repository the list was read from.
+        msgs: Vec<String>,
         op: git_glue::StashOp,
+        repo: Option<crate::scm::Target>,
     },
     FileHistory {
         root: String,
@@ -108,6 +120,8 @@ pub(super) enum OverlayKind {
         host: Arc<dyn Host>,
         root: String,
         choices: Vec<git_glue::BranchChoice>,
+        /// The repository the list was read from: a pick confirmed after another one was selected does nothing.
+        repo: Option<crate::scm::Target>,
     },
     /// Merge / Delete / Rename Branch, Remove Remote: act on the selected name.
     BranchOp {
@@ -144,12 +158,12 @@ pub(super) enum OverlayKind {
         rebuild: bool,
     },
     /// "Remove SSH Host…" / "Test Connection…": host aliases.
-    /// "GitHub: Pull Requests…": open requests and actions for the selected request.
+    /// "Pull Requests: Show…": open requests (GitHub's and extensions') and actions for the selected request, with the
+    /// host and repository the list was read from.
     PullRequests {
         host: Arc<dyn Host>,
         root: String,
-        remote: pulls_glue::PullRemote,
-        pulls: Vec<crate::github::Pull>,
+        rows: Vec<pulls_glue::PullRow>,
     },
     PullRequestActions {
         host: Arc<dyn Host>,
@@ -157,6 +171,15 @@ pub(super) enum OverlayKind {
         remote: pulls_glue::PullRemote,
         pull: crate::github::Pull,
         choices: Vec<pulls_glue::PullAction>,
+    },
+    /// An extension's request: its actions, and its changed files.
+    ExtPullActions {
+        pull: Box<ext_pulls_glue::ExtPull>,
+        choices: Vec<ext_pulls_glue::ExtPullAction>,
+    },
+    ExtPullFiles {
+        pull: Box<ext_pulls_glue::ExtPull>,
+        files: Vec<ext_api::value::ChangedFile>,
     },
     /// Spell check: list of corrections for a misspelled word.
     SpellFix {
@@ -211,6 +234,11 @@ impl InputContext {
 }
 
 pub(super) enum InputPurpose {
+    /// `window.input-box` of a code extension: its ticket completes with the text.
+    ExtInput {
+        extension: String,
+        ticket: u64,
+    },
     Create {
         dir: String,
         is_dir: bool,
@@ -270,6 +298,8 @@ pub(super) enum InputPurpose {
     FunctionBreakpoint,
     /// Debugger: the answer to a `promptString` input of a starting configuration.
     LaunchInput,
+    /// The answer to a `promptString` input of a task.
+    TaskInput,
     /// New name of the active terminal.
     RenameTerminal {
         terminal: gpui::EntityId,
@@ -285,6 +315,17 @@ pub(super) enum InputPurpose {
     SaveTheme,
     /// "Clone Git Repository…": URL first, then the target folder.
     CloneUrl,
+    /// A comment on an extension's pull request.
+    PullComment(Box<ext_pulls_glue::ExtPull>),
+    /// `host client-id` of a self-managed instance of an extension's `[[oauth]]` provider (#184).
+    AddInstance {
+        extension: String,
+        provider: String,
+    },
+    /// A server an extension with `net-from-setting` may connect to (workbench_ext_hosts.rs).
+    AllowHost {
+        extension: String,
+    },
     /// Workspace switcher: connect to the typed host name (or `user@host`).
     ConnectHost,
     /// `user@host[:port] [as name]` -> ~/.ssh/config.
@@ -310,9 +351,11 @@ pub(super) enum InputPurpose {
     /// New branch / tag from a commit in the graph.
     CommitBranch {
         hash: String,
+        repo: Option<crate::scm::Target>,
     },
     CommitTag {
         hash: String,
+        repo: Option<crate::scm::Target>,
     },
     // --- git-refs ---
     /// Name of a new branch that starts at `start`.
@@ -330,7 +373,10 @@ pub(super) enum InputPurpose {
         original: String,
     },
     /// Description of a new stash.
-    StashNamed,
+    StashNamed {
+        repo: Option<crate::scm::Target>,
+    },
+
     /// Add the open folder to the saved projects under its name.
     SaveProject {
         path: String,
@@ -413,4 +459,6 @@ pub(super) enum MenuCmd {
     Remote(remote_glue::RemoteMenuCmd),
     /// The Run and Debug view: configuration selector, breakpoint rows (`MenuTarget::path` = "path\tline").
     Debug(debug::DebugMenuCmd),
+    /// An option of an extension view's select (`ViewsState::choosing`).
+    ExtViewChoice(usize),
 }

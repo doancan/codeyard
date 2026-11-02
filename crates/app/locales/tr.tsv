@@ -5,6 +5,7 @@
 # More terms: agent araç, adapter bağdaştırıcı, clipboard pano, scratch taslak, snippet kod parçacığı, passphrase anahtar parolası,
 # Host Sunucu, Port Bağlantı Noktası (the word port stays in compounds: SSH port yönlendirme), Debug Hata Ayıklama, Breakpoint Kesme Noktası.
 # Updates: update güncelleme, release/version sürüm, checksum sağlama toplamı, install kur (kurulum), restart yeniden başlat.
+# Extensions: registry kayıt, Market Pazar, publisher yayıncı, withdrawn (yanked) geri çekildi, revoked iptal edildi, deprecated kullanımdan kalktı.
 
 # ---- Source Control worktrees ----
 Worktrees	Çalışma Ağaçları
@@ -35,7 +36,7 @@ Settings…	Ayarlar…
 Open Settings (JSON)	Ayarları Aç (JSON)
 Keyboard Shortcuts	Klavye Kısayolları
 Color Theme…	Renk Teması…
-Import VS Code Settings and Shortcuts	VS Code Ayarlarını ve Kısayollarını İçe Aktar
+Import Settings and Shortcuts from Another Editor	Başka Bir Editörün Ayarlarını ve Kısayollarını İçe Aktar
 Exit	Çıkış
 About Codeyard	Codeyard Hakkında
 
@@ -134,7 +135,6 @@ Remote: Disconnect	Uzak: Bağlantıyı Kes
 Go: File…	Gezin: Dosya…
 Go: Line…	Gezin: Satır…
 Search: Find in Files	Arama: Dosyalarda Bul
-Search: Open Results in Editor	Arama: Sonuçları Düzenleyicide Aç
 File: Follow (Tail) Active File	Dosya: Etkin Dosyayı Takip Et (Tail)
 File: Filter Log Lines…	Dosya: Günlük Satırlarını Süz…
 File: Open Active File as Hex	Dosya: Etkin Dosyayı Hex Olarak Aç
@@ -285,7 +285,6 @@ Test: Run Test at Cursor	Test: İmlecin Altındaki Testi Çalıştır
 Test: Run Tests in File	Test: Dosyadaki Testleri Çalıştır
 Tasks: Configure Tasks	Görevler: Görevleri Yapılandır
 Merge Conflict: Open Merge Editor	Birleştirme Çakışması: Birleştirme Düzenleyicisini Aç
-GitHub: Pull Requests…	GitHub: Pull Request'ler…
 HTTP: Send Request	HTTP: İstek Gönder
 HTTP: Show Last Response Headers	HTTP: Son Yanıtın Üstbilgilerini Göster
 Merge Conflict: Accept Current	Birleştirme Çakışması: Geçerli Olanı Kabul Et
@@ -367,7 +366,7 @@ Terminal: Run Selected Text	Terminal: Seçili Metni Çalıştır
 Go: Last Edit Location	Gezin: Son Düzenleme Konumu
 Git: Clone Repository…	Git: Depoyu Klonla…
 Preferences: Open Keyboard Shortcuts	Tercihler: Klavye Kısayollarını Aç
-Preferences: Import VS Code Settings and Shortcuts	Tercihler: VS Code Ayarlarını ve Kısayollarını İçe Aktar
+Preferences: Import Settings and Shortcuts from Another Editor	Tercihler: Başka Bir Editörün Ayarlarını ve Kısayollarını İçe Aktar
 View: Problems	Görünüm: Sorunlar
 View: Output	Görünüm: Çıktı
 Output: Clear	Çıktı: Temizle
@@ -521,6 +520,10 @@ Merge Changes	Birleştirme Değişiklikleri
 Staged Changes	Stage'deki Değişiklikler
 Changes	Değişiklikler
 No changes.	Değişiklik yok.
+Message	İleti
+Ignored	Yok sayıldı
+Asking the source control provider…	Kaynak denetimi sağlayıcısına soruluyor…
+The provider answered with something else: {}	Sağlayıcı beklenmeyen bir yanıt verdi: {}
 Commit	Commit Et
 Commit ({})	Commit Et ({})
 Commit All ({})	Tümünü Commit Et ({})
@@ -931,7 +934,7 @@ Leave out animations: the blinking cursor, spinners and sliding panels (auto: fo
 Theme “{1}”: {0} colour pair is below WCAG AA contrast ({2} on {3}: {4}:1, needs {5}:1)|Theme “{1}”: {0} colour pairs are below WCAG AA contrast, for example {2} on {3}: {4}:1, needs {5}:1	“{1}” teması: {0} renk çifti WCAG AA kontrastının altında (örneğin {3} üzerinde {2}: {4}:1, en az {5}:1 olmalı)
 Terminal {0} of {1}	Terminal {0} / {1}
 {} (modified)	{} (değiştirildi)
-{0} lines, showing from line {1}	{0} satır, {1}. satırdan itibaren gösteriliyor
+{0} lines, showing lines {1}–{2}	{0} satır, {1}–{2}. satırlar gösteriliyor
 Connecting to {}	{} sunucusuna bağlanılıyor
 Reconnecting to {0} (attempt {1})	{0} sunucusuna yeniden bağlanılıyor (deneme {1})
 Branch {}	Dal {}
@@ -979,7 +982,6 @@ Start	Başlangıç
 Nothing yet.	Henüz yok.
 
 # ---- Problems, Output panel, Log filter, Zoom ----
-Zoom: {}	Yakınlaştırma: {}
 No output yet. Language server logs appear here.	Henüz çıktı yok. Dil sunucusu günlükleri burada görünür.
 No problems. Language servers start when you open a file.	Sorun yok. Dil sunucuları bir dosya açtığınızda başlar.
 No problems.	Sorun yok.
@@ -1042,7 +1044,7 @@ unrecognized theme format (expected “color” or “colors”)	tanınmayan tem
 {}: the color must be a string	{}: renk string olmalı
 {}: invalid color {}	{}: geçersiz renk {}
 unknown role: {}	bilinmeyen rol: {}
-No VS Code settings found on this machine	Bu makinede VS Code ayarı bulunamadı
+No settings from another editor found on this machine	Bu makinede başka bir editörün ayarı bulunamadı
 The connection is down, so files with unsaved changes cannot be saved. Use File: Save a Copy to This Computer… to keep them, or close them, then reconnect.	Bağlantı kesik; bu yüzden kaydedilmemiş değişiklikleri olan dosyalar kaydedilemez. Onları korumak için Dosya: Bu Bilgisayara Kopya Kaydet… komutunu kullanın ya da kapatın, sonra yeniden bağlanın.
 Save or close the files with unsaved changes first.	Önce kaydedilmemiş değişiklikleri olan dosyaları kaydedin ya da kapatın.
 Open a folder first: project settings live in it.	Önce bir klasör açın: proje ayarları klasörün içinde durur.
@@ -1069,7 +1071,6 @@ Whole word	Tam sözcük
 Regular expression	Düzenli ifade
 Preserve case when replacing	Değiştirirken büyük/küçük harfi koru
 Replace All	Tümünü Değiştir
-Replace every match in these files (↵ in the field)	Bu dosyalardaki tüm eşleşmeleri değiştir (alanda ↵)
 Files to include / exclude	Dahil edilecek / hariç tutulacak dosyalar
 Previous result (⇧F4)	Önceki sonuç (⇧F4)
 Next result (F4)	Sonraki sonuç (F4)
@@ -1081,7 +1082,6 @@ Replace in this file	Bu dosyada değiştir
 Dismiss this file from the results	Bu dosyayı sonuçlardan çıkar
 Replace {0} match in 1 file with “{1}”?|Replace {0} matches in 1 file with “{1}”?	1 dosyadaki {0} eşleşme “{1}” ile değiştirilsin mi?
 Replace {0} match in {1} files with “{2}”?|Replace {0} matches in {1} files with “{2}”?	{1} dosyadaki {0} eşleşme “{2}” ile değiştirilsin mi?
-The search stopped at the result limit: only the files listed are changed. Open files can be undone; closed files are written to disk.	Arama sonuç sınırında durdu: yalnızca listelenen dosyalar değiştirilir. Açık dosyalar geri alınabilir; kapalı dosyalar diske yazılır.
 Open files can be undone with ⌘Z; closed files are written to disk.	Açık dosyalar ⌘Z ile geri alınabilir; kapalı dosyalar diske yazılır.
 
 # ---- Find and replace bar ----
@@ -1321,7 +1321,32 @@ Path of the folder (~ is your home folder)	Klasörün yolu (~ ev klasörünüzd�
 No matching folders	Eşleşen klasör yok
 Can't read {0}: {1}	{0} okunamıyor: {1}
 Can't open {0}: {1}	{0} açılamıyor: {1}
-Could not read the workspace file: {}	Çalışma alanı dosyası okunamadı: {}
+Workspace file could not be read: {}	Çalışma alanı dosyası okunamadı: {}
+Workspace changed on disk. Reload before saving.	Çalışma alanı diskte değişti. Kaydetmeden önce yeniden yükleyin.
+Workspace folder is unavailable: {}	Çalışma alanı klasörüne ulaşılamıyor: {}
+Could not save the workspace file: {}	Çalışma alanı dosyası kaydedilemedi: {}
+Workspace saved as {}	Çalışma alanı {} olarak kaydedildi
+No workspace file is open.	Açık bir çalışma alanı dosyası yok.
+No workspace file is open. Use File: Save Workspace As… to create one.	Açık bir çalışma alanı dosyası yok. Oluşturmak için Dosya: Çalışma Alanını Farklı Kaydet… komutunu kullanın.
+Save Workspace As… needs a folder on this computer.	Çalışma Alanını Farklı Kaydet… için bu bilgisayardaki bir klasör gerekir.
+The open folder is no longer listed in the workspace file.	Açık klasör artık çalışma alanı dosyasında listelenmiyor.
+Remove from the workspace file	Çalışma alanı dosyasından kaldır
+Set by the workspace file	Çalışma alanı dosyasında ayarlandı
+Set by this folder's settings	Bu klasörün ayarlarında ayarlandı
+the file is too large	dosya çok büyük
+expected an object { … }	{ … } biçiminde bir nesne bekleniyordu
+more than {} folders	{} klasörden fazla
+“folders” must be a list	“folders” bir liste olmalı
+its structure could not be read safely	yapısı güvenle okunamadı
+a comment is not closed	bir yorum kapatılmamış
+a string is not closed	bir dize kapatılmamış
+the file is not UTF-8 text	dosya UTF-8 metin değil
+File: Save Workspace	Dosya: Çalışma Alanını Kaydet
+File: Save Workspace As…	Dosya: Çalışma Alanını Farklı Kaydet…
+File: Reload Workspace	Dosya: Çalışma Alanını Yeniden Yükle
+File: Open Active File as Workspace	Dosya: Etkin Dosyayı Çalışma Alanı Olarak Aç
+The workspace file no longer exists on this computer.	Çalışma alanı dosyası artık bu bilgisayarda yok.
+Open a .code-workspace file in the editor first.	Önce düzenleyicide bir .code-workspace dosyası açın.
 The workspace file lists no folder that exists on this computer.	Çalışma alanı dosyasında bu bilgisayarda var olan bir klasör yok.
 Workspace: {} folder in the Explorer.|Workspace: {} folders in the Explorer.	Çalışma alanı: Gezgin'de {} klasör.
 Open	Aç
@@ -1350,7 +1375,7 @@ Unknown theme '{0}'. Available: {1}	Bilinmeyen tema: '{0}'. Kullanılabilir olan
 dark	koyu
 light	açık
 {} · user	{} · kullanıcı
-{} · VS Code import	{} · VS Code'dan içe aktarma
+{} · imported	{} · içe aktarıldı
 Select a color theme	Bir renk teması seçin
 Select a file icon theme	Bir dosya simgesi teması seçin
 Open as Hex	Hex Olarak Aç
@@ -1468,6 +1493,9 @@ Trusted “{}”	“{}” güvenilir olarak işaretlendi
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	“{}” klasörü görevleri, hata ayıklama yapılandırmaları ve proje ayarları aracılığıyla program çalıştırabilir. Yalnızca bu klasörün nereden geldiğine güveniyorsanız devam edin.
 Do you trust the authors of this folder?	Bu klasörün yazarlarına güveniyor musunuz?
 Trust Folder and Continue	Klasöre Güven ve Devam Et
+Do you trust the authors of this workspace?	Bu çalışma alanının yazarlarına güveniyor musunuz?
+“{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	“{}” ve klasörleri, görevleri, hata ayıklama yapılandırmaları ve proje ayarları aracılığıyla program çalıştırabilir. Yalnızca bu çalışma alanının nereden geldiğine güveniyorsanız devam edin.
+Trust Workspace and Continue	Çalışma Alanına Güven ve Devam Et
 Open a folder first.	Önce bir klasör açın.
 Passphrase	Anahtar parolası
 Password	Parola
@@ -1586,6 +1614,7 @@ Evaluate an expression (↵)	Bir ifadeyi değerlendirin (↵)
 Starting “{}”…	“{}” başlatılıyor…
 Could not start debugging: {}	Hata ayıklama başlatılamadı: {}
 Paused on exception: {}	İstisnada duraklatıldı: {}
+Paused on entry	Girişte duraklatıldı
 Process exited with code {}	Süreç {} koduyla çıktı
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	Program hiçbir kesme noktasında durmadan bitti. Hata ayıklayıcı kesme noktalarını dosya yoluna göre hata ayıklama bilgisiyle eşleştirir: bu klasörden hata ayıklama bilgisiyle (-g) derleyin ve kesme noktasının kod içeren bir satırda olduğunu denetleyin.
 Debug session ended	Hata ayıklama oturumu bitti
@@ -1637,7 +1666,7 @@ request failed	istek başarısız oldu
 # ---- Debug configurations (debug_config.rs) ----
 the checksum does not match: the download is incomplete or was altered	sağlama toplamı eşleşmiyor: indirme eksik ya da değiştirilmiş
 the archive does not contain js-debug/src/dapDebugServer.js	arşiv js-debug/src/dapDebugServer.js dosyasını içermiyor
-JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install VS Code (its copy is used).	JavaScript hata ayıklaması için Microsoft'un js-debug bağdaştırıcısı gerekir: “Hata Ayıklama: JavaScript Hata Ayıklayıcısını Kur” komutunu çalıştırın (tek seferlik indirme, MIT lisanslı) ya da VS Code'u kurun (onun kopyası kullanılır).
+JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install an editor that ships it (its copy is used).	JavaScript hata ayıklaması için Microsoft'un js-debug bağdaştırıcısı gerekir: “Hata Ayıklama: JavaScript Hata Ayıklayıcısını Kur” komutunu çalıştırın (tek seferlik indirme, MIT lisanslı) ya da onu içeren bir editör kurun (onun kopyası kullanılır).
 No debug adapter for type “{0}”. Supported: lldb (C, C++, Rust, Swift), go, python; or add {1} to the configuration.	“{0}” türü için hata ayıklama bağdaştırıcısı yok. Desteklenenler: lldb (C, C++, Rust, Swift), go, python; ya da yapılandırmaya {1} ekleyin.
 Debug Rust: {}	Rust Hata Ayıklama: {}
 Debug Go package	Go Paketi Hata Ayıklama
@@ -1720,7 +1749,6 @@ changes requested	değişiklik istendi
 review needed	inceleme gerekli
 draft	taslak
 Loading pull requests…	Pull request'ler yükleniyor…
-None of this repository's remotes is on github.com.	Bu deponun uzak depolarından hiçbiri github.com üzerinde değil.
 {}: no open pull requests.	{}: açık pull request yok.
 via the gh CLI	gh CLI ile
 via the GitHub API	GitHub API ile
@@ -1826,11 +1854,11 @@ Download	İndir
 Schema cache cleared. Schemas are downloaded again when needed.	Şema önbelleği temizlendi. Şemalar gerektiğinde yeniden indirilir.
 no file name	dosya adı yok
 HOME is not set	HOME ayarlı değil
-# ---- VS Code import, session restore ----
-VS Code settings.json could not be read	VS Code settings.json okunamadı
+# ---- Settings import, session restore ----
+The other editor's settings.json could not be read	Diğer editörün settings.json dosyası okunamadı
 theme {} isn't installed here: copy its .json into ~/.config/codeyard/themes to use it	{} teması burada kurulu değil: kullanmak için .json dosyasını ~/.config/codeyard/themes içine kopyalayın
 no configuration directory	yapılandırma klasörü yok
-Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	VS Code'dan {0} ayar ve {1} kısayol içe aktarıldı ({2} ayarın ve {3} kısayolun burada karşılığı yok)
+Imported {0} settings and {1} shortcuts ({2} settings and {3} shortcuts have no equivalent here)	{0} ayar ve {1} kısayol içe aktarıldı ({2} ayarın ve {3} kısayolun burada karşılığı yok)
 {} no longer exists, so it was not reopened.	{} artık yok, bu yüzden yeniden açılmadı.
 # ---- Compare, scratch files, snippets, user themes (workbench_extras) ----
 The clipboard has no text.	Panoda metin yok.
@@ -1845,7 +1873,7 @@ Name of the new theme (it joins the theme list)	Yeni temanın adı (tema listesi
 Give the theme a name.	Temaya bir ad verin.
 Saved {} (edit the colors in that file)	{} kaydedildi (renkleri o dosyada düzenleyin)
 Could not write {}: {}	{0} yazılamadı: {1}
-Themes live in {}: drop VS Code or native theme .json files there	Temalar {} içinde durur: VS Code ya da yerel tema .json dosyalarını oraya bırakın
+Themes live in {}: drop theme .json files there	Temalar {} içinde durur: tema .json dosyalarını oraya bırakın
 Snippets reloaded	Kod parçacıkları yeniden yüklendi
 user	kullanıcı
 Insert a snippet (or type its prefix in the editor and press Tab)	Bir kod parçacığı ekleyin (ya da düzenleyicide önekini yazıp Tab'a basın)
@@ -2663,20 +2691,13 @@ Close window	Pencereyi kapat
 Mouse wheel and trackpad scroll speed multiplier	Fare tekerleği ve izleme dörtgeni kaydırma hızı çarpanı
 Terminal row height, as a multiple of the font size	Terminal satır yüksekliği, yazı boyutunun katı olarak
 Toggle Panel (⌘J)	Paneli Aç/Kapat (⌘J)
-Closes when the pointer leaves · pin to keep open	Fare ayrılınca kapanır · açık tutmak için sabitleyin
 Codeyard memory	Codeyard belleği
 Disk available	Kullanılabilir disk
-Includes hidden and build files; symlinks are not followed.	Gizli dosyalar ve derleme dosyaları dahildir; sembolik bağlantılar izlenmez.
-Load average (1 / 5 / 15 min)	Yük ortalaması (1 / 5 / 15 dk)
-Logical processors	Mantıksal işlemciler
+Load	Yük
+files	dosya
 Measuring…	Ölçülüyor…
 Open File	Dosyayı Aç
-Open a folder to measure its size.	Boyutunu ölçmek için bir klasör açın.
-Partial scan: a time, file or access limit was reached.	Kısmi tarama: süre, dosya veya erişim sınırına ulaşıldı.
-Pinned · click the pin to restore auto-close	Sabitlendi · otomatik kapatmak için iğneye tıklayın
 Project	Proje
-Project size	Proje boyutu
-Project size is available for local folders.	Proje boyutu yerel klasörlerde gösterilir.
 Unavailable	Kullanılamıyor
 View: Resources	Görünüm: Kaynaklar
 Web Preview	Web Önizleme
@@ -2747,6 +2768,10 @@ Copy the files again on the current host before pasting.	Yapıştırmadan önce 
 Wait for the file operation to finish, or cancel it from the status bar.	Dosya işleminin bitmesini bekleyin veya durum çubuğundan iptal edin.
 Apply a file operation to {} entry?|Apply a file operation to {} entries?	{} öğeye dosya işlemi uygulansın mı?
 Destination: {0} on {1}. Existing files are never overwritten.	Hedef: {1} üzerindeki {0}. Mevcut dosyaların üzerine yazılmaz.
+Permanently delete {0} item on {1}?|Permanently delete {0} items on {1}?	{1} üzerindeki {0} öğe kalıcı olarak silinsin mi?
+{} has no Trash: the items are deleted at once and can't be restored.	{} üzerinde Çöp Kutusu yok: öğeler hemen silinir ve geri yüklenemez.
+Permanently delete “{0}” on {1}?	{1} üzerindeki “{0}” kalıcı olarak silinsin mi?
+{} has no Trash: it is deleted at once and can't be restored.	{} üzerinde Çöp Kutusu yok: hemen silinir ve geri yüklenemez.
 The complete file list is available in Output.	Dosyaların tam listesi Çıktı bölümünde bulunur.
 File operation: {0} completed, {1} failed, {2} not processed.	Dosya işlemi: {0} tamamlandı, {1} başarısız, {2} işlenmedi.
 Files: {0}/{1}	Dosyalar: {0}/{1}
@@ -2810,13 +2835,11 @@ Keymap preset from an installed extension, as publisher.name/label (empty: Codey
 “{}” cannot be used in a key binding	“{}” bir kısayol koşulunda kullanılamaz
 in a key binding, == and != compare editor.language with a language id	bir kısayol koşulunda == ve != yalnızca editor.language ile bir dil kimliğini karşılaştırır
 a key binding condition needs a context, not a constant	bir kısayol koşulu sabit değil, bir bağlam ister
-“{}” needs extension code, which this version does not run	“{}” eklenti kodu gerektiriyor; bu sürüm eklenti kodu çalıştırmıyor
 keymap preset “{}” is not installed	“{}” kısayol düzeni kurulu değil
 unknown command “{}”	bilinmeyen komut “{}”
 “{}” is a built-in shortcut; an extension cannot change it	“{}” yerleşik bir kısayol; eklentiler onu değiştiremez
 {} is not a setting of an installed extension	{} kurulu bir eklentinin ayarı değil
 {0}: expected {1}	{0}: {1} bekleniyordu
-“{}” ships inside the package; this version only starts language servers found on PATH	“{}” paketin içinde geliyor; bu sürüm yalnızca PATH üzerindeki dil sunucularını başlatır
 language “{0}” names grammar “{1}”, which Codeyard does not have	“{0}” dili “{1}” dil bilgisini istiyor, Codeyard’da bu yok
 keymap preset “{0}” is not installed (installed: {1})	“{0}” kısayol düzeni kurulu değil (kurulu olanlar: {1})
 Extension in development not loaded: {}	Geliştirilen eklenti yüklenemedi: {}
@@ -2894,13 +2917,14 @@ Setting: {}	Ayar: {}
 Language server: {0} for {1}	Dil sunucusu: {1} için {0}
 Command: {}	Komut: {}
 View: {}	Görünüm: {}
+Source control: {0} (folders with {1})	Kaynak denetimi: {0} ({1} içeren klasörler)
 Read all files in the workspace	Çalışma alanındaki tüm dosyaları okuma
 Read {}	{} okuma
 Read files that can hold passwords and keys	Parola ve anahtar barındırabilecek dosyaları okuma
 Change all files in the workspace	Çalışma alanındaki tüm dosyaları değiştirme
 Change {}	{} değiştirme
 Connect to any website	Herhangi bir web sitesine bağlanma
-Connect to {}	{} adresine bağlanma
+Connect to {} (any port)	{} adresine bağlanma (herhangi bir port)
 Act as your {} account	{} hesabınız adına işlem yapma
 Store secrets in your keychain	Anahtar zincirinizde gizli bilgi saklama
 Run {} with any arguments	{} programını herhangi bir argümanla çalıştırma
@@ -2909,8 +2933,6 @@ Write to the clipboard	Panoya yazma
 Read and write the clipboard	Panoyu okuma ve panoya yazma
 Type into terminals	Terminallere yazma
 Run Codeyard commands: {}	Codeyard komutlarını çalıştırma: {}
-{} contains code; this version of Codeyard runs data-only extensions (themes, snippets, keymaps, languages, schemas, language servers)	{} kod içeriyor; Codeyard’ın bu sürümü yalnızca veri eklentilerini çalıştırır (temalar, snippet’ler, kısayol düzenleri, diller, şemalar, dil sunucuları)
-{} contains code, which this version does not run	{} kod içeriyor; bu sürüm kodu çalıştırmaz
 Load installed extensions (off: Codeyard starts as if none were installed)	Kurulu eklentileri yükle (kapalı: Codeyard hiç eklenti kurulu değilmiş gibi açılır)
 Application details	Uygulama bilgileri
 Client protocol	İstemci protokolü
@@ -2943,8 +2965,78 @@ the {} registry's list is more than 3 days old; install from the Extensions view
 {0} is now published by {1}, not {2} as before; review it with Extensions: Install from Registry…	{0} artık eskisi gibi {2} değil, {1} tarafından yayımlanıyor; Eklentiler: Kayıttan Kur… ile inceleyin
 {} is not in any of your registries	{} kayıtlarınızın hiçbirinde yok
 {}: expected a list	{}: bir liste bekleniyordu
+
+# ---- Extensions: Market ----
+Installed	Kurulu
+Market	Pazar
+Search the Market	Pazarda ara
+Extensions: Open Market	Eklentiler: Pazarı Aç
+Reading the registries…	Kayıtlar okunuyor…
+No extension matches the search.	Aramayla eşleşen eklenti yok.
+{} extension|{} extensions	{} eklenti
+The {} registry's list is more than 3 days old; versions withdrawn since may still show.	{} kaydının listesi 3 günden eski; o zamandan beri geri çekilen sürümler hâlâ görünebilir.
+No extension registry is set up yet. Add one to extensions.registries in your settings.	Henüz bir eklenti kaydı ayarlanmadı. Ayarlarınızda extensions.registries içine bir kayıt ekleyin.
+withdrawn	geri çekildi
+Deprecated	Kullanımdan kalktı
+This extension is no longer in the registry.	Bu eklenti artık kayıtta yok.
+{0} · version {1}	{0} · sürüm {1}
+{} license	{} lisansı
+{} download, including updates|{} downloads, including updates	güncellemeler dahil {} indirme
+Deprecated by its publisher: use {} instead.	Yayıncısı kullanımdan kaldırdı: yerine {} kullanın.
+Deprecated by its publisher.	Yayıncısı kullanımdan kaldırdı.
+Reinstall	Yeniden Kur
+Update	Güncelle
+Version {} is installed.	{} sürümü kurulu.
+Show Installed	Kurulu Olanı Göster
+No version of this extension can be installed: they were withdrawn or revoked.	Bu eklentinin kurulabilecek bir sürümü yok: geri çekildiler ya da iptal edildiler.
+Cannot show this extension's details: {}	Bu eklentinin ayrıntıları gösterilemiyor: {}
+Versions	Sürümler
+README	Benioku
+This extension has no README.	Bu eklentinin benioku dosyası yok.
+The README is shortened here; the full one is in the package.	Benioku burada kısaltıldı; tamamı pakette.
+Images are not shown here.	Görseller burada gösterilmez.
+Open this link in your browser?	Bu bağlantı tarayıcınızda açılsın mı?
+{} download|{} downloads	{} indirme
+deprecated, use {}	kullanımdan kalktı, yerine {}
+deprecated	kullanımdan kalktı
+withdrawn by its publisher	yayıncısı geri çekti
+revoked: {}	iptal edildi: {}
+pre-release	ön sürüm
+Permissions: none.	İzinler: yok.
+Permissions: {}	İzinler: {}
 Could not paste: {}	Yapıştırılamadı: {}
 
+# ---- Extensions: updates and version status ----
+Also get its pre-releases, at once and before others get them	Ön sürümlerini de al: hemen ve herkesten önce
+Cannot update {0}: {1}	{0} güncellenemiyor: {1}
+Get Pre-releases	Ön Sürümleri Al
+Get only releases of this extension from now on	Bundan sonra bu eklentinin yalnızca kararlı sürümlerini al
+Its publisher deprecated it and suggests {} instead.	Yayıncısı kullanımdan kaldırdı ve yerine {} öneriyor.
+Its publisher deprecated it.	Yayıncısı kullanımdan kaldırdı.
+Its publisher withdrew this version, and there is no earlier one to go back to.	Yayıncısı bu sürümü geri çekti ve dönülecek daha eski bir sürüm yok.
+Newer versions of extensions from a registry: install (by themselves; versions that run code 48 hours after they are published; a version that asks for more permissions waits for your OK), notify (shown in the Extensions view; you install them) or off (nothing is downloaded until you ask). A withdrawn version is still replaced and a revoked one still stopped. Your own settings only; a folder cannot change it	Bir kayıttan kurulan eklentilerin yeni sürümleri: install (kendiliğinden kurulur; kod çalıştıran sürümler yayımlandıktan 48 saat sonra; daha fazla izin isteyen bir sürüm onayınızı bekler), notify (Eklentiler görünümünde gösterilir; siz kurarsınız) ya da off (siz istemedikçe hiçbir şey indirilmez). Geri çekilen bir sürüm yine değiştirilir, iptal edilen yine durdurulur. Yalnızca kendi ayarlarınız; bir klasör bunu değiştiremez
+Review…	İncele…
+Stop Pre-releases	Ön Sürümleri Durdur
+Update Now	Şimdi Güncelle
+Update available	Güncelleme var
+Update needs your OK	Güncelleme onayınızı bekliyor
+Version {0} could not be installed: {1}	{0} sürümü kurulamadı: {1}
+Version {0} is published by {1}, not {2} as before.	{0} sürümünü önceki gibi {2} değil, {1} yayımladı.
+Version {0} runs code, so it installs by itself after {1}.	{0} sürümü kod çalıştırıyor; bu yüzden {1} sonrasında kendiliğinden kurulur.
+Version {} asks for more than the version you have, which keeps running until you agree:	{} sürümü, kurulu sürümünüzden fazlasını istiyor; siz onaylayana kadar kurulu sürüm çalışmaya devam eder:
+Version {} is available.	{} sürümü çıktı.
+Version {} waits: the registry's list is more than 3 days old.	{} sürümü bekliyor: kaydın listesi 3 günden eski.
+the {} registry is no longer in your settings	{} kaydı artık ayarlarınızda yok
+{0} was stopped: it needs {1}, which was stopped	{0} durduruldu: ihtiyaç duyduğu {1} durduruldu
+{0} was stopped: the registry revoked this version ({1})	{0} durduruldu: kayıt bu sürümü iptal etti ({1})
+{0} was updated to version {1}.	{0}, {1} sürümüne güncellendi.
+{0} went back to version {1}: its publisher withdrew {2}.	{0}, {1} sürümüne geri döndü: yayıncısı {2} sürümünü geri çekti.
+{0} {1} waits for your OK in the Extensions view.	{0} {1}, Eklentiler görünümünde onayınızı bekliyor.
+{} gets pre-releases from now on.	{} bundan sonra ön sürümleri alacak.
+{} gets releases only; the pre-release you have stays until a release passes it.	{} yalnızca kararlı sürümleri alacak; kurulu ön sürüm, onu geçen bir kararlı sürüm çıkana kadar kalır.
+{} has no newer version	{} için daha yeni bir sürüm yok
+{} is not in the registry	{} kayıtta yok
+{} was not installed from a registry	{} bir kayıttan kurulmadı
 # ---- Terminal panel toolbar, launch menu and terminal list ----
 Launch Profile…	Profil Başlat…
 Split Terminal	Terminali Böl
@@ -2967,3 +3059,456 @@ Could not read the remote URL: {}	Uzak depo URL'si okunamadı: {}
 Remote {} no longer exists.	{} uzak deposu artık mevcut değil.
 Remote {} changed since this pull request list was loaded. Reopen the list and try again.	Bu çekme isteği listesi yüklendikten sonra {} uzak deposu değişti. Listeyi yeniden açıp tekrar deneyin.
 Could not reserve a temporary Git reference.	Geçici Git referansı ayrılamadı.
+# ---- Search Editor and replacement review ----
+Apply {0} {1}	Uygula: {1} {0}
+in {} file|in {} files	{} dosyada
+Binary file: not changed.	İkili dosya: değiştirilmedi.
+Changed {0} in {1}	{1} içinde {0} yapıldı
+Close Preview	Önizlemeyi Kapat
+Context: {} line|Context: {} lines	Bağlam: {} satır
+Copy the results as text	Sonuçları metin olarak kopyala
+Could not read: {}	Okunamadı: {}
+Each file is written on its own; files that were not changed keep their contents.	Her dosya ayrı ayrı yazılır; değiştirilmeyen dosyalar içeriklerini korur.
+Fewer context lines	Daha az bağlam satırı
+File changed since preview: {}	Dosya önizlemeden sonra değişti: {}
+Files were changed by a replacement since this search ran. Rerun to refresh.	Bu arama yapıldıktan sonra dosyalar bir değiştirme ile değişti. Yenilemek için yeniden çalıştırın.
+Line {0}: {1}	Satır {0}: {1}
+Line {0}: {1} → {2}	Satır {0}: {1} → {2}
+Line {} after the change	Değişiklikten sonra satır {}
+More context lines	Daha fazla bağlam satırı
+Not changed (cancelled): {}	Değiştirilmedi (iptal edildi): {}
+Not changed: {0} ({1})	Değiştirilmedi: {0} ({1})
+Nothing to replace: the files no longer contain matches.	Değiştirilecek bir şey yok: dosyalarda artık eşleşme yok.
+Open in a Search Editor tab	Arama Düzenleyicisi sekmesinde aç
+Open this search's folder on its host to run it again.	Yeniden çalıştırmak için bu aramanın klasörünü kendi makinesinde açın.
+Preview Replace	Değiştirmeyi Önizle
+Replacement preview	Değiştirme önizlemesi
+Rerun	Yeniden Çalıştır
+Restored from the last session, only the first {} results were kept: they may be out of date. Rerun to refresh.	Son oturumdan geri yüklendi, yalnızca ilk {} sonuç saklandı: güncel olmayabilir. Yenilemek için yeniden çalıştırın.
+Restored from the last session: the results may be out of date. Rerun to refresh.	Son oturumdan geri yüklendi: sonuçlar güncel olmayabilir. Yenilemek için yeniden çalıştırın.
+Restored {} file: {}|Restored {} files: {}	{} dosya geri yüklendi: {}
+Review every change before replacing (↵ in the field)	Değiştirmeden önce her değişikliği gözden geçir (alanda ↵)
+Run this search again in the same folder	Bu aramayı aynı klasörde yeniden çalıştır
+Search results	Arama sonuçları
+Search results are incomplete; rerun before replacing.	Arama sonuçları eksik; değiştirmeden önce yeniden çalıştırın.
+Search: Open Search Editor	Arama: Arama Düzenleyicisini Aç
+Search: Undo Last Replace	Arama: Son Değiştirmeyi Geri Al
+Search: {}	Arama: {}
+Show every change before anything is written (↵ in the field)	Hiçbir şey yazılmadan önce her değişikliği göster (alanda ↵)
+The connection or folder changed since the preview. Rerun the search and preview again.	Önizlemeden sonra bağlantı ya da klasör değişti. Aramayı yeniden çalıştırıp tekrar önizleyin.
+The connection was lost; the results are incomplete.	Bağlantı koptu; sonuçlar eksik.
+The file changed during the write ({})	Dosya yazılırken değişti ({})
+The query was edited: press Enter or Rerun to search for it.	Sorgu düzenlendi: aramak için Enter'a ya da Yeniden Çalıştır'a basın.
+The search failed.	Arama başarısız oldu.
+The search or the connection changed while the preview was being made. Preview again.	Önizleme hazırlanırken arama ya da bağlantı değişti. Tekrar önizleyin.
+There is no replacement to undo.	Geri alınacak bir değiştirme yok.
+This replacement is too large to preview. Narrow the search (fewer files or matches).	Bu değiştirme önizlemek için çok büyük. Aramayı daraltın (daha az dosya ya da eşleşme).
+This search belongs to {0} on {1}, which this window does not show. Results cannot be opened or replaced here.	Bu arama {1} üzerindeki {0} klasörüne ait ve bu pencere onu göstermiyor. Sonuçlar burada açılamaz ya da değiştirilemez.
+Too many files to preview ({}). Narrow the search.	Önizlemek için çok fazla dosya var ({}). Aramayı daraltın.
+Type a query and press Enter to search.	Aramak için bir sorgu yazıp Enter'a basın.
+Undo Replace	Değiştirmeyi Geri Al
+Undo conflict: {} changed after the replacement and was left as it is.	Geri alma çakışması: {} değiştirmeden sonra değişti ve olduğu gibi bırakıldı.
+Undo is not available here: the replacement was made in another folder or connection.	Geri alma burada kullanılamaz: değiştirme başka bir klasörde ya da bağlantıda yapıldı.
+Unknown outcome, check before retrying: {0} ({1})	Sonuç bilinmiyor, yeniden denemeden önce kontrol edin: {0} ({1})
+Unsupported encoding: the file would not be written back exactly, so it is not changed.	Desteklenmeyen kodlama: dosya birebir geri yazılamayacağı için değiştirilmedi.
+context	bağlam
+not selected	seçili değil
+partly selected	kısmen seçili
+selected	seçili
+{0} of {1} changes	{1} değişiklikten {0}
+{0} of {1} changes in {2} files selected. Nothing is written before Apply.	{2} dosyada {1} değişiklikten {0} tanesi seçili. Uygula'dan önce hiçbir şey yazılmaz.
+{0}. The search stopped at the result limit, so the results are incomplete.	{0}. Arama sonuç sınırında durdu, bu yüzden sonuçlar eksik.
+{0}. The search was cancelled, so the results are incomplete.	{0}. Arama iptal edildi, bu yüzden sonuçlar eksik.
+{} change|{} changes	{} değişiklik
+{} match|{} matches	{} eşleşme
+“{0}” cannot be written in {1}: not changed.	“{0}” {1} kodlamasında yazılamaz: değiştirilmedi.
+No matches in this file any more.	Bu dosyada artık eşleşme yok.
+Interface scale must be between 75% and 200%.	Arayüz ölçeği %75 ile %200 arasında olmalıdır.
+Interface scale: {}%	Arayüz ölçeği: %{}
+Interface scale of every window, from 0.75 (75%) to 2 (200%); View: Zoom In and Zoom Out step through 75%, 80% and every 10% from 90% to 200%. Editor and terminal font sizes are scaled with it. Your own settings only; a folder cannot change it	Tüm pencerelerin arayüz ölçeği, 0.75 (%75) ile 2 (%200) arasında; Görünüm: Büyüt ve Küçült %75, %80 ve %90 ile %200 arasında %10 adımlarla ilerler. Düzenleyici ve terminal yazı tipi boyutları da onunla ölçeklenir. Yalnızca kendi ayarlarınızda; bir klasör bunu değiştiremez
+
+# Extensions: running code
+{} contains code, but codeyard-exthost is missing beside Codeyard	{} kod içeriyor, ancak Codeyard'ın yanında codeyard-exthost yok
+{} crashed three times and is turned off until Codeyard restarts.	{} üç kez çöktü; Codeyard yeniden başlayana kadar kapalı.
+{} cannot run: codeyard-exthost is missing beside Codeyard.	{} çalışamıyor: Codeyard'ın yanında codeyard-exthost yok.
+{0} could not start: {1}	{0} başlatılamadı: {1}
+{0} failed to start: {1}	{0} başlarken hata verdi: {1}
+{} crashed three times in a minute and was turned off.	{} bir dakikada üç kez çöktü ve kapatıldı.
+denied ({0}); add to [permissions]: {1}	reddedildi ({0}); [permissions] bölümüne ekleyin: {1}
+A sign-in answer for {0} carried the code of {1}'s sign-in; it was ignored.	{0} için gelen bir oturum açma yanıtı {1} eklentisinin oturum açma kodunu taşıyordu; yok sayıldı.
+Accounts	Hesaplar
+Codeyard is not signed in to GitHub: run `gh auth login` in a terminal, then try again.	Codeyard GitHub'da oturum açmamış: bir terminalde `gh auth login` çalıştırın, sonra yeniden deneyin.
+Codeyard signs its requests to {} with this account. The extension never sees your password or token. You can sign out on its page in Extensions.	Codeyard, eklentinin {} adresine giden isteklerini bu hesapla imzalar. Eklenti parolanızı ya da belirtecinizi hiçbir zaman görmez. Eklentiler'deki sayfasından oturumu kapatabilirsiniz.
+Could not sign out: {}	Oturum kapatılamadı: {}
+GitHub did not accept Codeyard's sign-in: run `gh auth login` in a terminal, then try again.	GitHub, Codeyard'ın oturumunu kabul etmedi: bir terminalde `gh auth login` çalıştırın, sonra yeniden deneyin.
+Let {0} act as your GitHub account {1}?	{0}, GitHub hesabınız {1} adına işlem yapabilsin mi?
+Let {0} sign in to your {1} account?	{0}, {1} hesabınızla oturum açabilsin mi?
+Sign In…	Oturum Aç…
+Sign Out	Oturumu Kapat
+not signed in to {0}; call auth.session with “{1}” first	{0} hesabında oturum açılmamış; önce auth.session'ı “{1}” ile çağırın
+the keychain did not answer	anahtar zinciri yanıt vermedi
+the keychain refused the account: {}	anahtar zinciri hesabı kabul etmedi: {}
+the sign-in expired; sign in again	oturumun süresi doldu; yeniden oturum açın
+the sign-in failed: {}	oturum açılamadı: {}
+the sign-in was refused ({})	oturum açma reddedildi ({})
+the token endpoint answered {}	belirteç adresi {} yanıtını verdi
+the token endpoint sent a {} token; only bearer tokens can sign requests	belirteç adresi {} türünde bir belirteç gönderdi; istekleri yalnızca bearer belirteçleri imzalayabilir
+the token endpoint sent no access_token	belirteç adresi access_token göndermedi
+the window closed	pencere kapandı
+{0} ({1}) is published by {2}.	{0} ({1}) eklentisinin yayıncısı: {2}.
+{0} is signed in to {1} as {2}.	{0}, {1} hesabında {2} olarak oturum açtı.
+{0} is signed out of {1}.	{0}, {1} hesabındaki oturumu kapattı.
+{0}, in development from {1}	{0}, {1} klasöründen geliştirme aşamasında
+{0}, installed from {1} (not verified by a registry)	{0}, {1} konumundan kuruldu (bir kayıt tarafından doğrulanmadı)
+{0}, signed by {1} in the {2} registry	{0}, {2} kaydında {1} tarafından imzalandı
+{0}: finish signing in to {1} in your browser.	{0}: {1} oturumunu tarayıcınızda tamamlayın.
+{0}: signed in as {1}	{0}: {1} olarak oturum açık
+{} (not verified by a registry)	{} (bir kayıt tarafından doğrulanmadı)
+{}: not signed in	{}: oturum açılmamış
+Merge in progress	Birleştirme sürüyor
+Rebase in progress	Rebase sürüyor
+Cherry-pick in progress	Cherry-pick sürüyor
+Revert in progress	Geri alma sürüyor
+Bisect in progress	Bisect sürüyor
+Repository is no longer available: {}	Depo artık kullanılamıyor: {}
+Repository changed while the operation was pending.	İşlem beklerken depo değişti.
+Select a repository first	Önce bir depo seçin
+Repository: {}	Depo: {}
+no upstream	takip edilen dal yok
+Repositories	Depolar
+Repository discovery failed	Depolar aranamadı
+
+# Extensions: running code
+{0} contains code, which needs a sandbox this system does not provide: {1}	{0} kod içeriyor; bu sistemin sağlamadığı bir sandbox gerektiriyor: {1}
+
+# Extensions: Inspector, permission switches, denials and the crash card
+Developer: Extension Inspector	Geliştirici: Eklenti Denetçisi
+Extension Inspector	Eklenti Denetçisi
+Running code extensions in this window: why they started, how long their calls took, what was denied. Nothing here leaves this computer.	Bu penceredeki kodlu eklentiler: neden başladıkları, çağrılarının ne kadar sürdüğü, neyin reddedildiği. Buradaki hiçbir şey bu bilgisayardan çıkmaz.
+Activated {0} time, last at {1} by {2}|Activated {0} times, last at {1} by {2}	{0} kez etkinleştirildi, son kez {1} saatinde, nedeni {2}
+Not activated in this window yet	Bu pencerede henüz etkinleştirilmedi
+No code extension is installed and enabled.	Kurulu ve etkin kodlu eklenti yok.
+Calls	Çağrılar
+Denials	Retler
+Log	Günlük
+Last trap	Son hata yakalama
+None yet	Henüz yok
+at {}	konum: {}
+{0} {1}: guest {2}	{0} {1}: eklenti {2}
+{0} {1}: I/O {2}, overhead {3}	{0} {1}: G/Ç {2}, ek yük {3}
+not running	çalışmıyor
+turned off after three crashes	üç çökmeden sonra kapatıldı
+not declared	bildirilmemiş
+turned off on the extension page	eklenti sayfasında kapatıldı
+the folder is not trusted	klasöre güvenilmiyor
+this version was revoked	bu sürüm geri çekildi
+Copy fix	Düzeltmeyi kopyala
+Copied: {}	Kopyalandı: {}
+Permission switches	İzin anahtarları
+It declares no permissions.	Hiçbir izin bildirmiyor.
+On	Açık
+Off	Kapalı
+{0} may again: {1}	{0} yeniden izinli: {1}
+{0} may no longer: {1}	{0} artık izinli değil: {1}
+Recent denials	Son retler
+None in this session.	Bu oturumda yok.
+{} crashed three times within a minute and is turned off until Codeyard restarts. Nothing was sent anywhere.	{} bir dakika içinde üç kez çöktü ve Codeyard yeniden başlayana kadar kapalı. Hiçbir yere bir şey gönderilmedi.
+Last trap: {}	Son hata yakalama: {}
+No previous version is in the store.	Depoda önceki bir sürüm yok.
+Reinstall Previous Version	Önceki Sürümü Yeniden Kur
+Report…	Bildir…
+The crash report is on the clipboard. Nothing was sent.	Çökme raporu panoda. Hiçbir şey gönderilmedi.
+Answer the install sheet first.	Önce kurulum sayfasını yanıtlayın.
+Choose…	Seçin…
+Load more	Daha fazla yükle
+Open View: {0} ({1})	Görünümü Aç: {0} ({1})
+This view is not available.	Bu görünüm kullanılamıyor.
+by {}	yayımlayan: {}
+render must answer with response.view	render, response.view ile yanıt vermeli
+the extension stopped	eklenti durdu
+the extension was reloaded	eklenti yeniden yüklendi
+{0} could not draw this view: {1}	{0} bu görünümü çizemedi: {1}
+{0}, by {1}	{0}, yayımlayan: {1}
+{0}, from {1}	{0}, kaynak: {1}
+Formatted by {}	{} tarafından biçimlendirildi
+Saved without formatting: {0}: {1}	Biçimlendirmeden kaydedildi: {0}: {1}
+editor.formatters.{}: expected “lsp” or an extension id	editor.formatters.{}: “lsp” ya da bir eklenti kimliği bekleniyordu
+{}: the formatter returned no edits	{}: biçimlendirici hiçbir düzenleme döndürmedi
+“{}” is not the command of an active extension	“{}” etkin bir eklentinin komutu değil
+# ---- Task runs ----
+No task is running.	Çalışan bir görev yok.
+Running task: {}	Görev çalışıyor: {}
+Task cancellation could not be confirmed. Reconnect and inspect the process.	Görevin durdurulduğu doğrulanamadı. Yeniden bağlanın ve süreci kontrol edin.
+Task could not start: {}	Görev başlatılamadı: {}
+Task dependency cycle: {}	Görev bağımlılık döngüsü: {}
+Task input cancelled	Görev girdisi iptal edildi
+Task “{0}” depends on “{1}”, which does not exist.	“{0}” görevi, var olmayan “{1}” görevine bağlı.
+Task “{0}” has an invalid problem matcher: {1}	“{0}” görevinin sorun eşleştiricisi geçersiz: {1}
+Task “{0}” has an invalid “{1}”.	“{0}” görevinde geçersiz bir “{1}” var.
+Task “{0}” uses the input “{1}”, which the task file does not define.	“{0}” görevi, görev dosyasında tanımlanmamış “{1}” girdisini kullanıyor.
+Task “{0}” uses “{1}”, which has no value here.	“{0}” görevi “{1}” kullanıyor; burada bunun bir değeri yok.
+Task “{0}” uses “{1}”, which would run an editor command; use an input instead.	“{0}” görevi “{1}” kullanıyor; bu bir düzenleyici komutu çalıştırır. Bunun yerine bir girdi kullanın.
+Task “{0}”: {1}	“{0}” görevi: {1}
+Task “{}” has a variable that cannot be expanded.	“{}” görevinde genişletilemeyen bir değişken var.
+Task “{}” has no command.	“{}” görevinin komutu yok.
+Task “{}” needs an open file.	“{}” görevi için açık bir dosya gerekiyor.
+Task “{}” runs in the background but its problem matcher has no endsPattern, so nothing can wait for it.	“{}” görevi arka planda çalışıyor ama sorun eşleştiricisinde endsPattern yok; bu yüzden hiçbir şey onu bekleyemez.
+Tasks: Restart Running Task	Görevler: Çalışan Görevi Yeniden Başlat
+Tasks: Terminate Task	Görevler: Görevi Sonlandır
+The input “{}” would run an editor command; use promptString or pickString.	“{}” girdisi bir düzenleyici komutu çalıştırır; promptString ya da pickString kullanın.
+The preLaunchTask “{0}” did not succeed ({1}), so debugging was not started. Check its terminal, then start debugging again.	preLaunchTask “{0}” başarılı olmadı ({1}); bu yüzden hata ayıklama başlatılmadı. Terminalini kontrol edip hata ayıklamayı yeniden başlatın.
+The task file has an invalid “{}”.	Görev dosyasında geçersiz bir “{}” var.
+The task file is not valid JSON.	Görev dosyası geçerli bir JSON değil.
+The task file is too large or has too many tasks.	Görev dosyası çok büyük ya da çok fazla görev içeriyor.
+There is no task called “{}”.	“{}” adında bir görev yok.
+Two tasks are called “{}”.	İki görevin adı da “{}”.
+cancelled	iptal edildi
+ended before it was ready	hazır olmadan sona erdi
+failed (exit code {})	başarısız (çıkış kodu {})
+not run: a dependency failed	çalıştırılmadı: bir bağımlılık başarısız oldu
+not run: too many tasks in the background	çalıştırılmadı: arka planda çok fazla görev var
+queued	sırada
+ready	hazır
+stopped	durduruldu
+succeeded	başarılı
+a field refers to a group the regular expression does not have	bir alan, düzenli ifadede olmayan bir gruba başvuruyor
+invalid “{}”	geçersiz “{}”
+its pattern must capture at least file, line (or location) and message	deseni en az dosya, satır (ya da konum) ve mesajı yakalamalı
+the pattern cannot be evaluated	desen değerlendirilemiyor
+the regular expression is invalid ({})	düzenli ifade geçersiz ({})
+there is no built-in matcher called “{}”	“{}” adında yerleşik bir eşleştirici yok
+too many or too large patterns	çok fazla ya da çok büyük desen
+# ---- Movable views ----
+No view is in the secondary side bar. Use View: Move View to Secondary Side Bar.	İkincil kenar çubuğunda görünüm yok. Görünüm: Görünümü İkincil Kenar Çubuğuna Taşı komutunu kullanın.
+Open a view in the side bar first.	Önce kenar çubuğunda bir görünüm açın.
+Terminal: Move Terminal into New Window	Terminal: Terminali Yeni Pencereye Taşı
+Terminal: Move Terminals Back to Panel	Terminal: Terminalleri Panele Geri Taşı
+The secondary side bar shows no view.	İkincil kenar çubuğu bir görünüm göstermiyor.
+The terminal could not move to a new window: {}	Terminal yeni bir pencereye taşınamadı: {}
+There is no terminal to move.	Taşınacak bir terminal yok.
+View: Move View to Primary Side Bar	Görünüm: Görünümü Birincil Kenar Çubuğuna Taşı
+View: Move View to Secondary Side Bar	Görünüm: Görünümü İkincil Kenar Çubuğuna Taşı
+View: Toggle Secondary Side Bar	Görünüm: İkincil Kenar Çubuğunu Aç/Kapat
+
+# ---- Terminals in the editor area ----
+No terminal is in front in the editor area.	Düzenleyici alanında önde bir terminal yok.
+Terminal: Move Terminal Back to Panel	Terminal: Terminali Panele Geri Taşı
+Terminal: Move Terminal into Editor Area	Terminal: Terminali Düzenleyici Alanına Taşı
+Previous session ended; started a new shell	Önceki oturum sona erdi; yeni bir kabuk başlatıldı
+Reconnected to terminal session	Terminal oturumuna yeniden bağlanıldı
+another Codeyard window has them; started new shells	bunlar başka bir Codeyard penceresinde; yeni kabuklar başlatıldı
+{} bytes of output were lost while no window was attached	Hiçbir pencere bağlı değilken {} bayt çıktı kayboldu
+{} (terminal)	{} (terminal sekmesi)
+# ---- Problems accessibility ----
+Information	Bilgi
+Problems: {}	Sorunlar: {}
+{0}, line {1}	{0}, satır {1}
+{0}, line {1}, column {2}	{0}, satır {1}, sütun {2}
+{0}, problems: {1}	{0}, sorun: {1}
+Bottom panel	Alt panel
+
+# ---- Settings, Keyboard Shortcuts and Ports accessibility ----
+Categories	Kategoriler
+No shortcut	Kısayol yok
+Not forwarded	Yönlendirilmedi
+Port {0}, {1}	Bağlantı noktası {0}, {1}
+Port {}	Bağlantı noktası {}
+Context menu	Bağlam menüsü
+Debug toolbar	Hata ayıklama araç çubuğu
+not run	çalıştırılmadı
+passed	başarılı
+skipped	atlandı
+{} test|{} tests	{} test
+# ---- Terminal restore ----
+Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)	Her terminalin geçmişinden bir sonraki açılış için bu bilgisayarda düz metin olarak saklanan satır sayısı (0: hiç)
+Minutes the terminals keep running for the next start after Codeyard quits, crashes or is killed (0: not kept)	Codeyard kapandıktan, çöktükten ya da sonlandırıldıktan sonra terminallerin bir sonraki açılış için çalışmaya devam ettiği dakika (0: tutulmaz)
+Saved terminal history cleared	Kaydedilen terminal geçmişi temizlendi
+Terminal session could not be restored: {}	Terminal oturumu geri yüklenemedi: {}
+Terminal: Clear Saved Terminal History	Terminal: Kaydedilen Terminal Geçmişini Temizle
+the folder {} no longer exists; started a new shell in the workspace folder	{} klasörü artık yok; çalışma alanı klasöründe yeni bir kabuk başlatıldı
+the saved state is damaged	kaydedilen durum bozuk
+
+# ---- Code extensions: first-use prompts and the memory cap ----
+Let {} read the clipboard?	{} panoyu okuyabilsin mi?
+It wants to read the text you copied, here or in other apps.	Burada ya da başka uygulamalarda kopyaladığınız metni okumak istiyor.
+Let {0} run programs on {1}?	{0}, {1} üzerinde program çalıştırabilsin mi?
+It wants to run {0} on the remote host {1}, with your account there.	{0} programını uzak ana bilgisayar {1} üzerinde, oradaki hesabınızla çalıştırmak istiyor.
+Your answer holds until Codeyard quits.	Yanıtınız Codeyard kapanana kadar geçerli.
+Allow for this session	Bu oturum için izin ver
+it used {0} MB of memory, over the limit of {1} MB, and was stopped	{0} MB bellek kullandı, {1} MB sınırını aştı ve durduruldu
+
+the image is larger than {} bytes	görsel {} bayttan büyük
+the server answered {}	sunucu {} yanıtını verdi
+not a PNG, JPEG, GIF, WebP or SVG image	PNG, JPEG, GIF, WebP veya SVG görseli değil
+View: Move Editor into New Window	Görünüm: Düzenleyiciyi Yeni Pencereye Taşı
+View: Copy Editor into New Window	Görünüm: Düzenleyiciyi Yeni Pencereye Kopyala
+View: Move Editors Back to Main Window	Görünüm: Düzenleyicileri Ana Pencereye Geri Taşı
+Open a file in the editor first.	Önce düzenleyicide bir dosya açın.
+Up to {} editors can be in windows of their own.	Kendi penceresinde en fazla {} düzenleyici olabilir.
+The editor could not move to a new window: {}	Düzenleyici yeni bir pencereye taşınamadı: {}
+No editor is in a window of its own.	Kendi penceresinde açık düzenleyici yok.
+Primary Side Bar	Birincil Kenar Çubuğu
+Secondary Side Bar	İkincil Kenar Çubuğu
+Extension View	Eklenti Görünümü
+View: Move Panel Left	Görünüm: Paneli Sola Taşı
+View: Move Panel Right	Görünüm: Paneli Sağa Taşı
+View: Move Panel to Bottom	Görünüm: Paneli Alta Taşı
+Primary side bar: {}	Birincil kenar çubuğu: {}
+Secondary side bar: {}	İkincil kenar çubuğu: {}
+In the secondary side bar: {}	İkincil kenar çubuğunda: {}
+Panel: below the editor	Panel: düzenleyicinin altında
+Panel: left of the editor	Panel: düzenleyicinin solunda
+Panel: right of the editor	Panel: düzenleyicinin sağında
+View: Move View into New Window	Görünüm: Görünümü Yeni Pencereye Taşı
+View: Move View Back to Side Bar	Görünüm: Görünümü Kenar Çubuğuna Geri Taşı
+Open a view in a side bar first.	Önce bir kenar çubuğunda bir görünüm açın.
+No view is in a window of its own.	Kendi penceresinde açık görünüm yok.
+The view could not move to a new window: {}	Görünüm yeni bir pencereye taşınamadı: {}
+Break on Value Change	Değer Değişince Dur
+Breaks when the value is written; for this debug session only.	Değer yazıldığında durur; yalnızca bu hata ayıklama oturumu için.
+Save the file first: a tab with unsaved changes cannot move to another window.	Önce dosyayı kaydedin: kaydedilmemiş değişiklikleri olan bir sekme başka bir pencereye taşınamaz.
+This tab cannot move to that window: its folder is on another machine.	Bu sekme o pencereye taşınamaz: klasörü başka bir makinede.
+The destination window is no longer available.	Hedef pencere artık yok.
+{} is not in the package	{} pakette yok
+{0} has no package for {1}	{0} için {1} paketi yok
+{} has no valid hash in its package	{} için pakette geçerli bir özet yok
+Cannot copy {0} to {1}: {2}	{0}, {1} üzerine kopyalanamıyor: {2}
+{0} on {1} does not match the hash in its package; it was not run	{1} üzerindeki {0}, paketindeki özetle eşleşmiyor; çalıştırılmadı
+{} cannot receive native programs	{} yerel programları alamaz
+{0} was not installed from a registry, so it has no package for {1}; install the package built for {1}	{0} bir kayıttan kurulmadığı için {1} paketi yok; {1} için derlenmiş paketi kurun
+Type {} to install it.	Kurmak için {} yazın.
+Native programs	Yerel programlar
+It brings its own programs, built for each platform. They run on the computer that holds the workspace (this one, or the SSH server) with your rights.	Her platform için derlenmiş kendi programlarını getirir. Bu programlar çalışma alanının bulunduğu bilgisayarda (bu bilgisayar ya da SSH sunucusu) sizin yetkilerinizle çalışır.
+{0} (from {1})	{0} ({1} eklentisinden)
+# ---- Pull requests from code extensions ----
+No open pull requests.	Açık pull request yok.
+{} is no longer active.	{} artık etkin değil.
+Show details and comments	Ayrıntıları ve yorumları göster
+Show changed files	Değişen dosyaları göster
+Add comment…	Yorum ekle…
+Check out	Checkout et
+Open on {}	{} üzerinde aç
+Add comment	Yorum ekle
+Comment on {} (Markdown)	{} için yorum (Markdown)
+Loading {}…	{} yükleniyor…
+{}: no changed files.	{}: değişen dosya yok.
+{} files	{} dosya
+Changed files	Değişen dosyalar
+Pull request changes	Pull request değişiklikleri
+Adding comment…	Yorum ekleniyor…
+Comment added to {}.	{} için yorum eklendi.
+Checked out {} as {}	{0}, {1} olarak checkout edildi
+renamed from {}	{} adından değiştirildi
+renamed	adı değiştirildi
+added	eklendi
+deleted	silindi
+modified	değiştirildi
+open	açık
+merged	birleştirildi
+closed	kapalı
+Labels	Etiketler
+Checks	Denetimler
+Description	Açıklama
+No description.	Açıklama yok.
+Comments ({})	Yorumlar ({})
+Pull Requests: Show…	Pull Request'ler: Göster…
+None of this repository's remotes is on github.com or on a host of {}.	Bu deponun uzak depolarından hiçbiri github.com veya {} sunucularından birinde değil.
+None of this repository's remotes is on github.com, and no installed extension provides pull requests for their hosts.	Bu deponun uzak depolarından hiçbiri github.com üzerinde değil ve kurulu hiçbir eklenti bunların sunucuları için pull request sağlamıyor.
+Add Instance…	Sunucu Ekle…
+Add Instance	Sunucu Ekle
+Host and client id of your {} server, such as git.example.com 3f2a9c	{} sunucunuzun adresi ve istemci kimliği, örneğin git.example.com 3f2a9c
+Install the extension to add an instance; one in development has none.	Sunucu eklemek için eklentiyi kurun; geliştirilmekte olan bir eklentinin sunucusu olmaz.
+Type the host and the client id, separated by a space.	Sunucu adresini ve istemci kimliğini aralarında bir boşlukla yazın.
+Let {0} use your account on {1}?	{0}, {1} üzerindeki hesabınızı kullanabilsin mi?
+It may sign in to your account on {0} with the OAuth application you registered there (client id {1}, redirect URI {2}). Codeyard signs its requests to {0} with that account; the extension never sees the token. Remove it on the extension's page in Extensions.	Orada kaydettiğiniz OAuth uygulamasıyla (istemci kimliği {1}, yönlendirme adresi {2}) {0} üzerindeki hesabınızda oturum açabilir. Codeyard, {0} adresine giden isteklerini bu hesapla imzalar; eklenti belirteci hiç görmez. Eklentiler'deki eklenti sayfasından kaldırabilirsiniz.
+{0} can now sign in to {1}.	{0} artık {1} üzerinde oturum açabilir.
+Could not add the instance: {}	Sunucu eklenemedi: {}
+Could not remove the instance: {}	Sunucu kaldırılamadı: {}
+{} is a platform extension programs are not built for	{}, eklenti programlarının derlenmediği bir platform
+Version {} adds native programs; review it and type its id to install it:	{} sürümü yerel programlar ekliyor; kurmak için gözden geçirip kimliğini yazın:
+features: {}	özellikler: {}
+no default features	varsayılan özellikler yok
+output: {}	çıktı: {}
+Apply	Uygula
+Apply the Rust setup to settings.jsonc?	Rust kurulumu settings.jsonc dosyasına uygulansın mı?
+Preferences: Apply Rust Setup…	Tercihler: Rust Kurulumunu Uygula…
+Preferences: Reset Rust Setup…	Tercihler: Rust Kurulumunu Sıfırla…
+Reset the Rust setup in settings.jsonc?	settings.jsonc dosyasındaki Rust kurulumu sıfırlansın mı?
+settings.jsonc already has the Rust setup.	settings.jsonc dosyasında Rust kurulumu zaten var.
+settings.jsonc has no Rust setup to reset.	settings.jsonc dosyasında sıfırlanacak Rust kurulumu yok.
+the file changed; try again	dosya değişti; yeniden deneyin
+Discard changes in {}	{} içindeki değişiklikleri at
+Mark {} as resolved	{} dosyasını çözüldü olarak işaretle
+Files to include	Dahil edilecek dosyalar
+Structural pattern	Yapısal desen
+Structural search	Yapısal arama
+line {0}, column {1}	satır {0}, sütun {1}
+Pull	Pull Et
+Push	Push Et
+Commits	Commit'ler
+merge	birleştirme
+Evaluate	Değerlendir
+Hover	Üzerine gelme bilgisi
+Signature help	İmza yardımı
+Current parameter: {}	Geçerli parametre: {}
+Output of {}	{} çıktısı
+{} commit|{} commits	{} commit
+Files: {}	Dosyalar: {}
+Breadcrumbs	İçerik yolu
+Editor group {}	Düzenleyici grubu {}
+Go to Breakpoint	Kesme Noktasına Git
+Launch configuration	Başlatma yapılandırması
+Menu bar	Menü çubuğu
+Panel	Panel Alanı
+Show in the Explorer	Gezginde göster
+Tab actions	Sekme eylemleri
+Terminals	Terminaller
+Views	Görünümler
+Nothing was installed. Run the command again with --accept-permissions to grant these, or install it from the Extensions view.	Hiçbir şey kurulmadı. Bu izinleri vermek için komutu --accept-permissions ile yeniden çalıştırın ya da eklentiyi Eklentiler görünümünden kurun.
+Why: {}	Neden: {}
+denied: {0}; this cannot be granted: {1}	reddedildi: {0}; buna izin verilemez: {1}
+{0} stays stopped: the registry revoked the installed version ({1}) and has no other version to install	{0} durdurulmuş kalıyor: kayıt, kurulu sürümü iptal etti ({1}) ve kurulabilecek başka sürüm yok
+{0} went back to version {1}: the registry revoked {2}.	{0}, {1} sürümüne geri döndü: kayıt {2} sürümünü iptal etti.
+{0} {1} ({2}) asks to:	{0} {1} ({2}) şunları istiyor:
+Allow Host	Sunucuya İzin Ver
+Allow Host…	Sunucuya İzin Ver…
+Connect to a server you allow, named in its “{}” setting	“{}” ayarında adı geçen ve izin verdiğiniz sunucuya bağlanmak
+Could not allow the server: {}	Sunucuya izin verilemedi: {}
+Could not remove the server: {}	Sunucu kaldırılamadı: {}
+Host name of the server {} may connect to, such as github.example.com	{} eklentisinin bağlanabileceği sunucunun adı, örneğin github.example.com
+Install the extension to allow a server; one in development has none.	Bir sunucuya izin vermek için eklentiyi kurun; geliştirilmekte olan bir eklentide bu yoktur.
+It connects only to the servers you allow here, such as the one in its “{}” setting.	Yalnızca burada izin verdiğiniz sunuculara bağlanır, örneğin “{}” ayarındakine.
+It may send requests to {0} over HTTPS, with whatever it can read or store, such as a token you give it. Remove it on the extension's page in Extensions.	{0} sunucusuna HTTPS üzerinden istek gönderebilir; okuyabildiği ya da sakladığı her şeyle, örneğin ona verdiğiniz bir belirteçle. Eklentiler'deki eklenti sayfasından kaldırabilirsiniz.
+Let {0} connect to {1}?	{0}, {1} sunucusuna bağlanabilsin mi?
+Servers	Sunucular
+{0} may now connect to {1}.	{0} artık {1} sunucusuna bağlanabilir.
+(modified)	(değiştirildi)
+Collapse	Daralt
+Expand	Genişlet
+Open Editors	Açık Düzenleyiciler
+line {}	satır {}
+Removed	Kaldırıldı
+Show the Markdown source	Markdown kaynağını göster
+Sort by {}	{} ölçütüne göre sırala
+Unchanged	Değişmedi
+{} added	{} eklendi
+{} removed	{} kaldırıldı
+Breakpoint on line {}	{}. satırdaki kesme noktası
+Brightness	Parlaklık
+Color picker	Renk seçici
+Conflict at line {}	{}. satırdaki çakışma
+Find in Terminal	Terminalde Bul
+Fold line {}	{}. satırı katla
+Hue	Ton
+Line {} added	{}. satır eklendi
+Line {} changed	{}. satır değişti
+Lines deleted above line {}	{}. satırın üstünde satırlar silindi
+Opacity	Opaklık
+Saturation	Doygunluk
+Unfold line {}	{}. satırı aç
+disabled	devre dışı
+Preferences: Reset Settings to Defaults…	Tercihler: Ayarları Varsayılana Sıfırla…
+Reset all settings to the defaults?	Tüm ayarlar varsayılana sıfırlansın mı?
+Settings reset. The old file is kept as {}	Ayarlar sıfırlandı. Eski dosya {} olarak saklandı
+{} is replaced by the default settings of this version. The current file is kept next to it as a backup.	{} bu sürümün varsayılan ayarlarıyla değiştirilir. Mevcut dosya yanında yedek olarak saklanır.
+Reset All Settings…	Tüm Ayarları Sıfırla…

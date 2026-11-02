@@ -1,0 +1,18 @@
+[extension]
+id          = "codeyard.hello-view"
+version     = "0.1.0"
+name        = "Hello View"
+license     = "MIT"
+description = "A view."
+
+[code]
+entry = "Cargo.toml"
+
+[[views]]
+id       = "main"
+title    = "Hello View"
+location = "sidebar"
+
+[[commands]]
+id    = "reset"
+title = "Hello View: Reset"

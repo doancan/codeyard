@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh the firewall's Cloudflare addresses monthly
+
+[Timer]
+OnCalendar=monthly
+RandomizedDelaySec=1d
+Persistent=true
+
+[Install]
+WantedBy=timers.target

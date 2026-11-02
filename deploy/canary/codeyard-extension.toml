@@ -1,0 +1,12 @@
+# The registry's canary (docs/registry.md, "The canary"). The yard-canary workflow publishes a new version every week
+# (it sets the version to 0.0.<run>) and revokes it minutes later, to measure how fast a revocation reaches clients.
+[extension]
+id          = "codeyard.canary"
+version     = "0.0.0"
+name        = "Codeyard Canary"
+license     = "MIT"
+description = "A scheduled test of the registry's revocation: every version is revoked minutes after it is published. Do not install it."
+
+[[snippets]]
+language = "plaintext"
+path     = "snippets/plaintext.json"

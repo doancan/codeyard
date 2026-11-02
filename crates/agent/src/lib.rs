@@ -7,11 +7,13 @@ pub mod bigfile;
 pub mod daemon;
 mod file_identity;
 mod fileops;
+pub mod guard;
 pub mod hashtree;
 mod new_file;
 mod preview;
 pub mod proc;
 pub mod pty;
+mod reattach;
 pub mod search;
 mod shell_integration;
 pub mod watch;
@@ -22,7 +24,7 @@ mod write_tests;
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -76,130 +78,25 @@ pub fn handle(req: Request) -> Response {
         | Request::ProcSpawn { .. }
         | Request::ProcInput { .. }
         | Request::ProcKill { .. }
+        | Request::TaskSpawn { .. }
+        | Request::PtyToken { .. }
+        | Request::PtyAttach { .. }
+        | Request::PtyList
+        | Request::KeepFor { .. }
         | Request::LineIndex { .. }
         | Request::ReadLines { .. } => Err(Error::Unsupported("streaming request outside a session".into())),
         Request::ListFiles { root, limit } => list_files(&expand(&root), limit as usize).map(|(paths, truncated)| Response::Files { paths, truncated }),
         Request::ListShells => Ok(Response::Shells(pty::shells())),
+        Request::RealPaths { paths } => Ok(Response::RealPaths(paths.iter().map(|p| real_path(&expand(p))).collect())),
     };
     result.unwrap_or_else(Response::Error)
 }
 
-/// Maximum output kept per terminal while disconnected (the tail is kept).
-const PTY_BACKLOG: usize = 256 * 1024;
-
-/// The session's connection endpoint. While disconnected (daemon mode, ssh dropped) terminal output, shell exits
-/// and file changes are buffered and replayed in order on reconnect. Other responses are dropped (the client's
-/// pending requests already got "no connection").
-#[derive(Default)]
-struct Link {
-    inner: Mutex<LinkState>,
-}
-
-#[derive(Default)]
-struct LinkState {
-    writer: Option<BufWriter<Box<dyn Write + Send>>>,
-    /// Increments on every connect: so a stale connection's drop can't tear down the new one.
-    generation: u64,
-    backlog: Vec<(u32, Vec<u8>)>,
-    exits: Vec<(u32, Option<i32>)>,
-    changes: Vec<(String, proto::ChangeKind)>,
-}
-
-type Out = Arc<Link>;
-
-impl Link {
-    /// A response (id ≠ 0) or an event (id 0). Events are buffered while disconnected.
-    /// Borrowed response frames share the codec used for replay and daemon handshakes.
-    fn send(&self, id: u32, body: Response) -> io::Result<()> {
-        let mut st = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(w) = st.writer.as_mut() {
-            match proto::write_frame(w, &Frame { id, body: &body }) {
-                Ok(()) => return Ok(()),
-                // Frame too large (a huge directory listing, an `Exec` with both streams full): the connection is fine, only this response
-                // could not be sent. It is reported as an error so the client doesn't wait forever; events (id 0) are dropped.
-                Err(e) if e.kind() == io::ErrorKind::InvalidData => {
-                    if id != 0 {
-                        let note = Response::Error(Error::Other(format!("the answer is too large to send ({e})")));
-                        if proto::write_frame(w, &Frame { id, body: &note }).is_err() {
-                            st.writer = None;
-                        }
-                    }
-                    return Ok(());
-                }
-                Err(_) => st.writer = None, // connection dropped
-            }
-        }
-        match body {
-            Response::PtyOutput { pty, data } => {
-                match st.backlog.iter_mut().find(|(p, _)| *p == pty) {
-                    Some((_, buf)) => buf.extend_from_slice(&data),
-                    None => st.backlog.push((pty, data)),
-                }
-                for (_, buf) in st.backlog.iter_mut().filter(|(p, _)| *p == pty) {
-                    if buf.len() > PTY_BACKLOG {
-                        let cut = buf.len() - PTY_BACKLOG;
-                        buf.drain(..cut);
-                    }
-                }
-            }
-            Response::PtyExit { pty, code } => st.exits.push((pty, code)),
-            Response::FsChanged(c) => {
-                for ch in c {
-                    if !st.changes.contains(&ch) {
-                        st.changes.push(ch);
-                    }
-                }
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
-    /// New connection: handshake response first, then the buffered events.
-    fn attach(&self, writer: Box<dyn Write + Send>, hello: Option<Frame<Response>>) -> io::Result<u64> {
-        let mut st = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let mut w = BufWriter::new(writer);
-        if let Some(hello) = hello {
-            proto::write_frame(&mut w, &Frame { id: hello.id, body: &hello.body })?;
-        }
-        // Clear only after a successful write: one that breaks midway must not lose buffered events (resent on next connect).
-        for (pty, data) in &st.backlog {
-            proto::write_frame(&mut w, &Frame { id: 0, body: &Response::PtyOutput { pty: *pty, data: data.clone() } })?;
-        }
-        for (pty, code) in &st.exits {
-            proto::write_frame(&mut w, &Frame { id: 0, body: &Response::PtyExit { pty: *pty, code: *code } })?;
-        }
-        if !st.changes.is_empty() {
-            proto::write_frame(&mut w, &Frame { id: 0, body: &Response::FsChanged(st.changes.clone()) })?;
-        }
-        st.backlog.clear();
-        st.exits.clear();
-        st.changes.clear();
-        st.writer = Some(w);
-        st.generation += 1;
-        Ok(st.generation)
-    }
-
-    /// Mark disconnected, but only if this is still the current connection.
-    fn detach(&self, generation: u64) {
-        let mut st = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        if st.generation == generation {
-            st.writer = None;
-        }
-    }
-
-    fn generation(&self) -> u64 {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).generation
-    }
-
-    fn is_attached(&self) -> bool {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).writer.is_some()
-    }
-}
-
-fn send(out: &Out, id: u32, body: Response) -> io::Result<()> {
-    out.send(id, body)
-}
+#[path = "link.rs"]
+mod link;
+#[cfg(test)]
+use link::Link;
+use link::{Out, send};
 
 /// A session: running searches, open terminals, watching. Locally (stdio) it
 /// ends together with the connection; in daemon mode it lives on after the connection drops.
@@ -207,6 +104,10 @@ pub struct Session {
     out: Out,
     cancels: Arc<Mutex<HashMap<u32, Arc<AtomicBool>>>>,
     ptys: Arc<Mutex<HashMap<u32, pty::Pty>>>,
+    /// Each terminal's secret, once a client asked for its token (`reattach`).
+    secrets: Mutex<HashMap<u32, String>>,
+    /// Seconds the daemon keeps this session after its connection ends (`KeepFor`; `u64::MAX`: the daemon's default).
+    pub(crate) keep_for: AtomicU64,
     next_pty: AtomicU32,
     /// Piped processes and the generation of the connection they were opened on.
     procs: Arc<Mutex<HashMap<u32, (u64, proc::Proc)>>>,
@@ -256,6 +157,8 @@ impl Default for Session {
             out: Arc::default(),
             cancels: Arc::default(),
             ptys: Arc::default(),
+            secrets: Mutex::default(),
+            keep_for: AtomicU64::new(u64::MAX),
             next_pty: AtomicU32::new(1),
             procs: Arc::default(),
             big: Arc::default(),
@@ -291,6 +194,10 @@ impl Session {
                 self.dispatch(id, body)?;
             }
             while let Some(Frame { id, body }) = proto::read_frame::<Request>(input)? {
+                // A newer connection took the session over: this one may no longer type into its terminals.
+                if self.out.generation() != generation {
+                    break;
+                }
                 self.dispatch(id, body)?;
             }
             Ok(())
@@ -420,6 +327,7 @@ impl Session {
             Request::PtySpawnEx { cols, rows, cwd, shell, args, env, integration } => {
                 self.spawn_pty(id, pty::Spawn { cols, rows, cwd, shell, args, env, integration })
             }
+            Request::PtyToken { .. } | Request::PtyAttach { .. } | Request::PtyList | Request::KeepFor { .. } => self.reattach_request(id, body),
             Request::PtyStatus { pty: pid } => {
                 let status = self.ptys.locked().get(&pid).map(pty::Pty::status).unwrap_or_default();
                 reply(Response::PtyStatus { busy: status.busy, name: status.name, cwd: status.cwd })
@@ -468,37 +376,17 @@ impl Session {
             }
             Request::ProcSpawn { program, args, cwd } => {
                 let cwd = cwd.map(|c| expand(&c).to_string_lossy().into_owned());
-                match proc::spawn(&program, &args, cwd.as_deref()) {
-                    Err(e) => reply(Response::Error(Error::NotFound(format!("{program}: {e}")))),
-                    Ok((p, mut reader)) => {
-                        let pid = self.next_pty.fetch_add(1, Ordering::Relaxed);
-                        self.procs.locked().insert(pid, (self.out.generation(), p));
-                        reply(Response::ProcSpawned { proc: pid })?;
-                        let (out, procs) = (self.out.clone(), self.procs.clone());
-                        std::thread::spawn(move || {
-                            let mut buf = vec![0u8; 64 * 1024];
-                            while let Ok(n @ 1..) = reader.read(&mut buf) {
-                                let _ = send(&out, 0, Response::ProcOutput { proc: pid, data: buf[..n].to_vec() });
-                            }
-                            let code = loop {
-                                let mut processes = procs.locked();
-                                let Some((_, process)) = processes.get_mut(&pid) else { break None };
-                                match process.try_wait() {
-                                    Ok(None) => {
-                                        drop(processes);
-                                        std::thread::sleep(std::time::Duration::from_millis(10));
-                                    }
-                                    result => {
-                                        processes.remove(&pid);
-                                        break result.ok().flatten();
-                                    }
-                                }
-                            };
-                            let _ = send(&out, 0, Response::ProcExit { proc: pid, code });
-                        });
-                        Ok(())
-                    }
-                }
+                let spawned = proc::spawn(&program, &args, cwd.as_deref()).map(|(p, r)| (p, Box::new(r) as Box<dyn Read + Send>));
+                self.proc_spawned(spawned, &program, reply)
+            }
+            Request::TaskSpawn { command, cwd, env } => {
+                let cwd = cwd.map(|c| expand(&c).to_string_lossy().into_owned());
+                let name = match &command {
+                    proto::TaskCommand::Process { program, .. } => program.clone(),
+                    proto::TaskCommand::Shell { shell, .. } => shell.clone().unwrap_or_else(|| "shell".into()),
+                };
+                let spawned = proc::spawn_task(&command, cwd.as_deref(), &env).map(|(p, r)| (p, Box::new(r) as Box<dyn Read + Send>));
+                self.proc_spawned(spawned, &name, reply)
             }
             Request::LineIndex { path } if id != 0 => {
                 self.line_request(id, path, None);
@@ -546,6 +434,45 @@ impl Session {
 
 impl Session {
     /// Line index or a line range of a big file, answered from a thread (the scan can take a while).
+    /// Register a spawned process, answer `ProcSpawned`, then stream `ProcOutput` and one `ProcExit`.
+    fn proc_spawned(
+        &self,
+        spawned: io::Result<(proc::Proc, Box<dyn Read + Send>)>,
+        name: &str,
+        reply: impl FnOnce(Response) -> io::Result<()>,
+    ) -> io::Result<()> {
+        let (p, mut reader) = match spawned {
+            Err(e) => return reply(Response::Error(Error::NotFound(format!("{name}: {e}")))),
+            Ok(spawned) => spawned,
+        };
+        let pid = self.next_pty.fetch_add(1, Ordering::Relaxed);
+        self.procs.locked().insert(pid, (self.out.generation(), p));
+        reply(Response::ProcSpawned { proc: pid })?;
+        let (out, procs) = (self.out.clone(), self.procs.clone());
+        std::thread::spawn(move || {
+            let mut buf = vec![0u8; 64 * 1024];
+            while let Ok(n @ 1..) = reader.read(&mut buf) {
+                let _ = send(&out, 0, Response::ProcOutput { proc: pid, data: buf[..n].to_vec() });
+            }
+            let code = loop {
+                let mut processes = procs.locked();
+                let Some((_, process)) = processes.get_mut(&pid) else { break None };
+                match process.try_wait() {
+                    Ok(None) => {
+                        drop(processes);
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    result => {
+                        processes.remove(&pid);
+                        break result.ok().flatten();
+                    }
+                }
+            };
+            let _ = send(&out, 0, Response::ProcExit { proc: pid, code });
+        });
+        Ok(())
+    }
+
     fn line_request(&self, id: u32, path: String, range: Option<(u64, u32)>) {
         let (out, big) = (self.out.clone(), self.big.clone());
         std::thread::spawn(move || {
@@ -620,7 +547,8 @@ fn expand(path: &str) -> PathBuf {
 fn map_err(path: &Path, e: io::Error) -> Error {
     let p = path.display().to_string();
     match e.kind() {
-        io::ErrorKind::NotFound => Error::NotFound(p),
+        // A file where a folder of the path should be: nothing is at that path (ENOTDIR).
+        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory => Error::NotFound(p),
         io::ErrorKind::PermissionDenied => Error::PermissionDenied(p),
         io::ErrorKind::IsADirectory => Error::IsDirectory(p),
         io::ErrorKind::AlreadyExists => Error::AlreadyExists(p),
@@ -653,6 +581,42 @@ fn read_dir(path: &Path) -> Result<Vec<DirEntry>, Error> {
     Ok(out)
 }
 
+/// Symbolic links followed in one path before giving up, as `ELOOP` does.
+const MAX_LINKS: u32 = 40;
+
+/// Where `path` really is: every symbolic link followed, also a dangling one at the end (writing through it would create
+/// its target), and parts that do not exist yet appended to their nearest existing folder. `path` is absolute.
+fn real_path(path: &Path) -> Result<String, Error> {
+    resolve(path, 0).map(|p| plain(&p).to_string_lossy().into_owned())
+}
+
+fn resolve(path: &Path, links: u32) -> Result<PathBuf, Error> {
+    if links > MAX_LINKS {
+        return Err(Error::Other(format!("{}: too many levels of symbolic links", path.display())));
+    }
+    match fs::canonicalize(path) {
+        Ok(p) => return Ok(p),
+        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(map_err(path, e)),
+        Err(_) => {}
+    }
+    let parent = path.parent().ok_or_else(|| Error::NotFound(path.display().to_string()))?;
+    if let Ok(target) = fs::read_link(path) {
+        return resolve(&parent.join(target), links + 1);
+    }
+    let name = path.file_name().ok_or_else(|| Error::NotFound(path.display().to_string()))?;
+    Ok(resolve(parent, links)?.join(name))
+}
+
+/// `C:\x` for Windows' `\\?\C:\x`, as paths are written everywhere else; elsewhere the path itself.
+fn plain(path: &Path) -> PathBuf {
+    let s = path.to_string_lossy();
+    match s.strip_prefix(r"\\?\") {
+        Some(rest) if rest.starts_with("UNC\\") => PathBuf::from(format!(r"\\{}", &rest[4..])),
+        Some(rest) => PathBuf::from(rest),
+        None => path.to_path_buf(),
+    }
+}
+
 fn stat(path: &Path) -> Result<Meta, Error> {
     let m = fs::metadata(path).map_err(|e| map_err(path, e))?;
     Ok(file_meta(m))
@@ -660,7 +624,21 @@ fn stat(path: &Path) -> Result<Meta, Error> {
 
 fn file_meta(m: fs::Metadata) -> Meta {
     let mtime_ms = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as i64);
-    Meta { kind: kind_of(m.file_type()), size: m.len(), mtime_ms, readonly: m.permissions().readonly() }
+    let created_ms = m.created().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as i64);
+    Meta { kind: kind_of(m.file_type()), size: m.len(), mtime_ms, readonly: m.permissions().readonly(), file_id: file_id(&m), created_ms }
+}
+
+/// Device and inode in one value (a path deleted and created again gets a new one, writes keep it).
+#[cfg(unix)]
+fn file_id(m: &fs::Metadata) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+    m.ino() ^ m.dev().rotate_left(32)
+}
+
+/// Windows has no stable file index in the standard library; the creation time stands in for it.
+#[cfg(not(unix))]
+fn file_id(_: &fs::Metadata) -> u64 {
+    0
 }
 
 fn read(path: &Path) -> Result<Response, Error> {
@@ -796,6 +774,10 @@ fn write(path: &Path, data: &[u8], expect_hash: Option<u64>) -> Result<u64, Erro
     let _write_guard = target_lock.locked();
     let existing = fs::metadata(&target).ok();
 
+    // A write against a known version must not bring back a file that was deleted since that version was read.
+    if existing.is_none() && expect_hash.is_some() {
+        return Err(Error::Conflict { path: path.display().to_string(), current_hash: 0 });
+    }
     if let Some(m) = &existing {
         if m.is_dir() {
             return Err(Error::IsDirectory(path.display().to_string()));
@@ -1182,6 +1164,36 @@ mod tests {
         assert_eq!(fs::read_to_string(dir.join("other.txt")).unwrap(), "other");
     }
 
+    /// What an extension's file call reaches is checked on these: a link inside a folder can lead anywhere.
+    #[cfg(unix)]
+    #[test]
+    fn real_paths_follow_every_link_and_resolve_missing_parts() {
+        use std::os::unix::fs::symlink;
+        let d = fs::canonicalize(tmpdir("real-paths şü")).unwrap();
+        fs::create_dir_all(d.join("ws/src")).unwrap();
+        fs::write(d.join("ws/.env"), "SECRET=1").unwrap();
+        fs::write(d.join("outside.txt"), "x").unwrap();
+        symlink("/etc", d.join("ws/src/link-out")).unwrap();
+        symlink("../.env", d.join("ws/src/settings.txt")).unwrap();
+        symlink(d.join("nowhere/new.txt"), d.join("ws/src/dangling")).unwrap();
+        symlink(d.join("outside.txt"), d.join("ws/src/out-file")).unwrap();
+        symlink("loop", d.join("ws/src/loop")).unwrap();
+        let ask = |rel: &[&str]| {
+            let paths = rel.iter().map(|r| s(&d.join(r))).collect();
+            let Response::RealPaths(list) = handle(Request::RealPaths { paths }) else { panic!() };
+            list
+        };
+        let etc = s(&fs::canonicalize("/etc/passwd").unwrap());
+        let got = ask(&["ws/src/link-out/passwd", "ws/src/settings.txt", "ws/src/dangling", "ws/src/out-file", "ws/src/new/dir/file.txt", "ws/src"]);
+        assert_eq!(got[0], Ok(etc));
+        assert_eq!(got[1], Ok(s(&d.join("ws/.env"))));
+        assert_eq!(got[2], Ok(s(&d.join("nowhere/new.txt"))), "a dangling link leads where a write would create the file");
+        assert_eq!(got[3], Ok(s(&d.join("outside.txt"))));
+        assert_eq!(got[4], Ok(s(&d.join("ws/src/new/dir/file.txt"))), "parts that do not exist yet are kept");
+        assert_eq!(got[5], Ok(s(&d.join("ws/src"))));
+        assert!(ask(&["ws/src/loop"])[0].is_err(), "a link loop is an error, not a path");
+    }
+
     #[test]
     fn write_then_read_roundtrip() {
         let d = tmpdir("rt");
@@ -1192,6 +1204,22 @@ mod tests {
         assert_eq!(hash, h2);
         // No temp file should remain.
         assert_eq!(fs::read_dir(&d).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn a_write_against_a_version_does_not_recreate_a_deleted_file() {
+        let d = tmpdir("deleted-expect");
+        let p = d.join("gone.txt");
+        fs::write(&p, "v1").unwrap();
+        let base = content_hash(b"v1");
+        fs::remove_file(&p).unwrap();
+        let r = handle(Request::Write { path: s(&p), data: b"v2".to_vec(), expect_hash: Some(base) });
+        assert!(matches!(r, Response::Error(Error::Conflict { .. })), "{r:?}");
+        assert!(!p.exists(), "not recreated");
+        // Without an expected version (a forced save, a new file) it is still written.
+        let r = handle(Request::Write { path: s(&p), data: b"v2".to_vec(), expect_hash: None });
+        assert!(matches!(r, Response::Written { .. }), "{r:?}");
+        assert_eq!(fs::read_to_string(&p).unwrap(), "v2");
     }
 
     #[test]
@@ -1445,6 +1473,98 @@ mod tests {
         let text = String::from_utf8_lossy(&output);
         assert!(text.contains("kod-42"), "{text}");
         assert_eq!(code, Some(3));
+    }
+
+    /// Output of a task until its `ProcExit`: (text, exit code).
+    #[cfg(unix)]
+    fn task_output(c: &mut Client, proc: u32) -> (String, Option<i32>) {
+        let mut text = Vec::new();
+        loop {
+            match c.recv().body {
+                Response::ProcOutput { proc: p, data } if p == proc => text.extend(data),
+                Response::ProcExit { proc: p, code } if p == proc => return (String::from_utf8_lossy(&text).into_owned(), code),
+                other => panic!("{other:?}"),
+            }
+        }
+    }
+
+    /// Process tasks get their arguments literally; variables are set and removed in order; stderr arrives in the same
+    /// stream; the exit code is reported.
+    #[cfg(unix)]
+    #[test]
+    fn a_process_task_keeps_its_arguments_and_environment_exactly() {
+        let mut c = Client::new();
+        let dir = std::env::temp_dir().join(format!("codeyard-task-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = "printf '%s|' \"$@\"; printf 'A=%s B=%s' \"$TASK_A\" \"${TASK_B-unset}\"; echo err >&2; exit 3";
+        let args = vec!["-c".into(), script.into(), "sh".into(), "two words".into(), "'q' \"d\" $HOME; *".into(), String::new()];
+        c.send(
+            1,
+            Request::TaskSpawn {
+                command: proto::TaskCommand::Process { program: "/bin/sh".into(), args },
+                cwd: Some(dir.to_string_lossy().into_owned()),
+                env: vec![("TASK_A".into(), Some("é ü".into())), ("TASK_B".into(), Some("x".into())), ("TASK_B".into(), None)],
+            },
+        );
+        let Response::ProcSpawned { proc } = c.recv().body else { panic!("spawn") };
+        let (text, code) = task_output(&mut c, proc);
+        assert_eq!(code, Some(3));
+        assert!(text.starts_with("two words|'q' \"d\" $HOME; *||A=é ü B=unset"), "{text:?}");
+        assert!(text.contains("err"), "stderr is part of the output: {text:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_shell_task_runs_its_line_in_the_given_shell_and_a_missing_folder_is_an_error() {
+        let mut c = Client::new();
+        let shell = proto::TaskCommand::Shell { shell: Some("/bin/sh".into()), args: Some(vec!["-c".into()]), line: "echo $((6 * 7))".into() };
+        c.send(1, Request::TaskSpawn { command: shell.clone(), cwd: None, env: Vec::new() });
+        let Response::ProcSpawned { proc } = c.recv().body else { panic!("spawn") };
+        assert_eq!(task_output(&mut c, proc), ("42\n".into(), Some(0)));
+        c.send(2, Request::TaskSpawn { command: shell, cwd: Some("/nonexistent/codeyard".into()), env: Vec::new() });
+        assert!(matches!(c.recv().body, Response::Error(_)));
+    }
+
+    /// Stopping a task stops what it started, also after the leader has exited and only a descendant holds the output.
+    #[cfg(unix)]
+    #[test]
+    fn killing_a_task_stops_its_descendants() {
+        let mut c = Client::new();
+        let dir = std::env::temp_dir().join(format!("codeyard-task-tree-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pidfile = dir.join("child.pid");
+        let line = format!("sleep 300 & echo $! > '{}'; echo started; wait", pidfile.display());
+        c.send(
+            1,
+            Request::TaskSpawn {
+                command: proto::TaskCommand::Shell { shell: Some("/bin/sh".into()), args: Some(vec!["-c".into()]), line },
+                cwd: None,
+                env: Vec::new(),
+            },
+        );
+        let Response::ProcSpawned { proc } = c.recv().body else { panic!("spawn") };
+        let Response::ProcOutput { .. } = c.recv().body else { panic!("output") };
+        let child: i32 = std::fs::read_to_string(&pidfile).unwrap().trim().parse().unwrap();
+        // SAFETY: signal 0 only checks that the process exists.
+        assert_eq!(unsafe { libc::kill(child, 0) }, 0, "the descendant runs");
+        c.send(2, Request::ProcKill { proc });
+        let mut exited = None;
+        while exited.is_none() {
+            match c.recv().body {
+                Response::ProcExit { proc: p, code } if p == proc => exited = Some(code),
+                Response::Done | Response::ProcOutput { .. } => {}
+                other => panic!("{other:?}"),
+            }
+        }
+        assert_eq!(exited, Some(None), "a killed task has no exit code");
+        let gone = (0..200).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            // SAFETY: as above.
+            (unsafe { libc::kill(child, 0) }) != 0
+        });
+        assert!(gone, "the descendant was stopped with the task");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A server that stops reading must not silently lose later input: once the queue overflows the process is ended and the

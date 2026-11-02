@@ -1,0 +1,17 @@
+[package]
+name = "doc-snippets"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# The Rust snippets of docs/extensions, compiled and tested by CI (crates/cyx/src/doc_tests.rs checks that each
+# snippet appears here as written). Not an extension to install.
+[lib]
+
+[dependencies]
+codeyard-extension = { path = "../../../crates/ext-sdk" }
+
+[dev-dependencies]
+codeyard-extension-test = { path = "../../../crates/ext-test" }
+
+[workspace]

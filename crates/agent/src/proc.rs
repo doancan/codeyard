@@ -299,6 +299,76 @@ pub struct Proc {
 
 pub fn spawn(program: &str, args: &[String], cwd: Option<&str>) -> io::Result<(Proc, impl Read + Send + 'static)> {
     let mut cmd = command(program, args, cwd)?;
+    cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+    let (proc, stdout) = spawn_owned(cmd)?;
+    Ok((proc, piped(stdout)?))
+}
+
+/// The user's shell, or `/bin/sh`.
+#[cfg(unix)]
+fn user_shell() -> String {
+    std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/sh".into())
+}
+
+/// A task: `TaskCommand` as given, `env` applied in order, stdout and stderr written to one pipe so the reader sees them
+/// interleaved as the program wrote them. Standard input is closed. Nothing is added to the environment.
+pub fn spawn_task(task: &proto::TaskCommand, cwd: Option<&str>, env: &[(String, Option<String>)]) -> io::Result<(Proc, impl Read + Send + 'static)> {
+    let mut cmd = match task {
+        proto::TaskCommand::Process { program, args } => {
+            #[cfg(unix)]
+            let mut c = if program.contains('/') { Command::new(program) } else { login_command(&user_shell(), program) };
+            #[cfg(windows)]
+            let mut c = Command::new(resolve_program(program));
+            c.args(args);
+            c
+        }
+        proto::TaskCommand::Shell { shell, args, line } => {
+            #[cfg(unix)]
+            {
+                let mut c = Command::new(shell.clone().unwrap_or_else(user_shell));
+                c.args(args.clone().unwrap_or_else(|| vec!["-l".into(), "-c".into()])).arg(line);
+                c
+            }
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                let program = shell.clone().unwrap_or_else(|| "cmd.exe".into());
+                let cmd_exe = std::path::Path::new(&program).file_name().is_some_and(|n| n.eq_ignore_ascii_case("cmd.exe") || n.eq_ignore_ascii_case("cmd"));
+                let mut c = Command::new(resolve_program(&program));
+                if cmd_exe {
+                    // cmd.exe parses its own command line: the line goes in verbatim, not re-quoted by Command.
+                    for a in args.clone().unwrap_or_else(|| vec!["/d".into(), "/s".into(), "/c".into()]) {
+                        c.raw_arg(a);
+                    }
+                    c.raw_arg(format!("\"{line}\""));
+                } else {
+                    c.args(args.clone().unwrap_or_else(|| vec!["-Command".into()])).arg(line);
+                }
+                c
+            }
+        }
+    };
+    if let Some(dir) = cwd {
+        if !std::path::Path::new(dir).is_dir() {
+            return Err(io::Error::new(io::ErrorKind::NotFound, format!("the working directory {dir} does not exist")));
+        }
+        cmd.current_dir(dir);
+    }
+    for (key, value) in env {
+        match value {
+            Some(value) => cmd.env(key, value),
+            None => cmd.env_remove(key),
+        };
+    }
+    let (reader, writer) = io::pipe()?;
+    cmd.stdin(Stdio::null()).stdout(writer.try_clone()?).stderr(writer);
+    let (proc, _) = spawn_owned(cmd)?;
+    // `cmd` (and with it the parent's copies of the write end) is gone: the reader ends when the last child closes it.
+    Ok((proc, reader))
+}
+
+/// Spawn in an owned process group / job. Returns the child's stdout if it was piped.
+fn spawn_owned(mut cmd: Command) -> io::Result<(Proc, Option<std::process::ChildStdout>)> {
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     #[cfg(windows)]
@@ -308,7 +378,10 @@ pub fn spawn(program: &str, args: &[String], cwd: Option<&str>) -> io::Result<(P
         // Assign ownership before any user code can run or create descendants.
         cmd.creation_flags(CREATE_NO_WINDOW | CREATE_SUSPENDED);
     }
-    let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn()?;
+    let mut child = cmd.spawn()?;
+    drop(cmd);
+    #[cfg(unix)]
+    crate::guard::task_started(child.id());
     #[cfg(windows)]
     let job = match job::Job::attach(&child) {
         Ok(job) => job,
@@ -319,7 +392,7 @@ pub fn spawn(program: &str, args: &[String], cwd: Option<&str>) -> io::Result<(P
         }
     };
     let stdin = child.stdin.take();
-    let stdout = piped(child.stdout.take())?;
+    let stdout = child.stdout.take();
     let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(512);
     std::thread::spawn(move || {
         let Some(mut stdin) = stdin else { return };
@@ -358,13 +431,22 @@ impl Proc {
     pub fn wait(&mut self) -> Option<i32> {
         self.input = None;
         self.waited = true;
+        self.forget();
         self.child.wait().ok().and_then(exit_code)
+    }
+
+    /// The group leaves the process guard before its leader is reaped (after that its id may be reused).
+    fn forget(&self) {
+        #[cfg(unix)]
+        crate::guard::forget(self.child.id());
     }
 
     /// Poll without taking the process out of its session's table. Closing stdout
     /// must not make a still-running command impossible to cancel.
     pub fn try_wait(&mut self) -> io::Result<Option<i32>> {
         let Some(status) = self.child.try_wait()? else { return Ok(None) };
+        // Reaped: the group id is free from here on, so the guard must not keep it.
+        self.forget();
         self.input = None;
         self.waited = true;
         Ok(Some(exit_code(status).unwrap_or(1)))
@@ -382,6 +464,9 @@ impl Drop for Proc {
         {
             // SAFETY: kill has no memory-safety preconditions; a negative pid names the group this child leads.
             unsafe { libc::kill(-pid, libc::SIGKILL) };
+        }
+        if !self.waited {
+            self.forget();
         }
         let _ = self.child.kill();
         let _ = self.child.wait();
@@ -404,3 +489,7 @@ fn exit_code(status: std::process::ExitStatus) -> Option<i32> {
 #[cfg(test)]
 #[path = "proc_tests.rs"]
 mod tests;
+
+#[cfg(all(test, windows))]
+#[path = "proc_windows_tests.rs"]
+mod windows_tests;

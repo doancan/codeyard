@@ -2,18 +2,83 @@
 
 use super::*;
 
+/// Whether the activity bar's view buttons continue above and below what is visible.
+fn activity_hints(scroll: &gpui::ScrollHandle) -> (bool, bool) {
+    let (offset, max) = (scroll.offset().y, scroll.max_offset().height);
+    (offset < px(-0.5), max > px(0.5) && offset > -max + px(0.5))
+}
+
 impl Workbench {
-    pub(super) fn activity_bar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
+    /// The activity bar's own views in the order drawn: (view, label, badge, shown).
+    pub(super) fn activity_items(&self, cx: &App) -> Vec<(Panel, &'static str, usize, bool)> {
         let changes = self.vcs.status.as_ref().map_or(0, |g| g.changes.len());
-        let failed_tests = self.failed_test_count();
-        let item = |id: &'static str, name: &'static str, label: &'static str, panel: Panel, badge: usize, cx: &mut Context<Self>| {
-            let selected =
-                self.chrome.panel == Some(panel) || (panel == Panel::Containers && self.tabs.page_active && matches!(self.tabs.page, Some(Page::Containers)));
-            div()
-                .id(id)
+        let mut items = vec![
+            (Panel::Explorer, crate::i18n::t("Explorer (⇧⌘E)"), 0),
+            (Panel::Search, crate::i18n::t("Search (⇧⌘F)"), 0),
+            (Panel::Scm, crate::i18n::t("Source Control (⌃⇧G)"), changes),
+            (Panel::Debug, crate::i18n::t("Run and Debug (⌃⇧D)"), 0),
+            (Panel::Testing, crate::i18n::t("Testing"), self.failed_test_count()),
+            (Panel::Remote, crate::i18n::t("Remote Explorer"), 0),
+            (Panel::Extensions, crate::i18n::t("Extensions"), 0),
+        ];
+        if cx.global::<Settings>().docker_enabled {
+            items.push((Panel::Containers, crate::i18n::t("Containers"), 0));
+        }
+        items
+            .into_iter()
+            .map(|(panel, label, badge)| {
+                let shown = self.chrome.panel == Some(panel)
+                    || (panel == Panel::Containers && self.tabs.page_active && matches!(self.tabs.page, Some(Page::Containers)));
+                (panel, label, badge, shown)
+            })
+            .collect()
+    }
+
+    /// A click on a view of the activity bar: it is shown, or hidden when it is the one shown.
+    pub(super) fn activity_click(&mut self, panel: Panel, window: &mut Window, cx: &mut Context<Self>) {
+        if panel == Panel::Containers {
+            self.show_containers(cx);
+            return;
+        }
+        self.chrome.panel = if self.chrome.panel == Some(panel) { None } else { Some(panel) };
+        if self.view_shown(Panel::Explorer) {
+            window.focus(&self.roots.primary.focus_handle(cx));
+        }
+        if self.view_shown(Panel::Remote) {
+            self.refresh_remote_view(cx);
+        }
+        if self.view_shown(Panel::Debug) {
+            self.load_launch_catalog(cx);
+        }
+        if self.view_shown(Panel::Testing) {
+            self.testing_opened(window, cx);
+        }
+        if self.view_shown(Panel::Extensions) {
+            self.extensions_opened(window, cx);
+        }
+        cx.notify();
+    }
+
+    pub(super) fn activity_bar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
+        let item = |(panel, label, badge, selected): (Panel, &'static str, usize, bool), cx: &mut Context<Self>| {
+            let id = super::a11y::view_part(panel);
+            let name = match panel {
+                Panel::Explorer => "files",
+                Panel::Search => "search",
+                Panel::Scm => "git-branch",
+                Panel::Debug => "bug-play",
+                Panel::Testing => "flask-conical",
+                Panel::Remote => "screen-share",
+                Panel::Extensions => "blocks",
+                _ => "server",
+            };
+            // Dragged onto the other side bar, the view moves there.
+            self.view_drag(panel, div().id(id), cx)
                 .debug_selector(|| id.to_string())
                 .group(id)
                 .relative()
+                .child(super::a11y::part_frame(super::a11y::Part::Control(id), cx))
+                .flex_none()
                 .w(px(layout::ACTIVITYBAR_W))
                 .h(px(layout::ACTIVITYBAR_W))
                 .flex()
@@ -54,35 +119,17 @@ impl Workbench {
                     )
                 })
                 .tooltip(move |_, cx| cx.new(|_| Tooltip(label.into())).into())
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    if panel == Panel::Containers {
-                        this.show_containers(cx);
-                        return;
-                    }
-                    this.chrome.panel = if this.chrome.panel == Some(panel) { None } else { Some(panel) };
-                    if this.chrome.panel == Some(Panel::Explorer) {
-                        window.focus(&this.roots.primary.focus_handle(cx));
-                    }
-                    if this.chrome.panel == Some(Panel::Remote) {
-                        this.refresh_remote_view(cx);
-                    }
-                    if this.chrome.panel == Some(Panel::Debug) {
-                        this.load_launch_catalog(cx);
-                    }
-                    if this.chrome.panel == Some(Panel::Testing) {
-                        this.testing_opened(window, cx);
-                    }
-                    if this.chrome.panel == Some(Panel::Extensions) {
-                        this.extensions_opened(window, cx);
-                    }
-                    cx.notify();
-                }))
+                .on_click(cx.listener(move |this, _, window, cx| this.activity_click(panel, window, cx)))
         };
         // `tip`: tooltip only while the menu is closed so it can't cover the open menu's last row (native apps hide it too).
-        let bottom = |id: &'static str, name: &'static str, label: &'static str, tip: bool| {
+        let bottom = |id: &'static str, name: &'static str, label: &'static str, tip: bool, cx: &Context<Self>| {
             div()
                 .id(id)
+                .debug_selector(|| id.to_string())
                 .group(id)
+                .relative()
+                .child(super::a11y::part_frame(super::a11y::Part::Control(id), cx))
+                .flex_none()
                 .w(px(layout::ACTIVITYBAR_W))
                 .h(px(layout::ACTIVITYBAR_W))
                 .flex()
@@ -101,6 +148,64 @@ impl Workbench {
                 )
                 .when(tip, |d| d.tooltip(move |_, cx| cx.new(|_| Tooltip(label.into())).into()))
         };
+        let scroll = &self.chrome.activity_scroll;
+        let (more_above, more_below) = activity_hints(scroll);
+        self.chrome.activity_hints.set((more_above, more_below));
+        // The scroll range is only known after layout: when a resize or zoom changed it, draw the hints again.
+        let recheck = {
+            let (scroll, entity) = (scroll.clone(), cx.entity().downgrade());
+            gpui::canvas(
+                move |_, _, _| activity_hints(&scroll),
+                move |_, hints, _, cx| {
+                    // A view cannot be invalidated while it is being drawn: ask right after this frame.
+                    let entity = entity.clone();
+                    cx.defer(move |cx| {
+                        entity
+                            .update(cx, |wb, cx| {
+                                if wb.chrome.activity_hints.get() != hints {
+                                    cx.notify();
+                                }
+                            })
+                            .ok();
+                    });
+                },
+            )
+            .absolute()
+            .size_0()
+        };
+        // A faint strip with a chevron at the clipped edge; it takes no clicks, so the button under it still works.
+        let more_hint = |id: &'static str, glyph: &'static str, top: bool| {
+            div()
+                .debug_selector(move || id.to_string())
+                .absolute()
+                .left_0()
+                .right_0()
+                .when(top, |d| d.top_0().border_b_1())
+                .when(!top, |d| d.bottom_0().border_t_1())
+                .h(px(12.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(c(p.surface))
+                .border_color(c(p.border))
+                .child(icon(glyph, 10., p.text_muted))
+        };
+        let views = div()
+            .id("activity-views")
+            .debug_selector(|| "activity-views".into())
+            .size_full()
+            .flex()
+            .flex_col()
+            .overflow_y_scroll()
+            .track_scroll(scroll)
+            .children({
+                let items = self.activity_items(cx);
+                let (own, containers): (Vec<_>, Vec<_>) = items.into_iter().partition(|i| i.0 != Panel::Containers);
+                let mut out: Vec<gpui::AnyElement> = own.into_iter().map(|i| item(i, cx).into_any_element()).collect();
+                out.extend(self.ext_view_activity_items(p, cx).into_iter().map(|e| e.into_any_element()));
+                out.extend(containers.into_iter().map(|i| item(i, cx).into_any_element()));
+                out
+            });
         div()
             .w(px(layout::ACTIVITYBAR_W))
             .flex_none()
@@ -109,18 +214,23 @@ impl Workbench {
             .bg(c(p.surface))
             .border_r_1()
             .border_color(c(p.border))
-            .child(item("act-explorer", "files", crate::i18n::t("Explorer (⇧⌘E)"), Panel::Explorer, 0, cx))
-            .child(item("act-search", "search", crate::i18n::t("Search (⇧⌘F)"), Panel::Search, 0, cx))
-            .child(item("act-scm", "git-branch", crate::i18n::t("Source Control (⌃⇧G)"), Panel::Scm, changes, cx))
-            .child(item("act-debug", "bug-play", crate::i18n::t("Run and Debug (⌃⇧D)"), Panel::Debug, 0, cx))
-            .child(item("act-testing", "flask-conical", crate::i18n::t("Testing"), Panel::Testing, failed_tests, cx))
-            .child(item("act-remote", "screen-share", crate::i18n::t("Remote Explorer"), Panel::Remote, 0, cx))
-            .child(item("act-extensions", "blocks", crate::i18n::t("Extensions"), Panel::Extensions, 0, cx))
-            .when(cx.global::<Settings>().docker_enabled, |d| d.child(item("act-containers", "server", crate::i18n::t("Containers"), Panel::Containers, 0, cx)))
-            .child(div().flex_1())
+            // The views scroll when the window is too short for all of them (a small window, or a large interface
+            // scale); the manage button stays pinned at the bottom. A chevron at the clipped edge says more are there.
+            .child(
+                div()
+                    .relative()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .flex_col()
+                    .child(views)
+                    .child(recheck)
+                    .when(more_above, |d| d.child(more_hint("activity-more-above", "chevron-up", true)))
+                    .when(more_below, |d| d.child(more_hint("activity-more-below", "chevron-down", false))),
+            )
             .child(
                 // A single "manage" button: the menu opens to the right of the icon, bottom edge aligned with it (see `open_manage_menu`).
-                bottom("act-manage", "settings", crate::i18n::t("Manage: About, Settings, Color Theme…"), self.menu.is_none()).on_mouse_down(
+                bottom("act-manage", "settings", crate::i18n::t("Manage: About, Settings, Color Theme…"), self.menu.is_none(), cx).on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, _: &gpui::MouseDownEvent, window, cx| {
                         cx.stop_propagation();
@@ -131,18 +241,25 @@ impl Workbench {
     }
 
     pub(super) fn view_header(&self, title: impl Into<SharedString>, p: &Palette) -> impl IntoElement {
-        div()
-            .h(px(layout::VIEW_HEADER_H))
-            .flex_none()
-            .flex()
-            .items_center()
-            .px(px(theme::SPACE[6]))
-            .text_size(px(text::XXS.0))
-            .font_weight(gpui::FontWeight::SEMIBOLD)
-            .text_color(c(p.text_muted))
-            .child(title.into())
+        view_header(title, p)
     }
+}
 
+/// A side view's title row.
+pub(super) fn view_header(title: impl Into<SharedString>, p: &Palette) -> impl IntoElement {
+    div()
+        .h(px(layout::VIEW_HEADER_H))
+        .flex_none()
+        .flex()
+        .items_center()
+        .px(px(theme::SPACE[6]))
+        .text_size(px(text::XXS.0))
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(c(p.text_muted))
+        .child(title.into())
+}
+
+impl Workbench {
     /// Explorer tree events (the first and extra folders' trees use the same path).
     pub(super) fn on_tree_event(&mut self, event: &TreeEvent, window: &mut Window, cx: &mut Context<Self>) {
         let this = self;
@@ -177,7 +294,7 @@ impl Workbench {
     }
 
     pub(super) fn explorer_panel(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let root = self.roots.primary.read(cx).root().map(|r| ui::file_name(r).to_uppercase());
+        let root = self.roots.primary.read(cx).root().map(|r| self.root_label(r).to_uppercase());
         let Some(root) = root else {
             // No folder: an empty state saying what to do.
             return div()
@@ -198,6 +315,10 @@ impl Workbench {
                         .child(
                             div()
                                 .id("explorer-open-folder")
+                                .relative()
+                                .child(self.ctl(crate::i18n::t("Explorer"), "explorer-open-folder", crate::i18n::t("Open Folder"), cx, |this, w, cx| {
+                                    this.open_folder(&OpenFolder, w, cx)
+                                }))
                                 .h(px(28.))
                                 .flex()
                                 .items_center()
@@ -213,6 +334,14 @@ impl Workbench {
                         .child(
                             div()
                                 .id("explorer-recent")
+                                .relative()
+                                .child(self.ctl(
+                                    crate::i18n::t("Explorer"),
+                                    "explorer-recent",
+                                    crate::i18n::t("Open recent, or connect to a host… (⌃R)"),
+                                    cx,
+                                    |this, w, cx| this.show_project_switcher(w, cx),
+                                ))
                                 .w_full()
                                 .text_ellipsis()
                                 .cursor_pointer()
@@ -231,8 +360,20 @@ impl Workbench {
             .enumerate()
             .map(|(i, rel)| {
                 let rel = rel.clone();
+                let open_rel = rel.clone();
                 div()
                     .id(("favorite", i))
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::new(
+                            crate::i18n::t("★ Favorites"),
+                            rel.clone(),
+                            accesskit::Role::ListItem,
+                            ui::file_name(&rel).to_string(),
+                        )
+                        .description(parent_of(&rel))
+                        .on_entity(cx.entity().downgrade(), move |this, w, cx| this.open_favorite(open_rel.clone(), w, cx)),
+                    ))
                     .h(px(22.))
                     .w_full()
                     .flex()
@@ -271,6 +412,13 @@ impl Workbench {
                     div()
                         .id(("open-editor", ix))
                         .group(group.clone())
+                        .relative()
+                        .child(crate::a11y_controls::control(
+                            crate::a11y_controls::Control::new(crate::i18n::t("Open Editors"), format!("open:{path}"), accesskit::Role::ListItem, name.clone())
+                                .description(if dirty { crate::i18n::t("(modified)").to_string() } else { String::new() })
+                                .selected(active)
+                                .on_entity(cx.entity().downgrade(), move |this, w, cx| this.activate(ix, w, cx)),
+                        ))
                         .h(px(22.))
                         .w_full()
                         .flex()
@@ -283,7 +431,7 @@ impl Workbench {
                         .when(active, |d| d.bg(c(p.surface_active)))
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .child(crate::icon_theme::file_icon_el(&name, 14., p))
-                        .child(div().flex_none().text_color(c(mark.map_or(p.text, |m| m.color(p)))).child(name))
+                        .child(div().flex_none().text_color(c(mark.map_or(p.text, |m| m.color(p)))).child(name.clone()))
                         .child(
                             div()
                                 .flex_1()
@@ -300,6 +448,17 @@ impl Workbench {
                         } else {
                             div()
                                 .id(("open-editor-close", ix))
+                                .relative()
+                                .child(crate::a11y_controls::control(
+                                    crate::a11y_controls::Control::button(
+                                        crate::i18n::t("Open Editors"),
+                                        format!("close:{path}"),
+                                        crate::i18n::t("Close"),
+                                        |_, _| {},
+                                    )
+                                    .description(name.clone())
+                                    .on_entity(cx.entity().downgrade(), move |this, w, cx| this.close_editor_at(ix, w, cx)),
+                                ))
                                 .flex_none()
                                 .invisible()
                                 .group_hover(group, |s| s.visible())
@@ -330,12 +489,27 @@ impl Workbench {
         let (open_open, fav_open, tree_open, time_open) = (sec("open-editors"), sec("favorites"), sec("folders"), sec("timeline"));
         // Section header + toggle on click.
         let head = |id: &'static str, title: &str, count: Option<usize>, open: bool, cx: &mut Context<Self>| {
-            sections::header(SharedString::from(format!("sec-{id}")), title, count, open, p).debug_selector(move || format!("sec-{id}")).on_click(cx.listener(
-                move |this, _, _, cx| {
+            let label = match count {
+                Some(n) => format!("{title} ({n})"),
+                None => title.to_string(),
+            };
+            let toggle = crate::a11y_controls::control(
+                crate::a11y_controls::Control::button(crate::i18n::t("Explorer"), format!("sec-{id}"), label, |_, _| {}).expanded(open).on_entity(
+                    cx.entity().downgrade(),
+                    move |this: &mut Self, _, cx| {
+                        this.sections.toggle(id, id != "open-editors");
+                        this.persist_sections(cx);
+                    },
+                ),
+            );
+            sections::header(SharedString::from(format!("sec-{id}")), title, count, open, p)
+                .relative()
+                .child(toggle)
+                .debug_selector(move || format!("sec-{id}"))
+                .on_click(cx.listener(move |this, _, _, cx| {
                     this.sections.toggle(id, id != "open-editors");
                     this.persist_sections(cx);
-                },
-            ))
+                }))
         };
         // Bottom edge handle (dragging down grows) and top edge (dragging up grows).
         let sash = |id: &'static str, h: f32, sign: f32, cx: &mut Context<Self>| {
@@ -382,25 +556,54 @@ impl Workbench {
                     )
                     .child(
                         ui::icon_button("exp-new-file", "file-plus", crate::i18n::t("New File… (⌘N)"), p)
+                            .relative()
+                            .child(self.ctl(crate::i18n::t("Explorer"), "exp-new-file", crate::i18n::t("New File… (⌘N)"), cx, |this, w, cx| {
+                                this.new_file(&NewFile, w, cx)
+                            }))
                             .on_click(cx.listener(|this, _, window, cx| this.new_file(&NewFile, window, cx))),
                     )
                     .child(
                         ui::icon_button("exp-new-folder", "folder-plus", crate::i18n::t("New Folder…"), p)
+                            .relative()
+                            .child(
+                                self.ctl(crate::i18n::t("Explorer"), "exp-new-folder", crate::i18n::t("New Folder…"), cx, |this, w, cx| {
+                                    this.new_folder(w, cx)
+                                }),
+                            )
                             .on_click(cx.listener(|this, _, window, cx| this.new_folder(window, cx))),
                     )
                     .child(
                         ui::icon_button("exp-refresh", "refresh-cw", crate::i18n::t("Refresh Explorer"), p)
+                            .relative()
+                            .child(self.ctl(crate::i18n::t("Explorer"), "exp-refresh", crate::i18n::t("Refresh Explorer"), cx, |this, _, cx| {
+                                this.refresh_explorer(cx)
+                            }))
                             .on_click(cx.listener(|this, _, _, cx| this.refresh_explorer(cx))),
                     )
                     .child(
                         ui::icon_button("exp-expand", "chevrons-up-down", crate::i18n::t("Expand Folders (the selected one, or the open file's folders)"), p)
+                            .relative()
+                            .child(self.ctl(
+                                crate::i18n::t("Explorer"),
+                                "exp-expand",
+                                crate::i18n::t("Expand Folders (the selected one, or the open file's folders)"),
+                                cx,
+                                |this, _, cx| this.roots.primary.update(cx, |t, cx| t.expand_selected_recursive(cx)),
+                            ))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.roots.primary.update(cx, |t, cx| t.expand_selected_recursive(cx));
                             })),
                     )
-                    .child(ui::icon_button("exp-collapse", "square-minus", crate::i18n::t("Collapse Folders"), p).on_click(cx.listener(|this, _, _, cx| {
-                        this.roots.primary.update(cx, |t, cx| t.collapse_all(cx));
-                    }))),
+                    .child(
+                        ui::icon_button("exp-collapse", "square-minus", crate::i18n::t("Collapse Folders"), p)
+                            .relative()
+                            .child(self.ctl(crate::i18n::t("Explorer"), "exp-collapse", crate::i18n::t("Collapse Folders"), cx, |this, _, cx| {
+                                this.roots.primary.update(cx, |t, cx| t.collapse_all(cx))
+                            }))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.roots.primary.update(cx, |t, cx| t.collapse_all(cx));
+                            })),
+                    ),
             )
             .when(open_count > 0, |d| {
                 d.child(head("open-editors", &crate::i18n::tf("Open Editors ({})", &[&open_count]), None, open_open, cx)).when(open_open, |d| {
@@ -429,7 +632,7 @@ impl Workbench {
                     .flat_map(|(i, (tree, root))| {
                         let id = extra_folder_id(i);
                         let open = self.sections.is_open(id, true);
-                        let title = ui::file_name(root).to_string();
+                        let title = self.root_label(root);
                         let header = head(id, &title, None, open, cx).font_weight(gpui::FontWeight::BOLD).text_color(c(p.text)).tooltip({
                             let r = root.clone();
                             move |_, cx| cx.new(|_| Tooltip(r.clone().into())).into()
@@ -440,6 +643,7 @@ impl Workbench {
                     .flatten()
                     .collect::<Vec<_>>(),
             )
+            .children(self.unavailable_folder_rows(p, cx))
             .when(outline_open, |d| d.child(sash("outline", outline_h, -1., cx)))
             .child(head("outline", crate::i18n::t("Outline"), outline_count, outline_open, cx).when(outline_open, |d| d.border_t_0()))
             .when_some(outline_body, |d, body| {
@@ -475,7 +679,20 @@ impl Workbench {
     /// TIMELINE body: the active file's commits, newest first.
     pub(super) fn timeline_rows(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         let note = |t: &str| {
-            div().px(px(theme::SPACE[6])).py(px(theme::SPACE[2])).text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(t.to_string()).into_any_element()
+            div()
+                .relative()
+                .child(crate::a11y_controls::control(crate::a11y_controls::Control::text(
+                    crate::i18n::t("Explorer"),
+                    format!("note:{t}"),
+                    accesskit::Role::Label,
+                    t,
+                )))
+                .px(px(theme::SPACE[6]))
+                .py(px(theme::SPACE[2]))
+                .text_color(c(p.text_muted))
+                .text_size(px(text::XS.0))
+                .child(t.to_string())
+                .into_any_element()
         };
         if self.timeline.key.is_none() {
             return note(crate::i18n::t("Open a file to see its history."));
@@ -491,6 +708,17 @@ impl Workbench {
                 let ago = crate::git::relative_time((now_ms.saturating_sub(l.at_ms) / 1000) as i64);
                 div()
                     .id(("timeline-local", ix))
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::new(
+                            crate::i18n::t("Timeline"),
+                            format!("local:{}", l.at_ms),
+                            accesskit::Role::ListItem,
+                            crate::i18n::tf("Saved · {}", &[&crate::git::short_ago(&ago)]),
+                        )
+                        .description(crate::i18n::t("Compare this saved copy with the editor"))
+                        .on_entity(cx.entity().downgrade(), move |this, w, cx| this.open_local_history(ix, w, cx)),
+                    ))
                     .w_full()
                     .h(px(30.))
                     .flex()
@@ -541,6 +769,17 @@ impl Workbench {
                 let tip = format!("{}\n{} · {} · {}", e.subject, e.author, e.when, e.short);
                 div()
                     .id(("timeline", ix))
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::new(
+                            crate::i18n::t("Timeline"),
+                            format!("commit:{}", e.short),
+                            accesskit::Role::ListItem,
+                            e.subject.clone(),
+                        )
+                        .description(format!("{} · {} · {}", e.author, e.when, e.short))
+                        .on_entity(cx.entity().downgrade(), move |this, w, cx| this.open_timeline_entry(ix, w, cx)),
+                    ))
                     .w_full()
                     .h(px(46.))
                     .flex()
@@ -586,7 +825,7 @@ impl Workbench {
 
     /// Re-extract the active file's outline (if needed).
     pub(super) fn sync_outline(&mut self, cx: &mut Context<Self>) {
-        if self.chrome.panel != Some(Panel::Explorer) || !self.sections.is_open("outline", true) {
+        if !self.view_shown(Panel::Explorer) || !self.sections.is_open("outline", true) {
             return;
         }
         let Some(ed) = self
@@ -651,7 +890,20 @@ impl Workbench {
     /// OUTLINE body: symbols, the one at the cursor highlighted.
     pub(super) fn outline_rows(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         let note = |t: &str| {
-            div().px(px(theme::SPACE[6])).py(px(theme::SPACE[2])).text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(t.to_string()).into_any_element()
+            div()
+                .relative()
+                .child(crate::a11y_controls::control(crate::a11y_controls::Control::text(
+                    crate::i18n::t("Explorer"),
+                    format!("note:{t}"),
+                    accesskit::Role::Label,
+                    t,
+                )))
+                .px(px(theme::SPACE[6]))
+                .py(px(theme::SPACE[2]))
+                .text_color(c(p.text_muted))
+                .text_size(px(text::XS.0))
+                .child(t.to_string())
+                .into_any_element()
         };
         let Some(ed) =
             self.tabs.active.and_then(|i| self.tabs.editors.get(i)).filter(|_| !self.tabs.diff_active && !self.tabs.large_active && !self.tabs.page_active)
@@ -683,6 +935,16 @@ impl Workbench {
                         Some(
                             div()
                                 .id(("outline", ix))
+                                .relative()
+                                .child({
+                                    let (open_path, name) = (path.clone(), s.name.to_string());
+                                    crate::a11y_controls::control(
+                                        crate::a11y_controls::Control::new(crate::i18n::t("Outline"), format!("{ix}:{name}"), accesskit::Role::TreeItem, name)
+                                            .description(crate::i18n::tf("line {}", &[&(s.line + 1)]))
+                                            .selected(here == Some(ix))
+                                            .on_entity(cx.entity().downgrade(), move |this, w, cx| this.open_location(open_path.clone(), line, 0, w, cx)),
+                                    )
+                                })
                                 .w_full()
                                 .h(px(22.))
                                 .flex()
@@ -722,5 +984,52 @@ impl Workbench {
             let _ = s.set("explorer_sections", &self.sections.encode());
         }
         cx.notify();
+    }
+
+    /// Folders the workspace file lists that are not available: shown under the open ones with Retry and Remove, so
+    /// the workspace can be repaired without editing the file.
+    fn unavailable_folder_rows(&self, p: &Palette, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let Some(ws) = self.roots.workspace.as_ref() else { return Vec::new() };
+        ws.unavailable
+            .iter()
+            .enumerate()
+            .map(|(ix, u)| {
+                let item = u.item;
+                let path = u.path.clone();
+                div()
+                    .id(("ws-missing", ix))
+                    .debug_selector(move || format!("ws-missing-{ix}"))
+                    .h(px(26.))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .gap(px(theme::SPACE[2]))
+                    .px(px(theme::SPACE[3]))
+                    .border_t_1()
+                    .border_color(c(p.border))
+                    .child(icon("alert", 14., p.warning))
+                    .child(
+                        div()
+                            .id(("ws-missing-label", ix))
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_size(px(text::XS.0))
+                            .text_color(c(p.text_muted))
+                            .child(crate::i18n::tf("Workspace folder is unavailable: {}", &[&u.label]))
+                            .tooltip(move |_, cx| cx.new(|_| Tooltip(path.clone().into())).into()),
+                    )
+                    .child(
+                        ui::icon_button(("ws-missing-retry", ix), "refresh-cw", crate::i18n::t("Retry"), p)
+                            .on_click(cx.listener(|this, _, _, cx| this.reload_workspace(false, cx))),
+                    )
+                    .child(
+                        ui::icon_button(("ws-missing-remove", ix), "x", crate::i18n::t("Remove from the workspace file"), p)
+                            .on_click(cx.listener(move |this, _, _, cx| this.remove_unavailable_folder(item, cx))),
+                    )
+                    .into_any_element()
+            })
+            .collect()
     }
 }

@@ -1,82 +1,13 @@
 //! `cyx publish` end to end, without the network: a stand-in Fulcio and Rekor answering in their real formats (backed
 //! by the test Sigstore authority), and a real registry (`yard`) on a local port.
 
-use std::io::{BufRead as _, BufReader, Read as _, Write as _};
-use std::net::TcpListener;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use base64::Engine as _;
-use base64::engine::general_purpose::{STANDARD as B64, URL_SAFE_NO_PAD as B64URL};
-use ext_core::testing::{Authority, github};
+use ext_core::testing::{Authority, github, identity_token, serve_sigstore};
 use ext_core::yard::{Publisher, RootKeys, Seen, Status, StatusChange};
-use serde_json::{Value, json};
 
 use crate::{Kind, now, publish, scaffold, sigstore};
-
-/// The publisher each test token stands for, inside the token's claims.
-fn token(sub: &str, p: &Publisher) -> String {
-    let claims = json!({ "sub": sub, "test_publisher": p });
-    format!("h.{}.s", B64URL.encode(claims.to_string()))
-}
-
-/// Answer one request at a time: `POST /api/v2/signingCert` like Fulcio, `POST /api/v1/log/entries` like Rekor.
-fn fake_sigstore(authority: Arc<Authority>) -> String {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let url = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
-    std::thread::spawn(move || {
-        for stream in listener.incoming() {
-            let Ok(mut stream) = stream else { continue };
-            let mut reader = BufReader::new(stream.try_clone().unwrap());
-            let mut line = String::new();
-            reader.read_line(&mut line).unwrap();
-            let path = line.split(' ').nth(1).unwrap_or_default().to_string();
-            let mut len = 0;
-            loop {
-                let mut h = String::new();
-                reader.read_line(&mut h).unwrap();
-                if h.trim().is_empty() {
-                    break;
-                }
-                if let Some(v) = h.to_ascii_lowercase().strip_prefix("content-length:") {
-                    len = v.trim().parse().unwrap();
-                }
-            }
-            let mut body = vec![0; len];
-            reader.read_exact(&mut body).unwrap();
-            let (status, answer) = match path.as_str() {
-                "/api/v2/signingCert" => fulcio(&authority, &body),
-                "/api/v1/log/entries" => (201, authority.rekor_response(&body, now()).to_string()),
-                _ => (404, "not found".into()),
-            };
-            let _ = write!(
-                stream,
-                "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{answer}",
-                answer.len()
-            );
-        }
-    });
-    url
-}
-
-/// Fulcio's checks, in short: a token naming a publisher, a P-256 key, and proof that the key signed the subject.
-fn fulcio(a: &Authority, body: &[u8]) -> (u16, String) {
-    let req: Value = serde_json::from_slice(body).unwrap();
-    let token = req["credentials"]["oidcIdentityToken"].as_str().unwrap();
-    let claims: Value = serde_json::from_slice(&B64URL.decode(token.split('.').nth(1).unwrap()).unwrap()).unwrap();
-    let publisher: Publisher = serde_json::from_value(claims["test_publisher"].clone()).unwrap();
-    let pem = req["publicKeyRequest"]["publicKey"]["content"].as_str().unwrap();
-    let der = B64.decode(pem.lines().filter(|l| !l.starts_with("-----")).collect::<String>()).unwrap();
-    let point = &der[der.len() - 65..];
-    let proof = B64.decode(req["publicKeyRequest"]["proofOfPossession"].as_str().unwrap()).unwrap();
-    let ok =
-        ring::signature::UnparsedPublicKey::new(&ring::signature::ECDSA_P256_SHA256_ASN1, point).verify(claims["sub"].as_str().unwrap().as_bytes(), &proof);
-    if ok.is_err() {
-        return (400, "proof of possession does not verify".into());
-    }
-    let cert = a.certificate_for(point, &publisher, now());
-    (201, json!({ "signedCertificateEmbeddedSct": { "chain": { "certificates": [ext_core::testing::pem("CERTIFICATE", &cert)] } } }).to_string())
-}
 
 struct World {
     dir: PathBuf,
@@ -89,13 +20,13 @@ impl World {
         let dir = std::env::temp_dir().join(format!("cyx-publish-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let authority = Arc::new(Authority::new());
-        let cfg = ::yard::init(&dir.join("registry"), "yard.test", &authority.fulcio_pem(), &authority.rekor_pem(), now()).unwrap();
+        let cfg = ::yard::init(&dir.join("registry"), "yard.test", &authority.fulcio_pem(), &authority.rekor_pem(), None, now()).unwrap();
         let y = Arc::new(::yard::Yard::open(::yard::Config::load(&cfg).unwrap()).unwrap());
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         let listener = rt.block_on(tokio::net::TcpListener::bind("127.0.0.1:0")).unwrap();
         let registry = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
         std::thread::spawn(move || rt.block_on(::yard::http::serve(y, listener)));
-        let sig = fake_sigstore(authority);
+        let sig = serve_sigstore(authority);
         // Wait for the registry's first signing.
         for _ in 0..100 {
             if dir.join("registry/public/index.json").exists() {
@@ -117,8 +48,8 @@ impl World {
     }
 
     fn publish(&self, dir: &std::path::Path, who: &Publisher, dry_run: bool, pre_release: bool) -> Result<String, String> {
-        let p = publish::Publish { dir, registry: &self.registry, dry_run, pre_release };
-        publish::publish(&p, &self.endpoints, || Ok(token("repo:you/night:ref:refs/tags/v1", who)), now())
+        let p = publish::Publish { dir, registry: &self.registry, dry_run, pre_release, target: None };
+        publish::publish(&p, &self.endpoints, || Ok(identity_token("repo:you/night:ref:refs/tags/v1", who)), now())
     }
 
     /// The registry's index as a client verifies it.
@@ -170,6 +101,19 @@ fn dry_run_shows_the_install_sheet_and_sends_nothing() {
     assert!(w.index().extensions.is_empty());
 }
 
+/// #187: a placeholder `client-id` would fail every sign-in, so publishing refuses it (`cyx check` only warns).
+#[test]
+fn a_placeholder_client_id_is_not_published() {
+    let w = World::new("placeholder");
+    let dir = w.extension("forge", "1.0.0");
+    let m = dir.join(ext_manifest::FILE_NAME);
+    let oauth = "\n[permissions]\nauth = [\"forge\"]\nwhy = \"Signs in to the forge.\"\n\n[[oauth]]\nid = \"forge\"\nname = \"Forge\"\nauthorize-url = \"https://forge.example.com/a\"\ntoken-url = \"https://forge.example.com/t\"\nclient-id = \"your-client-id\"\nhosts = [\"forge.example.com\"]\n";
+    std::fs::write(&m, std::fs::read_to_string(&m).unwrap() + oauth).unwrap();
+    let e = w.publish(&dir, &github(7, 42), true, false).unwrap_err();
+    assert!(e.contains("the client id of [[oauth]] forge is a placeholder"), "{e}");
+    assert!(w.index().extensions.is_empty());
+}
+
 #[test]
 fn pre_releases_need_a_suffix() {
     let w = World::new("pre");
@@ -188,7 +132,7 @@ fn yank_restore_and_deprecate_from_the_folder() {
     let dir = w.extension("night", "1.0.0");
     w.publish(&dir, &me, false, false).unwrap();
     let v = ext_manifest::Version::parse("1.0.0").unwrap();
-    let change = |c: StatusChange, who: &Publisher| publish::change_status(&dir, &w.registry, &v, c, &w.endpoints, || Ok(token("s", who)), now());
+    let change = |c: StatusChange, who: &Publisher| publish::change_status(&dir, &w.registry, &v, c, &w.endpoints, || Ok(identity_token("s", who)), now());
     assert!(change(StatusChange::Yank, &me).unwrap().starts_with("Yanked you.night 1.0.0"));
     assert_eq!(w.index().extensions.values().next().unwrap().versions[0].status, Status::Yanked);
     change(StatusChange::Restore, &me).unwrap();
@@ -202,11 +146,11 @@ fn yank_restore_and_deprecate_from_the_folder() {
 fn a_signature_the_registry_would_refuse_is_caught_before_upload() {
     let w = World::new("roots");
     // Point signing at another Sigstore than the one the registry pins.
-    let other = fake_sigstore(Arc::new(Authority::new()));
+    let other = serve_sigstore(Arc::new(Authority::new()));
     let ep = sigstore::Endpoints { fulcio: other.clone(), rekor: other, oidc: String::new() };
     let dir = w.extension("night", "1.0.0");
-    let p = publish::Publish { dir: &dir, registry: &w.registry, dry_run: false, pre_release: false };
-    let err = publish::publish(&p, &ep, || Ok(token("s", &github(7, 42))), now()).unwrap_err();
+    let p = publish::Publish { dir: &dir, registry: &w.registry, dry_run: false, pre_release: false, target: None };
+    let err = publish::publish(&p, &ep, || Ok(identity_token("s", &github(7, 42))), now()).unwrap_err();
     assert!(err.contains("nothing was uploaded"), "{err}");
     assert!(w.index().extensions.is_empty());
     // A token problem stops before anything is signed.
@@ -214,8 +158,90 @@ fn a_signature_the_registry_would_refuse_is_caught_before_upload() {
     assert_eq!(err, "error: no token");
 }
 
+/// A code extension: the probe component the exthost tests use, with the permissions its imports need.
+const PROBE: &[u8] = include_bytes!("../../ext-host/testdata/probe.wasm");
+const PROBE_MANIFEST: &str = r#"[extension]
+id = "you.probe"
+version = "1.0.0"
+name = "Probe"
+license = "MIT"
+description = "Tests the host."
+
+[code]
+entry = "Cargo.toml"
+
+[permissions]
+read = ["a.txt"]
+net = ["api.example.com"]
+auth = ["github"]
+secrets = true
+why = "Tests every part of the host."
+
+[[commands]]
+id = "notice"
+title = "Probe: Notice"
+"#;
+
+#[test]
+fn a_code_extension_is_flagged_and_a_data_only_registry_says_so() {
+    let w = World::new("code");
+    let dir = w.dir.join("probe");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), PROBE_MANIFEST).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "").unwrap();
+    std::fs::write(dir.join(ext_pkg::COMPONENT), PROBE).unwrap();
+    let out = w.publish(&dir, &github(7, 42), true, false).unwrap();
+    assert!(out.contains("note: you.probe runs code: the index marks it as code"), "{out}");
+    // A pre-release of code does not wait for those who opted in.
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), PROBE_MANIFEST.replace("version = \"1.0.0\"", "version = \"1.0.0-beta.1\"")).unwrap();
+    let out = w.publish(&dir, &github(7, 42), true, true).unwrap();
+    assert!(out.contains("a pre-release installs at once") && !out.contains("48 hours"), "{out}");
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), PROBE_MANIFEST).unwrap();
+    // This registry (Phase 1) refuses code; cyx says what that means instead of passing the refusal on.
+    let err = w.publish(&dir, &github(7, 42), false, false).unwrap_err();
+    assert!(err.starts_with(&format!("error: {} accepts data-only extensions; you.probe 1.0.0 runs code", w.registry)), "{err}");
+    assert!(err.contains("`cyx package`"), "{err}");
+    assert!(w.index().extensions.is_empty());
+}
+
 #[test]
 fn registry_urls() {
     assert_eq!(publish::registry_url(Some("http://localhost:8080/")), "http://localhost:8080");
     assert!(publish::registry_url(None).starts_with("https://"));
+}
+
+/// The wait is the registry's 48 h, not 49 (e2e trial: the clocks differ by seconds and the hours were rounded up).
+#[test]
+fn the_wait_is_said_in_whole_hours() {
+    const NOW: u64 = 1_800_000_000;
+    let wait = ext_core::update::CODE_WAIT_SECS;
+    use super::when_available;
+    assert_eq!(when_available(NOW + wait + 5, NOW), "in 48 hours (updates that run code wait 48 h)");
+    assert_eq!(when_available(NOW + wait - 5, NOW), "in 48 hours (updates that run code wait 48 h)");
+    assert_eq!(when_available(NOW + 3600, NOW), "in 1 hour (updates that run code wait 48 h)");
+    assert_eq!(when_available(NOW + 60, NOW), "now");
+    assert_eq!(when_available(NOW - 60, NOW), "now");
+}
+
+/// e2e trial 2: the refusal said registries take only "API 1.1.0" builds, though a 1.0 build publishes fine.
+#[test]
+fn a_0_1_build_is_refused_with_the_line_registries_take() {
+    let w = World::new("old-api");
+    let dir = w.dir.join("old");
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = "[extension]\nid = \"you.old\"\nversion = \"1.0.0\"\nname = \"Old\"\nlicense = \"MIT\"\ndescription = \"Built before 1.0.\"\n\n[code]\nentry = \"Cargo.toml\"\n\n[[commands]]\nid = \"go\"\ntitle = \"Old: Go\"\n";
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), manifest).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "").unwrap();
+    std::fs::write(dir.join(ext_pkg::COMPONENT), ext_pkg::testing::COMPONENT_0_1).unwrap();
+    let err = w.publish(&dir, &github(7, 42), true, false).unwrap_err();
+    assert!(err.contains("built against API 0.1.0, and registries take only API 1.x builds"), "{err}");
+}
+
+/// A new install takes the newest version at once; the registry's wait is for updates (e2e trial 2: a first publish
+/// said "Users get it in 48 hours").
+#[test]
+fn the_wait_is_said_to_be_for_updates() {
+    assert_eq!(super::availability("now"), "Users get it now.");
+    let later = super::availability("in 48 hours (updates that run code wait 48 h)");
+    assert!(later.starts_with("New installs get it now; users who have an earlier version are updated in 48 hours"), "{later}");
 }

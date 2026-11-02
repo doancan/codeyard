@@ -94,8 +94,22 @@ impl SearchPanel {
             .cursor_pointer()
             .hover(|d| d.bg(c(p.surface_active)))
             .tooltip(|_, cx| cx.new(|_| crate::workbench::Tooltip(crate::i18n::t("Language of the pattern (click for the next one)").into())).into())
+            .relative()
             .child(self.st.family.id)
+            .child(crate::a11y_controls::control(
+                crate::a11y_controls::Control::button(crate::i18n::t("Search"), "s-language", self.st.family.id, |_, _| {})
+                    .description(crate::i18n::t("Language of the pattern (click for the next one)"))
+                    .on_entity(cx.entity().downgrade(), |this: &mut Self, _, cx| this.cycle_family(cx)),
+            ))
             .on_click(cx.listener(|this, _, _, cx| this.cycle_family(cx)))
+    }
+
+    /// The header's Clear: the field, the results and the status.
+    pub(super) fn clear_search(&mut self, cx: &mut Context<Self>) {
+        self.clear_query(cx);
+        self.results.clear();
+        self.rebuild_rows();
+        self.status = Status::Idle;
     }
 
     /// Next language in the list (the chip next to the pattern).

@@ -1,0 +1,15 @@
+[package]
+name = "codeyard-extension-test"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "A mock Codeyard for extension unit tests: fake files, fixture HTTP, recorded processes, a virtual clock"
+repository.workspace = true
+publish = false
+
+[dependencies]
+codeyard-extension = { version = "0.7.0", path = "../ext-sdk" }
+ext-manifest = { version = "0.7.0", path = "../ext-manifest" }
+# `render` checks a view with Codeyard's own rules, `view_event` an event with its own format.
+ext-ui = { version = "0.7.0", path = "../ext-ui" }
+serde_json = "1.0.154"

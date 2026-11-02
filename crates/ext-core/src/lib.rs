@@ -8,6 +8,8 @@
 //! <data>/extensions/store/<digest>/   unpacked packages, read-only, named by content digest
 //! <data>/extensions/data/<id>/        each extension's own storage
 //! <data>/extensions/index.json        derived from the lock and the store; rebuilt when the lock changes
+//! <data>/extensions/revoked.json      versions a registry revoked, by content digest: they stay stopped offline too
+//! <data>/extensions/permissions.json  permissions the user turned off, per extension and publisher (grants.rs)
 //! <data>/extensions/.lock             held while a transaction runs, so two windows cannot interleave
 //! ```
 //!
@@ -17,12 +19,16 @@
 //! rebuilds. The lock is never ahead of the store.
 
 mod der;
+pub mod grants;
+pub mod instances;
 pub mod lock;
+pub mod market;
 pub mod publisher;
 pub mod registry;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 pub mod trust;
+pub mod update;
 pub mod yard;
 
 #[cfg(test)]
@@ -80,6 +86,44 @@ pub struct Installed {
     pub digest: ContentDigest,
     pub disabled: bool,
     pub source: Source,
+}
+
+/// A version the registry revoked, as `revoked.json` keeps it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Revoked {
+    pub id: ExtId,
+    pub version: ext_manifest::Version,
+    /// The registry's reason, shown to the user.
+    pub reason: String,
+}
+
+/// Why an installed extension does not run.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Stopped {
+    /// Its version was revoked by the registry.
+    Revoked { reason: String },
+    /// It depends on an extension that is stopped (revoked, or stopped itself).
+    Dependency { on: ExtId },
+}
+
+/// Which installed extensions stop: those whose version is revoked, then everything that depends on one of them,
+/// however indirectly.
+pub fn stopped(installed: &[Installed], revoked: &BTreeMap<String, Revoked>) -> BTreeMap<ExtId, Stopped> {
+    let mut out: BTreeMap<ExtId, Stopped> =
+        installed.iter().filter_map(|e| revoked.get(&e.digest.hex()).map(|r| (e.manifest.id.clone(), Stopped::Revoked { reason: r.reason.clone() }))).collect();
+    loop {
+        let more: Vec<(ExtId, Stopped)> = installed
+            .iter()
+            .filter(|e| !out.contains_key(&e.manifest.id))
+            .filter_map(|e| {
+                e.manifest.dependencies.iter().find(|(d, _)| out.contains_key(d)).map(|(d, _)| (e.manifest.id.clone(), Stopped::Dependency { on: d.clone() }))
+            })
+            .collect();
+        if more.is_empty() {
+            return out;
+        }
+        out.extend(more);
+    }
 }
 
 /// What `load` returns: the installed extensions in id order, and anything that could not be loaded.
@@ -219,25 +263,102 @@ impl Store {
 
     /// Install a package file, replacing any installed version of the same extension (kept as `previous`).
     pub fn install(&self, bytes: &[u8], source: Source) -> Result<Installed, Error> {
+        self.install_with_targets(bytes, source, BTreeMap::new())
+    }
+
+    /// [`install`](Self::install) a per-platform package with the digests of the version's other platforms, as the
+    /// registry's index lists them; they go into the lock, so a package fetched later for another platform is checked
+    /// against them. The package's own platform must be listed with its digest, or is added.
+    pub fn install_with_targets(&self, bytes: &[u8], source: Source, mut targets: BTreeMap<String, ContentDigest>) -> Result<Installed, Error> {
         let pkg = ext_pkg::read(bytes).map_err(Error::Package)?;
-        self.commit_package(pkg, source)
+        match &pkg.target {
+            Some(t) => match targets.get(t) {
+                Some(d) if *d != pkg.digest => return Err(Error::Package(target_mismatch(t))),
+                _ => drop(targets.insert(t.clone(), pkg.digest)),
+            },
+            None if !targets.is_empty() => {
+                return Err(Error::Package(ext_pkg::Error::Contents("platform digests were given for a package that has no native programs".into())));
+            }
+            None => {}
+        }
+        self.commit_package(vec![pkg], source, targets)
     }
 
-    /// Package a folder and install it (`codeyard ext install ./folder`).
+    /// Package a folder and install it (`codeyard --install-extension ./folder`). An extension with native programs is packaged
+    /// for every platform its `native/` folder has, and the one for this machine (else the first) is the installed one.
     pub fn install_dir(&self, dir: &Path) -> Result<Installed, Error> {
-        let files = ext_pkg::collect_dir(dir).map_err(Error::Package)?;
-        let (bytes, _) = ext_pkg::write(files).map_err(Error::Package)?;
-        self.install(&bytes, Source::Folder { path: dir.display().to_string() })
+        let source = Source::Folder { path: dir.display().to_string() };
+        let mut pkgs = Vec::new();
+        for target in ext_pkg::native_targets(dir) {
+            let (bytes, _) = ext_pkg::write(ext_pkg::collect_dir_for(dir, Some(&target)).map_err(Error::Package)?).map_err(Error::Package)?;
+            pkgs.push(ext_pkg::read(&bytes).map_err(Error::Package)?);
+        }
+        // A folder without native programs (or one that names a program but has no `native/`, which `write` explains).
+        if pkgs.is_empty() || !pkgs[0].manifest.has_native_programs() {
+            let (bytes, _) = ext_pkg::write(ext_pkg::collect_dir(dir).map_err(Error::Package)?).map_err(Error::Package)?;
+            return self.install(&bytes, source);
+        }
+        let here = ext_manifest::this_target();
+        if let Some(i) = pkgs.iter().position(|p| p.target.as_deref() == here) {
+            pkgs.swap(0, i);
+        }
+        let targets = pkgs.iter().filter_map(|p| Some((p.target.clone()?, p.digest))).collect();
+        self.commit_package(pkgs, source, targets)
     }
 
-    fn commit_package(&self, pkg: ext_pkg::Package, source: Source) -> Result<Installed, Error> {
+    /// Add another platform's package of the installed version (fetched when a workspace on that platform needs its
+    /// programs). It must be the same extension and version; when the lock lists a digest for its platform it must be
+    /// that one, else the caller has checked it against the registry's signed index and it is recorded. Returns its
+    /// folder in the store.
+    pub fn add_target(&self, id: &ExtId, bytes: &[u8]) -> Result<PathBuf, Error> {
+        let pkg = ext_pkg::read(bytes).map_err(Error::Package)?;
         let _guard = self.guard()?;
         self.sweep_temporaries();
         let (mut lock, _) = self.read_lock()?;
+        let entry = lock.extensions.get_mut(id).ok_or_else(|| Error::NotInstalled(id.clone()))?;
+        let t = pkg.target.clone().ok_or_else(|| Error::Package(ext_pkg::Error::Contents("the package is not built for one platform".into())))?;
+        if &pkg.manifest.id != id || pkg.manifest.version != entry.version {
+            return Err(Error::Package(ext_pkg::Error::Contents(format!(
+                "the package is {} {}, not the installed {id} {}",
+                pkg.manifest.id, pkg.manifest.version, entry.version
+            ))));
+        }
+        match entry.targets.get(&t) {
+            Some(d) if *d != pkg.digest => return Err(Error::Package(target_mismatch(&t))),
+            Some(_) => {}
+            None => {
+                entry.targets.insert(t, pkg.digest);
+            }
+        }
         let dir = self.store_dir(&pkg.digest);
         if !dir.join(ext_manifest::FILE_NAME).is_file() {
             self.unpack(&pkg, &dir)?;
         }
+        self.commit_lock(&lock)?;
+        Ok(dir)
+    }
+
+    /// The store folder of `id`'s package for platform `target`, when it is there. `None` for an extension without
+    /// native programs, or a platform not fetched yet (its digest, if listed, is in the lock).
+    pub fn target_dir(&self, id: &ExtId, target: &str) -> Option<PathBuf> {
+        let (lock, _) = self.read_lock().ok()?;
+        let digest = lock.extensions.get(id)?.targets.get(target)?;
+        let dir = self.store_dir(digest);
+        dir.join(ext_manifest::FILE_NAME).is_file().then_some(dir)
+    }
+
+    /// `pkgs[0]` is the package installed; the others are more platforms of the same version, kept in the store.
+    fn commit_package(&self, pkgs: Vec<ext_pkg::Package>, source: Source, targets: BTreeMap<String, ContentDigest>) -> Result<Installed, Error> {
+        let _guard = self.guard()?;
+        self.sweep_temporaries();
+        let (mut lock, _) = self.read_lock()?;
+        for p in &pkgs {
+            let dir = self.store_dir(&p.digest);
+            if !dir.join(ext_manifest::FILE_NAME).is_file() {
+                self.unpack(p, &dir)?;
+            }
+        }
+        let pkg = pkgs.into_iter().next().expect("one package at least");
         let id = pkg.manifest.id.clone();
         let old = lock.extensions.get(&id);
         let previous = match old {
@@ -245,8 +366,15 @@ impl Store {
             Some(o) => o.previous,
             None => None,
         };
-        let entry =
-            Locked { version: pkg.manifest.version.clone(), digest: pkg.digest, previous, source: source.clone(), disabled: old.is_some_and(|o| o.disabled) };
+        let entry = Locked {
+            version: pkg.manifest.version.clone(),
+            digest: pkg.digest,
+            previous,
+            source: source.clone(),
+            disabled: old.is_some_and(|o| o.disabled),
+            pre_release: old.is_some_and(|o| o.pre_release),
+            targets,
+        };
         lock.extensions.insert(id.clone(), entry.clone());
         self.commit_lock(&lock)?;
         let _ = std::fs::create_dir_all(self.data_dir(&id));
@@ -313,6 +441,8 @@ impl Store {
         lock.extensions.remove(id).ok_or_else(|| Error::NotInstalled(id.clone()))?;
         self.commit_lock(&lock)?;
         let _ = remove_tree(&self.data_dir(id));
+        self.forget_permissions(id);
+        self.forget_instances(id);
         Ok(())
     }
 
@@ -324,10 +454,62 @@ impl Store {
         let prev = cur.previous.ok_or_else(|| Error::NoPrevious(id.clone()))?;
         let text = std::fs::read_to_string(self.store_dir(&prev).join(ext_manifest::FILE_NAME)).map_err(|_| Error::NoPrevious(id.clone()))?;
         let m = ext_manifest::parse(&text).map_err(|_| Error::NoPrevious(id.clone()))?;
-        let entry = Locked { version: m.version.clone(), digest: prev, previous: Some(cur.digest), source: cur.source.clone(), disabled: cur.disabled };
+        // The other platforms belonged to the version being left; the previous one keeps only its own.
+        let targets = std::fs::read_to_string(self.store_dir(&prev).join(ext_pkg::TARGET))
+            .ok()
+            .map(|t| BTreeMap::from([(t.trim_end().to_string(), prev)]))
+            .unwrap_or_default();
+        let entry = Locked { version: m.version.clone(), digest: prev, previous: Some(cur.digest), source: cur.source.clone(), targets, ..cur.clone() };
         lock.extensions.insert(id.clone(), entry);
         self.commit_lock(&lock)?;
         Ok(Installed { manifest: m, digest: prev, disabled: cur.disabled, source: cur.source })
+    }
+
+    /// Opt an extension into its registry's pre-releases, or out again (its page).
+    pub fn set_pre_release(&self, id: &ExtId, on: bool) -> Result<(), Error> {
+        let _guard = self.guard()?;
+        let (mut lock, _) = self.read_lock()?;
+        let entry = lock.extensions.get_mut(id).ok_or_else(|| Error::NotInstalled(id.clone()))?;
+        if entry.pre_release == on {
+            return Ok(());
+        }
+        entry.pre_release = on;
+        self.commit_lock(&lock)
+    }
+
+    /// `revoked.json`, which the app watches: a change stops or starts extensions in every window.
+    pub fn revoked_path(&self) -> PathBuf {
+        self.root.join("revoked.json")
+    }
+
+    /// Installed versions a registry revoked, by content digest. A missing or unreadable file is none.
+    pub fn revoked(&self) -> BTreeMap<String, Revoked> {
+        std::fs::read(self.revoked_path()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    }
+
+    /// Record what the indexes say: `Some` marks a digest revoked, `None` clears it. Digests no version in the lock
+    /// refers to any more are dropped; while the lock cannot be read (a hand edit), those of the packages in the store
+    /// are kept instead, so a revocation never waits for the lock to be fixed. Returns whether the file changed.
+    pub fn set_revoked(&self, changes: &[(ContentDigest, Option<Revoked>)]) -> Result<bool, Error> {
+        let _guard = self.guard()?;
+        let keep: BTreeSet<String> = match self.read_lock() {
+            Ok((lock, _)) => lock.digests().map(|d| d.hex()).collect(),
+            Err(_) => self.packages().iter().map(ContentDigest::hex).collect(),
+        };
+        let before = self.revoked();
+        let mut map = before.clone();
+        for (d, r) in changes {
+            match r {
+                Some(r) => map.insert(d.hex(), r.clone()),
+                None => map.remove(&d.hex()),
+            };
+        }
+        map.retain(|d, _| keep.contains(d));
+        if map == before {
+            return Ok(false);
+        }
+        write_atomic(&self.revoked_path(), &serde_json::to_vec_pretty(&map).expect("revoked serializes"))?;
+        Ok(true)
     }
 
     /// Turn an extension off or on without removing it.
@@ -395,10 +577,21 @@ impl Store {
         }
     }
 
+    /// The content digests of the packages in the store, whatever the lock says: what a revocation is checked against
+    /// when the lock cannot be read.
+    pub fn packages(&self) -> Vec<ContentDigest> {
+        let Ok(entries) = std::fs::read_dir(self.root.join("store")) else { return Vec::new() };
+        entries.flatten().filter_map(|e| ContentDigest::parse(&e.file_name().to_string_lossy())).collect()
+    }
+
     /// Every installed extension's lock entry, by id.
     pub fn locked(&self) -> Result<BTreeMap<ExtId, Locked>, Error> {
         Ok(self.read_lock()?.0.extensions)
     }
+}
+
+fn target_mismatch(target: &str) -> ext_pkg::Error {
+    ext_pkg::Error::Contents(format!("the package for {target} does not match the digest the registry listed for it; nothing was installed"))
 }
 
 fn hex(bytes: &[u8]) -> String {

@@ -22,7 +22,7 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
-use ext_manifest::{ExtId, Version};
+use ext_manifest::{ErrorDoc, ExtId, Version};
 use ext_pkg::ContentDigest;
 use ring::signature::{ECDSA_P256_SHA256_ASN1, ECDSA_P384_SHA384_ASN1, UnparsedPublicKey, VerificationAlgorithm};
 use rustls_pki_types::{CertificateDer, UnixTime};
@@ -118,29 +118,60 @@ pub enum Error {
     Signature(String),
 }
 
+/// The publisher signature's codes in the `CY` catalogue (docs/extensions/reference/errors.md).
+pub const CODES: [ErrorDoc; 5] = [
+    ErrorDoc {
+        code: "CY0810",
+        summary: "The signing roots pinned in the registry's root are unusable.",
+        fix: "update Codeyard; the registry's root is not usable",
+    },
+    ErrorDoc {
+        code: "CY0811",
+        summary: "The publisher signature is not a Sigstore bundle this version reads.",
+        fix: "nothing was installed; the publisher should publish again with a current cyx",
+    },
+    ErrorDoc {
+        code: "CY0812",
+        summary: "The publisher certificate does not chain to the pinned CA at the logged time, or has no publisher identity.",
+        fix: "nothing was installed; the package was not signed by a known publisher",
+    },
+    ErrorDoc {
+        code: "CY0813",
+        summary: "The transparency log record of the signature is missing or does not hold.",
+        fix: "nothing was installed; the signature was not logged as it claims",
+    },
+    ErrorDoc {
+        code: "CY0814",
+        summary: "The publisher signature is not over this package.",
+        fix: "nothing was installed; the package is not the one the publisher signed",
+    },
+];
+
 impl Error {
-    /// The registry's range of the `CY` catalogue (docs/registry.md).
+    pub fn doc(&self) -> &'static ErrorDoc {
+        &CODES[match self {
+            Error::Pins(_) => 0,
+            Error::Bundle(_) => 1,
+            Error::Certificate(_) => 2,
+            Error::Log(_) => 3,
+            Error::Signature(_) => 4,
+        }]
+    }
+
     pub fn code(&self) -> &'static str {
-        match self {
-            Error::Pins(_) => "CY0810",
-            Error::Bundle(_) => "CY0811",
-            Error::Certificate(_) => "CY0812",
-            Error::Log(_) => "CY0813",
-            Error::Signature(_) => "CY0814",
-        }
+        self.doc().code
     }
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (what, fix) = match self {
-            Error::Pins(m) => (format!("the registry's pinned signing roots: {m}"), "update Codeyard; the registry's root is not usable"),
-            Error::Bundle(m) => (format!("the publisher signature: {m}"), "nothing was installed; the publisher should publish again with a current cyx"),
-            Error::Certificate(m) => (format!("the publisher certificate: {m}"), "nothing was installed; the package was not signed by a known publisher"),
-            Error::Log(m) => (format!("the transparency log record: {m}"), "nothing was installed; the signature was not logged as it claims"),
-            Error::Signature(m) => (format!("the publisher signature: {m}"), "nothing was installed; the package is not the one the publisher signed"),
+        let what = match self {
+            Error::Pins(m) => format!("the registry's pinned signing roots: {m}"),
+            Error::Bundle(m) | Error::Signature(m) => format!("the publisher signature: {m}"),
+            Error::Certificate(m) => format!("the publisher certificate: {m}"),
+            Error::Log(m) => format!("the transparency log record: {m}"),
         };
-        write!(f, "error[{}]: {what}\n   = fix: {fix}", self.code())
+        write!(f, "error[{}]: {what}\n   = fix: {}", self.code(), self.doc().fix)
     }
 }
 
@@ -162,9 +193,14 @@ pub fn verify(bundle: &[u8], artifact: &[u8], pins: &Pins, now: u64) -> Result<S
     let sig = b.message_signature.as_ref().ok_or_else(|| bundle_err("only message signatures are accepted (no DSSE envelopes)"))?;
     let signature = b64(&sig.signature).ok_or_else(|| bundle_err("the signature is not base64"))?;
     let m = &b.verification_material;
+    // v0.3 carries the signing certificate alone; v0.1 and v0.2 a chain. A bundle must have the shape of the version
+    // it names, so the same signature cannot be passed off under another format.
+    let v3 = version >= 2;
     let leaf = match (&m.certificate, &m.x509_certificate_chain) {
-        (Some(c), None) => b64(&c.raw_bytes),
-        // Older bundles carry a chain; only the signing certificate counts, and a CA in it means a confused signer.
+        (Some(c), None) if v3 => b64(&c.raw_bytes),
+        (Some(_), None) => return Err(bundle_err("a single certificate is a v0.3 field, but the bundle says it is older")),
+        (None, Some(_)) if v3 => return Err(bundle_err("a v0.3 bundle carries the signing certificate, not a chain")),
+        // Only the signing certificate counts, and a CA in the chain means a confused signer.
         (None, Some(chain)) if chain.certificates.len() == 1 => b64(&chain.certificates[0].raw_bytes),
         (None, Some(chain)) if chain.certificates.is_empty() => return Err(bundle_err("the certificate chain is empty")),
         (None, Some(_)) => return Err(bundle_err("the certificate chain holds more than the signing certificate")),

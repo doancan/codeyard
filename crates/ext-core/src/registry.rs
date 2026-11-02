@@ -5,14 +5,17 @@
 //! ```text
 //! <data>/extensions/registries/<name>/root.json, root.json.sig, index.json, index.json.sig   the last accepted copy
 //! <data>/extensions/registries/<name>/state.json   versions seen (no rollback), when fetched, the index's ETag
+//! <data>/extensions/registries/<name>/details/<sha256>.json   Market pages opened before, checked against the index
 //! ```
 //!
 //! Every client fetches the same bytes (the whole index), at most once a day and only when it has something from the
 //! registry or the user opens the Market, so the registry learns nothing about what anyone installed.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use ext_manifest::{ExtId, Manifest, Version};
+use ext_pkg::ContentDigest;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
@@ -206,10 +209,13 @@ pub struct Download {
     pub manifest: Manifest,
     pub release: Release,
     pub signed: Signed,
+    /// For a release with native programs: every platform's content digest, as the index lists them (for the lock).
+    pub targets: BTreeMap<String, ContentDigest>,
 }
 
 /// Choose the version (`version`, else the newest installable one, pre-releases only if asked), download the package
-/// and its publisher signature, and check everything the index promises about them.
+/// and its publisher signature, and check everything the index promises about them. A release with native programs is
+/// downloaded for this machine's platform; [`download_for`] names another (the workspace's host).
 pub fn download(
     reg: &Registry,
     v: &Verified,
@@ -219,10 +225,35 @@ pub fn download(
     fetch: &dyn Fetch,
     now: u64,
 ) -> Result<Download, Error> {
+    download_for(reg, v, id, version, pre_release, ext_manifest::this_target().unwrap_or("unknown"), fetch, now)
+}
+
+/// [`download`] the package for platform `target` (a target triple); the same package for a release without native
+/// programs.
+#[allow(clippy::too_many_arguments)]
+pub fn download_for(
+    reg: &Registry,
+    v: &Verified,
+    id: &ExtId,
+    version: Option<&Version>,
+    pre_release: bool,
+    target: &str,
+    fetch: &dyn Fetch,
+    now: u64,
+) -> Result<Download, Error> {
     let entry = v.index.extensions.get(id).ok_or_else(|| Error::NotFound(format!("{id} is not in the {} registry", reg.name)))?;
     let release = match version {
         Some(ver) => v.index.release(id, ver).ok_or_else(|| Error::NotFound(format!("{id} has no version {ver}")))?,
-        None => v.index.latest(id, pre_release).ok_or_else(|| Error::NotFound(format!("{id} has no version that can be installed")))?,
+        None => v.index.latest(id, pre_release).ok_or_else(|| {
+            // Only pre-releases are left: say so, and how to take one.
+            match v.index.latest(id, true) {
+                Some(pre) => Error::NotFound(format!(
+                    "{id} has only pre-releases so far (the newest is {0}); install it with {id}@{0}, or opt the extension in to pre-releases on its page",
+                    pre.version
+                )),
+                None => Error::NotFound(format!("{id} has no version that can be installed")),
+            }
+        })?,
     };
     match &release.status {
         Status::Revoked { reason } => return Err(Error::NotFound(format!("{id} {} was revoked by the registry: {reason}", release.version))),
@@ -233,21 +264,34 @@ pub fn download(
         Got::Body { bytes, .. } => Ok(bytes),
         Got::NotModified => Err(Error::Network(format!("{name}: unexpected “not modified”"))),
     };
-    let bytes = body(format!("packages/{}.cyx", release.digest), ext_manifest::limits::PACKAGE_BYTES as usize)?;
+    let wanted = release.package_for(target).ok_or_else(|| {
+        let built: Vec<&str> = release.targets.keys().map(String::as_str).collect();
+        Error::NotFound(format!("{id} {} has native programs and is not built for {target} (only for {})", release.version, built.join(", ")))
+    })?;
+    let limit = if release.targets.is_empty() { ext_manifest::limits::PACKAGE_BYTES } else { ext_manifest::limits::TARGET_PACKAGE_BYTES };
+    let bytes = body(format!("packages/{}.cyx", wanted.digest), limit as usize)?;
     let bad = |what: &str| {
         Error::Package(format!("{id} {}: the downloaded package {what} does not match the registry's index; nothing was installed", release.version))
     };
-    if bytes.len() as u64 != release.size || hex(&Sha256::digest(&bytes)) != release.sha256 {
+    if bytes.len() as u64 != wanted.size || hex(&Sha256::digest(&bytes)) != wanted.sha256 {
         return Err(bad("file"));
     }
     let pkg = ext_pkg::read(&bytes).map_err(|e| Error::Package(e.to_string()))?;
-    if pkg.digest.hex() != release.digest || &pkg.manifest.id != id || pkg.manifest.version != release.version {
+    if pkg.digest.hex() != wanted.digest || &pkg.manifest.id != id || pkg.manifest.version != release.version {
         return Err(bad("content"));
+    }
+    // A per-platform package says which platform it is for, and it must be the one the index lists it under.
+    if !release.targets.is_empty() && pkg.target.as_deref() != Some(target) {
+        return Err(bad("platform"));
+    }
+    let mut targets = BTreeMap::new();
+    for (t, p) in release.targets.iter().filter(|(t, _)| ext_manifest::is_target(t)) {
+        targets.insert(t.clone(), ContentDigest::parse(&p.digest).ok_or_else(|| bad("platform list"))?);
     }
     if yard::permission_digest(&pkg.manifest) != release.permissions {
         return Err(bad("permission list"));
     }
-    let bundle = body(format!("packages/{}.sigstore.json", release.digest), publisher::MAX_BUNDLE_BYTES)?;
+    let bundle = body(format!("packages/{}.sigstore.json", wanted.digest), publisher::MAX_BUNDLE_BYTES)?;
     let pins = Pins::from_pem(&v.root.fulcio, &v.root.rekor).map_err(Error::Signature)?;
     let signed = publisher::verify_package(&bundle, id, &release.version, &pkg.digest, &pins, now).map_err(Error::Signature)?;
     if signed.publisher != entry.publisher {
@@ -256,7 +300,46 @@ pub fn download(
             release.version, signed.publisher, entry.publisher
         )));
     }
-    Ok(Download { bytes, manifest: pkg.manifest, release: release.clone(), signed })
+    Ok(Download { bytes, manifest: pkg.manifest, release: release.clone(), signed, targets })
+}
+
+/// What the Market's page shows of one version, checked against the index.
+#[derive(Clone, Debug)]
+pub struct Page {
+    pub manifest: Manifest,
+    pub readme: Option<String>,
+    /// The README was cut by the registry; the full one is in the package.
+    pub readme_cut: bool,
+}
+
+/// The page of one version: from the cache folder `dir` when it was opened before, else downloaded (one request, not
+/// counted as a download). Its sha256 is in the signed index, and its manifest must be the version's.
+pub fn page(reg: &Registry, dir: &Path, id: &ExtId, release: &Release, fetch: &dyn Fetch) -> Result<Page, Error> {
+    let sha = release.details.as_deref().ok_or_else(|| Error::NotFound(format!("the {} registry has no page for {id} {}", reg.name, release.version)))?;
+    let cache = dir.join("details").join(format!("{sha}.json"));
+    let bytes = match std::fs::read(&cache) {
+        Ok(b) if hex(&Sha256::digest(&b)) == sha => b,
+        _ => {
+            let bytes =
+                match fetch.get(&reg.file_url(&format!("packages/{}.details.json", release.digest)), None, yard::MAX_DETAILS_BYTES).map_err(Error::Network)? {
+                    Got::Body { bytes, .. } => bytes,
+                    Got::NotModified => return Err(Error::Network("details: unexpected “not modified”".into())),
+                };
+            if hex(&Sha256::digest(&bytes)) != sha {
+                return Err(Error::Package(format!("{id} {}: the page does not match the registry's index", release.version)));
+            }
+            std::fs::create_dir_all(cache.parent().expect("has a parent")).map_err(|e| Error::Cache(format!("cannot create {}: {e}", dir.display())))?;
+            write_atomic(&cache, &bytes)?;
+            bytes
+        }
+    };
+    let bad = |what: String| Error::Package(format!("{id} {}: the registry's page {what}", release.version));
+    let d: yard::Details = serde_json::from_slice(&bytes).map_err(|e| bad(format!("is not valid: {e}")))?;
+    let manifest = ext_manifest::parse(&d.manifest).map_err(|e| bad(format!("has a manifest that does not parse ({} errors)", e.len())))?;
+    if &manifest.id != id || manifest.version != release.version || yard::permission_digest(&manifest) != release.permissions {
+        return Err(bad("is for another package".into()));
+    }
+    Ok(Page { manifest, readme: d.readme, readme_cut: d.readme_cut })
 }
 
 /// The publisher an install from this registry pins, and what that means against the lock's pin.

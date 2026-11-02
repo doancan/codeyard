@@ -45,6 +45,12 @@ pub(super) struct TaskState {
     pub(super) scan_pending: bool,
     /// The Testing view: tests found, their results and the running test command.
     pub(super) tests: super::tests_glue::TestingState,
+    /// A run waiting for answers to its inputs, and a counter of questions asked (a dismissed one cancels the run).
+    pub(super) pending: Option<super::task_run_glue::PendingRun>,
+    pub(super) asking: u64,
+    /// Task runs: in progress, and finished ones until the next run starts.
+    pub(super) runs: Vec<super::task_run_glue::LiveRun>,
+    pub(super) next_token: u64,
 }
 
 /// Language servers, diagnostics, progress and log (see workbench_lsp.rs).
@@ -67,7 +73,8 @@ pub(super) struct LspState {
     /// Pending `workspace/symbol` search (dropped, i.e. cancelled, when a newer one arrives).
     pub(super) symbol_task: Option<gpui::Task<()>>,
     /// Position supplied by the language server: (path, line, UTF-16 column), 0-based.
-    pub(super) pending_reveal: Option<(String, u32, u32)>,
+    /// A location to show once its file is in front, and whether to ask for the fixes there then (Problems' Quick Fix…).
+    pub(super) pending_reveal: Option<(String, u32, u32, bool)>,
     /// JSON/YAML schema service (set up on first use) and the pending check per file.
     pub(super) schema: Option<Arc<schema::ide::Service>>,
     pub(super) schema_tasks: std::collections::HashMap<String, gpui::Task<()>>,
@@ -107,11 +114,17 @@ pub(super) struct GitState {
     /// Whether the marks of inactive roots are being refreshed right now.
     pub(super) marks_busy: std::collections::HashSet<String>,
     pub(super) tree_marks: std::collections::HashMap<String, Arc<std::collections::HashMap<String, crate::git::Mark>>>,
+    /// The repositories of the workspace (see workbench_repos.rs).
+    pub(super) repos: super::repos_glue::RepoState,
+    /// The repository the open commit menu belongs to (its actions are pinned to it).
+    pub(super) menu_repo: Option<crate::scm::Target>,
 }
 
 /// Layout: side panel, bottom panel, split editor, zoom, zen mode, window bounds.
 pub(super) struct ChromeLayout {
     pub(super) a11y_bounds: super::a11y::PaintedBounds,
+    /// Keyboard focus and cursor rows of the side view and panel lists (workbench_row_nav.rs).
+    pub(super) row_nav: super::row_nav_glue::RowNav,
     pub(super) web_preview: super::web_preview_glue::State,
     pub(super) resources: Entity<crate::resource_monitor::ResourceMonitor>,
     pub(super) panel: Option<Panel>,
@@ -121,18 +134,42 @@ pub(super) struct ChromeLayout {
     pub(super) resizing_sidebar: bool,
     pub(super) panel_open: bool,
     pub(super) panel_h: f32,
+    /// Views moved to the secondary side bar (right of the editor), the one it shows, the one it showed last, and the
+    /// primary side bar's last view (where it goes back to when a moved view is asked for).
+    pub(super) in_secondary: Vec<Panel>,
+    pub(super) secondary: Option<Panel>,
+    pub(super) secondary_last: Option<Panel>,
+    pub(super) last_primary: Option<Panel>,
+    /// Terminals in windows of their own.
+    pub(super) detached: Vec<super::views_glue::Detached>,
+    /// Editors in windows of their own (see workbench_editor_windows.rs).
+    pub(super) editor_windows: Vec<super::editor_windows_glue::DetachedEditor>,
+    /// The view slot of the editor window in use: commands act on its editor and its menus and pickers are drawn there.
+    pub(super) editor_host: Option<usize>,
+    /// Side views in windows of their own, and the one in use (its menus and pickers are drawn there).
+    pub(super) view_windows: Vec<super::view_windows_glue::ViewWindowEntry>,
+    pub(super) view_host: Option<gpui::AnyWindowHandle>,
     /// Panel on the right (next to the editor) and its width; maximized (covers the editor).
-    pub(super) panel_right: bool,
+    pub(super) panel_dock: super::docks_glue::PanelDock,
+    /// A side view being dragged by its activity bar icon (the side bars are drop zones meanwhile).
+    pub(super) view_drag: Option<Panel>,
+    /// The editor tab being dragged and the group it left (a release outside the window takes it out).
+    pub(super) tab_drag: Option<(Entity<EditorView>, super::GroupKey)>,
     pub(super) panel_w: f32,
     pub(super) panel_max: bool,
+    /// A running maximize/restore animation: when it started and whether it maximizes.
+    pub(super) panel_anim: Option<(std::time::Instant, bool)>,
+    /// The editor-and-panel area at the last draw: a maximizing panel grows to it.
+    pub(super) panel_area: Option<gpui::Bounds<gpui::Pixels>>,
     pub(super) resizing_panel: bool,
     /// Width of the terminal list beside the terminals (when there are several), and whether its edge is being dragged.
     pub(super) term_list_w: f32,
     pub(super) resizing_term_list: bool,
     pub(super) resizing_split: bool,
-    /// Zoom delta (pt) and the base sizes from settings (editor, line, terminal).
-    pub(super) zoom: f32,
-    pub(super) zoom_base: (f32, f32, f32),
+    /// Scroll position of the activity bar's view buttons (they scroll when the window is too short for all of them).
+    pub(super) activity_scroll: gpui::ScrollHandle,
+    /// Whether the last frame showed the "more above" and "more below" hints of the activity bar.
+    pub(super) activity_hints: std::cell::Cell<(bool, bool)>,
     /// Zen mode: the previous layout is kept here while it is on.
     pub(super) zen: Option<ZenSaved>,
     /// Window bounds at the last draw (saved on exit, used at the next launch).
@@ -171,6 +208,11 @@ pub(super) struct ConfigState {
     pub(super) dirty: bool,
     /// Own settings of extra folders (root -> settings): applied to that folder's files.
     pub(super) folders: std::collections::HashMap<String, Arc<crate::folder_settings::FolderSettings>>,
+    /// Texts of each extra folder's settings files (root -> layers, lowest first): re-resolved when the user file or the
+    /// workspace file changes.
+    pub(super) folder_texts: std::collections::HashMap<String, Vec<String>>,
+    /// The user settings file as last read (`None`: no settings folder, as in tests).
+    pub(super) user_text: Option<String>,
     /// The Extensions view: installed list, search, detail page and consent sheet (see workbench_ext.rs).
     pub(super) exts: super::ext_glue::ExtViewState,
 }
@@ -183,6 +225,8 @@ pub(super) struct PersistState {
     pub(super) data_dir: Option<std::path::PathBuf>,
     /// Workspace to restore on the next render (the window lives there).
     pub(super) pending_restore: Option<i64>,
+    /// Workspace whose workspace file is being read again after a restart (its extra folders follow the file).
+    pub(super) pending_restore_workspace: Option<i64>,
     pub(super) backup_task: Option<gpui::Task<()>>,
     /// Path -> backed-up version.
     pub(super) backed_up: std::collections::HashMap<String, u64>,
@@ -192,6 +236,23 @@ pub(super) struct PersistState {
     pub(super) pinned: Vec<(Option<String>, String)>,
     /// Recent entry opened over SSH: if it can't connect or the folder is missing, asks "remove from the list?".
     pub(super) opening_recent: Option<RecentWorkspace>,
+    /// This window's session on the terminal daemon, and the daemon socket to use (workbench_term_daemon.rs).
+    pub(super) term_daemon: Option<super::term_daemon_glue::TermDaemon>,
+    pub(super) term_socket: Option<std::path::PathBuf>,
+    /// The window's session is being taken back; terminals outside the panel wait in `pending_moved` until it is.
+    pub(super) term_restoring: bool,
+    /// The panel's terminals are being restored (any kind of restore, until it lands), and a new terminal was asked for
+    /// meanwhile or before the restore started: it opens after them, so the restore is not dropped and the new shell
+    /// runs where the window's do.
+    pub(super) panel_restoring: bool,
+    pub(super) terminal_wanted: bool,
+    pub(super) pending_moved: Option<super::term_tabs_glue::restore::SavedTerminals>,
+    /// Terminals outside the panel taken back before their places were restored (by position), waiting for them.
+    pub(super) moved_back: Vec<(usize, host::Pty, u64)>,
+    /// The app is quitting and this window's terminals are kept for the next start: nothing ends them on the way out.
+    pub(super) keeping_terminals: bool,
+    /// The SSH session id this window resumed, so no other window of the app takes it.
+    pub(super) remote_claim: Option<super::term_daemon_glue::Claim>,
 }
 
 /// Connection: host machine, SSH details and pending questions (see workbench_folder.rs).
@@ -235,6 +296,13 @@ pub(super) struct RootsState {
     /// Favorite files/folders of the open project (relative to the root).
     pub(super) favorites: Vec<String>,
     pub(super) file_index: Option<FileIndex>,
+    /// The workspace file this window was opened through (folder names, shared settings, tasks and launch).
+    pub(super) workspace: Option<super::workspace_glue::OpenWorkspace>,
+    /// Bumped by every workspace file open and every change of folder or host (never reset): replies of older
+    /// workspace reads and writes are dropped.
+    pub(super) workspace_request: u64,
+    /// Bumped whenever a workspace file is applied again (never reset, unlike `workspace`).
+    pub(super) workspace_generation: u64,
 }
 
 /// Editor groups keep all tab-local state together when focus changes.

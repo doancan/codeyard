@@ -409,11 +409,32 @@ impl Workbench {
                 .text_size(px(text::XS.0))
                 .child(icon("code", 14., p.text_muted))
                 .child(div().flex_none().text_color(c(p.text_muted)).child(t("Query")))
-                .child(div().flex_1().min_w_0().flex().child(bar.field.clone()))
-                .child(div().flex_none().max_w(px(460.)).overflow_hidden().whitespace_nowrap().text_color(c(color)).child(message))
+                .child({
+                    let handle = bar.field.focus_handle(cx);
+                    let press = handle.clone();
+                    div().flex_1().min_w_0().flex().child(bar.field.clone()).relative().child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::new(t("Query"), "field", accesskit::Role::TextInput, t("Query"))
+                            .value(bar.field.read(cx).text().to_string())
+                            .focus(handle)
+                            .on_press(move |window, _| window.focus(&press)),
+                    ))
+                })
+                .child(
+                    div()
+                        .flex_none()
+                        .max_w(px(460.))
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_color(c(color))
+                        .relative()
+                        .child(crate::a11y_controls::said(t("Query"), "status", accesskit::Role::Status, message.clone()))
+                        .child(message),
+                )
                 .child(
                     div()
                         .id("data-query-close")
+                        .relative()
+                        .child(self.ctl(t("Query"), "close", t("Close"), cx, |this, w, cx| this.close_query(false, w, cx)))
                         .flex_none()
                         .cursor_pointer()
                         .child(icon("x", 14., p.text_muted))

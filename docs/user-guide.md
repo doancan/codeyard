@@ -9,6 +9,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Welcome, Settings page and customization](#welcome-settings-page-and-customization)
 - [Source control, Timeline and more](#source-control-timeline-and-more)
 - [Settings and keyboard shortcuts](#settings-and-keyboard-shortcuts)
+- [Interface scale](#interface-scale)
 - [Interface language](#interface-language)
 - [Updates](#updates)
 - [Themes](#themes)
@@ -27,7 +28,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Spell check](#spell-check)
 - [Merge editor](#merge-editor)
 - [Compare folders](#compare-folders)
-- [GitHub pull requests](#github-pull-requests)
+- [Pull requests](#pull-requests)
 - [HTTP files](#http-files)
 - [Terminal](#terminal)
 - [Port forwarding](#port-forwarding)
@@ -82,7 +83,7 @@ is the complete list and always matches your key bindings; every setting is in [
 | Quick fix | ⌘. | Ctrl+. |
 | Format document | ⇧⌥F | Shift+Alt+F |
 | Save all | ⌥⌘S | Ctrl+Alt+S |
-| Zoom in / out / reset | ⌘= / ⌘- / ⌘0 | Ctrl+= / Ctrl+- / Ctrl+0 |
+| Interface zoom in / out / reset to 100% | ⌘= / ⌘- / ⌘0 | Ctrl+= / Ctrl+- / Ctrl+0 |
 | Back / forward | ⌃- / ⌃⇧- | Ctrl+Alt+- / Ctrl+Shift+- |
 | Reopen closed tab | ⇧⌘T | Ctrl+Shift+T |
 | New file / save as / new window | ⌘N / ⇧⌘S / ⇧⌘N | Ctrl+N / Ctrl+Shift+S / Ctrl+Shift+N |
@@ -114,15 +115,28 @@ is the complete list and always matches your key bindings; every setting is in [
 | Settings (UI page) | ⌘, | Ctrl+, |
 | Markdown preview | ⇧⌘V | Ctrl+Shift+V |
 | Next / previous search result | F4 / ⇧F4 | F4 / Shift+F4 |
+| Search Editor: run the search again | ⇧⌘R | Ctrl+Shift+R |
+| Search Editor results: move / open or fold / select a change | ↑ ↓ / ↵ / Space | ↑ ↓ / Enter / Space |
 | Toggle block comment | ⇧⌥A | Shift+Alt+A |
 | Go to last edit location | ⌘K ⌘Q | Ctrl+K Ctrl+Q |
 | Open / close everything inside a folder (file tree) | ⇧→ / ⇧← | Shift+→ / Shift+← |
 | Expand snippet / next tab stop / previous | Tab / Tab / ⇧Tab | Tab / Tab / Shift+Tab |
+| Context menu of the focused row, the Explorer selection or the editor | ⇧F10 | Shift+F10, Menu key |
+| Run and Debug, Testing, Remote Explorer and Ports lists: move / first / last / open | ↑ ↓ / Home / End / ↵ | ↑ ↓ / Home / End / Enter |
+
+The lists of the Run and Debug view (variables, watches, call stack, breakpoints), the Testing view, the Remote
+Explorer and the Ports panel take the keyboard as a whole: Tab reaches them (a click on a row does too), a frame in the
+focus colour marks the list and the row under the cursor, and Enter does what a click on the row does. Shift+F10 (or the
+Menu key on Windows keyboards) opens the menu a right click opens, under the row; Escape closes it and the keyboard goes
+back to the row. The same key opens the Explorer's menu for the selected row and the editor's menu at the caret. The
+keys are commands like any other (`rows.previous`, `rows.next`, `rows.first`, `rows.last`, `rows.activate`,
+`list.showContextMenu`), so `keybindings.jsonc` can change them.
 
 Right-click in the file tree for new file/folder, cut/copy/paste, rename, delete, copy path,
 favorites. Drag files and folders onto a folder to move them (an existing file is never
-overwritten). Deleting a local file moves it to the Trash (`"files.enableTrash": false` deletes
-permanently; on SSH hosts there is no Trash, so it asks). Right-click a tab for close others /
+overwritten). Deleting a file or folder deletes it permanently after asking; with
+`"files.enableTrash": true` local files go to the Trash instead. SSH hosts have no Trash: there the question says
+"Permanently delete … on <host>?" and the button is *Delete Permanently*. Right-click a tab for close others /
 to the right / saved, pin, copy path; drag tabs to reorder them or onto the other group.
 Right-click in the editor for go to definition / references, rename, cut/copy/paste,
 file history and blame. A single click in the tree opens a preview tab (italic) that the next
@@ -179,6 +193,77 @@ use ⌘J or bind `terminal.toggle` yourself (below).
 
 Opening a file from Explorer or Quick Open restores a maximized terminal panel to its previous size and shows the editor.
 
+**Arranging views.** "View: Move View to Secondary Side Bar" moves the open side view (Explorer, Search, Source
+Control, Run and Debug, Testing, Remote, Extensions) to a second side bar on the right of the editor; its activity bar
+icon and commands then open it there, next to whatever the left side bar shows. "View: Move View to Primary Side Bar"
+moves it back and "View: Toggle Secondary Side Bar" hides or shows it; the arrangement comes back at the next start.
+You can also drag a view's activity bar icon to the other side: while you drag, the left and right edges of the window
+show a highlighted drop zone, and the view opens in the side bar you drop it on. The panel (terminal, Problems,
+Output) docks below the editor or beside it: "View: Move Panel Left", "View: Move Panel Right" and "View: Move Panel
+to Bottom" (or the button in the panel's header); a panel docked beside the editor is resized from its edge towards the
+editor, and the dock is kept for the next start. Screen readers read which view each side bar shows and where the panel
+is in the window's description. Drag an editor tab out of the window and release it outside: over another Codeyard
+window, the file opens there and its tab here closes (a file with unsaved changes, or one on another machine than that
+window's folder, stays where it is and the status bar says why); anywhere else, the tab becomes a window of its own at
+that place, showing the same document (as "View: Move Editor into New Window" does).
+"View: Move View into New Window" moves the open side view (Explorer, Search, Source Control, Run and Debug, Testing,
+Remote Explorer, Extensions) into a window of its own, for example on another display. It is the same view: what you
+select, expand or type there is what the side bar would have shown. Its activity bar icon and commands then bring that
+window to the front instead of opening it in a side bar; the command palette, shortcuts, its right-click menus and
+pickers work in that window. Closing the window, ⌘W in it, or "View: Move View Back to Side Bar" puts the view back in
+the side bar it came from. The windows belong to the folder: they are saved with it, close when the folder or the
+connection changes (their views going back to the side bars), and come back when the folder opens again, on an
+attached display. Screen readers find the view in its own window, named after the view. A code extension's side bar
+view moves the same way (and to the secondary side bar): it stays the same view, so what the extension draws reaches
+the window and what you do there goes to the extension. Its window comes back only while the extension is installed;
+it closes when you remove or turn off the extension, and the view returns to the side bar if the extension crashes.
+"Terminal: Move Terminal into New Window" moves the active terminal, with its running program, into a window of its own
+(the same terminal, not a copy). Closing that window puts the terminal back in the panel, still running;
+"Terminal: Move Terminals Back to Panel" does it for all of them. A detached terminal belongs to its editor window and
+ends with it, or when the connection changes. "Terminal: Move Terminal into Editor Area" moves the active terminal into
+the focused editor group as a tab, next to your files; "Terminal: Move Terminal Back to Panel" returns it, and so does
+closing its tab (closing a terminal's tab never ends what runs in it). Opening another folder also returns
+it to the panel; a connection change ends it like a panel terminal. Drag a terminal's tab onto another group's tab bar
+to move it there; screen readers list terminal tabs with the other tabs of the focused group, and selecting one brings it
+to the front. At the next start, each terminal that was in an editor group or in a window of its own comes back in the
+same place as a new shell, with its name, colour and folder, and the line "Previous session ended; started a new
+shell"; nothing from the previous session runs again. A window whose display is gone opens on an attached display, made
+to fit; a saved arrangement that cannot be read is ignored.
+
+"View: Move Editor into New Window" shows the active file in a window of its own, for example on a second display;
+"View: Copy Editor into New Window" does the same and keeps its tab. Both windows show one document: what you type in
+one appears in the other at once, undo takes back edits made in either, and one save writes it. Each window keeps its
+own cursor, selection, scroll and find bar. Completion, hover, diagnostics and go to definition work there as in a tab
+(a definition in another file opens in the main window). Closing the file's window puts it back as a tab of the focused
+group with any unsaved changes; ⌘W in it closes the file instead, and asks whether to save when no other tab or window
+shows it. "View: Move Editors Back to Main Window" returns all of them. The windows belong to their folder: they close
+when the folder or the connection changes or the main window closes (unsaved changes are kept by hot exit or asked
+about, as for tabs), and come back in place at the next start; a file you also open as a tab keeps its tab. In a file's
+own window the command palette, Quick Open, Go to Line, the right-click menu and the other commands and shortcuts work
+as in the main window and act on that window's editor; a command that shows something in the main window (another
+file, a side view) brings it to the front. Screen readers see the editor in its own window, and the terminal in its
+own window, the same way as in the main window.
+**Terminals after a restart.** With `window.restoreSession` on (the default), a folder's terminals come back when the
+folder opens again: the panel's in the same order, and those you moved into an editor group or a window of their own in
+those places, with the same folder, title, color and program. Their shells keep running when you are expected to come
+back: when you **quit** Codeyard (⌘Q, Quit in the menu, an update's restart), or when it crashes or is killed. A local
+folder's terminals run in a small background process of Codeyard's (the terminal daemon); an SSH
+folder's already run in Codeyard's agent on the server. Leaving on purpose ends them at once, as always: **closing the
+window** (even the last one), *Close Folder*, opening another folder in the window or connecting elsewhere. Open the
+folder again within `terminal.persistentSessionTimeout` minutes (5 by default, at most 1440; 0 keeps nothing) and you get
+**the same shells back**, still running, with what they printed meanwhile and a line *Reconnected to terminal session*
+(also announced in the status bar). If another Codeyard instance already has a local folder's terminals open, they stay
+with it: this window starts new shells and says so in the status bar. If more than the last 256 KB of a terminal's output
+came while no window was open, the line says how much was lost. A terminal no window takes back in time is ended; the
+local daemon stops 10 minutes after its last terminal. Any terminal that cannot be taken back (it ended, the daemon or
+the server was restarted, `window.restoreSession` is off) is a **new shell**: nothing that
+ran before is started or typed again, and a line says *Previous session ended; started a new shell*. If a terminal's folder is gone,
+it starts in the workspace folder and says so. `"terminal.persistentScrollback": 1000` also keeps the last lines of each
+terminal's history (plain text, with colors and control sequences removed) and shows them above that line; it is 0 (off) by
+default, because history can contain secrets. "Terminal: Clear Saved Terminal History" removes the saved history now.
+Environment variables from terminal profiles are not saved. Task and test output terminals are not restored. Over SSH, a
+dropped connection reconnects to the shells that are still running on the server (they are not restarted).
+
 Terminal line editing works as in Terminal.app: ⌘← / ⌘→ jump to the start / end of the line, ⌥← / ⌥→ move by word,
 ⌘⌫ deletes to the start of the line, ⌘⌦ to its end and ⌥⌦ the next word (these are the shell's own keys, Ctrl+A, Ctrl+E,
 Esc b…, so they work in bash, zsh and fish; full-screen programs such as vim get the plain keys). ⌘F finds in the output and
@@ -219,8 +304,55 @@ while switching focus; session restoration currently saves text-document tabs an
 
 **Images** (png, jpg, gif, webp, svg, bmp) open in a preview tab.
 
-**Find in files** (⇧⌘F) has a replace field: "Replace All" asks first, then changes open
-files in their editors (undoable) and closed files on disk.
+**Find in files** (⇧⌘F) has a replace field. "Replace All" (or ↵ in the field, or "replace in
+this file" on a result) does not write anything: it opens a Search Editor with a replacement
+preview, described below.
+
+### Search Editors and replacement review
+
+"Search: Open Search Editor" (or the page icon in the Search panel's results bar) keeps the current
+query in an editor tab of its own. Each tab remembers its query, the match case / whole word /
+regex options, the include and exclude globs, the replacement, how many context lines to show
+(the − / + buttons, 0–5) and the host and folders it searched. Several Search Editors can be open
+at once; the Search panel stays free for other queries.
+
+- **Navigate.** Click a match, or focus the list and use ↑ / ↓ and ↵; F4 / ⇧F4 step through the
+  matches. Context lines are read for the first 2000 matches. "Rerun" (⇧⌘R) searches again in
+  the same tab. In a workspace with several folders every folder is searched, as in the Search
+  panel; files of other folders show as `folder › path`. A tab whose folders are no longer all in
+  the workspace is marked stale.
+- **Bounded.** A tab keeps at most 20000 matches in 5000 files. When the search stops at the
+  result limit (`"search.maxResults"`), is stopped or fails, the tab says the results are
+  incomplete.
+- **Restart.** Search Editors come back with the workspace, with their query and up to 200
+  results each, marked "Restored from the last session". Nothing runs and nothing is replaced
+  until you rerun. A tab whose host or folder is not the one the window shows says so and cannot
+  open, preview or replace anything there.
+- **Preview.** "Preview Replace" (or ↵ in the replacement field) lists every change as the line
+  before and after, with a checkbox per change and per file (Space toggles the focused row).
+  The plan is made from the current text of each file: an open editor's unsaved text wins over
+  the disk. Nothing is written before "Apply 3 changes in 2 files" (the button counts the selected
+  changes and files).
+- **Apply.** Apply is refused while the results are incomplete or out of date ("Search results
+  are incomplete; rerun before replacing."). Open files change in their editors, one undo step
+  each, and are not saved. Closed files are written one at a time, each atomically and only if it
+  is still exactly what the preview read; otherwise it is left alone and reported as "File
+  changed since preview". Every file keeps its encoding (UTF-8 with or without a byte-order mark,
+  UTF-16, Windows-1254, ISO 8859-9, ISO 8859-1), its line endings, mixed ones included, and a
+  missing final newline; a file whose encoding cannot hold the replacement, or that would not be
+  written back byte for byte, is listed and not changed. Binary files are never changed. This is
+  not a multi-file transaction: the report lists what changed, what did not and why, and any file
+  whose outcome is unknown (for example when the connection drops), with no automatic retry.
+- **Replacement text.** In regex mode `$1`, `${name}`, `$&` and `\n` work as in the find bar;
+  line breaks become the file's line ending. Matching is per line, as in the search, and empty
+  matches (`^`, `\b`, `x*` where there is no `x`) are never replaced. "Preserve case" follows
+  each match's letter case.
+- **Undo.** "Undo Replace" in the tab, or "Search: Undo Last Replace", takes the whole batch back
+  once: open editors lose that one step, files get their previous bytes. A file or editor
+  changed since the replacement, or reopened with unsaved edits, is reported as an undo conflict
+  and kept as it is.
+
+Search Editors work the same on SSH hosts: the host searches, reads and writes the files.
 
 ### Structural search and replace
 
@@ -315,7 +447,7 @@ Make it yours:
   change single colors with `"workbench.colorCustomizations": { "accent": "#ff8800",
   "[Quarry]": { "syntax-string": "#a6e22e" } }` (roles are the names in the theme files; an
   entry in `[brackets]` applies to that theme only), or "Theme: Save Current Colors as User
-  Theme…" to keep your tweaks as a theme file. VS Code color themes dropped into
+  Theme…" to keep your tweaks as a theme file. Color themes from another editor dropped into
   `~/.config/codeyard/themes` are imported.
 - **Icons:** "Theme: Pick File Icon Theme…" previews Minimal (default), Codeyard, Language Badges,
   Colorful Folders, Apple / GitHub (solid blue folders, outline files with a language dot),
@@ -330,7 +462,7 @@ Make it yours:
   `files.associations` (`{ "*.tpl": "html" }`) next to the options listed below.
 - **Snippets:** type a prefix and press Tab (`fn`, `for`, `def`, `html5`…); "Snippets: Insert
   Snippet…" lists them. "Preferences: Configure User Snippets" opens
-  `~/.config/codeyard/snippets/<language>.json` in the VS Code snippet format (`global.json`
+  `~/.config/codeyard/snippets/<language>.json` in the common JSON snippet format (`global.json`
   applies to every file).
 
 ## Source control, Timeline and more
@@ -389,6 +521,9 @@ its keys; picking one adds a line for it to `keybindings.jsonc` and opens the fi
 `~/.config/codeyard/settings.jsonc` and `keybindings.jsonc` (comments and trailing commas are
 fine). Changes apply on save; mistakes show in the status bar instead of being ignored.
 A project can override settings in `.codeyard/settings.jsonc` (or `.vscode/settings.json`).
+To start over, "Preferences: Reset Settings to Defaults…" (or **Reset All Settings…** on the Settings
+page, next to **Open settings.jsonc**) replaces `settings.jsonc` with this version's default file after
+you confirm; the old file is kept beside it as `settings.backup-<time>.jsonc`.
 
 **Workspace Trust.** A folder you open can carry settings, tasks and debug configurations that run
 programs. Until you trust a folder, its project settings cannot set `terminal.shell`, `lsp.servers` or schema
@@ -398,7 +533,11 @@ a test or the debugger first asks "Do you trust the authors of this folder?". A 
 program (a filter, diff or merge driver, an ssh or credential command, a hooks folder) gets **no Git at all** until it is
 trusted: `git status` alone would run its filters. A notice names the settings. Folders you had already opened before this
 rule existed are trusted once. Trusting is remembered per folder (per host over SSH) and starts the language servers at once;
-`Workspace: Trust This Folder` does it without a question. `security.workspaceTrust.enabled: false`
+`Workspace: Trust This Folder` does it without a question. With a workspace file open, trust covers the workspace as a
+whole: the question becomes "Do you trust the authors of this workspace?" and names the file, and the answer (or
+`Workspace: Trust This Folder`) trusts the file's own folder and every folder it lists in one step. A folder the
+workspace does not list is still asked about on its own, and over SSH the trust only holds on that host.
+`security.workspaceTrust.enabled: false`
 in your own `settings.jsonc` turns the check off; a project file can never change that key.
 
 ```jsonc
@@ -422,11 +561,33 @@ in your own `settings.jsonc` turns the check off; a project file can never chang
 ]
 ```
 
-Unknown command ids get a "did you mean" hint. Coming from VS Code? ⇧⌘P → "Preferences:
-Import VS Code Settings and Shortcuts" copies the settings that have an equivalent here and
-your shortcuts (into a marked block of `keybindings.jsonc`, so importing again replaces it);
-it reports what had no equivalent. Your VS Code files are only read. Open tabs, cursors and unsaved changes are
+Unknown command ids get a "did you mean" hint. Coming from another editor? ⇧⌘P → "Preferences:
+Import Settings and Shortcuts from Another Editor" copies the settings that have an equivalent here and
+your shortcuts (into a marked block of `keybindings.jsonc`, so importing again replaces it, also a block an earlier
+version wrote); it reports what had no equivalent. The other editor's files are only read. Open tabs, cursors and unsaved changes are
 restored on the next start (hot exit).
+
+## Interface scale
+
+*View: Zoom In* (⌘= or ⌘+), *Zoom Out* (⌘-) and *Reset Zoom* (⌘0; Ctrl on Windows), also in the View menu, make the
+whole interface larger or smaller: menus, the activity bar, side bars, tabs, the editor, the terminal, dialogs, tooltips
+and the status bar together. The steps are 75%, 80%, then every 10% from 90% to 200%; Reset Zoom returns to 100%. The
+status bar shows the new value ("Interface scale: 110%").
+
+Each change is saved as `ui.scale` in your own `settings.jsonc` (0.75–2, default 1) and applies at once to every open
+window and after a restart. You can also type a value there or in *Preferences: Settings*, such as `1.25` (it is rounded to whole
+percent); Zoom In and Zoom Out then continue from the next step. If the settings file cannot be written (no settings
+folder, a read-only folder), the zoom still applies for the session and a settings reload keeps it, until the file's
+own `ui.scale` changes. A value that is not a number from 0.75 to 2 is ignored with the message
+"Interface scale must be between 75% and 200%." and the interface stays at 100%. A project's `.codeyard/settings.jsonc`
+cannot set it.
+
+`editor.fontSize` and `terminal.fontSize` stay the sizes you chose: at 150% a 14 pt editor font is drawn 1.5 times as
+large, once, together with the rest of the window. The display's own scale (Retina, Windows display scaling) is applied
+separately, so moving a window to another monitor keeps the chosen interface scale. Window sizes and the minimum window
+size are in screen points and do not change when you zoom; when a small window cannot show every activity bar button,
+the buttons scroll, a small chevron at the top or bottom edge shows that more are hidden, and the Manage button stays at
+the bottom.
 
 ## Interface language
 
@@ -480,8 +641,8 @@ sees your IP address and that the request comes from `curl`. No cookies are kept
 nothing about you, your files or your machine is sent beyond what any web request carries.
 
 **What it does not do.** Codeyard never installs anything without your confirmation, and an update that Codeyard installs does not go
-through macOS's first-launch check (Gatekeeper), because the files come from `curl` and Codeyard builds are not notarized yet. What
-protects you instead is the signed checksum list (see *How it is verified*).
+through macOS's first-launch check (Gatekeeper), because the files come from `curl`; macOS releases are signed with Developer ID
+and notarized, and what protects an in-app update is the signed checksum list (see *How it is verified*).
 
 **When.** The setting `"update.check"` (your own `settings.jsonc` or the Settings page; a folder's `.codeyard/settings.jsonc` cannot
 set it) takes:
@@ -535,7 +696,7 @@ Windows installations made by the setup program run the installer silently and r
 ## Themes
 
 Readability is built in: every text, status and syntax color is checked against every surface it can sit on (WCAG AA,
-103 pairs); a built-in or imported VS Code theme that falls short is repaired when it loads by moving only the failing
+103 pairs); a built-in or imported theme that falls short is repaired when it loads by moving only the failing
 foreground colors the smallest step toward black or white. Theme files you wrote yourself and your own
 `workbench.colorCustomizations` are applied as written.
 
@@ -558,14 +719,18 @@ Your own themes go in `~/.config/codeyard/themes/*.json`:
 Missing roles fall back to the default dark or light theme. The full role list is in
 `crates/theme/design/tokens.json`.
 
-**VS Code themes:** drop the theme's `.json` file (from its extension's `themes/` folder)
+**Themes from another editor:** drop the theme's `.json` file (from its extension's `themes/` folder)
 into the same directory. Workbench colors and syntax colors (TextMate scopes) are mapped
 to the editor's roles; comments and trailing commas are fine.
 
 ## Extensions
 
 Extensions add themes, snippets, keymap presets, key bindings, languages, JSON and YAML schemas, settings and language
-servers. They contain data only: this version runs no extension code. *Extensions: Show Extensions* in the command
+servers. Extensions with code add commands, views, formatters, code actions, hover and completion, code lenses, inlay
+hints, source control and pull request providers (see *What extensions with code add* below). On Windows, extensions
+with code do not run yet in this version: the sandbox they need has not passed its check on real hardware, so they
+cannot be installed there (the extension's page says "… contains code, which needs a sandbox this system does not
+provide"); extensions without code work. *Extensions: Show Extensions* in the command
 palette (or the blocks icon in the activity bar, or *View › Extensions*) lists what is installed, turned-off ones
 included, with a search field. What comes with Codeyard is built in and always on.
 
@@ -575,9 +740,116 @@ in an SSH window. Before anything is installed, a consent sheet shows the extens
 contributes and what it may reach, in plain words ("Run taplo with any arguments"), with the author's reason quoted.
 A red line marks a **High risk** set: one that can run programs as you, or read private data and send it somewhere.
 For those, the keyboard starts on *Cancel*, so Enter never installs by accident; Escape cancels any sheet. A package
-that is not valid is not installed; the error says what is wrong, as the packaging tool would. A package with code
-(commands, views) is refused with that reason: this version runs data-only extensions. A new extension applies at
-once, in every open window, without a restart.
+that is not valid is not installed; the error says what is wrong, as the packaging tool would. A new extension
+applies at once, in every open window, without a restart.
+
+**Native programs.** Some extensions bring their own programs (a language server or a command-line tool), built for
+each platform. Their sheet has a *Native programs* section, and *Install* does nothing until you type the extension's
+id (for example `you.hello`) into the field there; a screen reader finds that field in the sheet, labelled with what
+to type. The programs run on the computer that holds the workspace: this
+one, or the SSH server. Codeyard installs the package for that computer's platform, copies the program there itself
+(the server downloads nothing) and checks its SHA-256 before every run, so a copy changed on disk is replaced, never
+run. A language server the extension brings starts the same way. A window on another platform fetches that platform's package the first time it needs it, checked against what
+was recorded at install. Registries take native programs only from publishers they invited, after a person reviewed
+the publisher's first one.
+
+**Extensions with code.** Their commands appear in the command palette. The first one you run starts the extension in
+its own process (`codeyard-exthost`, beside Codeyard): it reaches only the files, programs
+and commands its sheet listed, and only through Codeyard, which checks every call, the same way for local and SSH
+folders. In a folder you have not trusted it may read what it declared and show messages, but not change files or run
+programs. When a call is refused, the message names the permission the extension would need. One nobody used for
+five minutes is stopped and starts again on its next command. Installed extensions do nothing until you use them: none
+starts a process when Codeyard opens.
+
+Two things it declared still ask once, in a system dialog that names the extension, its publisher and what it wants:
+its first clipboard read, and the first program it runs on a remote (SSH) host. **Allow for this session** lets it
+until Codeyard quits; **Deny** refuses that call and the later ones of that kind until then, with `revoked-by-user`,
+and the refusal is listed under *Recent denials*. Programs on your own computer and clipboard writes do not ask.
+
+An extension's process may use up to 512 MB of memory. On macOS and Linux Codeyard checks every few seconds while one
+runs and stops one that uses more, with a message that says so; on Windows the system will enforce the limit once
+extensions with code run there. That counts as a crash.
+
+On the page of an extension with code:
+
+- **Permission switches.** Each entry it declared (a file pattern, a host, a program, the clipboard …) has its own
+  *On*/*Off* switch. Turning one off applies at once, also to a running extension: its next call of that kind is
+  refused with `revoked-by-user`. Switches are kept for that extension *and* its publisher, in
+  `permissions.json` next to the installed packages; the same id from another publisher, or installed from a file,
+  starts without them. Uninstalling forgets them.
+- **Recent denials.** The calls refused in this session (kept in memory only), with what was refused and why.
+  *Copy fix* copies the manifest line that allows it, such as `net = ["api.example.com"]`: for an author, the line to
+  add to `[permissions]`; for a switch you turned off, the entry to turn back on.
+- **The crash card.** An extension that crashes three times within a minute is turned off until Codeyard restarts,
+  and its page says so. *Reinstall Previous Version* goes back to the version this one replaced (when it is still
+  kept) and lets it run again. *Copy Report* copies its version, the error and where in its code it happened; file
+  contents, logs and paths outside the extension are left out. *Report…* opens a new issue in the extension's
+  repository, filled in with that report, after you confirm the address. Nothing is sent by itself.
+
+**Extension Inspector.** *Developer: Extension Inspector* in the command palette (release builds too) opens a page
+with every enabled extension with code in this window: whether it runs, when and why it last started, its recent
+calls (for a command, the time spent in the extension; for a call to Codeyard, the time the work took and the
+overhead around it), its denials with *Copy fix*, its log with levels, and its last error with the place in its code.
+Every line is a tab stop, and a screen reader reads a heading per extension and section and the *Copy fix* buttons.
+It shows only this computer's data and sends nothing. The extension's own UI, highlighted live, comes with extension
+views.
+
+**Extension views.** An extension with code can add views: a button in the activity bar for a sidebar view, a tab
+in the bottom panel, or a page in the editor area (also *Open View: …* in the command palette). Codeyard draws them
+with your theme, so they follow theme and zoom changes, and they work with the keyboard (Tab between controls, arrows
+in lists and trees) and screen readers. Each view names its publisher at the top. A view stays in its place: it cannot
+cover Codeyard's install, trust or sign-in sheets, or take the keyboard while one of them waits for you. Images in its
+text are not loaded, and a link opens in your browser only after you confirm its address. An image element with a web
+address is loaded by Codeyard, only from a site the extension asked for on its install sheet, never in a folder you have
+not trusted, and only while the view is on screen; anything else shows the image's description. A view can also be
+offered only in some situations, for example while a Rust file is open; it closes by itself when that stops.
+**What extensions with code add.** Everything they put on screen names the extension.
+
+- *Commands* in the palette, in the editor's and the file tree's right-click menus (after the built-in entries, greyed
+  out when they do not apply), under the **…** button in the title bar of the extension's own views, and on keys an
+  extension binds (never a built-in key). A file-tree entry gets the file.
+- *Codeyard commands* run by an extension, from the short list in its docs (Zen mode, Save All, Format Document, open
+  a file, run a task …): only the ones its sheet lists under "Run Codeyard commands", and only on files and programs
+  it may use anyway. Saving all files needs write access to every unsaved file, and running a task needs its program
+  in the extension's list.
+- *Status bar items*, which run a command when clicked.
+- *Formatters.* *Format Document* and `editor.formatOnSave` use the extension that formats the file's language when
+  there is no language server for it; `editor.formatters` chooses per language, for example
+  `{ "toml": "you.taplo" }`, or `"lsp"` to keep the language server. If you type while it works, its answer is dropped,
+  and a formatter that takes more than a second is skipped: the file is saved as it is.
+- *Code actions* in *Quick Fix…* (⌘.), next to the language server's.
+- *Hover and completion.* What an extension says about the word under the mouse (or *Editor: Show Hover*) shows in
+  the hover popup under the language server's, with the extension's id above it. Its completions join the list as
+  you type, with its id at the right of each item. An extension that takes more than a second is left out.
+- *Code lenses and inlay hints* at the end of their line, with the language server's (`editor.codeLens` and
+  `editor.inlayHints.enabled` turn them off). Hover to see which extension gave them; click a line with a lens, or use
+  *Editor: Run Code Lens on This Line*, to run it. Extensions are asked only about the lines you see, again once you stop
+  typing or scrolling.
+- *Problems* in the Problems view and the editor, with the extension's id as their source, and *decorations*: a dot in
+  the gutter, a tinted line or a note after the line, in theme colours.
+- *Tasks* in *Tasks: Run Task…*, which the extension runs itself when you pick one.
+- *Source control* for a version control system other than Git (Mercurial, Jujutsu, Perforce …). The extension
+  claims a workspace folder that has its marker, such as a `.hg` or `.jj` folder; there Source Control shows the
+  extension's name, where the folder stands, its message box and its groups of changed files, and the gutter's change
+  marks compare open files with the text the extension gives. Clicking a file opens its changes; the buttons on a file,
+  on a group and under the message box run the extension's commands (stage, discard, commit …), and the message box
+  shows the extension's note about your message, if any. The list is read again when files change, with **Refresh**,
+  and after each button. Git keeps every other folder. In a folder you have not trusted the extension is not asked,
+  and over SSH the programs it runs (`hg`, `jj` …) run on the remote host.
+
+Typing never waits for an extension. When one is disabled, uninstalled or crashes, its status items, problems,
+decorations, hover text, completion items, lenses and hints go with it. The same works in SSH windows: the extension runs on your computer and sees the remote files
+through Codeyard.
+
+**Accounts.** An extension that declares `auth` can act as your GitHub account, or as an account at a service it
+names. The first time it asks, Codeyard shows a system dialog with the extension, its publisher and the account; nothing
+happens until you choose **Allow** (GitHub) or **Sign In…** (the service's page opens in your browser and comes back
+to Codeyard). GitHub uses the sign-in you already have with the GitHub CLI (`gh auth login`). The token is kept in
+your system keychain (Keychain on macOS, Credential Manager on Windows, the Secret Service on Linux) and Codeyard adds
+it to the extension's requests itself, only to that account's own hosts; the extension never sees it. The extension's
+page lists its accounts with **Sign Out**, which removes the token from the keychain, and **Add Instance…** where the
+extension lets you add a server of your own (see [Pull requests](#pull-requests)). A sideloaded copy of an extension
+does not get the accounts or secrets of the registry one with the same id.
 
 **Rules that keep them predictable.** An extension key binding never takes a key a built-in shortcut uses (the
 binding is left out and the status bar says so); a keymap preset you choose with `keymap.preset` may. An extension
@@ -585,19 +857,59 @@ language only applies to files no built-in language claims. Extension language s
 and your own `lsp.servers` entry for the same language wins.
 
 **From a registry.** *Extensions: Install from Registry…* takes an id (`publisher.name`, or `publisher.name@1.2.0` for
-one version) and finds it in your registries: the public one, and any in `extensions.registries` (a company's own,
-for example). Before the sheet opens, Codeyard checks the registry's signed list, the package against it and the
+one version) and finds it in your registries: the ones in `extensions.registries` (a company's own, for example) and
+the public one. The public registry is not online yet in this version, so until it is, install from your own registry
+or from a `.cyx` file. Before the sheet opens, Codeyard checks the registry's signed list, the package against it and the
 publisher's signature; any failure installs nothing and says which check failed. The sheet names the publisher, and
 the first install pins it: if a later version comes from someone else, the sheet says so in red and the keyboard
 starts on *Cancel*. It does the same when the registry's list is more than 3 days old. Packages are installed on this
 computer, also in an SSH window.
 
-Codeyard asks a registry nothing until you install from it. After that it fetches the registry's whole list at most
-once a day, the same file for everyone, so the registry never learns what you have installed.
+**Market.** The Extensions view has two tabs: *Installed* and *Market* (also *Extensions: Open Market*). The Market
+lists every extension of your registries and searches their names, ids, descriptions and categories as you type,
+on your computer: searching sends nothing. ↑ and ↓ move through the results and Enter opens one; a screen reader is
+told how many match. An extension's page shows its README (images are not loaded; a link opens in your browser after
+you confirm its address), its versions with their dates and status (withdrawn, revoked, deprecated), its
+permissions in plain words, who publishes it and how often it was downloaded, updates included. There are no ratings.
+*Install* opens the same consent sheet as above.
+
+Codeyard asks a registry nothing until you install from it or open the Market. After that it fetches the registry's
+whole list at most once a day, the same file for everyone, so the registry never learns what you have installed.
+Opening an extension's page in the Market fetches that page once.
+
+**Updates.** Extensions from a registry stay current by themselves (`extensions.autoUpdate`, in your own settings):
+
+- `install` (the default): a newer version installs when it asks for the same or fewer permissions from the same
+  publisher. Data-only versions install at once; a version that runs code waits 48 hours after it is published, which
+  gives the registry time to stop a bad one (the registry can clear an urgent fix sooner). *Update Now* on the
+  extension's page skips the wait.
+- A version that asks for more keeps the one you have running and shows a card on the page with only what is new;
+  *Update* installs it. Another publisher, a version that adds a native program, or a registry list more than 3 days
+  old opens the full sheet (*Review…*); for a native program you type the extension's id there, as on a first install.
+- `notify` shows *Update available* in the list and the version on the page; you install it. `off` downloads nothing
+  until you ask.
+- Whatever the setting, a version its publisher withdrew goes back to the newest earlier one at once (from the kept
+  previous version when it is that one), and a version the registry revoked stops at once, with every extension that
+  depends on it, and its page says why. It stays stopped offline and after a restart, until another version replaces
+  it: a fixed newer one, or else the newest earlier one that was not withdrawn, as for a withdrawn version.
+  A deprecated version keeps working; its page names the replacement.
+- *Get Pre-releases* on an extension's page opts that extension into its publisher's pre-releases, with no wait;
+  *Stop Pre-releases* goes back to releases (the pre-release you have stays until a release passes it). The choice is
+  kept in `extensions.lock.jsonc`.
 
 From a terminal or a script, `codeyard --install-extension FILE.cyx` or `--install-extension publisher.name[@1.2.0]`
-(repeat the flag for several) installs without opening a window; running it is your consent, and the same checks
-apply. A changed publisher or an old registry list is refused there, with the reason: use the Extensions view.
+(repeat the flag for several) installs without opening a window, with the same checks. A folder with a built
+extension (its manifest and, for code, `extension.wasm`) installs the same way, packaged as it is, without building
+it. Running the command is not consent to what an extension asks for: a package or registry version that asks for
+permissions prints its sheet (what it asks for, the author's reason and the high-risk line) and is not installed
+unless you add `--accept-permissions`, which grants what the printed sheets list. A changed publisher and an old
+registry list are refused there, with the reason: use the Extensions view.
+`codeyard --update-extensions` runs the update check now, without a window: it asks the registries your extensions
+came from, applies what would apply by itself (updates, going back from a withdrawn or revoked version, stopping a
+revoked one) and prints one line for each change and for each update that waits for you (an update that asks for more permissions waits for the Extensions view: `--accept-permissions` is for `--install-extension` only, and is refused here), and says so when a revoked
+version has no other version to go to. If `extensions.lock.jsonc` cannot be read (a hand edit), it prints why and
+exits with status 1; a version a registry revoked is still stopped, so it does not start again once the lock is
+fixed.
 
 **Manage.** Choose an extension in the list to open its page: contributions, permissions and these actions:
 
@@ -627,6 +939,12 @@ staged. The panel also shows the last commit and who the commits will be made as
 refused commit explains how to set it. Clicking a file opens a side-by-side diff; F7 jumps
 between changes. Commits made in the terminal show up on their own.
 
+The change list also works from the keyboard: Tab moves to it from the message box, ↑/↓/Home/End
+move its cursor, ↵ opens the file's diff (or folds the group), Space stages or unstages the file,
+← goes to the file's group (and folds it), → unfolds it and goes in, Delete (⌘⌫ on macOS)
+discards the file's changes after asking, and Shift+F10 or the Menu key opens the file's right-click
+menu under it (Escape closes it and leaves the cursor on the file).
+
 **Graph:** the GRAPH section under the changes draws the history of every branch as lanes,
 with branch (blue), remote (green), tag (yellow) and HEAD labels; merges are hollow dots.
 Click a commit to list the files it changed and open one as a side-by-side diff.
@@ -651,6 +969,26 @@ window, on the same local or SSH host. The normal unsaved-file protection applie
 ones show a lock, and stale or bare entries cannot be opened from the list. Hover for the full path, commit and lock reason.
 The header offers **Add worktree** and **Refresh**. The list also refreshes with Git while Source Control and this section are
 visible, including checkouts added or removed in a terminal. Collapsing the section is remembered and pauses its refreshes.
+
+**Several repositories.** Source Control finds the repositories in the workspace folders and inside them (nested
+repositories, linked worktrees and submodules each count once). The search runs in the background, follows no
+symbolic links, skips hidden folders and dependency or build folders (`node_modules`, `target`, `dist`, `build`, …),
+goes at most four folders deep and stops at 64 repositories. With more than one, the changes list groups them by
+repository: each repository row shows its branch, ahead/behind counts, a missing upstream, a merge, rebase,
+cherry-pick, revert or bisect in progress, conflicts and the number of changes (hover for its path). Stage, unstage
+and discard on a file row or a group act on that row's repository, even when two repositories have files with the same
+path; clicking a file opens its repository's diff and selects that repository. The message box, Commit, Sync, the
+graph and the "…" menu act on the selected repository, named next to its branch; each repository keeps its own draft
+message and last result, and confirmations name the repository. Click a repository row to select it, or focus the list
+with Tab and use ↑/↓, Home and End to move between repositories and ←/→ (or Enter) to fold one. The workspace is
+searched again when folders are added or removed, when a repository disappears, and on **Refresh** once the last
+search is more than a minute old; while Source Control is visible the other repositories refresh a few at a time. A
+graph or stash action, the branch and stash pickers and the named stash belong to the repository they were opened
+on: picked after another repository was selected, they act on the one they were opened for or not at all, never on
+the new selection. A repository that is removed or created again at the same path while an operation is pending gets
+nothing from it: the result says "Repository is no longer available" or "Repository changed while the operation was
+pending", and the operation never moves to another repository. A draft typed for a repository that disappears stays
+with it. With a single repository the panel looks as before.
 
 **Stash.** Besides stash and stash with untracked files there are "Stash Staged Changes" (only what is staged;
 needs git 2.35 or newer), "Stash with Name…" and "Show Stash…", which lists the files a stash changed and opens one
@@ -689,7 +1027,7 @@ first), `"git.rebaseWhenSync"` (pull with rebase), `"git.pruneOnFetch"` (default
 (default true), `"git.fetchOnPull"` (fetch every remote before pulling), `"git.postCommitCommand"`
 (`none`, `push` or `sync` after each commit), `"git.enableSmartCommit"` (default true: with nothing
 staged the commit button commits all tracked changes; off, it asks you to stage first) and
-`"git.autofetch"` with `"git.autofetchPeriod"` (off by default; fetches in the background every 180 s
+`"git.autofetch"` with `"git.autofetchPeriod"` (on by default; fetches in the background every 180 s
 or more while the window is in front, never in a folder you have not trusted, and a failure only
 shows in the sync item's tooltip). `git.confirmSync` and `git.postCommitCommand` are read from your
 own settings only: a repository cannot turn the question on or off or make your commits push by themselves.
@@ -714,13 +1052,39 @@ Star files and folders ("Add to Favorites" in the tree's menu) to keep them in t
 section of the explorer and at the top of ⌘P. Bookmarks (⌥⌘K) mark lines; "Bookmarks: List…"
 shows them across the project.
 
-"Tasks: Run Task" finds `.codeyard/tasks.jsonc`, `.vscode/tasks.json`, package.json scripts
-(npm, pnpm, yarn or bun, by lock file), Makefile targets, Cargo and Go; each runs in its own
-terminal. ⇧⌘B runs the first task with "build" in its name.
+"Tasks: Run Task" finds `.codeyard/tasks.jsonc`, `.vscode/tasks.json`, the workspace file's tasks,
+package.json scripts (npm, pnpm, yarn or bun, by lock file), Makefile targets, Cargo and Go. ⇧⌘B runs
+the first task with "build" in its name.
 
-Compiler messages in a task's output (gcc / clang, Go, javac, rustc / cargo, tsc / MSBuild, eslint
-stylish) go to the Problems panel and underline the line in the editor, like a VS Code problem
-matcher without any setup; running another task clears them. Click a problem to jump to it.
+A task from a task file runs as the file describes it, on the folder's machine (locally or on the SSH
+server):
+
+- `"type": "process"` runs the program with each argument exactly as written; `"type": "shell"` (the
+  default) runs the command line in your login shell, or in `options.shell`. Arguments are quoted for
+  that shell (`quoting`: `strong`, `weak`, `escape`), and a value put into the command line by a variable
+  (`${file}`, an input answer) is always one argument, whatever it contains.
+- `options.cwd` and `options.env` (a `null` value removes the variable) apply to that task; `windows`,
+  `osx` and `linux` sections override fields per system.
+- `dependsOn` runs other tasks first: in parallel by default, one after the other with
+  `"dependsOrder": "sequence"`. A task several others need runs once. If one fails, the tasks that need it
+  do not start. A dependency cycle or a missing task is reported before anything runs.
+- `${input:id}` asks a `promptString` or `pickString` question from the file's `inputs` before anything
+  runs. Dismissing a question runs nothing. Answers are not shown in the output or kept.
+- A background task (`"isBackground": true`) counts as ready when its problem matcher's `endsPattern`
+  matches; tasks that depend on it start then. Ending before that is a failure.
+- Each command shows its output in its own terminal tab, then how it ended. "Tasks: Terminate Task" stops
+  every running task and everything it started; "Tasks: Restart Running Task" starts it again, and running
+  a task that is still running restarts it. Closing a task's terminal stops it too.
+
+`problemMatcher` (a built-in name such as `$tsc`, `$gcc`, `$rustc`, `$eslint-stylish`, or your own
+`pattern`, including multi-line ones) turns output lines into entries in the Problems panel and
+underlines in the editor; a watcher's `beginsPattern` clears the previous build's problems. Tasks without
+a matcher still get their compiler messages (gcc / clang, Go, javac, rustc / cargo, tsc / MSBuild, eslint
+stylish) found automatically. Running another task clears them. Click a problem to jump to it.
+
+A debug configuration's `preLaunchTask` runs the same way, and the debugger starts only after it
+succeeds (or, for a background task, becomes ready). If it fails, debugging does not start and the
+status bar says why. `postDebugTask` runs when the session ends.
 
 ## Highlighting, diffs and crash reports
 
@@ -750,15 +1114,19 @@ Swift use `lldb-dap` (from PATH or Xcode via `xcrun`). Add `.vscode/launch.json`
 `"debugAdapter": { "command": "…", "args": [] }` to use your own adapter. Click the gutter or press F9
 for a breakpoint; the file opens on the paused line, the Run and Debug view lists the call stack, the
 variables (click to expand) and the bottom panel's Debug Console evaluates expressions; `Debug: Add Watch Expression…` keeps expressions evaluated at
-every stop, hovering an expression shows its value while paused, `Debug: Break When Value Changes…` stops the
-program whenever a variable is written, `Debug: Break on Exceptions…` toggles
+every stop, hovering an expression shows its value while paused, `Debug: Break When Value Changes…` (or "Break on
+Value Change" in a variable's right-click menu, when the debugger supports it) stops the program whenever a variable
+is written; such data breakpoints are listed first under Breakpoints, where you can turn them off or remove them, and
+last only for that debug session (the debugger's id for a value means nothing in the next run), `Debug: Break on Exceptions…` toggles
 the adapter's exception filters, and several threads get a list; local variables also appear at
 the end of the lines that use them. `Debug: Edit Breakpoint…` makes a conditional breakpoint (`i == 3`),
 a logpoint (`log: i is {i}`) or a hit-count one (`hit: >= 5`). Node needs Microsoft's js-debug:
-`Debug: Install JavaScript Debugger` fetches it once (VS Code's copy is used when installed).
+`Debug: Install JavaScript Debugger` fetches it once (a copy another editor already installed is used when found).
 Over SSH the adapter runs on the server; Go and Node adapters talk TCP and are reached through a
 port forward on the shared SSH connection. `CODEYARD_DAP_TRACE=1` prints the protocol when a
-configuration misbehaves. Rust values and the standard library's sources: see [Working in Rust](#working-in-rust).
+configuration misbehaves. `"stopOnEntry": true` pauses the program before it runs and the Debug Console says
+"Paused on entry", also with `lldb-dap`, which reports that stop as a SIGSTOP signal; a SIGSTOP after that is shown as
+an exception. Rust values and the standard library's sources: see [Working in Rust](#working-in-rust).
 
 To debug a program that is already running, start it with its debug server and attach:
 `python -m debugpy --listen 5678 --wait-for-client app.py`, then a configuration
@@ -836,12 +1204,54 @@ test individually for precise attribution.
 palette or `File: Open Workspace from File…`) adds all its folders. The folder list is remembered per
 project. Go to file lists `folder › path` for the extra folders, Find in Files searches all of them,
 every folder gets its own language server, tasks / tests / debugging / new terminals use the folder
-of the active file, and Source Control shows the repository of the active file. Each extra folder's own settings
+of the active file, and Source Control shows the repository of the active file (unless a repository inside that folder
+was picked in Source Control; see **Several repositories** under Git). Each extra folder's own settings
 (`.vscode/settings.json`, `.codeyard/settings.jsonc`) apply to its files: indentation (`editor.tabSize`,
 `editor.insertSpaces`), saving (`editor.formatOnSave`, `editor.codeActionsOnSave`,
 `files.trimTrailingWhitespace`, `files.insertFinalNewline`), `editor.formatOnPaste` / `formatOnType`
 and `editor.rulers`; the first folder's settings already merge into the global ones. Editing the file
 re-reads it.
+
+### Workspace files
+
+A workspace file (`*.code-workspace`, JSON with comments) names a set of folders and can share `settings`,
+`tasks` and `launch` sections between them. Opening one puts its folders in this window in the file's order,
+each under its `name` if it has one. Relative paths are resolved against the file's own folder.
+
+- **Settings precedence:** your settings < the workspace file's `settings` < each folder's own settings. This holds
+  for the first folder and for every extra folder; one folder's settings never reach another folder's files. On the
+  Settings page, a value that comes from the workspace file or the folder says so under its key. Keys that can choose
+  a program (`terminal.shell`, `lsp.servers`, …) apply from a workspace file only when the folder that holds the
+  file is trusted, and user-only keys never do.
+- **Tasks and debugging:** the file's tasks join *Tasks: Run Task* (source `workspace`) and its launch
+  configurations join Run and Debug. They run in the active file's folder, on that folder's host. Before the first
+  one runs you are asked once whether you trust the workspace; trusting it trusts the workspace file's own folder
+  and all of its folders (see *Workspace Trust* above).
+- **Saving:** *Add Folder to Workspace…* and *Remove Folder from Workspace…* write the folder list back to the
+  file. Only the folder list changes: comments, unknown fields and sections Codeyard does not use stay as they
+  were. If nothing changed, nothing is written. *File: Save Workspace* writes on demand. *File: Save Workspace As…*
+  saves a copy elsewhere and rewrites relative paths so they still lead to the same folders; the window then
+  follows the new file. A window without a workspace file can save one the same way. Writes are atomic, locally and
+  over SSH.
+- **Edits elsewhere:** if the file changed on disk since it was read, saving stops with *Workspace changed on disk.
+  Reload before saving.* and the other edit is kept. *File: Reload Workspace* (also run automatically when the
+  watched file changes) applies the file's folders, order, names and settings again.
+- **Problems:** a file that cannot be read shows *Workspace file could not be read: …* and is never written over;
+  fix it and reload. A listed folder that does not exist shows *Workspace folder is unavailable: …* in the
+  notice and at the bottom of the Explorer, with **Retry** and **Remove from the workspace file**. Folder entries
+  that are not local paths (other URI schemes) and network shares on a server other than the file's own are never
+  opened or probed, but stay in the file.
+- **Recents and restart:** the workspace file gets its own Recents entry, next to its first folder's. Reopening it
+  (from Recents, or at startup with `window.startup` set to `"continue"`) reads the file again and restores its
+  folders, order, names and settings. Opening one of its folders directly opens just that folder, with its own extra
+  folders and settings, and never writes to the workspace file.
+- **More than 32 extra folders:** the ones that do not fit are listed as unavailable (and stay in the file), and the
+  notice names the limit.
+
+Over SSH, workspace files on the server are read and written on the server: open one in the editor and run
+*File: Open Active File as Workspace*. *Save Workspace As…* uses this
+computer's save dialog, so it is only available for local windows. A workspace file chosen from this computer
+while an SSH window is in front opens in a new local window.
 
 ## Language servers
 
@@ -929,6 +1339,15 @@ letters inside Latin words are boxed (`"editor.unicodeHighlight.enabled"`), whic
 A Cargo folder needs no setup. Install `rust-analyzer` (`rustup component add rust-analyzer`) for the editor and, so that
 the debugger can show the standard library's code, `rust-src` (`rustup component add rust-src`). In an SSH folder both are
 used from the server, with the toolchain the project's `rust-toolchain.toml` picks there.
+
+**Rust setup in one step.** "Preferences: Apply Rust Setup…" shows the exact lines it adds to `settings.jsonc` and
+writes them once you confirm: Clippy for checks, checks with the Cargo features Run and Debug build with
+(`rust.features`, `rust.noDefaultFeatures`), a check folder of its own, and rustfmt on save. Comments and other settings
+stay as they are; "Preferences: Reset Rust Setup…" removes exactly those lines again.
+
+If `settings.jsonc` is broken or left over from an old version, "Reset All Settings…" on the Settings page (or "Preferences: Reset Settings to Defaults…") replaces it with
+the default file of the running version after you confirm. The old file stays next to it as
+`settings.backup-<time>.jsonc`.
 
 **Check the way you build.** rust-analyzer runs `cargo check` when you save. Tell it to run Clippy instead, to analyse the
 code behind your Cargo features, or to keep a target folder of its own, in `lsp.servers` (no `command`: the default server
@@ -1092,13 +1511,30 @@ modification time is shown but never decides whether two files match.
 
 `compare.folders.maxFiles` (50000) is the number of entries read per side before the scan stops and says so. Times are shown in UTC.
 
-## GitHub pull requests
+## Pull requests
 
-**GitHub: Pull Requests…** lists the open pull requests of the `origin` (or first GitHub) remote with author, branches, age, check
+**Pull Requests: Show…** (the palette also finds it as "GitHub: Pull Requests" or "merge requests") lists the open pull requests of the `origin` (or first GitHub) remote with author, branches, age, check
 results and review state. Pick one to *check it out* (`git fetch origin pull/N/head` into the local branch `pr-N`, again to update it),
 open it on GitHub, or copy its link or branch name. It uses the `gh` CLI when it is installed and signed in (private repositories,
 checks, reviews); otherwise the public GitHub API, with `GITHUB_TOKEN` / `GH_TOKEN` if set. Read-only: reviewing and commenting stay on GitHub.
 Lists show the latest 50 open pull requests. Errors say what to do (sign in with `gh auth login`, commit or stash local changes, check the remote); calls time out after 30 seconds and never wait for a prompt.
+
+Extensions add other forges (GitLab, Gitea, Forgejo, Bitbucket): an extension with a pull request provider claims the
+remotes on its hosts, and their open requests appear in the same list, after GitHub's, each named with the provider
+and the extension. Pick one to see its details and comments (a Markdown page, kept as a scratch file), its changed
+files (each opens as a diff), to add a comment, to check it out (git fetches what the provider names into a local
+branch, on the machine the repository is on, so over SSH too), or to open or copy its link or branch name. The
+extension signs in to the forge
+with the account you allow on first use; Codeyard keeps the token in the system keychain and signs its requests, so the
+extension never sees it. A provider that does not answer within 20 seconds is left out, and its error is shown above
+the list and in its log in the Extension Inspector. When none of the remotes is GitHub's or claimed, the message names
+the providers there are.
+
+For a forge on a server of your own (a company GitLab, a Gitea or Forgejo), register an OAuth application there and
+choose **Add Instance…** next to the account on the extension's page in Extensions, if the extension offers it: type
+the server's host and the application's client id. Codeyard shows what that allows (the host, the client id and the
+address the sign-in comes back to) and asks before it adds it. The instance is an account of its own, used only for
+that host, and **Remove** takes it away again.
 
 ## HTTP files
 
@@ -1139,7 +1575,7 @@ server** (so `localhost` services work); `"http.runOn": "local"` sends it from y
 ## Terminal
 
 **Images over SSH.** Copy an image and press Ctrl+V in a remote terminal (⌘V on macOS). Codeyard saves it as a
-private temporary file on the remote host and pastes its path, so programs such as Codex can attach it. Images are
+private temporary file on the remote host and pastes its path, so programs running there, such as command-line assistants, can attach it. Images are
 limited to 32 MiB. The file remains available in the remote `/tmp` directory until the host cleans it up.
 
 **Selecting and copying.** Drag to select, double-click for a word, triple-click for a line. The selection stays on its
@@ -1192,7 +1628,7 @@ the bottom or the right restores its size.
 
 **Safety.**
 
-- Closing a terminal while a program runs in it asks first and names the program (`terminal.confirmOnClose`).
+- Closing a terminal never asks by default. Set `terminal.confirmOnClose` to `running` to be asked when a program runs in it, or to `always`.
 - Pasted text cannot end bracketed paste early. Control characters are removed when the shell does not use bracketed
   paste (`terminal.sanitizePaste`).
 - A paste of several lines asks before it runs (`terminal.warnMultilinePaste`).
@@ -1237,7 +1673,7 @@ status/logs, Dev Container creation, rebuild and cancellation are described in
 [Container environments](containers.md), along with current platform limits.
 
 Uses your system `ssh` and `~/.ssh/config`. Pick a host in the workspace switcher (⌃R) or type a name.
-The last remote folder only opens again at start if `"window.startup"` is `"continue"`. After connecting, a folder prompt opens (like VS Code):
+The last remote folder only opens again at start if `"window.startup"` is `"continue"`. After connecting, a folder prompt opens:
 type a path (`~` is your home folder), pick sub-folders from the list to step into them, and press
 Enter on the first row to open the typed path. Esc keeps the home folder. `⌘O` opens the same prompt
 on a remote host.

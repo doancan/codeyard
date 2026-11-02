@@ -73,7 +73,21 @@ pub const CATALOG: &[Entry] = &[
         Kind::Choice(&["glyphs", "minimal", "codeyard", "badges", "colorful", "apple", "material", "none"]),
     ),
     e("workbench.fontFamily", crate::i18n::tr("UI font of the whole window (empty: system font)"), Kind::Text),
+    e(
+        "ui.scale",
+        crate::i18n::tr(
+            "Interface scale of every window, from 0.75 (75%) to 2 (200%); View: Zoom In and Zoom Out step through 75%, 80% and every 10% from 90% to 200%. Editor and terminal font sizes are scaled with it. Your own settings only; a folder cannot change it",
+        ),
+        Kind::Number { min: 0.75, max: 2. },
+    ),
     e("extensions.enabled", crate::i18n::tr("Load installed extensions (off: Codeyard starts as if none were installed)"), Kind::Bool),
+    e(
+        "extensions.autoUpdate",
+        crate::i18n::tr(
+            "Newer versions of extensions from a registry: install (by themselves; versions that run code 48 hours after they are published; a version that asks for more permissions waits for your OK), notify (shown in the Extensions view; you install them) or off (nothing is downloaded until you ask). A withdrawn version is still replaced and a revoked one still stopped. Your own settings only; a folder cannot change it",
+        ),
+        Kind::Choice(&["install", "notify", "off"]),
+    ),
     e("keymap.preset", crate::i18n::tr("Keymap preset from an installed extension, as publisher.name/label (empty: Codeyard's own keys)"), Kind::Text),
     e("workbench.editor.showTabs", crate::i18n::tr("Show the editor tab bar"), Kind::Bool),
     e("workbench.tabs.showIcons", crate::i18n::tr("Show file icons on tabs"), Kind::Bool),
@@ -122,6 +136,16 @@ pub const CATALOG: &[Entry] = &[
     e("terminal.fontSize", crate::i18n::tr("Font size of the terminal"), Kind::Number { min: 6., max: 48. }),
     e("terminal.lineHeight", crate::i18n::tr("Terminal row height, as a multiple of the font size"), Kind::Number { min: 1., max: 2. }),
     e("terminal.scrollback", crate::i18n::tr("Lines kept in terminal history"), Kind::Number { min: 0., max: 50_000. }),
+    e(
+        "terminal.persistentScrollback",
+        crate::i18n::tr("Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)"),
+        Kind::Number { min: 0., max: 10_000. },
+    ),
+    e(
+        "terminal.persistentSessionTimeout",
+        crate::i18n::tr("Minutes the terminals keep running for the next start after Codeyard quits, crashes or is killed (0: not kept)"),
+        Kind::Number { min: 0., max: 1_440. },
+    ),
     e("terminal.scrollSensitivity", crate::i18n::tr("Mouse wheel and trackpad scroll speed multiplier"), Kind::Number { min: 0.1, max: 10. }),
     e("terminal.shellIntegration", crate::i18n::tr("Mark prompts, commands and the folder in zsh, bash and fish"), Kind::Bool),
     e("terminal.notifications", crate::i18n::tr("Flag a terminal and the taskbar when its program rings the bell or asks for you"), Kind::Bool),
@@ -290,6 +314,11 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "workbench.fontFamily" => json!(s.ui_font.clone().unwrap_or_default()),
         "keymap.preset" => json!(s.keymap_preset),
         "extensions.enabled" => json!(s.extensions_enabled),
+        "extensions.autoUpdate" => json!(match s.extension_auto_update {
+            ext_core::update::AutoUpdate::Off => "off",
+            ext_core::update::AutoUpdate::Notify => "notify",
+            ext_core::update::AutoUpdate::Install => "install",
+        }),
         "workbench.editor.showTabs" => json!(s.show_tabs),
         "workbench.tabs.showIcons" => json!(s.tab_icons),
         "workbench.tabs.closeButton" => json!(s.tab_close),
@@ -310,6 +339,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "http.runOn" => json!(s.http_run_on),
         "http.confirmRequests" => json!(s.http_confirm),
         "ui.language" => json!(s.ui_language),
+        "ui.scale" => settings::ui_scale_value(s.ui_scale),
         "update.check" => json!(s.update_check.as_str()),
         "spelling.enabled" => json!(s.spelling),
         "spelling.checkComments" => json!(s.spelling_comments),
@@ -350,6 +380,8 @@ pub fn current(s: &Settings, key: &str) -> Value {
         // Through f64 an f32 1.2 would read 1.2000000476837158: two decimals are all the setting means.
         "terminal.lineHeight" => json!((f64::from(s.terminal_line_height) * 100.).round() / 100.),
         "terminal.scrollback" => json!(s.terminal_scrollback),
+        "terminal.persistentScrollback" => json!(s.terminal_persistent_scrollback),
+        "terminal.persistentSessionTimeout" => json!(s.terminal_persistent_session_timeout),
         "terminal.scrollSensitivity" => json!(s.terminal_scroll_sensitivity),
         "terminal.sanitizePaste" => json!(s.terminal_sanitize_paste.as_str()),
         "terminal.confirmOnClose" => json!(s.terminal_confirm_close),
@@ -405,7 +437,10 @@ pub fn parse_input(kind: Kind, text: &str) -> Result<Value, String> {
 
 /// Apply constraints specific to a setting before it is written from either settings UI.
 pub fn parse_setting_input(key: &str, kind: Kind, text: &str) -> Result<Value, String> {
-    let value = parse_input(kind, text)?;
+    let value = match parse_input(kind, text) {
+        Err(_) if key == "ui.scale" => return Err(crate::i18n::t(settings::UI_SCALE_ERROR).into()),
+        other => other?,
+    };
     if matches!(key, "webPreview.port" | "webPreview.reloadInterval") && value.as_f64().is_some_and(|n| n.fract() != 0.) {
         return Err(crate::i18n::tf("{}: expected a whole number", &[&key]));
     }
@@ -553,6 +588,107 @@ impl Workbench {
         }
         cx.notify();
     }
+
+    pub(super) fn apply_rust_setup(&mut self, _: &ApplyRustSetup, window: &mut Window, cx: &mut Context<Self>) {
+        self.change_rust_setup(false, window, cx);
+    }
+
+    pub(super) fn reset_rust_setup(&mut self, _: &ResetRustSetup, window: &mut Window, cx: &mut Context<Self>) {
+        self.change_rust_setup(true, window, cx);
+    }
+
+    /// Replaces `settings.jsonc` with the current template once confirmed, keeping the old file next to it as a backup.
+    pub(super) fn reset_settings(&mut self, _: &ResetSettings, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((spath, _)) = self.config_paths() else { return };
+        let answer = crate::questions::reset_settings(&spath.display().to_string()).ask(window, cx);
+        cx.spawn_in(window, async move |this, cx| {
+            if answer.await != Some(0) {
+                return;
+            }
+            this.update_in(cx, |this, window, cx| {
+                match write_default_settings(&spath) {
+                    Ok(backup) => {
+                        this.notice = backup.map(|b| Notice::Info(crate::i18n::tf("Settings reset. The old file is kept as {}", &[&b.display()]).into()));
+                        this.reload_config(window, cx);
+                    }
+                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Shows the exact change to `settings.jsonc` and writes it once confirmed, if the file did not change meanwhile.
+    fn change_rust_setup(&mut self, reset: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((spath, _)) = self.config_paths() else { return };
+        let text = match settings::ensure_file(&spath, settings::TEMPLATE).and_then(|_| std::fs::read_to_string(&spath)) {
+            Ok(text) => text,
+            Err(e) => {
+                self.notice = Some(Notice::Error(crate::i18n::tf("Could not read {0}: {1}", &[&spath.display(), &e]).into()));
+                return cx.notify();
+            }
+        };
+        let (new, diff) = rust_setup_change(&text, cx.global::<Settings>(), reset);
+        if diff.is_empty() {
+            let done =
+                if reset { crate::i18n::t("settings.jsonc has no Rust setup to reset.") } else { crate::i18n::t("settings.jsonc already has the Rust setup.") };
+            self.notice = Some(Notice::Info(done.into()));
+            return cx.notify();
+        }
+        let answer = crate::questions::rust_setup(reset, &diff).ask(window, cx);
+        cx.spawn_in(window, async move |this, cx| {
+            if answer.await != Some(0) {
+                return;
+            }
+            this.update_in(cx, |this, window, cx| {
+                let unchanged = std::fs::read_to_string(&spath).is_ok_and(|now| now == text);
+                match if unchanged {
+                    crate::fsutil::write_atomic(&spath, new)
+                } else {
+                    Err(std::io::Error::other(crate::i18n::t("the file changed; try again")))
+                } {
+                    Ok(()) => {
+                        this.notice = None;
+                        this.reload_config(window, cx);
+                    }
+                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+}
+
+gpui::actions!(workbench, [ApplyRustSetup, ResetRustSetup, ResetSettings]);
+
+/// Writes the template over `path`, first copying an existing file to `settings.backup-<unix seconds>.jsonc` beside it
+/// (`-<n>` added when that name is taken, so a second reset never overwrites the first backup).
+pub fn write_default_settings(path: &std::path::Path) -> std::io::Result<Option<std::path::PathBuf>> {
+    let backup = if path.exists() {
+        let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        let name = |n: u32| if n == 0 { format!("settings.backup-{secs}.jsonc") } else { format!("settings.backup-{secs}-{n}.jsonc") };
+        let backup = (0..).map(|n| path.with_file_name(name(n))).find(|p| !p.exists()).expect("a free backup name");
+        std::fs::copy(path, &backup)?;
+        Some(backup)
+    } else {
+        None
+    };
+    crate::fsutil::write_atomic(path, settings::TEMPLATE)?;
+    Ok(backup)
+}
+
+/// `text` with the Rust setup written (`reset`: removed), and the unified diff of that change (empty: no change).
+pub fn rust_setup_change(text: &str, s: &Settings, reset: bool) -> (String, String) {
+    let new = settings::rust_setup(s).iter().fold(text.to_string(), |t, (path, v)| settings::set_path_in(&t, path, (!reset).then_some(v)));
+    if new == text {
+        return (new, String::new());
+    }
+    let diff = similar::TextDiff::from_lines(text, &new).unified_diff().context_radius(1).to_string();
+    (new, diff)
 }
 
 /// Whether the byte is real JSON (`false` inside comments and strings), so a `]` or `}`
@@ -664,3 +800,7 @@ mod tests {
         assert_eq!(v.as_array().map(Vec::len), Some(2));
     }
 }
+
+#[cfg(test)]
+#[path = "rust_setup_tests.rs"]
+mod rust_setup_tests;

@@ -111,11 +111,11 @@ impl EditorView {
                         extra: Vec::new(),
                         doc: i.doc.clone(),
                         resolve: None,
+                        source: None,
                     })
                     .collect();
                 let start = text[..found.filter_start].chars().count();
-                e.completion = Some(Completion { items, shown: Vec::new(), selected: 0, start, incomplete: false, prefix: String::new() });
-                e.refilter(cx);
+                e.open_completion(items, start, false, cx);
             })
             .ok();
         }));

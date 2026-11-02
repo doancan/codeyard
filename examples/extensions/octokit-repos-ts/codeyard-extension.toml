@@ -1,0 +1,18 @@
+[extension]
+id          = "codeyard.octokit-repos-ts"
+version     = "0.1.0"
+name        = "GitHub Repos"
+license     = "MIT"
+description = "Lists your GitHub repositories with Octokit."
+
+[code]
+entry = "src/extension.ts"
+
+# Codeyard signs the requests with the user's GitHub account; the extension never sees the token.
+[permissions]
+auth = ["github"]
+why  = "Lists your GitHub repositories so you can open one."
+
+[[commands]]
+id    = "list"
+title = "GitHub Repos: List My Repositories"

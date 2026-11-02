@@ -1,0 +1,13 @@
+[extension]
+id          = "codeyard.trim-formatter"
+version     = "0.1.0"
+name        = "Trim Formatter"
+license     = "MIT"
+description = "Removes trailing spaces and ends files with one newline."
+
+[code]
+entry = "Cargo.toml"
+
+# Codeyard starts the extension when it formats a file of these languages.
+[[formatters]]
+languages = ["markdown", "plaintext"]

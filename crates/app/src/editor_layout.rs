@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 
 pub type GroupId = u8;
 pub const MAX_GROUPS: usize = 32;
+/// Windows of their own an editor can be shown in (each one is a view after the groups' views).
+pub const MAX_DETACHED: usize = 8;
+/// Views one document can have: one per editor group and one per window of its own.
+pub const MAX_VIEW_SLOTS: usize = MAX_GROUPS + MAX_DETACHED;
 const VERSION: u8 = 1;
 const MAX_JSON_BYTES: usize = 32 * 1024;
 const MIN_RATIO: f32 = 0.1;

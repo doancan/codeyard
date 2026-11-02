@@ -38,11 +38,30 @@ impl EditorView {
         };
     }
 
-    /// This view's fold headers (line, sorted).
+    /// This view's fold headers (line, sorted). A keystroke asks several times (moving the cursors out of folds, the
+    /// display map, painting), and with every region of a large file folded there are thousands: the lines are kept
+    /// until the text or the fold marks change.
     pub fn fold_headers(&self) -> Vec<usize> {
-        let mut v: Vec<usize> = self.buffer.marks(FOLD_MARKS + self.slot).iter().map(|&c| self.buffer.char_to_line(c)).collect();
+        let marks = self.buffer.marks(FOLD_MARKS + self.slot);
+        if marks.is_empty() {
+            return Vec::new();
+        }
+        let key = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            marks.hash(&mut h);
+            // The version alone stays the same while typing joins one undo step: the length and line count change.
+            (self.slot, self.buffer.version(), self.buffer.len_chars(), self.buffer.len_lines(), h.finish())
+        };
+        if let Some((k, v)) = &*self.fold_lines.borrow()
+            && *k == key
+        {
+            return v.clone();
+        }
+        let mut v: Vec<usize> = marks.iter().map(|&c| self.buffer.char_to_line(c)).collect();
         v.sort_unstable();
         v.dedup();
+        *self.fold_lines.borrow_mut() = Some((key, v.clone()));
         v
     }
 

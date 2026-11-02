@@ -4,6 +4,11 @@ use super::*;
 
 pub(super) const WINDOWS_TITLEBAR_H: f32 = 34.;
 
+/// Logical width that keeps 80 screen points free for the macOS traffic lights at any interface scale.
+pub(crate) fn traffic_light_room(ui_scale: f32) -> f32 {
+    80. / ui_scale
+}
+
 fn grid_minimum(node: &crate::editor_layout::Node) -> gpui::Size<gpui::Pixels> {
     use crate::editor_layout::{Axis, Node};
     match node {
@@ -80,9 +85,13 @@ impl Workbench {
                     Some(Page::LanguageServices(view)) => view.into_any_element(),
                     Some(Page::Merge(view)) => view.into_any_element(),
                     Some(Page::Compare(view)) => view.into_any_element(),
+                    Some(Page::Search(view)) => view.into_any_element(),
+                    Some(Page::ExtView(id)) => self.ext_view_frame(&id, p, cx),
+                    Some(Page::Terminal(view)) => self.editor_terminal_view(view, p),
                     Some(Page::Welcome) => self.welcome_view(p, cx).into_any_element(),
                     Some(Page::Containers) => self.container_dashboard_view(p, cx).into_any_element(),
                     Some(Page::Extension) => self.extension_page(p, cx),
+                    Some(Page::ExtensionInspector) => self.extension_inspector(p, cx),
                     None => hint(),
                 }
             } else if state.diff_active {
@@ -103,7 +112,12 @@ impl Workbench {
                 .flex_col()
                 .overflow_hidden()
                 .when(
-                    (!state.editors.is_empty() && cx.global::<Settings>().show_tabs) || state.diff.is_some() || state.large.is_some() || state.page.is_some(),
+                    (!state.editors.is_empty() && cx.global::<Settings>().show_tabs)
+                        || state.diff.is_some()
+                        || state.large.is_some()
+                        || state.page.is_some()
+                        || !state.searches.is_empty()
+                        || !state.terminals.is_empty(),
                     |d| d.child(self.tabs(key, p, cx)),
                 )
                 .when(focused, |d| {
@@ -115,7 +129,7 @@ impl Workbench {
                     .children(self.data_query_bar(p, cx))
                 })
                 .child(div().relative().flex_1().min_w_0().min_h_0().child(body).when(
-                    focused && self.active_editor().is_some() && !state.diff_active && !state.large_active && !state.page_active && state.open_error.is_none(),
+                    focused && self.tab_editor().is_some() && !state.diff_active && !state.large_active && !state.page_active && state.open_error.is_none(),
                     |d| d.child(a11y::landmark(a11y::Landmark::Editor, cx)),
                 ))
                 .on_mouse_down(
@@ -153,10 +167,12 @@ impl Workbench {
         let revision = self.tabs.revision;
         let mut sashes = std::collections::BTreeMap::new();
         for (id, axis) in splits {
-            let bounds = std::rc::Rc::new(std::cell::Cell::new(gpui::Bounds::<gpui::Pixels>::default()));
+            // The split being dragged keeps its cell, so every frame of the drag updates the bounds the drag reads.
+            let held = self.tabs.resizing.as_ref().filter(|r| r.split == id).map(|r| r.bounds.clone());
+            let resizing = held.is_some();
+            let bounds = held.unwrap_or_else(|| std::rc::Rc::new(std::cell::Cell::new(gpui::Bounds::<gpui::Pixels>::default())));
             let captured = bounds.clone();
             let horizontal = axis == Axis::Horizontal;
-            let resizing = self.tabs.resizing.is_some_and(|r| r.split == id);
             let sash = div()
                 .id(("group-sash", usize::from(id)))
                 .debug_selector(move || format!("group-sash-{id}"))
@@ -172,7 +188,7 @@ impl Workbench {
                             return;
                         }
                         this.chrome.resizing_split = true;
-                        this.tabs.resizing = Some(GroupResize { split: id, axis, bounds: captured.get(), anchor, revision });
+                        this.tabs.resizing = Some(GroupResize { split: id, axis, bounds: captured.clone(), anchor, revision });
                         cx.notify();
                     }),
                 )
@@ -266,6 +282,38 @@ impl Workbench {
             })
             .collect();
         let hints = twin_hints(&rels);
+        // The accessibility tree lists the focused group's tabs: theirs are the frames it reports. Another group's tabs
+        // are painted controls of their own group ("Editor group 2"), which bring that group forward.
+        let focused_group = key.id == self.tabs.layout.focused();
+        let group_number = self.tabs.layout.groups().iter().position(|g| *g == key.id).map_or(1, |i| i + 1);
+        let weak = cx.entity().downgrade();
+        let tab_surface = if focused_group { crate::i18n::t("Tab actions").to_string() } else { crate::i18n::tf("Editor group {}", &[&group_number]) };
+        // The large-file, diff and page tabs of the focused group join the "Editor tabs" list.
+        let list_surface = if focused_group { crate::i18n::t("Editor tabs").to_string() } else { tab_surface.clone() };
+        let single_tab = |what: &'static str, label: String, active: bool, f: fn(&mut Workbench, &mut Window, &mut Context<Workbench>)| {
+            crate::a11y_controls::control(
+                crate::a11y_controls::Control::new(list_surface.clone(), what, accesskit::Role::Tab, label).selected(active).on_entity(
+                    weak.clone(),
+                    move |this, w, cx| {
+                        if this.ensure_group(key) {
+                            f(this, w, cx)
+                        }
+                    },
+                ),
+            )
+        };
+        let tab_button = |what: &str, label: String, name: String, f: Box<dyn Fn(&mut Workbench, &mut Window, &mut Context<Workbench>)>| {
+            crate::a11y_controls::control(
+                crate::a11y_controls::Control::button(tab_surface.clone(), format!("{what}:{name}"), label, |_, _| {}).description(name).on_entity(
+                    weak.clone(),
+                    move |this, w, cx| {
+                        if this.ensure_group(key) {
+                            f(this, w, cx)
+                        }
+                    },
+                ),
+            )
+        };
         let (tab_icons, close_mode) = {
             let st = cx.global::<Settings>();
             (st.tab_icons, st.tab_close.clone())
@@ -281,6 +329,9 @@ impl Workbench {
             .on_drop(cx.listener(move |this, d: &DraggedTab, window, cx| {
                 this.drop_tab(d.editor.clone(), d.from, key, None, window, cx);
             }))
+            .on_drop(cx.listener(move |this, d: &term_tabs_glue::DraggedTerminalTab, window, cx| {
+                this.drop_terminal_tab(d.term.clone(), d.from, key, window, cx);
+            }))
             .bg(c(p.surface))
             .border_b_1()
             .border_color(c(p.border))
@@ -293,17 +344,38 @@ impl Workbench {
                 let rel = rels[ix].clone();
                 let hint = hints[ix].clone();
                 let dragged = DraggedTab { editor: editors[ix].clone(), from: key, name: ed.name.clone() };
+                let home = cx.entity().downgrade();
                 let drop_on = editors[ix].clone();
                 let accent = p.accent;
+                let frame = focused_group.then(|| a11y::part_frame(a11y::Part::EditorTab(ix), cx));
+                let other_group_tab = (!focused_group).then(|| {
+                    crate::a11y_controls::control(
+                        crate::a11y_controls::Control::new(tab_surface.clone(), format!("tab:{}", ed.path), accesskit::Role::Tab, ed.name.to_string())
+                            .selected(active)
+                            .on_entity(weak.clone(), move |this, w, cx| {
+                                if this.ensure_group(key) {
+                                    this.activate(ix, w, cx)
+                                }
+                            }),
+                    )
+                });
+                let name = ed.name.to_string();
                 div()
                     .id(SharedString::from(format!("tab-{}-{ix}", key.id)))
-                    .on_drag(dragged, |d, _, _, cx| cx.new(|_| d.clone()))
+                    .debug_selector(move || format!("tab-{}-{ix}", key.id))
+                    .children(other_group_tab)
+                    .on_drag(dragged, move |d, _, _, cx| {
+                        // Remembered, so a release outside the window can take the tab out of it.
+                        home.update(cx, |wb, _| wb.start_tab_drag(d.editor.clone(), d.from)).ok();
+                        cx.new(|_| d.clone())
+                    })
                     .drag_over::<DraggedTab>(move |s, _, _, _| s.border_l_2().border_color(c(accent)))
                     .on_drop(cx.listener(move |this, d: &DraggedTab, window, cx| {
                         this.drop_tab(d.editor.clone(), d.from, key, Some(drop_on.clone()), window, cx);
                     }))
                     .group(group.clone())
                     .relative()
+                    .children(frame)
                     .flex()
                     .flex_none()
                     .items_center()
@@ -340,19 +412,36 @@ impl Workbench {
                     .when(
                         active && ed.path.rsplit_once('.').is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown")),
                         |d| {
-                            d.child(ui::icon_button("markdown-read", "eye", crate::i18n::t("Read"), p).on_click(cx.listener(move |this, _, window, cx| {
-                                cx.stop_propagation();
-                                if !this.ensure_group(key) {
-                                    return;
-                                }
-                                this.open_markdown_preview(&OpenMarkdownPreview, window, cx);
-                            })))
+                            d.child(
+                                ui::icon_button("markdown-read", "eye", crate::i18n::t("Read"), p)
+                                    .relative()
+                                    .child(tab_button(
+                                        "read",
+                                        crate::i18n::t("Read").into(),
+                                        name.clone(),
+                                        Box::new(|this, w, cx| this.open_markdown_preview(&OpenMarkdownPreview, w, cx)),
+                                    ))
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        cx.stop_propagation();
+                                        if !this.ensure_group(key) {
+                                            return;
+                                        }
+                                        this.open_markdown_preview(&OpenMarkdownPreview, window, cx);
+                                    })),
+                            )
                         },
                     )
                     .when(active && cx.global::<Settings>().web_preview_enabled && crate::web_preview::is_html(&ed.path), |d| {
                         d.child(
                             ui::icon_button("html-preview", "eye", crate::i18n::t("Preview HTML in your browser"), p)
                                 .debug_selector(|| "html-preview".into())
+                                .relative()
+                                .child(tab_button(
+                                    "html",
+                                    crate::i18n::t("Preview HTML in your browser").into(),
+                                    name.clone(),
+                                    Box::new(|this, w, cx| this.open_web_preview(w, cx)),
+                                ))
                                 .on_click(cx.listener(move |this, _, window, cx| {
                                     cx.stop_propagation();
                                     if !this.ensure_group(key) {
@@ -368,6 +457,8 @@ impl Workbench {
                         d.child(
                             div()
                                 .id(SharedString::from(format!("tab-pin-{}-{ix}", key.id)))
+                                .relative()
+                                .child(tab_button("unpin", crate::i18n::t("Unpin").into(), name.clone(), Box::new(move |this, _, cx| this.toggle_pin(ix, cx))))
                                 .size(px(20.))
                                 .flex()
                                 .items_center()
@@ -389,6 +480,13 @@ impl Workbench {
                             // Close: visible on the active tab and on hover; a dot if dirty.
                             div()
                                 .id(SharedString::from(format!("tab-close-{}-{ix}", key.id)))
+                                .relative()
+                                .child(tab_button(
+                                    "close",
+                                    crate::i18n::t("Close").into(),
+                                    name.clone(),
+                                    Box::new(move |this, w, cx| this.close_editor_at(ix, w, cx)),
+                                ))
                                 .size(px(20.))
                                 .flex()
                                 .items_center()
@@ -439,6 +537,76 @@ impl Workbench {
                         this.activate(ix, window, cx);
                     }))
             }))
+            .children(state.searches.iter().enumerate().map(|(ix, ed)| {
+                let active = state.page_active && matches!(&state.page, Some(Page::Search(p)) if p == ed);
+                let (title, stale) = {
+                    let e = ed.read(cx);
+                    (e.title(), e.doc.stale.is_some() || !e.doc.is_current_and_complete())
+                };
+                let (show, close, middle) = (ed.clone(), ed.clone(), ed.clone());
+                div()
+                    .id(SharedString::from(format!("tab-search-{}-{ix}", key.id)))
+                    .relative()
+                    .children(focused_group.then(|| a11y::part_frame(a11y::Part::SearchTab(ix), cx)))
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .gap(px(theme::SPACE[3]))
+                    .max_w(px(260.))
+                    .pl(px(theme::SPACE[5]))
+                    .pr(px(theme::SPACE[2]))
+                    .border_r_1()
+                    .border_color(c(p.border))
+                    .cursor_pointer()
+                    .text_color(c(if active { p.text } else { p.text_muted }))
+                    .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover))))
+                    .when(active, |d| d.bg(c(p.bg)).child(div().absolute().top_0().left_0().right_0().h(px(1.)).bg(c(p.accent))))
+                    .child(icon("search", layout::ICON, if stale { p.warning } else { p.accent }))
+                    .child(div().overflow_hidden().whitespace_nowrap().child(title.clone()))
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("tab-search-close-{}-{ix}", key.id)))
+                            .relative()
+                            .child({
+                                let close = close.clone();
+                                tab_button(
+                                    "close-search",
+                                    crate::i18n::t("Close").into(),
+                                    title.to_string(),
+                                    Box::new(move |this, _, cx| this.close_search_editor(&close, cx)),
+                                )
+                            })
+                            .size(px(20.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(theme::radius::SM))
+                            .hover(|d| d.bg(c(p.surface_hover)))
+                            .child(icon("x", 14., p.text_muted))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
+                                if !this.ensure_group(key) {
+                                    return;
+                                }
+                                this.close_search_editor(&close, cx);
+                            })),
+                    )
+                    .on_mouse_down(
+                        MouseButton::Middle,
+                        cx.listener(move |this, _, _, cx| {
+                            if this.ensure_group(key) {
+                                this.close_search_editor(&middle, cx);
+                            }
+                        }),
+                    )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        if !this.ensure_group(key) {
+                            return;
+                        }
+                        this.show_search_editor(show.clone(), window, cx);
+                    }))
+            }))
+            .children(self.editor_terminal_tabs(key, state, p, cx))
             .when_some(state.large.clone(), |d, view| {
                 let active = state.large_active;
                 let name = view.read(cx).name.clone();
@@ -448,6 +616,7 @@ impl Workbench {
                     div()
                         .id("tab-large")
                         .relative()
+                        .child(single_tab("large", format!("{name} ({suffix})"), active, |this, w, cx| this.show_large_tab(w, cx)))
                         .flex()
                         .flex_none()
                         .items_center()
@@ -465,6 +634,13 @@ impl Workbench {
                         .child(
                             div()
                                 .id("tab-large-close")
+                                .relative()
+                                .child(tab_button(
+                                    "close-large",
+                                    crate::i18n::t("Close").into(),
+                                    name.to_string(),
+                                    Box::new(|this, w, cx| this.close_large(w, cx)),
+                                ))
                                 .size(px(20.))
                                 .flex()
                                 .items_center()
@@ -481,16 +657,9 @@ impl Workbench {
                                 })),
                         )
                         .on_click(cx.listener(move |this, _, window, cx| {
-                            if !this.ensure_group(key) {
-                                return;
+                            if this.ensure_group(key) {
+                                this.show_large_tab(window, cx);
                             }
-                            this.tabs.large_active = true;
-                            this.tabs.page_active = false;
-                            this.tabs.diff_active = false;
-                            if let Some(v) = &this.tabs.large {
-                                window.focus(&v.focus_handle(cx));
-                            }
-                            cx.notify();
                         })),
                 )
             })
@@ -501,6 +670,7 @@ impl Workbench {
                     div()
                         .id("tab-diff")
                         .relative()
+                        .child(single_tab("diff", crate::i18n::tf("{} (diff)", &[&name]), active, |this, w, cx| this.show_diff_tab(w, cx)))
                         .flex()
                         .flex_none()
                         .items_center()
@@ -518,6 +688,13 @@ impl Workbench {
                         .child(
                             div()
                                 .id("tab-diff-close")
+                                .relative()
+                                .child(tab_button(
+                                    "close-diff",
+                                    crate::i18n::t("Close").into(),
+                                    name.to_string(),
+                                    Box::new(|this, w, cx| this.close_diff(w, cx)),
+                                ))
                                 .size(px(20.))
                                 .flex()
                                 .items_center()
@@ -534,37 +711,39 @@ impl Workbench {
                                 })),
                         )
                         .on_click(cx.listener(move |this, _, window, cx| {
-                            if !this.ensure_group(key) {
-                                return;
+                            if this.ensure_group(key) {
+                                this.show_diff_tab(window, cx);
                             }
-                            this.tabs.diff_active = true;
-                            this.tabs.page_active = false;
-                            this.tabs.large_active = false;
-                            if let Some(v) = &this.tabs.diff {
-                                window.focus(&v.focus_handle(cx));
-                            }
-                            cx.notify();
                         })),
                 )
             })
-            .when_some(state.page.clone(), |d, page| {
+            .when_some(state.page.clone().filter(|page| !matches!(page, Page::Search(_) | Page::Terminal(_))), |d, page| {
                 let active = state.page_active;
                 let (glyph, title): (&str, String) = match &page {
                     Page::Welcome => ("rocket", crate::i18n::t("Welcome").into()),
                     Page::About(_) => ("info", crate::i18n::t("About Codeyard").into()),
                     Page::Containers => ("server", crate::i18n::t("Container Resources").into()),
                     Page::Extension => ("blocks", self.extension_page_title()),
+                    Page::ExtensionInspector => ("bug-play", crate::i18n::t("Extension Inspector").into()),
                     Page::Settings(_) => ("settings", crate::i18n::t("Settings").into()),
                     Page::Markdown(v) => ("eye", v.read(cx).title(cx)),
                     Page::Shortcuts(_) => ("keyboard", crate::i18n::t("Keyboard Shortcuts").into()),
                     Page::LanguageServices(_) => ("code", crate::i18n::t("Language Services").into()),
                     Page::Merge(v) => ("git-compare", v.read(cx).title(cx)),
                     Page::Compare(v) => ("git-compare", v.read(cx).title()),
+                    Page::Search(v) => ("search", v.read(cx).title()),
+                    Page::ExtView(id) => ("plug", self.ext_view_title(id)),
+                    Page::Terminal(v) => ("terminal", v.read(cx).title.to_string()),
                 };
+                // About is listed by the tree itself; every other page is a tab of the list here.
+                let page_tab = (!matches!(page, Page::About(_)) || !focused_group)
+                    .then(|| single_tab("page", title.clone(), active, |this, w, cx| this.show_page_tab(w, cx)));
+                let page_close = tab_button("close-page", crate::i18n::t("Close").into(), title.clone(), Box::new(|this, _, cx| this.close_page(cx)));
                 d.child(
                     div()
                         .id("tab-page")
                         .relative()
+                        .children(page_tab)
                         .flex()
                         .flex_none()
                         .items_center()
@@ -582,6 +761,8 @@ impl Workbench {
                         .child(
                             div()
                                 .id("tab-page-close")
+                                .relative()
+                                .child(page_close)
                                 .size(px(20.))
                                 .flex()
                                 .items_center()
@@ -598,28 +779,62 @@ impl Workbench {
                                 })),
                         )
                         .on_click(cx.listener(move |this, _, window, cx| {
-                            if !this.ensure_group(key) {
-                                return;
+                            if this.ensure_group(key) {
+                                this.show_page_tab(window, cx);
                             }
-                            this.tabs.page_active = true;
-                            this.tabs.diff_active = false;
-                            this.tabs.large_active = false;
-                            if let Some(Page::Settings(v)) = &this.tabs.page {
-                                v.read(cx).focus_search(window, cx);
-                            }
-                            if let Some(Page::About(v)) = &this.tabs.page {
-                                window.focus(&v.focus_handle(cx));
-                            }
-                            cx.notify();
                         })),
                 )
             })
     }
 
+    /// The large-file tab of the focused group to the front, with the keyboard.
+    fn show_large_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.tabs.large_active = true;
+        self.tabs.page_active = false;
+        self.tabs.diff_active = false;
+        if let Some(v) = &self.tabs.large {
+            window.focus(&v.focus_handle(cx));
+        }
+        cx.notify();
+    }
+
+    /// The diff tab of the focused group to the front, with the keyboard.
+    fn show_diff_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.tabs.diff_active = true;
+        self.tabs.page_active = false;
+        self.tabs.large_active = false;
+        if let Some(v) = &self.tabs.diff {
+            window.focus(&v.focus_handle(cx));
+        }
+        cx.notify();
+    }
+
+    /// The page tab of the focused group to the front (Settings focuses its search, About its Copy button).
+    fn show_page_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.tabs.page_active = true;
+        self.tabs.diff_active = false;
+        self.tabs.large_active = false;
+        if let Some(Page::Settings(v)) = &self.tabs.page {
+            v.read(cx).focus_search(window, cx);
+        }
+        if let Some(Page::About(v)) = &self.tabs.page {
+            window.focus(&v.focus_handle(cx));
+        }
+        cx.notify();
+    }
+
+    /// A breadcrumb's click: the Explorer shows the file (or folder) and takes the keyboard.
+    fn reveal_crumb(&mut self, target: &str, file: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.chrome.panel = Some(Panel::Explorer);
+        self.roots.primary.update(cx, |t, cx| if file { t.reveal(target, cx) } else { t.reveal_dir(target, cx) });
+        window.focus(&self.roots.primary.focus_handle(cx));
+        cx.notify();
+    }
+
     /// File path relative to the root folder: src › app › main.rs
     /// The path above the editor. A folder item shows that folder in the explorer, a file item shows the file.
     pub(super) fn breadcrumbs(&self, p: &Palette, cx: &mut Context<Self>) -> Option<impl IntoElement> {
-        let path = self.active_editor()?.read(cx).path.clone();
+        let path = self.tab_editor()?.read(cx).path.clone();
         let root = self.roots.primary.read(cx).root().map(str::to_string);
         let crumbs = crumb_paths(root.as_deref(), &path);
         let last = crumbs.len().saturating_sub(1);
@@ -630,9 +845,16 @@ impl Workbench {
             }
             let file = i == last;
             let target = abs;
+            let reveal = target.clone();
             items.push(
                 div()
                     .id(SharedString::from(format!("crumb-{i}")))
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::new(crate::i18n::t("Breadcrumbs"), format!("{i}:{reveal}"), accesskit::Role::Link, part.clone())
+                            .description(crate::i18n::t("Show in the Explorer"))
+                            .on_entity(cx.entity().downgrade(), move |this, window, cx| this.reveal_crumb(&reveal, file, window, cx)),
+                    ))
                     .flex()
                     .items_center()
                     .gap(px(theme::SPACE[1]))
@@ -642,12 +864,7 @@ impl Workbench {
                     .hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text)))
                     .when(file, |d| d.text_color(c(p.text)).child(crate::icon_theme::file_icon_el(&part, 12., p)))
                     .child(part)
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.chrome.panel = Some(Panel::Explorer);
-                        this.roots.primary.update(cx, |t, cx| if file { t.reveal(&target, cx) } else { t.reveal_dir(&target, cx) });
-                        window.focus(&this.roots.primary.focus_handle(cx));
-                        cx.notify();
-                    }))
+                    .on_click(cx.listener(move |this, _, window, cx| this.reveal_crumb(&target, file, window, cx)))
                     .into_any_element(),
             );
         }
@@ -669,11 +886,13 @@ impl Workbench {
     }
 
     /// Native hit-test areas preserve Windows dragging, snapping and WM_CLOSE guards.
-    pub(super) fn windows_title_bar(&self, window: &Window, p: &Palette, _cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn windows_title_bar(&self, window: &Window, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *p;
         let control = |id: &'static str, glyph: &'static str, label: &'static str, area: gpui::WindowControlArea| {
             div()
                 .id(id)
+                .relative()
+                .child(a11y::part_frame(a11y::Part::Control(id), cx))
                 .debug_selector(move || id.into())
                 .w(px(46.))
                 .h_full()
@@ -735,18 +954,24 @@ impl Workbench {
 
     /// macOS: the native title is transparent, we draw it (so it follows the theme color). Back /
     /// forward, then the command center (the folder name; click to search files) in the middle.
-    pub(super) fn title_bar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
+    /// The command center's label: the folder (and the SSH host), or "Search".
+    pub(super) fn command_center_label(&self, cx: &App) -> String {
         let root = self.roots.primary.read(cx).root().map(|r| ui::file_name(r).to_string());
         let remote = match &self.remote.conn {
             Conn::Connected { alias } | Conn::Reconnecting { alias, .. } => Some(alias.to_string()),
             _ => None,
         };
-        let label: SharedString = match (&root, &remote) {
-            (Some(r), Some(a)) => format!("{r} [SSH: {a}]").into(),
-            (Some(r), None) => r.clone().into(),
-            (None, Some(a)) => format!("[SSH: {a}]").into(),
+        match (&root, &remote) {
+            (Some(r), Some(a)) => format!("{r} [SSH: {a}]"),
+            (Some(r), None) => r.clone(),
+            (None, Some(a)) => format!("[SSH: {a}]"),
             (None, None) => crate::i18n::t("Search").into(),
-        };
+        }
+    }
+
+    pub(super) fn title_bar(&self, window: &Window, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
+        let root = self.roots.primary.read(cx).root().map(|r| ui::file_name(r).to_string());
+        let label: SharedString = self.command_center_label(cx).into();
         let tip: SharedString = match &root {
             Some(r) => crate::i18n::tf("Search {}", &[r]).into(),
             None => crate::i18n::t("Search files by name").into(),
@@ -756,9 +981,11 @@ impl Workbench {
             Some(k) => format!("{tip} ({k})").into(),
             None => tip,
         };
-        let nav = |id: &'static str, glyph: &'static str, enabled: bool, tip: &'static str| {
+        let nav = |id: &'static str, glyph: &'static str, enabled: bool, tip: &'static str, cx: &Context<Self>| {
             div()
                 .id(id)
+                .relative()
+                .child(a11y::part_frame(a11y::Part::Control(id), cx))
                 .size(px(22.))
                 .flex()
                 .items_center()
@@ -784,7 +1011,8 @@ impl Workbench {
                 }
             })
             // Room for the traffic lights, mirrored on the right so the navigation group stays in the middle of the window.
-            .child(div().w(px(80.)).flex_none())
+            // The system draws them at a fixed size in screen points, so the room does not follow the interface scale.
+            .child(div().w(px(traffic_light_room(window.ui_scale()))).flex_none())
             .child(
                 div()
                     .flex_1()
@@ -793,13 +1021,13 @@ impl Workbench {
                     .items_center()
                     .justify_center()
                     .gap(px(theme::SPACE[1]))
-                    .child(nav("tb-back", "arrow-left", can_back, crate::i18n::t("Back")).when(can_back, |d| {
+                    .child(nav("tb-back", "arrow-left", can_back, crate::i18n::t("Back"), cx).when(can_back, |d| {
                         d.on_click(cx.listener(|this, _, w, cx| {
                             cx.stop_propagation();
                             this.go_back(&GoBack, w, cx);
                         }))
                     }))
-                    .child(nav("tb-forward", "arrow-right", can_forward, crate::i18n::t("Forward")).when(can_forward, |d| {
+                    .child(nav("tb-forward", "arrow-right", can_forward, crate::i18n::t("Forward"), cx).when(can_forward, |d| {
                         d.on_click(cx.listener(|this, _, w, cx| {
                             cx.stop_propagation();
                             this.go_forward(&GoForward, w, cx);
@@ -808,6 +1036,8 @@ impl Workbench {
                     .child(
                         div()
                             .id("command-center")
+                            .relative()
+                            .child(a11y::part_frame(a11y::Part::Control("command-center"), cx))
                             .ml(px(theme::SPACE[2]))
                             // Sits a point below the middle, level with the traffic lights' optical centre.
                             .mt(px(2.))
@@ -834,7 +1064,7 @@ impl Workbench {
                             .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label)),
                     ),
             )
-            .child(div().w(px(80.)).flex_none())
+            .child(div().w(px(traffic_light_room(window.ui_scale()))).flex_none())
     }
 
     /// An action row on the welcome screen: icon, name, shortcut (from the keymap).

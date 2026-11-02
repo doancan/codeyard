@@ -1,0 +1,18 @@
+;; codeyard-exthost's Seatbelt profile (docs/plugin-architecture.md §3), entered with `sandbox_init` after the
+;; handshake and before any extension code loads. Everything is denied except what is listed: no network (TCP or
+;; Unix sockets), no fork or exec, no files outside the extension's own. dyld and the system libraries are mapped
+;; before this point, so they need no rule.
+;;
+;; sandbox.rs appends one rule per path of the policy, with canonical paths:
+;;   (allow file-read* (subpath "<package dir>"))  (allow file-read* (literal "<compiled file>"))
+;;   (allow file-read* file-write* (subpath "<data dir>"))
+(version 1)
+(deny default)
+
+;; The process itself: its own signals and process info, the system's sysctl values (page size, CPU count).
+(allow process-info* (target self))
+(allow signal (target self))
+(allow sysctl-read)
+
+(allow file-read* file-write-data (literal "/dev/null"))
+(allow file-read* (literal "/dev/urandom"))

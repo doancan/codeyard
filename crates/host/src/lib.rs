@@ -10,6 +10,7 @@ mod outbox;
 pub mod ssh;
 pub mod ssh_config;
 pub mod ssh_hosts;
+mod terminals;
 pub mod transfer;
 
 /// Resolve tools without requiring a terminal launch of the editor. Container tools
@@ -258,6 +259,51 @@ pub trait Host: Send + Sync + 'static {
         }
     }
 
+    /// The token to take terminal `pty` back after a restart: (agent instance, terminal secret).
+    fn pty_token(&self, pty: u32) -> Result<(String, String)> {
+        match self.call(Request::PtyToken { pty })? {
+            Response::PtyToken { instance, secret } => Ok((instance, secret)),
+            other => Err(unexpected(other)),
+        }
+    }
+
+    /// Take terminal `pty` of this session back with its token: (output sequence number, bytes lost while away).
+    fn pty_attach(&self, pty: u32, instance: String, secret: String) -> Result<(u64, u64)> {
+        match self.call(Request::PtyAttach { pty, instance, secret })? {
+            Response::PtyAttached { sequence, dropped, .. } => Ok((sequence, dropped)),
+            other => Err(unexpected(other)),
+        }
+    }
+
+    /// Take terminal `pty` of this session back after a restart, with its token: a `Pty` that first gets what the
+    /// terminal wrote since this connection opened, and the bytes it lost before that. `Unsupported` where terminals
+    /// cannot be taken back.
+    fn pty_adopt(&self, pty: u32, instance: String, secret: String) -> Result<(Pty, u64)> {
+        let _ = (pty, instance, secret);
+        Err(HostError::Op(proto::Error::Unsupported("taking terminals back".into())))
+    }
+
+    /// The daemon session this connection uses (`None`: none, e.g. the in-process agent).
+    fn session(&self) -> Option<String> {
+        None
+    }
+
+    /// Leave the session (and its terminals) to the daemon when this connection ends, instead of ending it (`Bye`).
+    fn keep_session(&self) {}
+
+    /// How long the daemon keeps the session after the connection ends (seconds; 0: not at all).
+    fn keep_for(&self, secs: u64) {
+        let _ = secs;
+    }
+
+    /// The session's open terminals.
+    fn pty_list(&self) -> Result<Vec<u32>> {
+        match self.call(Request::PtyList)? {
+            Response::PtyList(ids) => Ok(ids),
+            other => Err(unexpected(other)),
+        }
+    }
+
     /// The shells the machine offers.
     fn list_shells(&self) -> Vec<String> {
         match self.call(Request::ListShells) {
@@ -280,6 +326,13 @@ pub trait Host: Send + Sync + 'static {
     /// No reply expected.
     fn proc_input(&self, proc: u32, data: Vec<u8>);
     fn proc_kill(&self, proc: u32);
+
+    /// Run a task (`Request::TaskSpawn`): output and exit arrive like a piped process's; `proc_kill` stops it and what it
+    /// started. `Exit(None)` after a kill or when the connection drops.
+    fn task_spawn(&self, command: proto::TaskCommand, cwd: Option<String>, env: Vec<(String, Option<String>)>) -> Result<Proc> {
+        let _ = (command, cwd, env);
+        Err(HostError::Op(proto::Error::Unsupported("tasks".into())))
+    }
 
     /// Large file: (line count, size). The agent scans the file on the first call.
     fn line_index(&self, path: &str) -> Result<(u64, u64)> {
@@ -342,6 +395,15 @@ pub trait Host: Send + Sync + 'static {
     fn read_preview(&self, root: &str, path: &str) -> Result<(Vec<u8>, u64)> {
         match self.call(Request::ReadPreview { root: root.into(), path: path.into() })? {
             Response::File { data, hash } => Ok((data, hash)),
+            other => Err(unexpected(other)),
+        }
+    }
+
+    /// Where each path really is, every symbolic link followed (`Request::RealPaths`): one result per path, in order.
+    fn real_paths(&self, paths: Vec<String>) -> Result<Vec<std::result::Result<String, proto::Error>>> {
+        let n = paths.len();
+        match self.call(Request::RealPaths { paths })? {
+            Response::RealPaths(list) if list.len() == n => Ok(list),
             other => Err(unexpected(other)),
         }
     }
@@ -478,6 +540,14 @@ struct Shared {
     /// Watch set to resend on reconnect.
     last_watch: Mutex<Option<Vec<String>>>,
     closing: std::sync::atomic::AtomicBool,
+    /// The session is meant to outlive this connection (a terminal daemon's): no `Bye` when it is dropped.
+    keep_session: AtomicBool,
+    /// Ends the connection itself when the host is dropped (a socket whose read half the reader thread still holds).
+    closer: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+    /// The daemon session this connection opened or resumed.
+    session: Mutex<Option<String>>,
+    /// Events of terminals this client has not taken back (yet): buffered, bounded, for `pty_adopt` (terminals.rs).
+    orphans: Mutex<HashMap<u32, Vec<PtyEvent>>>,
     next_id: AtomicU32,
     /// Pin the call timeout (seconds; 0 = default table). For tests and diagnostics.
     call_limit_secs: AtomicU32,
@@ -522,16 +592,18 @@ impl Shared {
     fn route(&self, frame: Frame<Response>) {
         if frame.id == 0 {
             match frame.body {
-                Response::PtyOutput { pty, data } => {
-                    if let Some(tx) = self.ptys.locked().get(&pty) {
+                Response::PtyOutput { pty, data } => match self.ptys.locked().get(&pty) {
+                    Some(tx) => {
                         let _ = tx.send(PtyEvent::Output(data));
                     }
-                }
-                Response::PtyExit { pty, code } => {
-                    if let Some(tx) = self.ptys.locked().remove(&pty) {
+                    None => self.orphan(pty, PtyEvent::Output(data)),
+                },
+                Response::PtyExit { pty, code } => match self.ptys.locked().remove(&pty) {
+                    Some(tx) => {
                         let _ = tx.send(PtyEvent::Exit(code));
                     }
-                }
+                    None => self.orphan(pty, PtyEvent::Exit(code)),
+                },
                 Response::FsChanged(changes) => {
                     if let Some(tx) = self.fs.locked().as_ref() {
                         let _ = tx.send(changes);
@@ -642,6 +714,43 @@ impl Shared {
         Ok(())
     }
 
+    /// The host is dropped: stop writing and end the connection, but only after what was queued went out. Closing the
+    /// socket at once could cut off the `Bye` (the daemon would then keep the session and its shells) or the last
+    /// keystrokes, when the writer thread had not been scheduled yet (a loaded machine). A peer that stopped reading
+    /// cannot hold the connection open: it is ended after `CLOSE_LIMIT` anyway.
+    fn end_connection(&self) {
+        const CLOSE_LIMIT: std::time::Duration = std::time::Duration::from_secs(5);
+        let Some(close) = self.closer.locked().take() else {
+            self.clear_writer();
+            return;
+        };
+        let Some(w) = self.writer.locked().take() else {
+            close();
+            return;
+        };
+        // The writer thread signals when it is done; another thread ends the connection then, or after the limit.
+        let close = Arc::new(Mutex::new(Some(close)));
+        let run = |close: &Mutex<Option<Box<dyn FnOnce() + Send>>>| {
+            if let Some(close) = close.locked().take() {
+                close();
+            }
+        };
+        let (done, drained) = mpsc::channel::<()>();
+        let later = close.clone();
+        let spawned = std::thread::Builder::new().name("host-close".into()).spawn(move || {
+            let _ = drained.recv_timeout(CLOSE_LIMIT);
+            run(&later);
+        });
+        if spawned.is_ok() {
+            w.close_then(move || {
+                let _ = done.send(());
+            });
+        } else {
+            w.close();
+            run(&close);
+        }
+    }
+
     fn clear_writer(&self) {
         if let Some(w) = self.writer.locked().take() {
             w.close();
@@ -731,6 +840,26 @@ pub struct RemoteHost {
     info: HostInfo,
     label: String,
     remote: bool,
+}
+
+/// 128 random bits as hex, for secrets (session ids, tokens): the system's random device on Unix; elsewhere keys of
+/// the standard library's hasher, which it takes from the system's random source.
+pub fn random_token() -> String {
+    #[cfg(unix)]
+    {
+        let mut bytes = [0u8; 16];
+        if std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut bytes)).is_ok() {
+            return bytes.iter().map(|b| format!("{b:02x}")).collect();
+        }
+    }
+    use std::hash::{BuildHasher, Hasher};
+    let half = |n: u64| {
+        let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+        h.write_u64(n);
+        h.finish()
+    };
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
+    format!("{:016x}{:016x}", half(nanos), half(!nanos))
 }
 
 /// This machine: the agent is a thread in this process, same protocol over a pipe.
@@ -851,6 +980,7 @@ impl RemoteHost {
         let (info, reader, writer, child, stderr) = handshake(t, session.as_deref())?;
         let reconnects = connector.is_some();
         let shared = Arc::new(Shared { next_id: AtomicU32::new(2), ..Default::default() });
+        shared.session.locked().clone_from(&session);
         shared.set_writer(writer).map_err(|e| HostError::Disconnected(e.to_string()))?;
         *shared.child.locked() = child;
         *shared.stderr.locked() = stderr;
@@ -1036,6 +1166,18 @@ impl Host for RemoteHost {
     fn info(&self) -> &HostInfo {
         &self.info
     }
+    fn pty_adopt(&self, pty: u32, instance: String, secret: String) -> Result<(Pty, u64)> {
+        self.adopt(pty, instance, secret)
+    }
+    fn session(&self) -> Option<String> {
+        self.shared.session.locked().clone()
+    }
+    fn keep_session(&self) {
+        self.shared.keep_session.store(true, Ordering::Relaxed);
+    }
+    fn keep_for(&self, secs: u64) {
+        self.notify(Request::KeepFor { secs });
+    }
     fn label(&self) -> String {
         self.label.clone()
     }
@@ -1115,6 +1257,16 @@ impl Host for RemoteHost {
         }
     }
 
+    fn task_spawn(&self, command: proto::TaskCommand, cwd: Option<String>, env: Vec<(String, Option<String>)>) -> Result<Proc> {
+        let (tx, rx) = mpsc::channel();
+        let (ev_tx, ev_rx) = mpsc::channel();
+        self.start(Request::TaskSpawn { command, cwd, env }, Waiter::ProcSpawn(tx, ev_tx))?;
+        match rx.recv().map_err(|_| self.disconnected())? {
+            Response::ProcSpawned { proc } => Ok(Proc { id: proc, events: ev_rx }),
+            other => Err(unexpected(other)),
+        }
+    }
+
     fn proc_input(&self, proc: u32, data: Vec<u8>) {
         self.notify(Request::ProcInput { proc, data });
     }
@@ -1157,12 +1309,13 @@ impl Drop for RemoteHost {
         // (Best effort: ignored if the connection is already down.)
         self.shared.closing.store(true, Ordering::Relaxed); // first, so the reader doesn't try to reconnect when the agent closes
         // Waited for (briefly), because the child is killed right below and would take an unsent Bye with it.
-        if let Ok(w) = self.shared.writer()
+        if !self.shared.keep_session.load(Ordering::Relaxed)
+            && let Ok(w) = self.shared.writer()
             && let Ok(bytes) = Shared::encode(0, &Request::Bye)
         {
             let _ = w.send_within(bytes, std::time::Duration::from_secs(1));
         }
-        self.shared.clear_writer();
+        self.shared.end_connection();
         if let Some(mut child) = self.shared.child.locked().take() {
             let _ = child.kill();
             let _ = child.wait();

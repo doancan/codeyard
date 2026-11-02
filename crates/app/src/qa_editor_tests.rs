@@ -488,7 +488,7 @@ fn qa_drag_select_autoscrolls_past_viewport(cx: &mut TestAppContext) {
     let f = file("drag-scroll", "a.txt", content.as_bytes());
     let (wb, cx) = setup(cx);
     let ed = open(&wb, &f, cx);
-    let (_, last_visible) = ed.read_with(cx, |e, _| e.qa_visible_lines()).unwrap();
+    let (_, last_visible) = ed.read_with(cx, |e, _| e.visible_lines()).unwrap();
     let at = ed.read_with(cx, |e, _| e.point_for(0)).unwrap();
     let last_start = (0..last_visible).map(|i| format!("satır {i}\n").chars().count()).sum::<usize>();
     let bottom = ed.read_with(cx, |e, _| e.point_for(last_start)).unwrap();
@@ -896,7 +896,8 @@ fn qa_perf_50k_lines(cx: &mut TestAppContext) {
         eprintln!("SKIPPED the frame-budget assertion: debug build (run `cargo test --release -- qa_perf`)");
         return;
     }
-    let budget = 16.7;
+    // Shared CI runners get their allowance (`CODEYARD_TEST_TIMEOUT_SCALE`), as the other wall-clock budgets do.
+    let budget = 16.7 * crate::test_sshd::timeout_scale() as f64;
     let slow: Vec<_> = worst.iter().filter(|(l, v)| *v > budget && !matches!(l.as_str(), "fold-all" | "cmd-f" | "cmd-shift-l" | "wrap")).collect();
     assert!(slow.is_empty(), "per-keystroke ops slower than {budget} ms: {slow:?}");
 }

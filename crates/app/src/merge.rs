@@ -137,6 +137,7 @@ impl MergeView {
 
     fn pane(
         &self,
+        surface: &str,
         id: String,
         title: String,
         subtitle: Option<String>,
@@ -149,8 +150,15 @@ impl MergeView {
         // Very long blocks must not slow the UI: the first `MAX_PANE_LINES` lines are drawn, the rest is reported in a note.
         let extra = lines.len().saturating_sub(MAX_PANE_LINES);
         let lines = &lines[..lines.len() - extra];
+        let heard = match &subtitle {
+            Some(s) => format!("{title} ({s})"),
+            None => title.clone(),
+        };
+        let text = if lines.is_empty() { crate::i18n::t("(nothing)").to_string() } else { lines.join("\n") };
         div()
-            .id(SharedString::from(id))
+            .id(SharedString::from(id.clone()))
+            .relative()
+            .child(crate::a11y_controls::control(crate::a11y_controls::Control::text(surface, id, accesskit::Role::Document, heard).value(text)))
             .flex_1()
             .min_w_0()
             .flex()
@@ -216,6 +224,8 @@ impl Render for MergeView {
         let cards: Vec<Card> = all_cards.into_iter().take(MAX_CARDS).collect();
         let total = cards.len() + hidden;
         let hover = self.hover;
+        let surface = crate::i18n::tf("Merge {}", &[&name]);
+        let ctl = |key: String, label: &str| crate::a11y_controls::Control::button(surface.clone(), key, label, |_, _| {});
         let button = |id: SharedString, label: &'static str, primary: bool| {
             div()
                 .id(id)
@@ -240,31 +250,50 @@ impl Render for MergeView {
             .border_b_1()
             .border_color(c(p.border))
             .child(icon("git-compare", 16., p.accent))
-            .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(crate::i18n::tf("Merge {}", &[&name])))
+            .child(div().relative().font_weight(gpui::FontWeight::SEMIBOLD).child(crate::i18n::tf("Merge {}", &[&name])).child(crate::a11y_controls::said(
+                surface.clone(),
+                "title",
+                accesskit::Role::Heading,
+                crate::i18n::tf("Merge {}", &[&name]),
+            )))
             .child(div().text_size(px(text::XS.0)).text_color(c(if total == 0 { p.success } else { p.warning })).child(match total {
                 0 => crate::i18n::t("All conflicts are resolved").to_string(),
                 n => crate::i18n::tn("{} conflict left", "{} conflicts left", n, &[]),
             }))
             .child(div().flex_1())
             .when(total > 0, |d| {
-                d.child(
-                    button("merge-all-current".into(), crate::i18n::t("Accept All Current"), false)
-                        .on_click(cx.listener(|this, _, _, cx| this.resolve_all(Choice::Current, cx))),
-                )
-                .child(
-                    button("merge-all-incoming".into(), crate::i18n::t("Accept All Incoming"), false)
-                        .on_click(cx.listener(|this, _, _, cx| this.resolve_all(Choice::Incoming, cx))),
-                )
+                d.child(crate::a11y_controls::press_on(
+                    button("merge-all-current".into(), crate::i18n::t("Accept All Current"), false),
+                    ctl("all-current".into(), crate::i18n::t("Accept All Current")),
+                    cx,
+                    |this, _, cx| this.resolve_all(Choice::Current, cx),
+                ))
+                .child(crate::a11y_controls::press_on(
+                    button("merge-all-incoming".into(), crate::i18n::t("Accept All Incoming"), false),
+                    ctl("all-incoming".into(), crate::i18n::t("Accept All Incoming")),
+                    cx,
+                    |this, _, cx| this.resolve_all(Choice::Incoming, cx),
+                ))
             })
             .when(total == 0, |d| {
-                d.child(button("merge-save".into(), crate::i18n::t("Save File"), true).on_click(cx.listener(|this, _, _, cx| {
-                    if let Some(e) = this.source.upgrade() {
-                        e.update(cx, |e, cx| e.save_now(cx));
-                    }
-                    cx.emit(MergeEvent::Saved);
-                })))
+                d.child(crate::a11y_controls::press_on(
+                    button("merge-save".into(), crate::i18n::t("Save File"), true),
+                    ctl("save".into(), crate::i18n::t("Save File")),
+                    cx,
+                    |this, _, cx| {
+                        if let Some(e) = this.source.upgrade() {
+                            e.update(cx, |e, cx| e.save_now(cx));
+                        }
+                        cx.emit(MergeEvent::Saved);
+                    },
+                ))
             })
-            .child(button("merge-close".into(), crate::i18n::t("Close"), false).on_click(cx.listener(|_, _, _, cx| cx.emit(MergeEvent::Close))));
+            .child(crate::a11y_controls::press_on(
+                button("merge-close".into(), crate::i18n::t("Close"), false),
+                ctl("close".into(), crate::i18n::t("Close")),
+                cx,
+                |_, _, cx| cx.emit(MergeEvent::Close),
+            ));
         let body = div().id("merge-body").flex_1().min_h_0().overflow_y_scroll().flex().flex_col().items_center().child(
             div()
                 .w_full()
@@ -284,7 +313,11 @@ impl Render for MergeView {
                             .py(px(theme::SPACE[9]))
                             .text_color(c(p.text_muted))
                             .child(icon("check", 28., p.success))
-                            .child(div().text_size(px(text::LG.0)).text_color(c(p.text)).child(crate::i18n::t("Nothing left to resolve")))
+                            .child(
+                                div().relative().text_size(px(text::LG.0)).text_color(c(p.text)).child(crate::i18n::t("Nothing left to resolve")).child(
+                                    crate::a11y_controls::said(surface.clone(), "done", accesskit::Role::Label, crate::i18n::t("Nothing left to resolve")),
+                                ),
+                            )
                             .child(crate::i18n::t("Save the file to finish, then stage it in Source Control.")),
                     )
                 })
@@ -303,13 +336,17 @@ impl Render for MergeView {
                         )
                     };
                     let result: Option<Vec<String>> = hover.filter(|(ix, _)| *ix == i).map(|(_, ch)| preview(&card, ch));
+                    let conflict = crate::i18n::tf("Conflict {0} of {1}", &[&(i + 1), &total]);
                     let choose = |id: &'static str, label: &'static str, choice: Choice| {
-                        button(SharedString::from(format!("{id}{i}")), label, false)
-                            .on_hover(cx.listener(move |this, over: &bool, _, cx| {
+                        crate::a11y_controls::press_on(
+                            button(SharedString::from(format!("{id}{i}")), label, false).on_hover(cx.listener(move |this, over: &bool, _, cx| {
                                 this.hover = over.then_some((i, choice));
                                 cx.notify();
-                            }))
-                            .on_click(cx.listener(move |this, _, _, cx| this.resolve(i, choice, cx)))
+                            })),
+                            ctl(format!("{id}{i}"), label).description(conflict.clone()),
+                            cx,
+                            move |this, _, cx| this.resolve(i, choice, cx),
+                        )
                     };
                     div()
                         .id(SharedString::from(format!("conflict{i}")))
@@ -329,7 +366,14 @@ impl Render for MergeView {
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                         .child(crate::i18n::tf("Conflict {0} of {1}", &[&(i + 1), &total])),
                                 )
-                                .child(crate::i18n::tf("lines {0}–{1}", &[&card.first_line, &card.last_line])),
+                                .child(crate::i18n::tf("lines {0}–{1}", &[&card.first_line, &card.last_line]))
+                                .relative()
+                                .child(crate::a11y_controls::said(
+                                    surface.clone(),
+                                    format!("conflict{i}"),
+                                    accesskit::Role::Heading,
+                                    format!("{}, {}", conflict, crate::i18n::tf("lines {0}–{1}", &[&card.first_line, &card.last_line])),
+                                )),
                         )
                         .child(ctx_lines(&card.before, format!("b{i}-")))
                         .child(
@@ -337,6 +381,7 @@ impl Render for MergeView {
                                 .flex()
                                 .gap(px(theme::SPACE[4]))
                                 .child(self.pane(
+                                    &surface,
                                     format!("cur{i}"),
                                     crate::i18n::t("Current").into(),
                                     Some(card.current_label.clone()).filter(|l| !l.is_empty()),
@@ -346,12 +391,11 @@ impl Render for MergeView {
                                     &font,
                                     size,
                                 ))
-                                .children(
-                                    card.base.as_ref().map(|b| {
-                                        self.pane(format!("base{i}"), crate::i18n::t("Common ancestor").into(), None, b, p.text_muted, &p, &font, size)
-                                    }),
-                                )
+                                .children(card.base.as_ref().map(|b| {
+                                    self.pane(&surface, format!("base{i}"), crate::i18n::t("Common ancestor").into(), None, b, p.text_muted, &p, &font, size)
+                                }))
                                 .child(self.pane(
+                                    &surface,
                                     format!("inc{i}"),
                                     crate::i18n::t("Incoming").into(),
                                     Some(card.incoming_label.clone()).filter(|l| !l.is_empty()),

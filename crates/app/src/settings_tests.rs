@@ -187,7 +187,8 @@ fn exclude_globs_like_vscode() {
 fn template_parses_cleanly() {
     let (s, w) = parse(TEMPLATE);
     assert!(w.is_empty(), "{w:?}");
-    assert_eq!(s, Settings::default());
+    // The template shows the shipped defaults; unit tests run with language servers off.
+    assert_eq!(s, Settings { lsp_enabled: true, ..Settings::default() });
     assert!(parse_keybindings(KEYBINDINGS_TEMPLATE).1.is_empty());
 }
 
@@ -285,6 +286,15 @@ mod code_actions_on_save {
         assert_eq!(s.code_actions_on_save, ["source.organizeImports"]);
         let (s, w) = parse(r#"{ "editor.codeActionsOnSave": 3 }"#);
         assert!(s.code_actions_on_save.is_empty() && w.len() == 1, "{w:?}");
+    }
+
+    #[test]
+    fn formatters_are_chosen_per_language() {
+        let (s, w) = parse(r#"{ "editor.formatters": { "toml": "you.taplo", "rust": "lsp", "go": 3 } }"#);
+        assert_eq!(s.formatters, [("toml".to_string(), "you.taplo".to_string()), ("rust".to_string(), "lsp".to_string())]);
+        assert_eq!(w.len(), 1, "the wrong entry is named: {w:?}");
+        let (s, w) = parse(r#"{ "editor.formatters": "you.taplo" }"#);
+        assert!(s.formatters.is_empty() && w.len() == 1, "{w:?}");
     }
 }
 

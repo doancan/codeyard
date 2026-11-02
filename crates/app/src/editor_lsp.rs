@@ -33,13 +33,20 @@ impl EditorView {
     }
 
     /// Dim text at the line end: code lenses first, then hints.
-    pub(super) fn eol_hint(&self, line: usize) -> Option<String> {
+    pub(crate) fn eol_hint(&self, line: usize) -> Option<String> {
         // Values from the stopped program replace the hints (both on one line would be crowded).
         if let Some(v) = self.debug_values.get(&line) {
             return Some(v.clone());
         }
-        let lens = self.lenses.get(&line).map(|l| l.iter().map(|x| x.title.as_str()).collect::<Vec<_>>().join(" | "));
-        match (lens, self.inlays.get(&line)) {
+        // The language server's lenses and hints first, then the extensions' (editor_ext.rs).
+        let mut titles: Vec<&str> = self.lenses.get(&line).map(|l| l.iter().map(|x| x.title.as_str()).collect()).unwrap_or_default();
+        titles.extend(self.ext_lenses_on(line).map(|l| l.title.as_str()));
+        let lens = (!titles.is_empty()).then(|| titles.join(" | "));
+        let mut labels: Vec<&str> = self.inlays.get(&line).map(|h| vec![h.as_str()]).unwrap_or_default();
+        let ext_hints = self.ext_hints_on(line);
+        labels.extend(ext_hints.iter().map(|h| h.label.as_str()));
+        let hints = (!labels.is_empty()).then(|| labels.join("  "));
+        match (lens, hints.as_ref()) {
             (Some(l), Some(h)) => Some(format!("{l}   {h}")),
             (Some(l), None) => Some(l),
             (None, Some(h)) => Some(h.clone()),
@@ -51,6 +58,9 @@ impl EditorView {
     pub(super) fn run_code_lens(&mut self, _: &RunCodeLens, _: &mut Window, cx: &mut Context<Self>) {
         let line = self.buffer.char_to_line(self.buffer.cursor());
         let Some(lens) = self.lenses.get(&line).and_then(|l| l.first()).cloned() else {
+            if self.click_ext_lens(line, cx) {
+                return;
+            }
             return cx.emit(EditorEvent::Message(t("No code lens on this line").into()));
         };
         let Some(client) = self.lsp.clone() else { return };
@@ -464,6 +474,21 @@ impl EditorView {
         self.after_edit(cx);
     }
 
+    /// The selection (or the cursor as an empty range) in UTF-16 positions, for extensions.
+    pub fn lsp_selection(&self) -> crate::lsp::Range16 {
+        let head = self.buffer.cursor();
+        let r = self.buffer.selection().unwrap_or(head..head);
+        (self.buffer.lsp_position(r.start), self.buffer.lsp_position(r.end))
+    }
+
+    /// Select `range` (UTF-16 positions), for extensions.
+    pub fn set_lsp_selection(&mut self, range: crate::lsp::Range16, cx: &mut Context<Self>) {
+        let ((l0, c0), (l1, c1)) = range;
+        let (a, b) = (self.buffer.from_lsp_position(l0, c0), self.buffer.from_lsp_position(l1, c1));
+        self.buffer.set_selection(a.min(b)..a.max(b), b < a);
+        cx.notify();
+    }
+
     /// Document version for language server requests (see `apply_lsp_edits_if_unchanged`).
     pub fn lsp_buffer_version(&self) -> u64 {
         self.buffer.version()
@@ -623,6 +648,11 @@ impl EditorView {
             self.hover = None;
             cx.notify();
         }
+        self.schedule_hover_at(ix, position, cx);
+    }
+
+    /// Show info about the character at `ix` after the hover delay; `position` is where the popup opens.
+    pub(super) fn schedule_hover_at(&mut self, ix: usize, position: Point<Pixels>, cx: &mut Context<Self>) {
         let mut diagnostics = self.diagnostics_at(ix);
         if let Some((_, word)) = self.misspelling_at(ix, cx) {
             let message = tf("“{}” is not in the dictionary. Quick Fix shows suggestions.", &[&word]);
@@ -631,7 +661,8 @@ impl EditorView {
         let client = self.lsp.clone();
         let debug = self.debug_eval.clone().zip(self.debug_expression_at(ix));
         let schema_hover = self.schema_hover_input(ix, client.is_some());
-        if client.is_none() && diagnostics.is_empty() && debug.is_none() && schema_hover.is_none() {
+        let ext = self.ext_hover_ask(ix);
+        if client.is_none() && diagnostics.is_empty() && debug.is_none() && schema_hover.is_none() && ext.is_none() {
             self.hover_task = None;
             return;
         }
@@ -639,6 +670,11 @@ impl EditorView {
         let uri = crate::lsp::path_to_uri(&self.path);
         self.hover_task = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(std::time::Duration::from_millis(450)).await;
+            // Extensions are asked first and answer while the language server does; each shows when it arrives.
+            let ext = match ext {
+                Some(ask) => ask.send(cx).await,
+                None => None,
+            };
             // If the program is stopped: the expression's value (DAP `evaluate`, context "hover") goes before the server's description.
             let value = match debug {
                 Some(((session, frame), expr)) => {
@@ -671,11 +707,14 @@ impl EditorView {
             };
             this.update(cx, |e, cx| {
                 if text.is_some() || !diagnostics.is_empty() {
-                    e.hover = Some(Hover { at: ix, diagnostics, text, position });
+                    e.hover = Some(Hover { at: ix, diagnostics, text, position, ext: Vec::new() });
                     cx.notify();
                 }
             })
             .ok();
+            if let Some(reply) = ext {
+                Self::show_ext_hovers(this, reply, ix, position, cx).await;
+            }
         }));
     }
 

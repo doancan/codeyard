@@ -39,6 +39,7 @@ if (Test-Path -LiteralPath $packageDir) { Remove-Item -LiteralPath $packageDir -
 New-Item -ItemType Directory -Force "$out\$name" | Out-Null
 Copy-Item target\release\codeyard.exe "$out\$name\Codeyard.exe"
 Copy-Item target\release\cyx.exe "$out\$name\cyx.exe"
+Copy-Item target\release\codeyard-exthost.exe "$out\$name\codeyard-exthost.exe"
 New-Item -ItemType Directory -Force "$out\$name\licenses" | Out-Null
 foreach ($src in $licenses.Keys) { Copy-Item -Recurse $src "$out\$name\licenses\$($licenses[$src])" }
 Remove-Item "$out\$name.zip" -ErrorAction SilentlyContinue

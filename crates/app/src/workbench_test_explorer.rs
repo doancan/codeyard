@@ -26,20 +26,20 @@ pub(super) struct TestingState {
     pub(super) files: Vec<TestFile>,
     pub(super) results: testexp::Results,
     /// Folder the files were found in.
-    root: Option<String>,
+    pub(super) root: Option<String>,
     js_runner: Option<&'static str>,
     /// Files shown open (they start closed; a run opens the ones with failures).
-    expanded: HashSet<String>,
-    only_failed: bool,
-    filter: Option<Entity<TextField>>,
-    scanning: bool,
+    pub(super) expanded: HashSet<String>,
+    pub(super) only_failed: bool,
+    pub(super) filter: Option<Entity<TextField>>,
+    pub(super) scanning: bool,
     /// The running process, to stop it.
     running: Option<(Arc<dyn Host>, u32)>,
     /// Results from before the run, put back for tests the run did not report (or did not reach).
     before: testexp::Results,
-    run: Option<gpui::Task<()>>,
+    pub(super) run: Option<gpui::Task<()>>,
     output: Option<Entity<TerminalView>>,
-    scroll: gpui::UniformListScrollHandle,
+    pub(super) scroll: gpui::UniformListScrollHandle,
 }
 
 impl TestingState {
@@ -144,7 +144,7 @@ impl Workbench {
             this.update(cx, |this, cx| {
                 this.jobs.tests.scanning = false;
                 if this.root(cx).as_deref() != Some(&root) || this.lsp.generation != generation {
-                    if this.chrome.panel == Some(Panel::Testing) {
+                    if this.view_shown(Panel::Testing) {
                         this.refresh_tests(cx);
                     }
                     return;
@@ -334,7 +334,7 @@ impl Workbench {
     }
 
     /// Runs one file's tests, or one test.
-    fn run_test_item(&mut self, file: usize, test: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn run_test_item(&mut self, file: usize, test: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
         let job = self.jobs.tests.files.get(file).and_then(|f| testexp::job_for(f, test));
         self.run_test_jobs(job.into_iter().collect(), window, cx);
     }
@@ -364,7 +364,7 @@ impl Workbench {
 
     /// Starts a test under the debugger. Building a Rust test runs the project's build scripts, so trust is asked for
     /// the test's folder before anything runs.
-    fn debug_test(&mut self, file: TestFile, test: TestItem, root: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn debug_test(&mut self, file: TestFile, test: TestItem, root: String, window: &mut Window, cx: &mut Context<Self>) {
         self.require_trust_for(Some(root.clone()), window, cx, move |this, window, cx| this.debug_test_trusted(file, test, root, window, cx));
     }
 
@@ -451,7 +451,7 @@ impl Workbench {
     }
 
     /// Opens where a test is defined, or where it failed when the runner said.
-    fn open_test(&mut self, file: usize, test: usize, at_failure: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_test(&mut self, file: usize, test: usize, at_failure: bool, window: &mut Window, cx: &mut Context<Self>) {
         let t = &self.jobs.tests;
         let (Some(root), Some(f)) = (t.root.clone(), t.files.get(file)) else { return };
         let Some(item) = f.tests.get(test) else { return };
@@ -511,11 +511,19 @@ impl Workbench {
                         ui::icon_button("tests-refresh", "refresh-cw", crate::i18n::t("Refresh Tests"), p)
                             .on_click(cx.listener(|this, _, _, cx| this.refresh_tests(cx))),
                     )
-                    .child(ui::icon_button("tests-collapse", "chevrons-down-up", crate::i18n::t("Collapse All"), p).on_click(cx.listener(|this, _, _, cx| {
-                        let t = &mut this.jobs.tests;
-                        t.expanded.clear();
-                        cx.notify();
-                    }))),
+                    .child(
+                        ui::icon_button("tests-collapse", "chevrons-down-up", crate::i18n::t("Collapse All"), p)
+                            .relative()
+                            .child(self.ctl(crate::i18n::t("Testing"), "tests-collapse", crate::i18n::t("Collapse All"), cx, |this, _, cx| {
+                                this.jobs.tests.expanded.clear();
+                                cx.notify();
+                            }))
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                let t = &mut this.jobs.tests;
+                                t.expanded.clear();
+                                cx.notify();
+                            })),
+                    ),
             );
         let muted = |s: SharedString| div().px(px(theme::SPACE[6])).py(px(theme::SPACE[2])).text_color(c(p.text_muted)).child(s);
         let body: AnyElement = if t.scanning && t.files.is_empty() {
@@ -539,15 +547,24 @@ impl Workbench {
                 .flex_1()
                 .min_h_0()
                 .child(
-                    gpui::uniform_list(
-                        "test-rows",
-                        rows.len(),
-                        cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
-                            range.filter_map(|ix| Some(this.test_row(ix, rows.get(ix)?, &p, cx))).collect()
-                        }),
-                    )
-                    .track_scroll(t.scroll.clone())
-                    .size_full(),
+                    self.row_list(
+                        a11y::RowFrame::Test,
+                        gpui::uniform_list(
+                            "test-rows",
+                            rows.len(),
+                            cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
+                                range
+                                    .filter_map(|ix| {
+                                        let row = this.test_row(ix, rows.get(ix)?, &p, cx);
+                                        Some(this.nav_row(a11y::RowFrame::Test, ix, row, window, cx))
+                                    })
+                                    .collect()
+                            }),
+                        )
+                        .track_scroll(t.scroll.clone())
+                        .size_full(),
+                        cx,
+                    ),
                 )
                 .into_any_element()
         };
@@ -578,7 +595,22 @@ impl Workbench {
             .text_size(px(text::SM.0))
             .child(header)
             .children(t.filter.clone().map(|f| {
+                let field = f.read(cx);
+                let (text, handle) = (field.text().to_string(), field.focus_handle(cx));
+                let access = crate::a11y_controls::control(
+                    crate::a11y_controls::Control::new(
+                        crate::i18n::t("Testing"),
+                        "tests-filter",
+                        accesskit::Role::TextInput,
+                        crate::i18n::t("Filter (e.g. text, path)"),
+                    )
+                    .value(text)
+                    .focus(handle.clone())
+                    .on_entity(cx.entity().downgrade(), move |_: &mut Self, w, _| w.focus(&handle)),
+                );
                 div()
+                    .relative()
+                    .child(access)
                     .mx(px(theme::SPACE[3]))
                     .mb(px(theme::SPACE[2]))
                     .px(px(theme::SPACE[2]))
@@ -652,12 +684,16 @@ impl Workbench {
                     .child(label(dir).text_color(c(p.text_muted)).text_size(px(text::XS.0)))
                     .child(div().flex_1())
                     .child(muted(f.tests.len().to_string()))
-                    .child(hover_actions().child(ui::icon_button(("test-file-run", ix), "play", crate::i18n::t("Run Tests in File"), p).on_click(cx.listener(
-                        move |this, _, w, cx| {
+                    .child(hover_actions().child(a11y::row_button(
+                        ui::icon_button(("test-file-run", ix), "play", crate::i18n::t("Run Tests in File"), p).on_click(cx.listener(move |this, _, w, cx| {
                             cx.stop_propagation();
                             this.run_test_item(fi, None, w, cx);
-                        },
-                    ))))
+                        })),
+                        a11y::RowFrame::Test,
+                        ix,
+                        1,
+                        cx,
+                    )))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         let c = &mut this.jobs.tests.expanded;
                         if !c.remove(&rel) {
@@ -678,20 +714,32 @@ impl Workbench {
                     .children(millis.map(|ms| muted(if ms >= 1000 { format!("{:.1} s", ms as f64 / 1000.) } else { format!("{ms} ms") })))
                     .child(
                         hover_actions()
-                            .child(ui::icon_button(("test-run", ix), "play", crate::i18n::t("Run Test"), p).on_click(cx.listener(move |this, _, w, cx| {
-                                cx.stop_propagation();
-                                this.run_test_item(fi, Some(ti), w, cx);
-                            })))
+                            .child(a11y::row_button(
+                                ui::icon_button(("test-run", ix), "play", crate::i18n::t("Run Test"), p).on_click(cx.listener(move |this, _, w, cx| {
+                                    cx.stop_propagation();
+                                    this.run_test_item(fi, Some(ti), w, cx);
+                                })),
+                                a11y::RowFrame::Test,
+                                ix,
+                                1,
+                                cx,
+                            ))
                             .when(debuggable, |d| {
-                                d.child(ui::icon_button(("test-debug", ix), "bug-play", crate::i18n::t("Debug Test"), p).on_click(cx.listener(
-                                    move |this, _, w, cx| {
-                                        cx.stop_propagation();
-                                        let t = &this.jobs.tests;
-                                        let (Some(root), Some(f)) = (t.root.clone(), t.files.get(fi).cloned()) else { return };
-                                        let Some(item) = f.tests.get(ti).cloned() else { return };
-                                        this.debug_test(f, item, root, w, cx);
-                                    },
-                                )))
+                                d.child(a11y::row_button(
+                                    ui::icon_button(("test-debug", ix), "bug-play", crate::i18n::t("Debug Test"), p).on_click(cx.listener(
+                                        move |this, _, w, cx| {
+                                            cx.stop_propagation();
+                                            let t = &this.jobs.tests;
+                                            let (Some(root), Some(f)) = (t.root.clone(), t.files.get(fi).cloned()) else { return };
+                                            let Some(item) = f.tests.get(ti).cloned() else { return };
+                                            this.debug_test(f, item, root, w, cx);
+                                        },
+                                    )),
+                                    a11y::RowFrame::Test,
+                                    ix,
+                                    2,
+                                    cx,
+                                ))
                             }),
                     )
                     .on_click(cx.listener(move |this, _, w, cx| this.open_test(fi, ti, false, w, cx)))

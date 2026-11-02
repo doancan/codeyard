@@ -3,13 +3,16 @@
 use std::collections::HashSet;
 use std::ops::Range;
 
-use crate::raw::{RawManifest, RawPermissions, S};
+use crate::raw::{RawManifest, RawOAuth, RawPermissions, S};
 use crate::risk::{self, Clipboard, Permissions};
 use crate::{
-    Activation, CodeEntry, CodeLanguage, Command, Contributions, ExtId, FileEntry, Keybinding, Language, LanguageServer, Manifest, SchemaAssociation, Setting,
-    SettingKind, Snippets, Version, View, ViewLocation, check_id_part, limits, when,
+    Activation, BUILTIN_PROVIDERS, CodeEntry, CodeLanguage, Command, CompletionProvider, Contributions, ExtId, FileEntry, Keybinding, Language, LanguageServer,
+    Manifest, Menu, MenuLocation, OAuthProvider, Provider, SchemaAssociation, ScmProvider, Setting, SettingKind, Snippets, StatusItem, Version, View,
+    ViewLocation, check_id_part, limits, when,
 };
 use crate::{Code as C, Diagnostic};
+
+mod pulls;
 
 struct Ctx {
     errors: Vec<Diagnostic>,
@@ -126,6 +129,7 @@ pub fn parse(text: &str, options: Options) -> Result<Manifest, Vec<Diagnostic>> 
     }
     let raw: RawManifest = match toml::from_str(text) {
         Ok(r) => r,
+        Err(e) if e.message().contains("unknown field") => return Err(unknown_fields(text, e, options)),
         Err(e) => {
             let message = e.message().trim().to_string();
             let fix = if message.contains("missing field `extension`") {
@@ -145,6 +149,113 @@ pub fn parse(text: &str, options: Options) -> Result<Manifest, Vec<Diagnostic>> 
     let mut cx = Ctx { errors: Vec::new(), options };
     let m = build(&mut cx, raw);
     if cx.errors.is_empty() { Ok(m) } else { Err(cx.errors) }
+}
+
+/// The most unknown fields one check reports.
+const MAX_UNKNOWN_FIELDS: usize = 50;
+
+/// Every unknown field, not only the first one the parser stops at: each is blanked out (its line, or a whole unknown
+/// table) and the text parsed again. When the rest then parses, its own problems follow. Blanking keeps every byte
+/// offset, so each span points into the author's text.
+fn unknown_fields(text: &str, first: toml::de::Error, options: Options) -> Vec<Diagnostic> {
+    let mut out = Vec::new();
+    let mut bytes = text.as_bytes().to_vec();
+    let mut err = first;
+    while let Some(span) = err.span().filter(|_| err.message().contains("unknown field") && out.len() < MAX_UNKNOWN_FIELDS) {
+        out.push(Diagnostic::new(C::Syntax, err.message().trim().to_string()).at(Some(span.clone())).fix("check the spelling against the manifest reference"));
+        if !blank_entry(&mut bytes, span.start) {
+            break;
+        }
+        // Only ASCII spaces replaced whole lines, so the text is still UTF-8.
+        let Ok(blanked) = std::str::from_utf8(&bytes) else { break };
+        match toml::from_str::<RawManifest>(blanked) {
+            Ok(raw) => {
+                let mut cx = Ctx { errors: Vec::new(), options };
+                build(&mut cx, raw);
+                out.sort_by_key(|d| d.span.as_ref().map(|s| s.start));
+                out.extend(cx.errors);
+                return out;
+            }
+            Err(e) => err = e,
+        }
+    }
+    // In the order of the file, as the author reads it.
+    out.sort_by_key(|d| d.span.as_ref().map(|s| s.start));
+    out
+}
+
+/// Replace with spaces the line holding byte `at`, or for a table header (`[x]`, `[[x]]`) the table up to the next
+/// header. False when there was nothing left to blank.
+fn blank_entry(bytes: &mut [u8], at: usize) -> bool {
+    let at = at.min(bytes.len());
+    let line_start = |i: usize| bytes[..i].iter().rposition(|b| *b == b'\n').map_or(0, |p| p + 1);
+    let line_end = |i: usize| bytes[i..].iter().position(|b| *b == b'\n').map_or(bytes.len(), |p| i + p);
+    let start = line_start(at);
+    let mut end = line_end(at);
+    let is_header = |line: &[u8]| line.iter().find(|b| !b.is_ascii_whitespace()) == Some(&b'[');
+    if is_header(&bytes[start..end]) {
+        while end < bytes.len() {
+            let next = end + 1;
+            let next_end = line_end(next);
+            if is_header(&bytes[next..next_end]) {
+                break;
+            }
+            end = next_end;
+        }
+    }
+    let mut changed = false;
+    for b in &mut bytes[start..end] {
+        if *b != b'\n' && *b != b' ' {
+            *b = b' ';
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// The modifiers a key binding may use (`secondary` is cmd on macOS and ctrl elsewhere).
+pub const KEY_MODIFIERS: &[&str] = &["cmd", "ctrl", "alt", "shift", "fn", "super", "win", "secondary"];
+
+/// Key names besides single characters (`a`, `1`, `/`) and `f1`…`f35`.
+pub const KEY_NAMES: &[&str] =
+    &["enter", "escape", "tab", "space", "backspace", "delete", "insert", "home", "end", "pageup", "pagedown", "up", "down", "left", "right", "menu"];
+
+/// A key binding as Codeyard reads it: one to four keystrokes separated by spaces, each modifiers and one key joined
+/// by `-` (`cmd-shift-r`, `ctrl-k ctrl-r`, `ctrl--` for the minus key).
+pub fn check_key(key: &str) -> Result<(), String> {
+    if key.is_empty() || key.len() > 64 {
+        return Err("must be 1 to 64 characters".into());
+    }
+    let strokes: Vec<&str> = key.split(' ').collect();
+    if strokes.len() > 4 {
+        return Err("has more than 4 keystrokes".into());
+    }
+    for stroke in strokes {
+        // `ctrl--`: the key is `-` itself.
+        let (mods, key) = match stroke.strip_suffix("--") {
+            Some(m) => (m, "-"),
+            None if stroke == "-" => ("", "-"),
+            None => match stroke.rsplit_once('-') {
+                Some((m, k)) => (m, k),
+                None => ("", stroke),
+            },
+        };
+        if stroke.is_empty() || key.is_empty() {
+            return Err("has an empty keystroke; separate keystrokes with one space".into());
+        }
+        for m in mods.split('-').filter(|_| !mods.is_empty()) {
+            if !KEY_MODIFIERS.contains(&m.to_ascii_lowercase().as_str()) {
+                return Err(format!("uses '{m}', which is not a modifier ({})", KEY_MODIFIERS.join(", ")));
+            }
+        }
+        let lower = key.to_ascii_lowercase();
+        let function_key = lower.strip_prefix('f').and_then(|n| n.parse::<u8>().ok()).is_some_and(|n| (1..=35).contains(&n));
+        let single = key.chars().count() == 1 && key.chars().all(|c| c.is_ascii_graphic());
+        if !(single || function_key || KEY_NAMES.contains(&lower.as_str())) {
+            return Err(format!("uses '{key}', which is not a key: use one character, f1 to f35, or one of {}", KEY_NAMES.join(", ")));
+        }
+    }
+    Ok(())
 }
 
 fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
@@ -216,11 +327,26 @@ fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
     }
 
     let contributions = contributions(cx, &raw, &id, &permissions);
+    if let Some(key) = raw.permissions.as_ref().and_then(|p| p.get_ref().net_from_setting.as_ref()) {
+        let found = contributions.settings.iter().find(|s| &s.key == key.get_ref());
+        if !found.is_some_and(|s| s.kind == SettingKind::String) {
+            let what = if found.is_some() { "is not a string setting" } else { "is not one of the extension's settings" };
+            cx.err(C::BadPermission, key.span(), format!("permissions.net-from-setting '{}' {what}", key.get_ref())).fix =
+                Some(format!("declare it: [settings.{}] type = \"string\", description = \"The server's host name\"", key.get_ref()));
+        }
+    }
+    let oauth = oauth(cx, &raw.oauth, raw.permissions.as_ref().map(|p| p.get_ref()), &permissions);
 
     let mut activation: Vec<Activation> = Vec::new();
     if code.is_some() {
         activation.extend(contributions.commands.iter().map(|c| Activation::Command(c.id.clone())));
         activation.extend(contributions.views.iter().map(|v| Activation::View(v.id.clone())));
+        activation.extend(contributions.provider_languages().into_iter().map(Activation::Language));
+        if !contributions.tasks.is_empty() {
+            activation.push(Activation::Tasks);
+        }
+        activation.extend(contributions.scm.iter().map(|s| Activation::Scm(s.id.clone())));
+        activation.extend(contributions.pull_requests.iter().map(|p| Activation::PullRequests(p.id.clone())));
     }
     if let (Some(a), None) = (&raw.activation, &raw.code)
         && let Some(first) = a.workspace_contains.first()
@@ -229,7 +355,7 @@ fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
             Some("remove [activation]: themes, snippets, languages and other no-code contributions are always on".into());
     }
     for g in raw.activation.iter().flat_map(|a| &a.workspace_contains) {
-        if let Err(e) = check_workspace_glob(g.get_ref()) {
+        if let Err(e) = crate::glob::check(g.get_ref()) {
             cx.err(C::BadPath, g.span(), format!("activation.workspace-contains '{}' {e}", g.get_ref()));
         }
         activation.push(Activation::WorkspaceContains(g.get_ref().clone()));
@@ -238,12 +364,12 @@ fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
         && activation.is_empty()
     {
         cx.err(C::NeverActivates, c.span(), "this extension has code but nothing ever starts it").fix =
-            Some("add a [[commands]] or [[views]] entry, or [activation] workspace-contains = [\"some-file\"]".into());
+            Some("add a [[commands]], [[views]], [[formatters]] or [[tasks]] entry, or [activation] workspace-contains = [\"some-file\"]".into());
     }
     if code.is_none() && contributions.needs_code() {
         let span = raw.commands.first().map(|c| c.span()).or_else(|| raw.views.first().map(|v| v.span()));
         cx.errors.push(
-            Diagnostic::new(C::NeedsCode, "commands and views need extension code, but there is no [code] table")
+            Diagnostic::new(C::NeedsCode, "commands, views, status items and providers need extension code, but there is no [code] table")
                 .at(span)
                 .fix("add [code] entry = \"src/main.ts\" (or \"Cargo.toml\"), or run `cyx new command` to start from a template"),
         );
@@ -264,32 +390,118 @@ fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
         dependencies,
         untrusted: raw.untrusted.unwrap_or(true),
         contributions,
+        oauth,
     }
 }
 
-fn check_workspace_glob(g: &str) -> Result<(), String> {
-    if g.is_empty() || g.len() > limits::ITEM_LEN {
-        return Err(format!("must be 1 to {} characters", limits::ITEM_LEN));
+/// An `https://` URL with a host name (the rules of `net`), no user info and no fragment. Returns the host.
+pub fn check_https_url(u: &str) -> Result<String, String> {
+    let Some(rest) = u.strip_prefix("https://") else { return Err("must start with https://".into()) };
+    if u.len() > limits::ITEM_LEN {
+        return Err(format!("is longer than {} characters", limits::ITEM_LEN));
     }
-    if g.starts_with('/') || g.starts_with('~') || g.contains('\\') || g.contains(':') {
-        return Err("must be relative to the workspace and '/'-separated".into());
+    if u.contains('#') || u.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("must not contain spaces, control characters or a #fragment".into());
     }
-    if g.contains(['{', '}']) {
-        return Err("must not use {a,b} alternatives; list each glob separately".into());
+    let authority = rest.split(['/', '?']).next().unwrap_or_default();
+    if authority.contains('@') {
+        return Err("must not contain a user name or password".into());
     }
-    if g.chars().any(is_deceptive) {
-        return Err("contains an invisible or control character".into());
+    let (host, port) = match authority.split_once(':') {
+        Some((h, p)) => (h, Some(p)),
+        None => (authority, None),
+    };
+    if let Some(port) = port
+        && port.parse::<u16>().is_err()
+    {
+        return Err(format!("has an invalid port '{port}'"));
     }
-    let body = g.strip_prefix("./").unwrap_or(g);
-    if body.split('/').any(|p| p.is_empty() || p == "." || p == "..") {
-        return Err("must not contain '.', '..' or empty parts".into());
+    if host.starts_with("*.") {
+        return Err("must name one host, without *".into());
     }
-    Ok(())
+    check_host(host).map_err(|e| format!("host '{host}' {e}"))?;
+    Ok(host.to_string())
+}
+
+/// `[[oauth]]` tables: each well formed and named in `[permissions] auth`; every `auth` entry is either built in or
+/// declared here.
+fn oauth(cx: &mut Ctx, raw: &[S<RawOAuth>], perms_raw: Option<&RawPermissions>, perms: &Permissions) -> Vec<OAuthProvider> {
+    cx.count("oauth providers", raw);
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for r in raw {
+        let span = r.span();
+        let r = r.get_ref();
+        let id = r.id.get_ref().clone();
+        if let Err(e) = check_id_part(&id) {
+            cx.err(C::BadContribution, r.id.span(), format!("oauth id '{id}' {e}"));
+        } else if BUILTIN_PROVIDERS.contains(&id.as_str()) {
+            cx.err(C::BadContribution, r.id.span(), format!("oauth id '{id}' is built into Codeyard")).fix =
+                Some(format!("remove this [[oauth]] table; auth = [\"{id}\"] is enough"));
+        } else if !seen.insert(id.clone()) {
+            cx.err(C::DuplicateId, r.id.span(), format!("oauth id '{id}' is used twice"));
+        } else if !perms.auth.contains(&id) {
+            cx.err(C::NotDeclared, span.clone(), format!("oauth provider '{id}' is not in [permissions] auth")).fix =
+                Some(format!("add to [permissions]:  auth = [\"{id}\"]"));
+        }
+        let name = cx.text("oauth name", &r.name, limits::NAME_LEN);
+        let mut url = |what: &str, v: &S<String>| {
+            if let Err(e) = check_https_url(v.get_ref()) {
+                cx.err(C::BadContribution, v.span(), format!("oauth {what} '{}' {e}", v.get_ref()));
+            }
+            v.get_ref().clone()
+        };
+        let authorize_url = url("authorize-url", &r.authorize_url);
+        let token_url = url("token-url", &r.token_url);
+        let account_url = r.account_url.as_ref().map(|a| url("account-url", a));
+        let client_id = cx.text("oauth client-id", &r.client_id, limits::ITEM_LEN);
+        if client_id.chars().any(|c| c.is_whitespace() || matches!(c, '&' | '#' | '"')) {
+            cx.err(C::BadContribution, r.client_id.span(), "oauth client-id must not contain spaces, &, # or quotes");
+        }
+        let scopes = list(cx, "oauth scopes", &r.scopes, |s| {
+            let ok = !s.is_empty() && s.len() <= limits::ITEM_LEN && s.chars().all(|c| c.is_ascii_graphic() && c != '"' && c != '\\');
+            if ok { Ok(()) } else { Err("must be one scope: printable characters without spaces or quotes".into()) }
+        });
+        if r.hosts.is_empty() {
+            cx.err(C::BadContribution, span.clone(), format!("oauth provider '{id}' lists no hosts")).fix =
+                Some("add  hosts = [\"api.example.com\"]: the hosts whose requests Codeyard signs".into());
+        }
+        let hosts = list(cx, "oauth hosts", &r.hosts, check_host);
+        let instances = r.instances.as_ref().is_some_and(|i| *i.get_ref());
+        if instances {
+            // An instance swaps one host for another in every URL: they must all be on it, and it must be signed.
+            let on: Vec<Option<String>> =
+                [Some(&authorize_url), Some(&token_url), account_url.as_ref()].into_iter().flatten().map(|u| check_https_url(u).ok()).collect();
+            let home = on.first().cloned().flatten();
+            let same = home.is_some() && on.iter().all(|h| *h == home);
+            if !same || !home.as_ref().is_some_and(|h| hosts.contains(h)) {
+                let span = r.instances.as_ref().map_or(span.clone(), |i| i.span());
+                cx.err(C::BadContribution, span, format!("oauth provider '{id}' has instances = true, so its URLs must all be on one host that hosts lists"))
+                    .fix = Some("put authorize-url, token-url and account-url on the same host, and list that host in hosts".into());
+            }
+        }
+        out.push(OAuthProvider { id, name, authorize_url, token_url, client_id, scopes, hosts, account_url, instances });
+    }
+    if let Some(p) = perms_raw {
+        for a in &p.auth {
+            let a_id = a.get_ref();
+            if check_id_part(a_id).is_ok() && !BUILTIN_PROVIDERS.contains(&a_id.as_str()) && !raw.iter().any(|r| r.get_ref().id.get_ref() == a_id) {
+                cx.err(C::NotDeclared, a.span(), format!("permissions.auth '{a_id}' is not a built-in provider and has no [[oauth]] table")).fix =
+                    Some(format!("use auth = [\"github\"], or add [[oauth]] with id = \"{a_id}\", its authorize-url, token-url, client-id and hosts"));
+            }
+        }
+    }
+    out
+}
+
+/// A glob as `watch.files` takes it: the same rules as a `read` glob (`crate::glob::check`).
+pub fn check_watch_glob(g: &str) -> Result<(), String> {
+    crate::glob::check(g).map_err(|e| format!("the glob '{g}' {e}"))
 }
 
 /// `core:` followed by a command id as the command palette lists it: ASCII letters, digits and `-`, in dot-separated
 /// parts (`core:workbench.openSettings`).
-fn check_core_command(c: &str) -> Result<(), String> {
+pub(crate) fn check_core_command(c: &str) -> Result<(), String> {
     let ok = c.strip_prefix("core:").is_some_and(|id| {
         !id.is_empty()
             && id.len() <= limits::ID_LEN
@@ -306,7 +518,7 @@ fn check_host(h: &str) -> Result<(), String> {
     if h.contains("://") || h.contains('/') || h.contains(':') {
         return Err("must be a host name only, without scheme, port or path".into());
     }
-    if name.parse::<std::net::Ipv4Addr>().is_ok() || name.split('.').next_back().is_some_and(|l| l.bytes().all(|b| b.is_ascii_digit())) {
+    if crate::is_ip_address(name) {
         return Err("must be a name, not an IP address".into());
     }
     if name.len() > 253 || !name.contains('.') {
@@ -357,8 +569,8 @@ fn list(cx: &mut Ctx, what: &str, items: &[S<String>], check: impl Fn(&str) -> R
 }
 
 fn permissions(cx: &mut Ctx, p: &RawPermissions) -> Permissions {
-    let read = list(cx, "read", &p.read, check_workspace_glob);
-    let write = list(cx, "write", &p.write, check_workspace_glob);
+    let read = list(cx, "read", &p.read, crate::glob::check);
+    let write = list(cx, "write", &p.write, crate::glob::check);
     let net = list(cx, "net", &p.net, check_host);
     let auth = list(cx, "auth", &p.auth, check_id_part);
     let run = list(cx, "run", &p.run, check_program);
@@ -380,7 +592,8 @@ fn permissions(cx: &mut Ctx, p: &RawPermissions) -> Permissions {
         }
         s
     });
-    let perms = Permissions { read, write, net, auth, secrets: p.secrets, run, clipboard, terminal: p.terminal, commands, why };
+    let net_from_setting = p.net_from_setting.as_ref().map(|k| k.get_ref().clone());
+    let perms = Permissions { read, write, net, net_from_setting, auth, secrets: p.secrets, run, clipboard, terminal: p.terminal, commands, why };
     let r = risk::risk(&perms);
     if r.needs_why() && perms.why.is_none() && cx.options.require_why {
         let reason = if r.runs_code {
@@ -476,8 +689,9 @@ fn contributions(cx: &mut Ctx, raw: &RawManifest, id: &ExtId, perms: &Permission
     for k in &raw.keybindings {
         let k = k.get_ref();
         let key = k.key.get_ref().trim().to_string();
-        if key.is_empty() || key.len() > 64 || key.split(' ').any(|stroke| stroke.is_empty() || stroke.split('-').any(str::is_empty)) {
-            cx.err(C::BadContribution, k.key.span(), format!("key '{key}' must look like \"cmd-shift-r\" or \"ctrl-k ctrl-r\""));
+        if let Err(why) = check_key(&key) {
+            cx.err(C::BadContribution, k.key.span(), format!("key '{key}' {why}")).fix =
+                Some("write modifiers and a key joined by -, like \"cmd-shift-r\" or \"ctrl-k ctrl-r\"; reference/contributions.md lists the key names".into());
         }
         let cmd = k.command.get_ref();
         // A binding only acts when the user presses the key, so binding a core command needs no permission. What it may
@@ -562,7 +776,7 @@ fn contributions(cx: &mut Ctx, raw: &RawManifest, id: &ExtId, perms: &Permission
                     .file_match
                     .iter()
                     .map(|g| {
-                        if let Err(e) = check_workspace_glob(g.get_ref()) {
+                        if let Err(e) = crate::glob::check(g.get_ref()) {
                             cx.err(C::BadPath, g.span(), format!("{what} file-match '{}' {e}", g.get_ref()));
                         }
                         g.get_ref().clone()
@@ -642,5 +856,215 @@ fn contributions(cx: &mut Ctx, raw: &RawManifest, id: &ExtId, perms: &Permission
         }
         out.language_servers.push(LanguageServer { command, args: s.args.clone(), languages: s.languages.iter().map(|l| l.get_ref().clone()).collect() });
     }
+    code_contributions(cx, raw, id, &command_ids, &view_ids, &deps, &mut out);
+    pulls::contribute(cx, raw, id, perms, &mut out);
     out
+}
+
+/// The command of a menu or status item: one of the extension's own commands (local id) or a dependency's (full id).
+fn own_or_dependency(cx: &mut Ctx, what: &str, v: &S<String>, id: &ExtId, commands: &HashSet<String>, deps: &HashSet<&str>) -> String {
+    let cmd = v.get_ref();
+    if commands.contains(cmd) {
+        id.qualify(cmd)
+    } else if cmd.rsplit_once('.').is_some_and(|(owner, _)| deps.contains(owner)) {
+        cmd.clone()
+    } else {
+        cx.err(C::BadContribution, v.span(), format!("{what} command '{cmd}' is not one of your [[commands]] or a dependency's command"));
+        cmd.clone()
+    }
+}
+
+/// A menu's `core:` command: one extensions may run (crate::core_commands) that needs no argument.
+fn menu_core_command(cx: &mut Ctx, v: &S<String>) -> String {
+    let cmd = v.get_ref();
+    match crate::core_commands::core_command(cmd) {
+        Some(c) if c.argument.optional() => {}
+        Some(_) => {
+            cx.err(C::BadContribution, v.span(), format!("menu command '{cmd}' needs an argument, which a menu cannot pass"));
+        }
+        None => {
+            cx.err(C::BadContribution, v.span(), format!("menu command '{cmd}' is not a core command extensions may run")).fix =
+                Some("pick one from docs/extensions/reference/core-commands.md".into());
+        }
+    }
+    cmd.clone()
+}
+
+/// Language ids of a provider: at least one, each like a language id (`rust`, `typescriptreact`, `my-lang`).
+fn languages(cx: &mut Ctx, what: &str, items: &[S<String>], span: Range<usize>) -> Vec<String> {
+    if items.is_empty() {
+        cx.err(C::BadContribution, span, format!("{what} needs at least one language")).fix = Some("add languages = [\"rust\"]".into());
+    }
+    let mut out: Vec<String> = Vec::new();
+    for l in items {
+        if let Err(e) = check_id_part(l.get_ref()) {
+            cx.err(C::BadContribution, l.span(), format!("{what} language '{}' {e}", l.get_ref()));
+        } else if !out.contains(l.get_ref()) {
+            out.push(l.get_ref().clone());
+        }
+    }
+    out
+}
+
+/// `[[completion]] trigger-characters`: single punctuation characters, each once. Letters, digits and spaces are
+/// refused: a word already asks, and a space would ask on every word.
+fn trigger_characters(cx: &mut Ctx, items: &[S<String>]) -> Vec<char> {
+    const MAX: usize = 16;
+    if let Some(first) = items.get(MAX) {
+        cx.err(C::BadContribution, first.span(), format!("more than {MAX} completion trigger-characters"));
+    }
+    let mut out: Vec<char> = Vec::new();
+    for t in items.iter().take(MAX) {
+        let mut chars = t.get_ref().chars();
+        match (chars.next(), chars.next()) {
+            (Some(c), None) if !c.is_alphanumeric() && c != '_' && !c.is_whitespace() && !is_deceptive(c) => {
+                if !out.contains(&c) {
+                    out.push(c);
+                }
+            }
+            _ => {
+                cx.err(
+                    C::BadContribution,
+                    t.span(),
+                    format!("completion trigger character '{}' must be one punctuation character", t.get_ref().escape_debug()),
+                )
+                .fix = Some("use characters such as \".\" or \":\"".into());
+            }
+        }
+    }
+    out
+}
+
+/// Menus, status items, providers and tasks: contributions that run the extension's code (§5.1).
+fn code_contributions(
+    cx: &mut Ctx,
+    raw: &RawManifest,
+    id: &ExtId,
+    commands: &HashSet<String>,
+    views: &HashSet<String>,
+    deps: &HashSet<&str>,
+    out: &mut Contributions,
+) {
+    cx.count("menus", &raw.menus);
+    for m in &raw.menus {
+        let m = m.get_ref();
+        let command = if m.command.get_ref().starts_with("core:") {
+            menu_core_command(cx, &m.command)
+        } else {
+            own_or_dependency(cx, "menu", &m.command, id, commands, deps)
+        };
+        let location = match m.location.get_ref().as_str() {
+            "editor-context" => MenuLocation::EditorContext,
+            "file-tree" => MenuLocation::FileTree,
+            "view-title" => MenuLocation::ViewTitle,
+            other => {
+                cx.err(C::BadContribution, m.location.span(), format!("menu location '{other}' must be \"editor-context\", \"file-tree\" or \"view-title\""));
+                MenuLocation::EditorContext
+            }
+        };
+        let view = match (&m.view, location) {
+            (Some(v), MenuLocation::ViewTitle) => {
+                if !views.contains(v.get_ref()) {
+                    cx.err(C::BadContribution, v.span(), format!("menu view '{}' is not one of your [[views]]", v.get_ref()));
+                }
+                Some(id.qualify(v.get_ref()))
+            }
+            (None, MenuLocation::ViewTitle) => {
+                cx.err(C::BadContribution, m.location.span(), "a view-title menu needs view = \"<one of your views>\"");
+                None
+            }
+            (Some(v), _) => {
+                cx.err(C::BadContribution, v.span(), "only a view-title menu names a view");
+                None
+            }
+            (None, _) => None,
+        };
+        let when = cx.when("menu when", &m.when);
+        out.menus.push(Menu { command, location, view, when });
+    }
+
+    cx.count("status-bar", &raw.status_bar);
+    let mut item_ids = HashSet::new();
+    for s in &raw.status_bar {
+        let s = s.get_ref();
+        let local = local_id(cx, "status-bar", &s.id, &mut item_ids);
+        let command = s.command.as_ref().map(|c| own_or_dependency(cx, "status-bar", c, id, commands, deps));
+        out.status_items.push(StatusItem { id: id.qualify(&local), command });
+    }
+
+    for (what, items, formatters) in [("formatters", &raw.formatters, true), ("code-actions", &raw.code_actions, false)] {
+        cx.count(what, items);
+        for p in items {
+            let p = Provider { id: String::new(), languages: languages(cx, what, &p.get_ref().languages, p.span()) };
+            if formatters { out.formatters.push(p) } else { out.code_actions.push(p) }
+        }
+    }
+    for (what, items, lenses) in [("code-lens", &raw.code_lens, true), ("inlay-hints", &raw.inlay_hints, false)] {
+        cx.count(what, items);
+        for p in items {
+            let p = Provider { id: String::new(), languages: languages(cx, what, &p.get_ref().languages, p.span()) };
+            if lenses { out.code_lenses.push(p) } else { out.inlay_hints.push(p) }
+        }
+    }
+    for (what, items, diagnostics) in [("diagnostics", &raw.diagnostics, true), ("decorations", &raw.decorations, false)] {
+        cx.count(what, items);
+        let mut seen = HashSet::new();
+        for p in items {
+            let p = p.get_ref();
+            let local = local_id(cx, what, &p.id, &mut seen);
+            let p = Provider { id: id.qualify(&local), languages: languages(cx, what, &p.languages, p.id.span()) };
+            if diagnostics { out.diagnostics.push(p) } else { out.decorations.push(p) }
+        }
+    }
+
+    cx.count("hover", &raw.hover);
+    for p in &raw.hover {
+        out.hover.push(Provider { id: String::new(), languages: languages(cx, "hover", &p.get_ref().languages, p.span()) });
+    }
+    cx.count("completion", &raw.completion);
+    for p in &raw.completion {
+        let languages = languages(cx, "completion", &p.get_ref().languages, p.span());
+        let trigger_characters = trigger_characters(cx, &p.get_ref().trigger_characters);
+        out.completion.push(CompletionProvider { languages, trigger_characters });
+    }
+
+    cx.count("tasks", &raw.tasks);
+    let mut task_ids = HashSet::new();
+    for t in &raw.tasks {
+        let local = local_id(cx, "tasks", &t.get_ref().id, &mut task_ids);
+        out.tasks.push(id.qualify(&local));
+    }
+
+    cx.count("scm", &raw.scm);
+    let mut scm_ids = HashSet::new();
+    for s in &raw.scm {
+        let s = s.get_ref();
+        let local = local_id(cx, "scm", &s.id, &mut scm_ids);
+        let label = cx.text("scm label", &s.label, limits::NAME_LEN);
+        if s.markers.is_empty() {
+            cx.err(C::BadContribution, s.id.span(), "scm needs at least one marker").fix =
+                Some("add markers = [\".hg\"]: a file or folder at the top of the folders it claims".into());
+        }
+        if let Some(extra) = s.markers.get(limits::SCM_MARKERS) {
+            cx.err(C::BadContribution, extra.span(), format!("scm has more than {} markers", limits::SCM_MARKERS));
+        }
+        let mut markers: Vec<String> = Vec::new();
+        for m in &s.markers {
+            if let Err(e) = check_marker(m.get_ref()) {
+                cx.err(C::BadPath, m.span(), format!("scm marker '{}' {e}", m.get_ref()));
+            } else if !markers.contains(m.get_ref()) {
+                markers.push(m.get_ref().clone());
+            }
+        }
+        out.scm.push(ScmProvider { id: id.qualify(&local), label, markers });
+    }
+}
+
+/// An `[[scm]]` marker: a path relative to the folder, without wildcards (`.hg`, `.jj/repo`).
+fn check_marker(m: &str) -> Result<(), String> {
+    crate::glob::check(m)?;
+    if m.contains(['*', '?', '[', ']']) {
+        return Err("must be a plain name, without wildcards".into());
+    }
+    Ok(())
 }

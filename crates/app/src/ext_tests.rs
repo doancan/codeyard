@@ -223,8 +223,7 @@ fn language_servers_and_schemas_join_the_users_settings() {
         ],
     );
     crate::ext::reload(Some(&cfg));
-    let (servers, warnings) = crate::ext::server_entries();
-    assert!(warnings.is_empty(), "{warnings:?}");
+    let servers = crate::ext::server_entries(Some(&cfg), &[]);
     let keys: Vec<&str> = servers.iter().map(|(k, _)| k.as_str()).collect();
     assert_eq!(keys, ["toml", "typescript"], "a language id maps to its server key");
     // The user's own entry for the same key comes later and wins.
@@ -338,16 +337,45 @@ fn install_file_checks_like_the_view() {
     let store = crate::ext::store(&cfg);
     let good = cfg.join("good.cyx");
     std::fs::write(&good, pkg(manifest("you.night", "[[themes]]\nlabel = \"Night\"\npath = \"t.json\"\n"), vec![("t.json", THEME)])).unwrap();
-    let m = crate::ext::install_file(&store, &good).unwrap();
+    let m = crate::ext::install_file(&store, &good, false).unwrap();
     assert_eq!(m.id.as_str(), "you.night");
     assert!(store.locked().unwrap().contains_key(&m.id));
     let code = cfg.join("code.cyx");
-    std::fs::write(&code, pkg(manifest("you.code", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n"), vec![("main.ts", "")]))
-        .unwrap();
-    assert!(crate::ext::install_file(&store, &code).unwrap_err().contains("contains code"));
+    let mut code_pkg = vec![
+        ext_pkg::Entry {
+            path: "codeyard-extension.toml".into(),
+            data: manifest("you.code", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n").into_bytes(),
+            executable: false,
+        },
+        ext_pkg::Entry { path: "main.ts".into(), data: vec![], executable: false },
+    ];
+    code_pkg.push(ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: ext_pkg::testing::COMPONENT.to_vec(), executable: false });
+    std::fs::write(&code, ext_pkg::write(code_pkg).unwrap().0).unwrap();
+    // Code without permissions installs (it runs in codeyard-exthost); with permissions it needs the consent sheet.
+    if crate::ext_runtime::code_runs_here(&"tests").is_ok() {
+        assert_eq!(crate::ext::install_file(&store, &code, false).unwrap().id.as_str(), "you.code");
+    }
+    let asks = cfg.join("asks.cyx");
+    let manifest_text =
+        manifest("you.asks", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n[permissions]\nnet = [\"api.example.com\"]\n");
+    let asks_pkg = vec![
+        ext_pkg::Entry { path: "codeyard-extension.toml".into(), data: manifest_text.into_bytes(), executable: false },
+        ext_pkg::Entry { path: "main.ts".into(), data: vec![], executable: false },
+        ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: ext_pkg::testing::COMPONENT.to_vec(), executable: false },
+    ];
+    std::fs::write(&asks, ext_pkg::write(asks_pkg).unwrap().0).unwrap();
+    // #2 of the outside-author trials: what it asks for is printed, and only --accept-permissions installs it.
+    let e = crate::ext::install_file(&store, &asks, false).unwrap_err();
+    assert!(e.starts_with("you.asks 1.0.0 (Installed from the file "), "{e}");
+    assert!(e.contains("asks to:\n  - Connect to api.example.com (any port)\n"), "{e}");
+    assert!(e.contains("--accept-permissions"), "{e}");
+    assert!(!store.locked().unwrap().keys().any(|id| id.as_str() == "you.asks"), "nothing installed");
+    if crate::ext_runtime::code_runs_here(&"tests").is_ok() {
+        assert_eq!(crate::ext::install_file(&store, &asks, true).unwrap().id.as_str(), "you.asks");
+    }
     let junk = cfg.join("junk.cyx");
     std::fs::write(&junk, b"not a package").unwrap();
-    assert!(crate::ext::install_file(&store, &junk).unwrap_err().contains("no gzip header"));
+    assert!(crate::ext::install_file(&store, &junk, false).unwrap_err().contains("no gzip header"));
 }
 
 /// Local and SSH are the same (#35, exit criterion 5): over SSH a file in an extension's language gets that language, and
@@ -374,6 +402,7 @@ fn extension_language_and_server_work_over_ssh(cx: &mut TestAppContext) {
     let root = cfg.join("project");
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("a.foo"), "# hello\n").unwrap();
+    std::fs::write(cfg.join("settings.jsonc"), r#"{ "lsp.enabled": true }"#).unwrap();
     let (wb, cx) = setup(cx, &cfg);
     assert!(cx.update(|_, cx| cx.global::<crate::settings::Settings>().lsp_servers.iter().any(|(k, _)| k == "foo")), "the server joins lsp.servers");
     wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
@@ -393,4 +422,24 @@ fn extension_language_and_server_work_over_ssh(cx: &mut TestAppContext) {
     assert_eq!(open["params"]["textDocument"]["languageId"], "foo");
     assert!(open["params"]["textDocument"]["uri"].as_str().unwrap_or_default().ends_with("/a.foo"), "{open}");
     crate::ext::set_for_test(Vec::new());
+}
+
+/// `--install-extension FOLDER`: the folder is packaged as it is, without building, with the same checks as a file. The
+/// performance scenarios' decoration provider (scripts/perf/run.sh) installs this way: code with no permissions.
+#[test]
+fn a_built_folder_installs_like_a_package() {
+    let cfg = config_dir("folder");
+    let dir = cfg.join("src-decorations");
+    std::fs::create_dir_all(&dir).unwrap();
+    let code = "[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"decorate\"\ntitle = \"Decorate\"\n[[decorations]]\nid = \"lines\"\nlanguages = [\"rust\"]\n[[tasks]]\nid = \"noop\"\n";
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), manifest("perf.decorations", code)).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "").unwrap();
+    std::fs::write(dir.join(ext_pkg::COMPONENT), include_bytes!("../../ext-host/testdata/decorator.wasm")).unwrap();
+    let store = crate::ext::store(&cfg);
+    let m = crate::ext::install_file(&store, &dir, false).expect("installs");
+    assert_eq!(m.id.to_string(), "perf.decorations");
+    // Code that asks for a permission prints its sheet and needs --accept-permissions, from a folder as from a file.
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), manifest("perf.decorations", &format!("[permissions]\nread = [\"a.txt\"]\n{code}"))).unwrap();
+    let e = crate::ext::install_file(&store, &dir, false).unwrap_err();
+    assert!(e.contains("asks to:\n  - Read a.txt") && e.contains("--accept-permissions"), "{e}");
 }

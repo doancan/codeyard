@@ -22,7 +22,7 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
         "`50000`",
         "Entries per side *Compare: Folders…* reads before it stops and reports that the result is partial.",
     ),
-    ("workbench.startupEditor", "string", "`welcome`", "VS Code compatible alias of `window.startup`."),
+    ("workbench.startupEditor", "string", "`welcome`", "Alias of `window.startup`, kept for settings imported from another editor."),
     (
         "editor.codeActionsOnSave",
         "object",
@@ -30,6 +30,12 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
         "Code actions to run on save before formatting, e.g. `{ \"source.organizeImports\": \"explicit\" }`; each gives up after 2 s.",
     ),
     ("files.associations", "object of glob → language", "`{}`", "Force a language mode for matching files, e.g. `{ \"*.tpl\": \"html\" }`."),
+    (
+        "editor.formatters",
+        "object of language → formatter",
+        "`{}`",
+        "Who formats a language: `\"lsp\"` or the id of an extension that formats it, e.g. `{ \"toml\": \"you.taplo\" }`. Without an entry the language server formats, or else the only extension that formats the language.",
+    ),
     (
         "terminal.profiles.macos",
         "object of name → profile",
@@ -64,6 +70,15 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
         "Extension registries besides the public one, e.g. a company's own `yard`: a short `name`, its `https://` address, the hex public keys that sign its `root.json` and how many of them must (default: all). User settings only.",
     ),
     ("spelling.languages", "list of dictionary ids", "`[\"en\"]`", "Dictionaries used together; install more with *Spelling: Install Dictionary…*."),
+    ("rust.features", "list of feature names", "`[]`", "Cargo features Run and Debug build with, besides a target's required features."),
+    ("rust.noDefaultFeatures", "boolean", "`false`", "Build Run and Debug targets without the package's default features."),
+    ("rust.profile", "string", "Cargo's default (`dev`)", "Cargo profile Run and Debug build with, e.g. `release` or a custom `[profile.*]`."),
+    (
+        "rust.targetDir",
+        "path",
+        "Cargo's own",
+        "Output folder for Run and Debug builds (`--target-dir`); a relative path is resolved against the workspace folder on the machine that builds, also over SSH.",
+    ),
     ("workbench.colorCustomizations", "object", "`{}`", "Override single colour roles; an entry in `[Theme Name]` applies to that theme only."),
 ];
 
@@ -88,8 +103,9 @@ fn default_text(key: &str) -> String {
     if let Some((_, mac, other)) = PLATFORM_DEFAULTS.iter().find(|(k, ..)| *k == key) {
         return format!("`{mac}` on macOS, `{other}` on Windows and Linux");
     }
-    // Tests run with the trust check off and the language forced to `en`; the shipped defaults are on and `auto`.
-    let s = Settings { workspace_trust: true, ui_language: "auto".into(), ..Settings::default() };
+    // Tests run with the trust check and language servers off and the language forced to `en`; the shipped defaults are
+    // on and `auto`.
+    let s = Settings { workspace_trust: true, lsp_enabled: true, ui_language: "auto".into(), ..Settings::default() };
     match current(&s, key) {
         serde_json::Value::Null => "detected".into(),
         serde_json::Value::String(t) if t.is_empty() => "empty".into(),
@@ -149,7 +165,8 @@ mod tests {
             std::fs::write(&path, &want).unwrap();
             return;
         }
-        let have = std::fs::read_to_string(&path).unwrap_or_default();
+        // A Windows checkout may have turned the file's `\n` into `\r\n`.
+        let have = std::fs::read_to_string(&path).unwrap_or_default().replace("\r\n", "\n");
         assert!(have == want, "docs/settings.md is out of date: run `UPDATE_DOCS=1 cargo test -p app docs_reference`");
     }
 
@@ -166,9 +183,9 @@ mod tests {
     /// Every key the settings parser reads is documented, either in the catalog or in `FILE_ONLY`.
     #[test]
     fn docs_reference_covers_every_parsed_setting() {
-        let src = include_str!("settings.rs");
+        let src = concat!(include_str!("settings.rs"), include_str!("settings_terminal.rs"), include_str!("settings_rust.rs"));
         let mut parsed = std::collections::BTreeSet::new();
-        for m in ["bool", "choice", "number", "integer", "numbers", "strings", "string", "code_actions"] {
+        for m in ["bool", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale"] {
             let needle = format!("r.{m}(\"");
             let mut rest = src;
             while let Some(i) = rest.find(&needle) {
@@ -179,7 +196,7 @@ mod tests {
             }
         }
         // A new reader method (`r.something("key")`) that is not in the list above would hide its keys from this test: fail instead.
-        let known = ["bool", "choice", "number", "integer", "numbers", "strings", "string", "code_actions"];
+        let known = ["bool", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale"];
         let mut unknown_methods = std::collections::BTreeSet::new();
         for (at, _) in src.match_indices("r.") {
             if src[..at].chars().next_back().is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.') {
@@ -197,6 +214,7 @@ mod tests {
         );
         for k in [
             "files.associations",
+            "editor.formatters",
             "workbench.colorCustomizations",
             "lsp.servers",
             "extensions.registries",

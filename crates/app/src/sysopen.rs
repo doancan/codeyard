@@ -31,6 +31,11 @@ pub fn paths_from_urls(urls: &[String]) -> Vec<String> {
 /// Apply the request. File: becomes a tab of the open window (project stays). Folder: if open in another window, raise it;
 /// if the active window has no folder, open it there, else in a new window.
 pub fn open_urls(urls: Vec<String>, cx: &mut App) {
+    // `codeyard://ext/<id>/callback`: an extension's browser sign-in coming back.
+    let (callbacks, urls): (Vec<String>, Vec<String>) = urls.into_iter().partition(|u| u.starts_with("codeyard://"));
+    for u in &callbacks {
+        crate::workbench::deliver_extension_callback(u, cx);
+    }
     let windows = |cx: &App| -> Vec<WindowHandle<Workbench>> { cx.windows().into_iter().filter_map(|w| w.downcast::<Workbench>()).collect() };
     for path in paths_from_urls(&urls) {
         let abs = std::fs::canonicalize(&path).map_or(path.clone(), |p| crate::ui::local_path(&p));

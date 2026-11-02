@@ -80,10 +80,12 @@ local bare remote. The user's running editor and real repositories were not used
 
 ## Remaining product work
 
-The scoped implementation and integration are complete. The [development plan](product-quality-plan.md) retains the
-remaining product backlog with acceptance criteria: control/text-level accessibility geometry and silent panels,
-VoiceOver/Windows assistive-technology testing on hardware, interface scaling, Explorer multi-selection, large-repository
-Git performance, and unified Rust features/profiles/presets. Native Windows hardware, every Rust macro/test framework,
-frame timings and active-accessibility CPU cost are not certified by this macOS walkthrough.
+The scoped implementation and integration are complete. Delivered since this walkthrough, as of 2026-11-01: interface
+scaling (Q08; its native walkthrough is still pending), Explorer multi-selection and bulk operations (Q11),
+large-repository change lists (Q09), Rust features and profiles for Run and Debug (Q07) and the Rust setup preset
+(Q12); see the [development plan](product-quality-plan.md). The plan keeps what remains, with acceptance criteria:
+VoiceOver/Windows assistive-technology testing on hardware and Q08's native walkthrough. Native Windows hardware,
+every Rust macro/test framework, frame timings and active-accessibility CPU cost are not certified by this macOS
+walkthrough.
 
 New Turkish strings were drafted by the coding agent; no human native-speaker review is claimed.

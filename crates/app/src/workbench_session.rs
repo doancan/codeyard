@@ -95,6 +95,16 @@ impl Workbench {
                 group.active = Some(0);
             }
         }
+        // Search Editors of groups the restored layout does not have move to the focused group instead of closing.
+        // So do terminals in the editor area: their processes keep running.
+        let (mut orphans, mut terminals) = (Vec::new(), Vec::new());
+        for g in previous_groups.into_values() {
+            orphans.extend(g.searches);
+            terminals.extend(g.terminals);
+        }
+        let focused = groups.get_mut(&grid.focused()).expect("focused group exists");
+        focused.searches.extend(orphans);
+        focused.terminals.extend(terminals);
         let current = groups.remove(&grid.focused()).expect("focused group exists");
         self.tabs = state_glue::TabsState { current, groups, layout: grid, ..Default::default() };
         self.sync_slots(cx);
@@ -132,6 +142,11 @@ impl Workbench {
         if let Ok(json) = serde_json::to_string(&session) {
             let _ = s.save_tabs_with_layout(ws, &tabs, Some(&json));
         }
+        self.persist_moved_terminals(cx);
+        self.persist_editor_windows(cx);
+        self.persist_view_windows();
+        self.persist_search_editors(cx);
+        self.persist_terminals(cx);
     }
 
     pub(super) fn restore_group_views(&self, saved: SavedEditorSession, cx: &mut App) {
@@ -233,10 +248,21 @@ impl Workbench {
     /// Coalesce an explicit open with its saved document read, including any unsaved backup.
     /// Returns whether the open will be completed by the restore task.
     pub(super) fn restore_tabs_for_open(&mut self, ws: i64, request: Option<(String, bool)>, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        let (Some(s), Some(root)) = (&self.persist.state, self.root(cx)) else { return false };
+        let (Some(_), Some(root)) = (&self.persist.state, self.root(cx)) else { return false };
         if !cx.global::<Settings>().restore_session {
             return false;
         }
+        self.restore_search_editors(ws, window, cx);
+        self.restore_terminals(ws, window, cx);
+        // Read now (before anything saves the session again); opened after this window is drawn (a folder from the
+        // last session is opened while drawing).
+        let view_windows = self.saved_view_windows(ws);
+        cx.defer_in(window, move |this, window, cx| this.restore_view_windows(view_windows, window, cx));
+        // Terminals that were in the editor area or in windows of their own: new shells, once the groups exist.
+        let moved = self.saved_moved_terminals(ws);
+        // Files in windows of their own: loaded with the tabs, then shown in their windows again.
+        let windows = self.saved_editor_windows(ws);
+        let Some(s) = &self.persist.state else { return false };
         let mut tabs = s.tabs(ws).unwrap_or_default();
         let saved = s.tab_layout(ws).as_deref().and_then(SavedEditorSession::parse);
         let focus_left = s.get(&format!("focus_left:{ws}")).is_none_or(|v| v != "0");
@@ -248,10 +274,19 @@ impl Workbench {
                 tabs.push(state::Tab { rel_path: b.rel_path.clone(), active: false, pinned: false, group: 0 });
             }
         }
+        // Loaded only to go back into their windows (not saved as tabs): those tabs are taken away again.
+        let mut for_windows: Vec<String> = Vec::new();
+        for rel in windows.iter().flat_map(|w| w.only_here()) {
+            if !tabs.iter().any(|t| t.rel_path == rel) {
+                tabs.push(state::Tab { rel_path: rel.to_string(), active: false, pinned: false, group: 0 });
+                for_windows.push(rel.to_string());
+            }
+        }
         if tabs.is_empty() {
             if saved.is_some() && self.tabs.opening.is_none() {
                 self.restore_layout(&[], saved, focus_left, window, cx);
             }
+            self.restore_moved_terminals(moved, window, cx);
             return false;
         }
         // Don't load a file that's being opened from the command line (or is already open)
@@ -262,10 +297,16 @@ impl Workbench {
             self.tabs.opening.as_deref() == Some(path.as_str()) || self.all_editors().iter().any(|e| e.read(cx).path == path)
         };
         tabs.retain(|t| !busy(&t.rel_path));
+        // A file already open (or being opened, from the command line) keeps its tab; its window shows the same document.
+        for_windows.retain(|rel| tabs.iter().any(|t| t.rel_path == *rel));
         if tabs.is_empty() {
+            self.restore_moved_terminals(moved, window, cx);
+            self.restore_editor_windows(windows, &[], window, cx);
             return false;
         }
         let request = request.filter(|(path, _)| tabs.iter().any(|tab| ui::join(&root, &tab.rel_path) == *path));
+        // The file asked for (the command line, Quick Open) is wanted as a tab as well as in its window.
+        for_windows.retain(|rel| request.as_ref().is_none_or(|(path, _)| ui::join(&root, rel) != *path));
         let requested = request.is_some();
         // Layout: the tab order and active tabs of the two groups; the file is loaded once.
         let layout: Vec<(String, u8, bool)> = tabs.iter().map(|t| (ui::join(&root, &t.rel_path), t.group, t.active)).collect();
@@ -332,6 +373,8 @@ impl Workbench {
                     }
                 }
                 this.restore_layout(&layout, saved, focus_left, window, cx);
+                this.restore_moved_terminals(moved, window, cx);
+                this.restore_editor_windows(windows, &for_windows, window, cx);
                 if let Some((path, preview)) = request {
                     this.open_file_as(restore_host, path, preview, window, cx);
                 }
@@ -355,6 +398,8 @@ impl Workbench {
     /// Opens a folder from an earlier session (this computer, or an SSH host: it connects, which may ask for a password).
     pub fn reopen(&mut self, host: Option<String>, path: String, window: &mut Window, cx: &mut Context<Self>) {
         match host {
+            // A workspace file: its folders, order, names and settings come back from it.
+            None if crate::workspace_file::is_workspace_file(&path) && std::path::Path::new(&path).is_file() => self.open_path(&path, window, cx),
             None if std::path::Path::new(&path).is_dir() => self.set_root(path, cx),
             // Folder deleted or moved: stay on the welcome screen and say why.
             None => {

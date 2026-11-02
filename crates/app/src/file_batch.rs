@@ -64,6 +64,39 @@ impl Failure {
     }
 }
 
+/// The question a batch asks before it starts: its title, the first line of its detail, the label of the button that
+/// runs it, and whether it is destructive (a permanent delete, shown as a critical alert).
+pub struct Question {
+    pub title: String,
+    pub detail: String,
+    pub verb: String,
+    pub destructive: bool,
+}
+
+/// What a batch of `n` entries on `host` (its label) asks. An SSH host has no Trash, so a delete there names the host
+/// and says it is permanent.
+pub fn question(op: &Operation, n: usize, host: &str, remote: bool) -> Question {
+    use crate::i18n::{t, tf, tn};
+    let generic = || tn("Apply a file operation to {} entry?", "Apply a file operation to {} entries?", n, &[]);
+    let (title, detail, verb, destructive) = match op {
+        Operation::Copy(dir) | Operation::Move(dir) => (
+            generic(),
+            tf("Destination: {0} on {1}. Existing files are never overwritten.", &[dir, &host]),
+            if matches!(op, Operation::Copy(_)) { t("Copy") } else { t("Move") }.to_string(),
+            false,
+        ),
+        Operation::Delete { trash: true } => (generic(), t("You can restore it from the Trash.").to_string(), t("Move to Trash").to_string(), false),
+        Operation::Delete { trash: false } if remote => (
+            tn("Permanently delete {0} item on {1}?", "Permanently delete {0} items on {1}?", n, &[&host]),
+            tf("{} has no Trash: the items are deleted at once and can't be restored.", &[&host]),
+            t("Delete Permanently").to_string(),
+            true,
+        ),
+        Operation::Delete { trash: false } => (generic(), t("This can't be undone.").to_string(), t("Delete Permanently").to_string(), true),
+    };
+    Question { title, detail, verb, destructive }
+}
+
 /// Preserve visible order; select a parent only once even when its children are marked.
 /// Reject roots and traversal before handing any path to a destructive operation.
 pub fn top_level(paths: Vec<String>, roots: &[String]) -> Vec<String> {

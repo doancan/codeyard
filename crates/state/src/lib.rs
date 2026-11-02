@@ -289,10 +289,13 @@ impl State {
 
     /// Folder opened: move it to the front of the recents list.
     pub fn record_workspace(&self, host: Option<&str>, path: &str) -> Result<i64, Error> {
-        let now = now_ms();
         // IMMEDIATE: if two windows save at once the second waits up to `busy_timeout`; a deferred read later upgraded
         // to a write would fail instantly with SQLITE_BUSY in WAL.
         let tx = rusqlite::Transaction::new_unchecked(&self.db, rusqlite::TransactionBehavior::Immediate)?;
+        // Strictly after the last one: two records in the same millisecond (a workspace file right after its first
+        // folder) keep their order in the list.
+        let latest: Option<i64> = tx.query_row("select max(last_opened_at) from workspaces", [], |r| r.get(0))?;
+        let now = latest.map_or(now_ms(), |l| now_ms().max(l + 1));
         let host_id = host.map(|h| self.host_id(h, now)).transpose()?;
         let existing: Option<i64> = tx
             .query_row("select id from workspaces where coalesce(host_id, 0) = coalesce(?1, 0) and path = ?2", params![host_id, path], |r| r.get(0))
@@ -670,6 +673,18 @@ mod tests {
         assert_eq!(s.recent_workspaces(10).unwrap().len(), 1);
         assert_eq!(s.tabs(ws).unwrap().len(), 1);
         assert_eq!(s.backups(ws).unwrap().len(), 1, "the unsaved edit survived \"remove from recent\"");
+    }
+
+    #[test]
+    fn records_in_the_same_millisecond_keep_their_order() {
+        let s = State::in_memory().unwrap();
+        for _ in 0..3 {
+            s.record_workspace(None, "/w/api").unwrap();
+            s.record_workspace(None, "/w/mono.code-workspace").unwrap();
+            let r = s.recent_workspaces(10).unwrap();
+            assert_eq!(r.iter().map(|r| r.path.as_str()).collect::<Vec<_>>(), ["/w/mono.code-workspace", "/w/api"]);
+            assert!(r[0].last_opened_at > r[1].last_opened_at);
+        }
     }
 
     #[test]

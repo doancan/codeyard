@@ -24,8 +24,17 @@ pub(super) fn button(id: impl Into<gpui::ElementId>, label: &'static str, p: &Pa
 
 pub(super) fn search_field(id: &'static str, field: Entity<crate::input::TextField>, p: &Palette, cx: &App) -> gpui::Stateful<gpui::Div> {
     let focus = field.focus_handle(cx);
+    let press = focus.clone();
+    let text = field.read(cx).text().to_string();
     div()
         .id(id)
+        .relative()
+        .child(crate::a11y_controls::control(
+            crate::a11y_controls::Control::new(crate::i18n::t("Containers"), id, accesskit::Role::SearchInput, crate::i18n::t("Search"))
+                .value(text)
+                .focus(focus.clone())
+                .on_press(move |window, _| window.focus(&press)),
+        ))
         .debug_selector(move || id.into())
         .w_full()
         .min_w_0()
@@ -141,7 +150,7 @@ impl Workbench {
             cx.background_executor().timer(Duration::from_secs(3)).await;
             this.update(cx, |this, cx| {
                 if this.remote.docker.monitor.generation == generation
-                    && (this.chrome.panel == Some(Panel::Containers) || (this.tabs.page_active && matches!(this.tabs.page, Some(Page::Containers))))
+                    && (this.view_shown(Panel::Containers) || (this.tabs.page_active && matches!(this.tabs.page, Some(Page::Containers))))
                 {
                     this.refresh_container_monitor(cx);
                 }

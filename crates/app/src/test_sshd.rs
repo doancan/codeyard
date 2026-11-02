@@ -39,12 +39,32 @@ fn skip<T>(test: &str, why: &str) -> Option<T> {
 /// Call right before an early `return` in a test that needs an external tool (python3, node, clang, lldb-dap, debugpy, go, dlv, clangd).
 /// Prints a visible SKIPPED line; `CODEYARD_REQUIRE_TOOLS=1` (or a list such as `python3,clang`) turns the skip into a failure.
 pub fn skip_missing(tools: &str) {
+    skip_tool(tools, "which is unavailable");
+}
+
+/// `skip_missing` for a tool that is there but cannot be used on this machine, with the reason (codeyard-exthost
+/// without its OS sandbox, as on Windows).
+pub fn skip_unusable(tool: &str, why: &str) {
+    skip_tool(tool, &format!("which cannot run here ({why})"));
+}
+
+/// For a test that needs a POSIX shell: `/bin/sh` in the terminal, or a fixture that is a shell script started as a
+/// program (a fake `rustc`, a commit hook). `false` on Windows, after a SKIPPED line.
+pub fn posix_shell() -> bool {
+    if cfg!(windows) {
+        skip_unusable("sh", "Windows has no /bin/sh and does not start a shell script as a program");
+        return false;
+    }
+    true
+}
+
+fn skip_tool(tools: &str, state: &str) {
     let test = std::thread::current().name().unwrap_or("?").to_string();
     if let Some(req) = std::env::var("CODEYARD_REQUIRE_TOOLS").ok().filter(|r| !r.is_empty()) {
         let wanted = req == "1" || tools.split(',').any(|t| req.split(',').any(|r| r == t));
-        assert!(!wanted, "{test}: needs {tools}, which is unavailable, and CODEYARD_REQUIRE_TOOLS={req}");
+        assert!(!wanted, "{test}: needs {tools}, {state}, and CODEYARD_REQUIRE_TOOLS={req}");
     }
-    eprintln!("SKIPPED {test}: needs {tools}, which is unavailable (set CODEYARD_REQUIRE_TOOLS=1 to make this an error)");
+    eprintln!("SKIPPED {test}: needs {tools}, {state} (set CODEYARD_REQUIRE_TOOLS=1 to make this an error)");
 }
 
 /// `None`: no sshd or agent binary, or the setup failed (the test is skipped, loudly; see `skip`).

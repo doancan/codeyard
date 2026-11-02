@@ -480,6 +480,18 @@ impl EditorView {
         }
     }
 
+    /// Undo a replacement's single step, only if the document is still exactly what it left (`expected`: the same
+    /// buffer object, undo step and text right after it). A reload or anything typed since makes this refuse instead of
+    /// undoing the wrong step.
+    pub fn undo_replace_step(&mut self, expected: super::DocIdentity, cx: &mut Context<Self>) -> bool {
+        if self.doc_identity() != expected || !self.buffer.undo() {
+            return false;
+        }
+        self.buffer.set_marks(LINK_MARKS, Vec::new());
+        self.after_edit(cx);
+        true
+    }
+
     pub(super) fn redo(&mut self, _: &Redo, _: &mut Window, cx: &mut Context<Self>) {
         if self.buffer.redo() {
             self.buffer.set_marks(LINK_MARKS, Vec::new());

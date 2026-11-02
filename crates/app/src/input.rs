@@ -62,6 +62,13 @@ impl TextField {
         &self.text
     }
 
+    /// Shown while the field is empty (a source control provider sets its own).
+    pub fn set_placeholder(&mut self, placeholder: &str) {
+        if self.placeholder != placeholder {
+            self.placeholder = placeholder.to_string().into();
+        }
+    }
+
     /// Replace the text and leave all of it selected (so typing replaces it).
     pub fn set_text(&mut self, text: &str, cx: &mut Context<Self>) {
         self.text = if self.multiline { text.to_string() } else { text.replace('\n', " ") };

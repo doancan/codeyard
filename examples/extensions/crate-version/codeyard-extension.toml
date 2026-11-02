@@ -1,0 +1,17 @@
+[extension]
+id          = "codeyard.crate-version"
+version     = "0.1.0"
+name        = "Crate Version"
+license     = "MIT"
+description = "The latest version of a crate on crates.io."
+
+[code]
+entry = "Cargo.toml"
+
+# Every host the code fetches from is listed; Codeyard refuses the rest.
+[permissions]
+net = ["crates.io"]
+
+[[commands]]
+id    = "latest"
+title = "Crate Version: Latest Version of a Crate"

@@ -1,0 +1,29 @@
+[package]
+name = "probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Built for wasm32-wasip2 by scripts/build-exthost-fixtures.sh; the result is crates/ext-host/testdata/probe.wasm.
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[features]
+# The `escape` command (tests/sandbox.rs, tests/exthost.rs): imports wasi:sockets.
+escape = []
+# The app's run-time guards (ext_prompts_ui_tests.rs): `clipboard`, `run` and `hold`; imports clipboard-read and process.
+guards = []
+# The app's Source Control tests (#144): a toy source control provider whose commit runs `echo`; imports process.
+scm = []
+
+[dependencies]
+wit-bindgen = "0.63"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = "symbols"
+panic = "abort"
+
+[workspace]

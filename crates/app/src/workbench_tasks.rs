@@ -17,9 +17,51 @@ pub struct Task {
     pub command: String,
     /// Where it came from ("npm", "make", "cargo", "tasks.jsonc"…).
     pub source: &'static str,
+    /// The task file it was read from: the run is planned from it (dependencies, inputs, matchers, options). Detected
+    /// tasks have none and run their command in the shell.
+    pub file: Option<std::sync::Arc<str>>,
+}
+
+impl Task {
+    /// A detected task: one shell command.
+    pub fn shell(label: String, command: String, source: &'static str) -> Self {
+        Self { label, command, source, file: None }
+    }
+}
+
+/// `Task::source` of a task a code extension provides; its `command` is `<extension>\n<task id>\n<detail>`.
+const EXTENSION_SOURCE: &str = "extension";
+
+impl Task {
+    /// A task a code extension provided (`request.provide-tasks`).
+    pub fn from_extension(extension: &str, id: &str, label: &str, detail: Option<&str>) -> Task {
+        let detail = detail.unwrap_or_default().replace('\n', " ");
+        Task { label: label.to_string(), command: format!("{extension}\n{id}\n{detail}"), source: EXTENSION_SOURCE, file: None }
+    }
+
+    /// (extension, task id) of a task a code extension provided.
+    pub fn extension(&self) -> Option<(&str, &str)> {
+        let mut parts = self.command.splitn(3, '\n');
+        match (self.source == EXTENSION_SOURCE, parts.next(), parts.next()) {
+            (true, Some(extension), Some(id)) => Some((extension, id)),
+            _ => None,
+        }
+    }
+
+    /// The line under the label in the task list: the command and where it came from, or the extension's detail and
+    /// its id (every extension surface names the extension).
+    pub fn detail(&self) -> String {
+        match (self.extension(), self.command.splitn(3, '\n').nth(2).filter(|d| !d.is_empty())) {
+            (Some((extension, _)), Some(detail)) => format!("{detail} · {extension}"),
+            (Some((extension, _)), None) => extension.to_string(),
+            (None, _) => format!("{} · {}", self.command, self.source),
+        }
+    }
 }
 
 const TASKS_FILE: &str = ".codeyard/tasks.jsonc";
+/// Source shown for the tasks of a workspace file.
+pub(crate) const WORKSPACE_SOURCE: &str = "workspace";
 /// Task file left under the old name (codeapp): read if the new one is missing.
 const LEGACY_TASKS_FILE: &str = ".codeapp/tasks.jsonc";
 const TASKS_TEMPLATE: &str = "// Tasks for this project (Tasks: Run Task, ⇧⌘B runs the first one with \"build\" in its label).\n[\n  // { \"label\": \"build\", \"command\": \"make build\" },\n]\n";
@@ -32,6 +74,7 @@ const TASKS_TEMPLATE: &str = "// Tasks for this project (Tasks: Run Task, ⇧⌘
 /// so a `cd` can't leak into the next. Cycles and unknown labels are skipped.
 pub fn parse_task_file(text: &str, source: &'static str) -> Vec<Task> {
     let Ok(v) = serde_json::from_str::<Value>(&theme::themes::strip_jsonc(text)) else { return Vec::new() };
+    let file: std::sync::Arc<str> = text.into();
     let items = match &v {
         Value::Array(a) => a.clone(),
         Value::Object(o) => o.get("tasks").and_then(Value::as_array).cloned().unwrap_or_default(),
@@ -98,7 +141,7 @@ pub fn parse_task_file(text: &str, source: &'static str) -> Vec<Task> {
             if !own.is_empty() {
                 parts.push(own.clone());
             }
-            (!parts.is_empty()).then(|| Task { label: label.clone(), command: parts.join(" && "), source })
+            (!parts.is_empty()).then(|| Task { label: label.clone(), command: parts.join(" && "), source, file: Some(file.clone()) })
         })
         .collect()
 }
@@ -108,24 +151,24 @@ pub fn parse_task_file(text: &str, source: &'static str) -> Vec<Task> {
 /// `${relativeFile}`, `${env:AD}`. With no active file, `${file…}` and unknown variables stay
 /// as written (the shell won't expand them either, and the user sees it).
 pub fn expand_variables(command: &str, root: &str, file: Option<&str>) -> String {
-    expand(command, root, file, false)
+    expand(command, root, file, &[])
 }
 
-/// The same for a command line that a shell will read: a value is quoted for the place it lands in (bare, inside `'…'` or
-/// inside `"…"`), so a file called `a;rm -rf ~;.txt` is still one argument. Values that need no quoting are left alone.
-pub fn expand_variables_for_shell(command: &str, root: &str, file: Option<&str>) -> String {
-    expand(command, root, file, true)
+/// `expand_variables` in a workspace with several folders: `${workspaceFolder:name}` and
+/// `${workspaceFolderBasename:name}` name one of `folders` (name, path).
+pub fn expand_variables_in(command: &str, root: &str, file: Option<&str>, folders: &[(String, String)]) -> String {
+    expand(command, root, file, folders)
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum Quote {
+pub(crate) enum Quote {
     Bare,
     Single,
     Double,
 }
 
 /// Where the next character of `text` would be, as a POSIX shell reads it.
-fn quote_at_end(text: &str) -> Quote {
+pub(crate) fn quote_at_end(text: &str) -> Quote {
     let (mut state, mut escaped) = (Quote::Bare, false);
     for c in text.chars() {
         if escaped {
@@ -145,7 +188,7 @@ fn quote_at_end(text: &str) -> Quote {
     state
 }
 
-fn for_shell(value: &str, at: Quote) -> String {
+pub(crate) fn for_shell(value: &str, at: Quote) -> String {
     match at {
         Quote::Bare => shell_quote(value),
         Quote::Single => crate::shell_quote::in_single(value),
@@ -159,7 +202,7 @@ fn for_shell(value: &str, at: Quote) -> String {
     }
 }
 
-fn expand(command: &str, root: &str, file: Option<&str>, shell: bool) -> String {
+fn expand(command: &str, root: &str, file: Option<&str>, folders: &[(String, String)]) -> String {
     let root = root.trim_end_matches('/');
     let name = |p: &str| p.rsplit('/').next().unwrap_or(p).to_string();
     let mut out = String::with_capacity(command.len());
@@ -181,14 +224,14 @@ fn expand(command: &str, root: &str, file: Option<&str>, shell: bool) -> String 
             "fileExtname" => file.map(|f| name(f).rsplit_once('.').map_or(String::new(), |(_, e)| format!(".{e}"))),
             "fileDirname" => file.map(|f| f.rsplit_once('/').map_or(String::new(), |(d, _)| d.to_string())),
             "relativeFile" => file.map(|f| f.strip_prefix(&format!("{root}/")).unwrap_or(f).to_string()),
+            v if v.starts_with("workspaceFolder:") || v.starts_with("workspaceFolderBasename:") => {
+                let (kind, wanted) = v.split_once(':').unwrap_or((v, ""));
+                let path = folders.iter().find(|(n, _)| n == wanted).map(|(_, p)| p.trim_end_matches('/'));
+                path.map(|p| if kind == "workspaceFolder" { p.to_string() } else { name(p) })
+            }
             v => v.strip_prefix("env:").map(|n| std::env::var(n).unwrap_or_default()),
         };
         match value {
-            Some(v) if shell => {
-                let at = quote_at_end(&out);
-                // An empty value bare would vanish as an argument: `''` keeps it one.
-                out.push_str(&if v.is_empty() && at == Quote::Bare { "''".to_string() } else { for_shell(&v, at) });
-            }
             Some(v) => out.push_str(&v),
             None => out.push_str(&rest[start..=start + end]),
         }
@@ -207,9 +250,7 @@ pub fn npm_tasks(package_json: &str, runner: &str) -> Vec<Task> {
     let Ok(v) = serde_json::from_str::<Value>(package_json) else { return Vec::new() };
     v["scripts"]
         .as_object()
-        .map(|o| {
-            o.keys().map(|k| Task { label: format!("{runner}: {k}"), command: format!("{runner} run {}", shell_quote(k)), source: "package.json" }).collect()
-        })
+        .map(|o| o.keys().map(|k| Task::shell(format!("{runner}: {k}"), format!("{runner} run {}", shell_quote(k)), "package.json")).collect())
         .unwrap_or_default()
 }
 
@@ -225,19 +266,19 @@ pub fn make_tasks(makefile: &str) -> Vec<Task> {
             continue;
         }
         if !out.iter().any(|t| t.label == format!("make: {name}")) {
-            out.push(Task { label: format!("make: {name}"), command: format!("make {name}"), source: "Makefile" });
+            out.push(Task::shell(format!("make: {name}"), format!("make {name}"), "Makefile"));
         }
     }
     out
 }
 
 fn fixed(source: &'static str, cmds: &[&str]) -> Vec<Task> {
-    cmds.iter().map(|c| Task { label: format!("{source}: {}", c.split_whitespace().nth(1).unwrap_or(c)), command: c.to_string(), source }).collect()
+    cmds.iter().map(|c| Task::shell(format!("{source}: {}", c.split_whitespace().nth(1).unwrap_or(c)), c.to_string(), source)).collect()
 }
 
 impl Workbench {
     /// Find the project's tasks (in the background), then continue with `then`.
-    fn detect_tasks(&mut self, cx: &mut Context<Self>, then: impl FnOnce(&mut Self, Vec<Task>, &mut Window, &mut Context<Self>) + 'static) {
+    pub(super) fn detect_tasks(&mut self, cx: &mut Context<Self>, then: impl FnOnce(&mut Self, Vec<Task>, &mut Window, &mut Context<Self>) + 'static) {
         let Some(root) = self.active_root(cx) else {
             self.notice =
                 Some(Notice::Info(crate::i18n::t("Open a folder first: tasks come from its package.json, Makefile, Cargo.toml or tasks.jsonc.").into()));
@@ -246,10 +287,15 @@ impl Workbench {
         };
         let host = self.remote.host.clone();
         let asked = root.clone();
+        // Shared tasks of the workspace file: they run in the active file's folder like the folder's own.
+        let shared = self.workspace_tasks_and_launch().0;
         let task = cx.background_executor().spawn(async move {
             let read = |rel: &str| host.read(&ui::join(&root, rel)).ok().map(|(d, _)| String::from_utf8_lossy(&d).into_owned());
             let exists = |rel: &str| host.stat(&ui::join(&root, rel)).is_ok();
             let mut tasks = Vec::new();
+            if let Some(t) = &shared {
+                tasks.extend(parse_task_file(t, WORKSPACE_SOURCE));
+            }
             if let Some(t) = read(TASKS_FILE).or_else(|| read(LEGACY_TASKS_FILE)) {
                 tasks.extend(parse_task_file(&t, "tasks.jsonc"));
             }
@@ -301,22 +347,22 @@ impl Workbench {
 
     /// "Tasks: Run Task…"
     pub(super) fn show_tasks(&mut self, cx: &mut Context<Self>) {
-        self.detect_tasks(cx, |this, tasks, window, cx| {
-            if tasks.is_empty() {
-                this.notice = Some(Notice::Info(crate::i18n::t("No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.").into()));
-                cx.notify();
-                return;
-            }
-            if this.overlay.is_some() {
-                this.close_overlay(window, cx);
-            }
-            let items = tasks
-                .iter()
-                .map(|t| PickItem { label: t.label.clone().into(), detail: Some(format!("{} · {}", t.command, t.source).into()), keys: None })
-                .collect();
-            let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Run task"), "", None, cx));
-            this.show_overlay(picker, OverlayKind::Tasks(tasks), window, cx);
-        });
+        self.detect_tasks(cx, |this, tasks, window, cx| this.with_extension_tasks(tasks, window, cx, Self::pick_task));
+    }
+
+    /// The task list: the folder's tasks and those code extensions provide.
+    fn pick_task(&mut self, tasks: Vec<Task>, window: &mut Window, cx: &mut Context<Self>) {
+        if tasks.is_empty() {
+            self.notice = Some(Notice::Info(crate::i18n::t("No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.").into()));
+            cx.notify();
+            return;
+        }
+        if self.overlay.is_some() {
+            self.close_overlay(window, cx);
+        }
+        let items = tasks.iter().map(|t| PickItem { label: t.label.clone().into(), detail: Some(t.detail().into()), keys: None }).collect();
+        let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Run task"), "", None, cx));
+        self.show_overlay(picker, OverlayKind::Tasks(tasks), window, cx);
     }
 
     /// ⇧⌘B: the first task with "build" in its name (open the list if none).
@@ -363,7 +409,7 @@ impl Workbench {
                         return;
                     }
                     match crate::testrun::plan_in_crate(&rel, &text, line, whole_file, package_json.as_deref(), context.as_ref()) {
-                        Some(run) => this.run_task(Task { label: run.label, command: run.command, source: "test" }, window, cx),
+                        Some(run) => this.run_task(Task::shell(run.label, run.command, "test"), window, cx),
                         None => {
                             this.notice = Some(Notice::Info(
                                 if whole_file {
@@ -393,31 +439,21 @@ impl Workbench {
 
     /// Run the task in a new terminal (tab name is the task's name).
     pub(super) fn run_task(&mut self, task: Task, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some((extension, id)) = task.extension() {
+            self.jobs.last = Some(task.clone());
+            return self.run_extension_task(extension, id, window, cx);
+        }
         self.require_trust(window, cx, move |this, window, cx| this.run_task_trusted(task, window, cx));
     }
 
+    /// The task runs at the active file's root (in a multi-folder workspace, the file's folder), planned from its file.
     fn run_task_trusted(&mut self, task: Task, window: &mut Window, cx: &mut Context<Self>) {
-        // The task runs at the active file's root (in a multi-folder workspace, the file's folder).
-        let root = self.active_root(cx).unwrap_or_default();
-        self.jobs.root = Some(root.clone());
-        self.new_terminal_in(Some(root.clone()), window, cx);
-        if let Some(t) = self.terminals.get(self.active_terminal).cloned() {
-            let file = self.active_editor().map(|e| e.read(cx).path.clone());
-            let (label, command) = (task.label.clone(), expand_variables_for_shell(&task.command, &root, file.as_deref()));
-            t.update(cx, |t, cx| {
-                t.set_fixed_title(label);
-                t.send_lines(&command);
-                cx.notify();
-            });
-        }
-        self.jobs.last = Some(task);
-        self.watch_task_output(cx);
-        cx.notify();
+        self.start_task_run(task, super::task_run_glue::After::Nothing, window, cx);
     }
 
     /// Watch the active terminal (the task terminal just opened): problems are rescanned as output arrives.
     /// A new task clears the old task's problems (like VS Code).
-    fn watch_task_output(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn watch_task_output(&mut self, cx: &mut Context<Self>) {
         let Some(term) = self.terminals.get(self.active_terminal).cloned() else { return };
         let id = term.entity_id();
         self.jobs.terminal = Some(id);
@@ -482,12 +518,17 @@ impl Workbench {
         for (p, d) in &self.jobs.problems {
             all.entry(p.clone()).or_default().push(d.clone());
         }
+        for (p, d) in self.extension_problems() {
+            all.entry(p.clone()).or_default().extend(d);
+        }
         all
     }
 
+    /// Language server, task and extension diagnostics of one file.
     pub(super) fn diagnostics_for(&self, path: &str) -> Vec<crate::lsp::Diagnostic> {
         let mut d = self.lsp.diagnostics.get(path).cloned().unwrap_or_default();
         d.extend(self.jobs.problems.iter().filter(|(p, _)| p == path).map(|(_, x)| x.clone()));
+        d.extend(self.extension_diagnostics_for(path));
         d
     }
 
@@ -541,7 +582,7 @@ mod tests {
         ]"#,
             "tasks.jsonc",
         );
-        assert_eq!(ours, vec![Task { label: "build".into(), command: "make build".into(), source: "tasks.jsonc" }]);
+        assert_eq!(ours.iter().map(|t| (t.label.as_str(), t.command.as_str(), t.source)).collect::<Vec<_>>(), vec![("build", "make build", "tasks.jsonc")]);
         let vs = parse_task_file(
             r#"{ "version": "2.0.0", "tasks": [ { "label": "lint", "command": "eslint", "args": ["src", "--fix", "a b"] } ] }"#,
             ".vscode/tasks.json",
@@ -554,21 +595,6 @@ mod tests {
     }
 
     /// A file name is data: in a shell command it stays one argument in every quoting context.
-    #[test]
-    fn variables_are_quoted_for_the_place_they_land_in() {
-        let f = Some("/p/src/a;rm -rf ~;.txt");
-        assert_eq!(expand_variables_for_shell("cat ${file}", "/p", f), "cat '/p/src/a;rm -rf ~;.txt'");
-        assert_eq!(expand_variables_for_shell("cat '${file}'", "/p", f), "cat '/p/src/a;rm -rf ~;.txt'");
-        assert_eq!(expand_variables_for_shell(r#"cat "${fileBasename}""#, "/p", Some("/p/$(id)`x`\"q\".txt")), r#"cat "\$(id)\`x\`\"q\".txt""#);
-        assert_eq!(expand_variables_for_shell("cat ${file}", "/p", Some("/p/it's.txt")), r#"cat '/p/it'"'"'s.txt'"#);
-        assert_eq!(expand_variables_for_shell("cat '${file}'", "/p", Some("/p/it's.txt")), r#"cat '/p/it'"'"'s.txt'"#);
-        // Plain names are left alone, so existing tasks read the same.
-        assert_eq!(expand_variables_for_shell("make -C ${workspaceFolder}/sub", "/p/", None), "make -C /p/sub");
-        assert_eq!(expand_variables_for_shell("echo ${fileExtname}x", "/p", Some("/p/a")), "echo ''x", "an empty value is still one argument");
-        // The generic expansion (debug configurations, JSON) stays raw.
-        assert_eq!(expand_variables("${file}", "/p", f), "/p/src/a;rm -rf ~;.txt");
-    }
-
     #[test]
     fn expands_vscode_variables_and_cwd() {
         let f = Some("/p/src/app.test.ts");

@@ -1,0 +1,19 @@
+# The extension the TypeScript snippets of docs/extensions run in: the tests in test/ check their calls against it.
+[extension]
+id          = "codeyard.doc-snippets-ts"
+version     = "0.1.0"
+name        = "Doc Snippets Ts"
+license     = "MIT"
+description = "The TypeScript snippets of the extension docs."
+
+[code]
+entry = "src/extension.ts"
+
+# For the watches and openInEditor of src/watching.ts.
+[permissions]
+read     = ["src/**/*.ts"]
+commands = ["core:editor.open"]
+
+[[commands]]
+id    = "hello"
+title = "Doc Snippets Ts: Say Hello"

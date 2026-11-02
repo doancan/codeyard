@@ -233,6 +233,10 @@ pub struct FileTree {
     /// While "expand all" runs: folders still waiting to load and the remaining budget (folder count).
     recursive: HashSet<String>,
     budget: usize,
+    /// The list's visible area in the last frame, to put a menu opened by keyboard under the selected row.
+    bounds: Option<gpui::Bounds<gpui::Pixels>>,
+    /// Where each row (by path) was painted in the last frame, for the accessibility tree.
+    painted: crate::painted::RowBounds<String>,
 }
 
 impl EventEmitter<TreeEvent> for FileTree {}
@@ -265,6 +269,7 @@ impl FileTree {
             next_load: 0,
             focus_handle: cx.focus_handle(),
             scroll: UniformListScrollHandle::new(),
+            painted: Default::default(),
             git: Arc::default(),
             opts: cx
                 .try_global::<crate::settings::Settings>()
@@ -273,6 +278,7 @@ impl FileTree {
             root_selected: false,
             recursive: HashSet::new(),
             budget: 0,
+            bounds: None,
         }
     }
 
@@ -527,6 +533,29 @@ impl FileTree {
         (rows, self.selected)
     }
 
+    /// The physical frame of the row of `path` as last painted in `window` (`None` while it is scrolled out of view).
+    pub fn a11y_row_frame(&self, path: &str, window: &Window) -> Option<accesskit::Rect> {
+        crate::painted::physical(&self.painted, &path.to_string(), window)
+    }
+
+    /// First and last row on screen in the last layout.
+    pub fn visible_rows(&self) -> Option<(usize, usize)> {
+        let state = self.scroll.0.borrow();
+        let height = f32::from(state.last_item_size?.item.height);
+        let first = (-f32::from(state.base_handle.offset().y) / ROW_H).max(0.) as usize;
+        let last = (first + (height / ROW_H).ceil() as usize).saturating_sub(1).min(self.rows.len().saturating_sub(1));
+        Some((first.min(last), last))
+    }
+
+    /// Accessibility scroll action: move the view `pages` screens down (up when negative), the selection stays.
+    pub fn a11y_scroll(&mut self, pages: isize, cx: &mut Context<Self>) {
+        let Some((first, last)) = self.visible_rows() else { return };
+        let page = (last - first).max(1) as isize;
+        let max = self.rows.len().saturating_sub(1) as isize;
+        self.scroll.scroll_to_item_strict((first as isize + pages * page).clamp(0, max) as usize, ScrollStrategy::Top);
+        cx.notify();
+    }
+
     /// Resolve a snapshot's path again: a refresh may have inserted or removed rows since AT read it.
     pub fn a11y_select(&mut self, path: &str, activate: bool, cx: &mut Context<Self>) {
         let Some(ix) = self.rows.iter().position(|r| r.path == path) else { return };
@@ -534,6 +563,20 @@ impl FileTree {
         if activate {
             self.activate(ix, false, cx);
         }
+    }
+
+    /// For assistive technology: the menu of the row of `path`, as Shift+F10 on it opens it (the row is selected first).
+    pub fn a11y_context_menu(&mut self, path: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.rows.iter().any(|r| r.path == path) {
+            return;
+        }
+        self.a11y_select(path, false, cx);
+        self.show_context_menu(&crate::menu::ShowContextMenu, window, cx);
+    }
+
+    #[cfg(test)]
+    pub fn row_errors(&self) -> Vec<(String, String)> {
+        self.rows.iter().filter_map(|r| r.error.as_ref().map(|e| (r.name.to_string(), e.to_string()))).collect()
     }
 
     #[cfg(test)]
@@ -669,6 +712,18 @@ impl FileTree {
             return;
         }
         self.load_epochs.remove(&path);
+        // The folder is gone (deleted, here or outside Codeyard): forget it and read its parent again, which drops its
+        // row. The watcher may report only the folder's own change, so this is the only read that sees it.
+        if matches!(&result, Err(host::HostError::Op(proto::Error::NotFound(_)))) && self.root.as_deref() != Some(path.as_str()) {
+            self.forget(&path);
+            if let Some((parent, _)) = path.rsplit_once('/') {
+                let parent = if parent.is_empty() { "/" } else { parent };
+                self.reload(parent, cx);
+            }
+            self.rebuild();
+            cx.notify();
+            return;
+        }
         let loaded = result.is_ok();
         let load = match result {
             Ok(mut entries) => {
@@ -714,6 +769,16 @@ impl FileTree {
             self.load(path, cx);
         }
         cx.notify();
+    }
+
+    /// Drop a folder that no longer exists, with everything under it, from what the tree holds.
+    fn forget(&mut self, dir: &str) {
+        let under = format!("{dir}/");
+        let gone = |p: &String| p == dir || p.starts_with(&under);
+        self.children.retain(|p, _| !gone(p));
+        self.expanded.retain(|p| !gone(p));
+        self.reload_queued.retain(|p| !gone(p));
+        self.recursive.retain(|p| !gone(p));
     }
 
     /// Rebuild the visible rows from scratch (expanded folders, depth first).
@@ -794,6 +859,25 @@ impl FileTree {
         self.select_with(ix, false, false, cx);
         self.scroll.scroll_to_item(ix, ScrollStrategy::Top);
         cx.notify();
+    }
+
+    /// Shift+F10 or the Menu key: the selected row's menu (the root folder's without a selection), under the row, as a
+    /// right click opens it.
+    fn show_context_menu(&mut self, _: &crate::menu::ShowContextMenu, _: &mut Window, cx: &mut Context<Self>) {
+        let bounds = self.bounds.unwrap_or_default();
+        let (path, is_dir, position) = match self.selected.filter(|_| !self.root_selected).and_then(|ix| Some((ix, self.rows.get(ix)?))) {
+            Some((ix, row)) => {
+                // Scrolled to the top first, so the menu opens just under the first visible row.
+                self.scroll.scroll_to_item(ix, ScrollStrategy::Top);
+                let y = (bounds.top() + px(ROW_H)).min(bounds.bottom());
+                (row.path.clone(), row.is_dir, gpui::point(bounds.left() + px(ROW_PAD_L), y))
+            }
+            None => match self.root.clone() {
+                Some(root) => (root, true, gpui::point(bounds.left() + px(ROW_PAD_L), bounds.top() + px(ROW_H))),
+                None => return,
+            },
+        };
+        cx.emit(TreeEvent::ContextMenu { path, is_dir, position });
     }
 
     fn select_prev(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
@@ -896,6 +980,8 @@ impl Render for FileTree {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
         let focused = self.focus_handle.is_focused(window);
+        self.painted.borrow_mut().clear();
+        let painted = self.painted.clone();
         let root_state = self.root.as_ref().and_then(|r| self.children.get(r));
 
         let body = match root_state {
@@ -982,6 +1068,7 @@ impl Render for FileTree {
                                     cx.emit(TreeEvent::DropFiles { paths: d.paths().to_vec(), to_dir: drop_dir.clone() });
                                 }))
                                 .relative()
+                                .child(crate::painted::probe(&painted, row.path.clone()))
                                 .w_full()
                                 .h(px(ROW_H))
                                 .flex()
@@ -1108,6 +1195,7 @@ impl Render for FileTree {
                 this.collapse_recursive(&dir, cx);
             }))
             .on_action(cx.listener(Self::confirm))
+            .on_action(cx.listener(Self::show_context_menu))
             .on_action(cx.listener(Self::rename_entry))
             .on_action(cx.listener(Self::delete_entry))
             .on_action(cx.listener(Self::copy_entry))
@@ -1143,8 +1231,22 @@ impl Render for FileTree {
                 }),
             )
             .size_full()
+            .relative()
             .text_color(c(p.text))
             .child(body)
+            .child({
+                let tree = cx.entity().downgrade();
+                gpui::canvas(
+                    |bounds, window, _| bounds.intersect(&window.content_mask().bounds),
+                    move |_, bounds, _, cx| {
+                        tree.update(cx, |t, _| t.bounds = Some(bounds)).ok();
+                    },
+                )
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+            })
     }
 }
 

@@ -93,6 +93,11 @@ pub struct Settings {
     /// Row height as a multiple of the terminal's font size.
     pub terminal_line_height: f32,
     pub terminal_scrollback: usize,
+    /// Lines of each terminal's history saved for the next start (`terminal.persistentScrollback`; 0: none).
+    pub terminal_persistent_scrollback: usize,
+    /// Minutes a window's terminals keep running for the next start after Codeyard quits, crashes or is killed
+    /// (`terminal.persistentSessionTimeout`; 0: not kept).
+    pub terminal_persistent_session_timeout: u64,
     pub terminal_scroll_sensitivity: f32,
     /// Whether a program in the terminal may put text on the clipboard (OSC 52).
     pub terminal_allow_clipboard_write: bool,
@@ -122,7 +127,7 @@ pub struct Settings {
     pub word_wrap: bool,
     /// The active file is selected and visible in the tree.
     pub auto_reveal: bool,
-    /// Files deleted locally go to the Trash (`files.enableTrash`).
+    /// Files deleted locally go to the Trash (`files.enableTrash`, off: deletes are permanent and ask first).
     pub enable_trash: bool,
     /// In files without a language server, suggest words from the document.
     pub word_based_suggestions: bool,
@@ -132,6 +137,8 @@ pub struct Settings {
     pub format_on_save: bool,
     /// Code actions run on save (`editor.codeActionsOnSave`), e.g. `source.organizeImports`.
     pub code_actions_on_save: Vec<String>,
+    /// `editor.formatters`: (language id, `lsp` or the id of an extension that formats it).
+    pub formatters: Vec<(String, String)>,
     /// Format pasted text with the language server (`editor.formatOnPaste`).
     pub format_on_paste: bool,
     /// Ask the server to format on triggers like `}` `;` Enter (`editor.formatOnType`).
@@ -198,6 +205,9 @@ pub struct Settings {
     pub keymap_preset: String,
     /// `extensions.enabled`: false loads no extension, like `--no-extensions` but kept across sessions.
     pub extensions_enabled: bool,
+    /// `extensions.autoUpdate`: what happens when a registry has a newer version of an installed extension. User
+    /// settings only.
+    pub extension_auto_update: ext_core::update::AutoUpdate,
     /// `extensions.registries`: registries besides the public one (user settings only).
     pub extension_registries: Vec<ext_core::registry::Registry>,
     /// Values of settings that installed extensions declare (`ext.<publisher.name>.<key>`), checked against their type.
@@ -220,6 +230,8 @@ pub struct Settings {
     pub spelling: bool,
     pub spelling_comments: bool,
     pub spell_languages: Vec<String>,
+    /// `rust.features`, `rust.noDefaultFeatures`, `rust.profile`, `rust.targetDir`: how Run and Debug build with Cargo.
+    pub rust_build: crate::cargo_project::BuildOptions,
     // --- data ---
     /// Data lens: spaces per level in JSON and YAML output, and whether output keys are sorted.
     pub data_indent: usize,
@@ -230,6 +242,9 @@ pub struct Settings {
     pub http_confirm: String,
     /// UI language (`ui.language`): "auto" (system language), "en" or "tr"; user settings only. "en" in tests.
     pub ui_language: String,
+    /// Interface scale (`ui.scale`): every window's layout, text and hit regions, on top of the display's own scale.
+    /// Always within `UI_SCALE_MIN..=UI_SCALE_MAX`; user settings only.
+    pub ui_scale: f32,
     /// Update checks (`update.check`); user settings only, because it decides whether the app contacts the network by itself.
     pub update_check: crate::update::Policy,
     /// Folder hierarchy lines in the explorer.
@@ -306,7 +321,7 @@ impl Default for Settings {
             files_exclude: vec![".git".into(), ".DS_Store".into()],
             search_max_results: 2000,
             // --- git-sync ---
-            git_autofetch: false,
+            git_autofetch: true,
             git_autofetch_period: 180,
             git_confirm_sync: false,
             git_rebase_when_sync: false,
@@ -324,12 +339,14 @@ impl Default for Settings {
             terminal_font_size: theme::text::CODE.0,
             terminal_line_height: crate::terminal::LINE_HEIGHT,
             terminal_scrollback: 2000,
+            terminal_persistent_scrollback: 0,
+            terminal_persistent_session_timeout: 5,
             terminal_scroll_sensitivity: 2.,
             terminal_allow_clipboard_write: false,
             terminal_shell_integration: true,
             terminal_notifications: true,
             terminal_copy_on_selection: "agents".into(),
-            terminal_confirm_close: "running".into(),
+            terminal_confirm_close: "never".into(),
             terminal_profiles: Default::default(),
             terminal_default_profile: None,
             terminal_sanitize_paste: Default::default(),
@@ -340,6 +357,7 @@ impl Default for Settings {
             auto_close_brackets: true,
             format_on_save: false,
             code_actions_on_save: Vec::new(),
+            formatters: Vec::new(),
             format_on_paste: false,
             format_on_type: false,
             editorconfig: true,
@@ -359,11 +377,12 @@ impl Default for Settings {
             auto_reveal: true,
             cursor_blinking: true,
             word_based_suggestions: true,
-            enable_trash: true,
+            enable_trash: false,
             ports_auto_forward: true,
             ports_local_bind: host::forward::LocalBind::Loopback,
             ports_rules: Vec::new(),
-            lsp_enabled: true,
+            // Unit tests never launch an installed language server; LSP integration tests turn it on explicitly.
+            lsp_enabled: !cfg!(test),
             lsp_servers: Vec::new(),
             fallback_encoding: crate::encoding::Encoding::Windows1254,
             compact_folders: true,
@@ -379,6 +398,7 @@ impl Default for Settings {
             icon_theme: crate::icon_theme::ALL[0].id().into(),
             keymap_preset: String::new(),
             extensions_enabled: true,
+            extension_auto_update: ext_core::update::AutoUpdate::Install,
             extension_registries: Vec::new(),
             ext_settings: std::collections::BTreeMap::new(),
             status_bar: true,
@@ -392,11 +412,13 @@ impl Default for Settings {
             spelling: true,
             spelling_comments: true,
             spell_languages: vec!["en".into()],
+            rust_build: Default::default(),
             data_indent: 2,
             data_sort_keys: false,
             http_run_on: "workspace".into(),
             http_confirm: "remote".into(),
             ui_language: if cfg!(test) { "en" } else { "auto" }.into(),
+            ui_scale: 1.,
             update_check: crate::update::Policy::Ask,
             tree_guides: true,
             graph_show_author: true,
@@ -430,10 +452,22 @@ impl Default for Settings {
 
 #[path = "settings_templates.rs"]
 mod templates;
-pub use templates::{KEYBINDINGS_TEMPLATE, TEMPLATE};
+pub use templates::{KEYBINDINGS_TEMPLATE, TEMPLATE, rust_setup};
 #[path = "settings_text.rs"]
 mod text;
-pub use text::{set_string_in, set_value_in};
+pub use text::{Seg, array_items, members, set_path_in, set_string_in, set_value_in, value_range};
+#[path = "settings_scope.rs"]
+mod scope;
+pub use scope::{Scope, ScopedLayer, Sources, is_user_only};
+#[path = "settings_rust.rs"]
+mod rust;
+#[path = "settings_scale.rs"]
+mod scale;
+#[path = "settings_terminal.rs"]
+mod terminal;
+#[cfg(test)]
+pub use scale::UI_SCALE_STEPS;
+pub use scale::{SessionScale, UI_SCALE_ERROR, UI_SCALE_MAX, UI_SCALE_MIN, UnsavedScale, parse_ui_scale, step_ui_scale, ui_scale_percent, ui_scale_value};
 
 pub fn config_dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("CODEYARD_CONFIG_DIR") {
@@ -489,8 +523,8 @@ pub const RESTRICTED_KEYS: &[&str] = &[
     "yaml.schemas",
 ];
 
-/// Not read from the project file even in a trusted folder: the gate is global, so one
-/// repo touching it would open it for every folder.
+/// Not read from any layer but the user's own file, even in a trusted folder: the gate is global, so one
+/// repo touching it would open it for every folder. `is_user_only` applies it to every non-user layer.
 pub const USER_ONLY_KEYS: &[&str] = &[
     "modules.containers.enabled",
     "modules.webPreview.enabled",
@@ -502,10 +536,14 @@ pub const USER_ONLY_KEYS: &[&str] = &[
     "security.workspaceTrust.enabled",
     "http.confirmRequests",
     "ui.language",
+    // The interface scale applies to every window, so a repository must not zoom the user's whole application.
+    "ui.scale",
     "update.check",
     // A repository must not switch extensions on or off for the user, or swap their keys for a preset.
     "extensions.enabled",
     "keymap.preset",
+    // A repository must not turn updates (and the fixes they bring) off, nor install them for the user.
+    "extensions.autoUpdate",
     // A repository must not add a registry to install from.
     "extensions.registries",
     // --- git-sync ---
@@ -523,6 +561,13 @@ pub const USER_ONLY_KEYS: &[&str] = &[
 
 /// `trusted`: the folder is trusted. If not, `RESTRICTED_KEYS` in the project layer are ignored and a warning is recorded.
 pub fn parse_layers_trusted(user: &str, project: &[Layer], trusted: bool) -> Result<(Settings, Vec<String>), String> {
+    let layers: Vec<ScopedLayer> = project.iter().map(|&(name, text, warn)| ScopedLayer { name, text, warn, trusted, scope: Scope::Folder }).collect();
+    parse_scoped(user, &layers).map(|(s, w, _)| (s, w))
+}
+
+/// User settings, then each layer in order (later over earlier, key by key), each with its own trust; also returns which
+/// layer set each key in effect.
+pub fn parse_scoped(user: &str, layers: &[ScopedLayer]) -> Result<(Settings, Vec<String>, Sources), String> {
     let mut warnings = Vec::new();
     let value: Value = serde_json::from_str(&theme::themes::strip_jsonc(user))
         .map_err(|e| format!("settings.jsonc: {}", crate::i18n::tf("{} (previous settings kept)", &[&e])))?;
@@ -531,11 +576,12 @@ pub fn parse_layers_trusted(user: &str, project: &[Layer], trusted: bool) -> Res
     };
     let mut merged = user_obj.clone();
     let mut quiet: Vec<String> = Vec::new();
-    for (name, text, warn) in project {
+    let mut sources = Sources::default();
+    for &ScopedLayer { name, text, warn, trusted, scope } in layers {
         match serde_json::from_str::<Value>(&theme::themes::strip_jsonc(text)) {
             Ok(Value::Object(o)) => {
                 for (k, v) in o {
-                    if USER_ONLY_KEYS.contains(&k.as_str()) {
+                    if is_user_only(&k) {
                         warnings.push(crate::i18n::tf("{}: “{}” can only be set in your own settings.jsonc", &[&name, &k]));
                         continue;
                     }
@@ -546,6 +592,7 @@ pub fn parse_layers_trusted(user: &str, project: &[Layer], trusted: bool) -> Res
                     if !warn && !user_obj.contains_key(&k) {
                         quiet.push(k.clone());
                     }
+                    sources.0.insert(k.clone(), scope);
                     merged.insert(k, v);
                 }
             }
@@ -555,7 +602,7 @@ pub fn parse_layers_trusted(user: &str, project: &[Layer], trusted: bool) -> Res
     }
     let (s, more) = parse_object(&merged, &quiet);
     warnings.extend(more);
-    Ok((s, warnings))
+    Ok((s, warnings, sources))
 }
 
 /// One `lsp.servers` entry: `Some(None)` turns the language off, `None` is malformed. An object needs at least one of
@@ -586,7 +633,7 @@ fn server_entry(lang: &str, cfg: &Value, warnings: &mut Vec<String>) -> Option<O
         }
     };
     let init_options = o.get("initializationOptions").filter(|v| !v.is_null()).cloned();
-    Some(Some(crate::lsp::ServerSpec { command, args, settings: std::sync::Arc::new(settings), init_options }))
+    Some(Some(crate::lsp::ServerSpec { command, args, settings: std::sync::Arc::new(settings), init_options, program: None }))
 }
 
 fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<String>) {
@@ -677,55 +724,8 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.number("compare.folders.maxFiles", 100., 5_000_000.) {
         s.compare_max_files = v as u32;
     }
-    s.terminal_shell = r.string("terminal.shell");
-    if let Some(v) = r.number("terminal.fontSize", 6., 48.) {
-        s.terminal_font_size = v as f32;
-    }
-    if let Some(v) = r.number("terminal.lineHeight", 1., 2.) {
-        s.terminal_line_height = v as f32;
-    }
-    if let Some(v) = r.number("terminal.scrollback", 0., crate::terminal::SCROLLBACK_MAX as f64) {
-        s.terminal_scrollback = v as usize;
-    }
-    if let Some(v) = r.number("terminal.scrollSensitivity", 0.1, 10.) {
-        s.terminal_scroll_sensitivity = v as f32;
-    }
-    if let Some(v) = r.bool("terminal.allowClipboardWrite") {
-        s.terminal_allow_clipboard_write = v;
-    }
-    if let Some(v) = r.bool("terminal.shellIntegration") {
-        s.terminal_shell_integration = v;
-    }
-    if let Some(v) = r.bool("terminal.notifications") {
-        s.terminal_notifications = v;
-    }
-    if let Some(v) = r.choice("terminal.copyOnSelection", &["agents", "always", "off"]) {
-        s.terminal_copy_on_selection = v;
-    }
-    if let Some(v) = r.choice("terminal.confirmOnClose", &["running", "always", "never"]) {
-        s.terminal_confirm_close = v;
-    }
-    s.terminal_default_profile = r.string("terminal.defaultProfile").filter(|p| !p.trim().is_empty());
-    for os in ["macos", "linux", "windows"] {
-        let key = format!("terminal.profiles.{os}");
-        match obj.get(&key) {
-            None | Some(Value::Null) => {}
-            Some(Value::Object(m)) => {
-                let mut w = Vec::new();
-                s.terminal_profiles.insert(os.to_string(), crate::terminal_profiles::parse_profiles(&key, m, &mut w));
-                for w in w {
-                    r.warn(w);
-                }
-            }
-            Some(_) => r.warn(crate::i18n::tf("{0}: expected an object {1}", &[&key, &"{ \"zsh\": { \"path\": \"/bin/zsh\" } }"])),
-        }
-    }
-    if let Some(v) = r.choice("terminal.sanitizePaste", &["auto", "always", "off"]) {
-        s.terminal_sanitize_paste = crate::terminal_paste::Sanitize::parse(&v).unwrap_or_default();
-    }
-    if let Some(v) = r.choice("terminal.warnMultilinePaste", &["unbracketed", "always", "never"]) {
-        s.terminal_warn_multiline = crate::terminal_paste::WarnMultiline::parse(&v).unwrap_or_default();
-    }
+    terminal::parse(&mut s, &mut r, obj);
+    rust::parse(&mut s, &mut r);
     if let Some(v) = r.bool("window.restoreSession") {
         s.restore_session = v;
     }
@@ -816,6 +816,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.choice("ui.language", crate::i18n::SETTING_CHOICES) {
         s.ui_language = v;
+    }
+    if let Some(v) = r.scale("ui.scale") {
+        s.ui_scale = v;
     }
     if let Some(v) = r.choice("update.check", &["ask", "daily", "manual"]).and_then(|v| v.parse().ok()) {
         s.update_check = v;
@@ -932,6 +935,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.bool("extensions.enabled") {
         s.extensions_enabled = v;
     }
+    if let Some(v) = r.choice("extensions.autoUpdate", &["off", "notify", "install"]).and_then(|v| ext_core::update::AutoUpdate::parse(&v)) {
+        s.extension_auto_update = v;
+    }
     if let Some(v) = r.bool("workbench.editor.showTabs") {
         s.show_tabs = v;
     }
@@ -963,6 +969,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.strings("search.exclude") {
         s.search_exclude = v;
     }
+    s.formatters = crate::ext::formatters_setting(obj.get("editor.formatters"), &mut cw);
     match obj.get("files.associations") {
         None | Some(Value::Null) => {}
         Some(Value::Object(m)) => {
@@ -1153,12 +1160,17 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     const KNOWN: &[&str] = &[
         "ui.language",
+        "ui.scale",
         "update.check",
         "http.runOn",
         "http.confirmRequests",
         "spelling.enabled",
         "spelling.checkComments",
         "spelling.languages",
+        "rust.features",
+        "rust.noDefaultFeatures",
+        "rust.profile",
+        "rust.targetDir",
         // --- data ---
         "data.indent",
         "data.sortKeys",
@@ -1199,6 +1211,8 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.fontSize",
         "terminal.lineHeight",
         "terminal.scrollback",
+        "terminal.persistentScrollback",
+        "terminal.persistentSessionTimeout",
         "terminal.scrollSensitivity",
         "terminal.sanitizePaste",
         "terminal.warnMultilinePaste",
@@ -1265,6 +1279,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "workbench.fontFamily",
         "keymap.preset",
         "extensions.enabled",
+        "extensions.autoUpdate",
         "extensions.registries",
         "workbench.editor.showTabs",
         "workbench.tabs.showIcons",
@@ -1276,6 +1291,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "editor.quickSuggestions",
         "search.exclude",
         "files.associations",
+        "editor.formatters",
         "workbench.colorCustomizations",
         "security.workspaceTrust.enabled",
         "explorer.confirmDelete",
@@ -1358,6 +1374,15 @@ impl Reader<'_> {
                 None
             }
         }
+    }
+
+    /// An interface scale (`parse_ui_scale`); anything else warns with `UI_SCALE_ERROR`.
+    fn scale(&mut self, key: &str) -> Option<f32> {
+        let scale = parse_ui_scale(self.get(key)?);
+        if scale.is_none() {
+            self.warn(format!("{key}: {}", crate::i18n::t(UI_SCALE_ERROR)));
+        }
+        scale
     }
 
     fn integer(&mut self, key: &str, min: u64, max: u64) -> Option<u64> {

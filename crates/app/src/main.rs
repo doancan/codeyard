@@ -1,6 +1,6 @@
 //! codeyard: lightweight, native code editor. Local + SSH.
 //!
-//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|ID[@VERSION]]
+//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|FOLDER|ID[@VERSION] [--accept-permissions]] [--update-extensions]
 
 // Normal Windows launches are GUI applications in every profile. Test harnesses keep their console.
 #![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
@@ -30,6 +30,7 @@ mod crash;
 mod dap;
 mod debug_model;
 // --- data ---
+mod a11y_controls;
 #[cfg(test)]
 mod a11y_ui_tests;
 mod about_page;
@@ -50,6 +51,8 @@ mod docker_tests;
 mod docs_tests;
 mod editor;
 mod editor_decor;
+#[cfg(test)]
+mod editor_keystroke_tests;
 mod editor_layout;
 mod editor_overlay;
 #[cfg(test)]
@@ -59,16 +62,58 @@ mod emmet;
 mod encoding;
 #[cfg(test)]
 mod error_ui_tests;
+#[cfg(all(test, unix))]
+mod explorer_bulk_ssh_tests;
 #[cfg(test)]
 mod explorer_bulk_tests;
 mod ext;
+mod ext_accounts;
+#[cfg(test)]
+mod ext_accounts_ui_tests;
+mod ext_broker;
+#[cfg(test)]
+mod ext_code_tests;
+#[cfg(test)]
+mod ext_core_commands_tests;
+#[cfg(test)]
+mod ext_dev_tests;
+mod ext_fetch;
+#[cfg(test)]
+mod ext_hover_tests;
+mod ext_inspector;
+#[cfg(test)]
+mod ext_inspector_ui_tests;
+#[cfg(test)]
+mod ext_lenses_tests;
+mod ext_memory;
+mod ext_programs;
+mod ext_prompts;
+#[cfg(test)]
+mod ext_prompts_ui_tests;
+#[cfg(test)]
+mod ext_providers_tests;
+mod ext_pulls;
+#[cfg(test)]
+mod ext_pulls_ui_tests;
 mod ext_registry;
 #[cfg(test)]
 mod ext_registry_tests;
+mod ext_runtime;
+#[cfg(test)]
+mod ext_scm_tests;
+#[cfg(test)]
+mod ext_template_views_tests;
 #[cfg(test)]
 mod ext_tests;
+mod ext_updates;
+#[cfg(test)]
+mod ext_updates_tests;
 #[cfg(test)]
 mod ext_view_tests;
+#[cfg(test)]
+mod ext_views_tests;
+#[cfg(test)]
+mod ext_watch_tests;
 #[cfg(test)]
 mod features_tests;
 mod file_batch;
@@ -114,10 +159,13 @@ mod lsp;
 #[cfg(test)]
 mod manage_menu_tests;
 mod markdown;
+#[cfg(test)]
+mod market_tests;
 mod menu;
 mod menus;
 mod merge;
 mod outline;
+mod painted;
 mod perf;
 mod picker;
 mod port_forwards;
@@ -142,13 +190,24 @@ mod qa_lsp_settings_tests;
 #[cfg(test)]
 mod qa_workbench_tests;
 #[cfg(test)]
+mod qa_workspace_file_tests;
+mod question;
+mod questions;
+#[cfg(test)]
 mod reliability_data_tests;
+mod replace_apply;
+mod replace_plan;
+mod repos;
 mod resource_monitor;
 mod resources;
 #[cfg(test)]
 mod rust_hardening_tests;
 mod scm;
 mod search;
+mod search_doc;
+mod search_editor;
+#[cfg(test)]
+mod search_editor_tests;
 mod sections;
 mod settings;
 #[cfg(test)]
@@ -158,6 +217,8 @@ mod shortcuts_page;
 mod snippets;
 #[cfg(test)]
 mod text_scale_tests;
+#[cfg(test)]
+mod ui_scale_tests;
 mod web_preview;
 mod web_preview_config;
 // --- structural ---
@@ -169,11 +230,13 @@ mod structural;
 mod structural_tests;
 mod sysopen;
 mod system_prefs;
+mod task_run;
 mod terminal;
 mod terminal_image_paste;
 mod terminal_osc;
 mod terminal_paste;
 mod terminal_profiles;
+mod terminal_session;
 #[cfg(all(test, unix))]
 mod test_files;
 #[cfg(test)]
@@ -250,6 +313,11 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("down", search::HistoryNext, Some("SearchPanel")),
         KeyBinding::new("f4", search::NextResult, None),
         KeyBinding::new("shift-f4", search::PrevResult, None),
+        KeyBinding::new("down", search_editor::SelectNextRow, Some("SearchEditorList")),
+        KeyBinding::new("up", search_editor::SelectPrevRow, Some("SearchEditorList")),
+        KeyBinding::new("enter", search_editor::ActivateRow, Some("SearchEditorList")),
+        KeyBinding::new("space", search_editor::ToggleRow, Some("SearchEditorList")),
+        KeyBinding::new("secondary-shift-r", search_editor::RerunSearch, Some("SearchEditor")),
         KeyBinding::new("ctrl-shift-g", ShowScm, None),
         // Ctrl+Shift+D duplicates the selection in the editor on Windows and Linux.
         KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-shift-d" } else { "alt-shift-d" }, ShowRunAndDebug, None),
@@ -295,6 +363,8 @@ fn bind_keys(cx: &mut App) {
         // The update dialog: Esc closes it, Tab walks its buttons, Enter and Space press the focused one (Enter: the primary one).
         KeyBinding::new("escape", UpdateDismiss, Some("UpdateDialog")),
         KeyBinding::new("escape", CancelExtensionConsent, Some("ExtensionConsent")),
+        KeyBinding::new("up", MarketPrevious, Some("MarketSearch")),
+        KeyBinding::new("down", MarketNext, Some("MarketSearch")),
         KeyBinding::new("cmd-w", UpdateDismiss, Some("UpdateDialog")),
         KeyBinding::new("tab", UpdateFocusNext, Some("UpdateDialog")),
         KeyBinding::new("shift-tab", UpdateFocusPrev, Some("UpdateDialog")),
@@ -482,6 +552,15 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-c", t::CopyEntry, tr),
         KeyBinding::new("secondary-x", t::CutEntry, tr),
         KeyBinding::new("secondary-v", t::PasteEntry, tr),
+        // Rows of the Run and Debug, Testing, Remote Explorer and Ports lists
+        KeyBinding::new("up", workbench::RowPrevious, Some(workbench::ROW_LIST)),
+        KeyBinding::new("down", workbench::RowNext, Some(workbench::ROW_LIST)),
+        KeyBinding::new("home", workbench::RowFirst, Some(workbench::ROW_LIST)),
+        KeyBinding::new("end", workbench::RowLast, Some(workbench::ROW_LIST)),
+        KeyBinding::new("enter", workbench::RowActivate, Some(workbench::ROW_LIST)),
+        // The focused row's (or the editor's, the Explorer's) context menu; "menu" is the Windows Application key.
+        KeyBinding::new("shift-f10", menu::ShowContextMenu, None),
+        KeyBinding::new("menu", menu::ShowContextMenu, None),
         // Context menu
         KeyBinding::new("up", menu::MenuPrev, Some("ContextMenu")),
         KeyBinding::new("down", menu::MenuNext, Some("ContextMenu")),
@@ -617,9 +696,15 @@ fn bind_extension_keys(cx: &mut App) -> Vec<String> {
         cx.key_bindings().borrow().bindings().map(|b| b.keystrokes().iter().map(|k| k.unparse()).collect::<Vec<_>>().join(" ")).collect();
     let mut bindings = Vec::new();
     for b in list {
-        let Some(action) = commands::action_by_id(&b.command) else {
-            warnings.push(format!("{}: {}", b.ext, i18n::tf("unknown command “{}”", &[&b.command])));
-            continue;
+        let action: Box<dyn gpui::Action> = match &b.extension {
+            Some(extension) => Box::new(workbench::RunExtensionCommand { extension: extension.clone(), command: b.command.clone(), args: "null".into() }),
+            None => match commands::action_by_id(&b.command) {
+                Some(a) => a,
+                None => {
+                    warnings.push(format!("{}: {}", b.ext, i18n::tf("unknown command “{}”", &[&b.command])));
+                    continue;
+                }
+            },
         };
         let predicate = match b.when.as_deref().map(gpui::KeyBindingContextPredicate::parse) {
             None => None,
@@ -701,14 +786,18 @@ struct Args {
     no_extensions: bool,
     /// `--extension-dev FOLDER` (`cyx dev`): load that folder as an extension and reload it on every save.
     extension_dev: Option<String>,
-    /// `--install-extension FILE.cyx` (repeatable): install these packages and exit, without a window.
+    /// `--install-extension FILE.cyx` or `FOLDER` (repeatable): install these packages and exit, without a window.
     install: Vec<String>,
+    /// `--update-extensions`: check the registries of installed extensions now, act as the update check does, and exit.
+    update_extensions: bool,
+    /// `--accept-permissions`: with `--install-extension`, grant what the packages ask for (their sheets are printed).
+    accept_permissions: bool,
 }
 
-/// `--install-extension`: install each package into the user's store, as the Extensions view does after its consent
-/// sheet (the person running the command is the one consenting), and report one line per package. Exit status 1 when any
-/// failed; the others are still installed.
-fn install_extensions(files: &[String]) -> i32 {
+/// `--install-extension`: install each package into the user's store with the checks of the Extensions view, and report
+/// one line per package. A package that asks for permissions prints its consent sheet and installs only with
+/// `--accept-permissions`. Exit status 1 when any failed; the others are still installed.
+fn install_extensions(files: &[String], accept_permissions: bool) -> i32 {
     let Some(cfg) = settings::config_dir() else {
         eprintln!("codeyard: no settings folder");
         return 1;
@@ -722,9 +811,20 @@ fn install_extensions(files: &[String]) -> i32 {
         let path = std::fs::canonicalize(f).unwrap_or_else(|_| f.into());
         // A file (or anything that looks like one) is a package; `publisher.name[@version]` comes from a registry.
         let from_file = path.exists() || f.ends_with(".cyx") || f.contains(['/', '\\']);
-        let result = if from_file { ext::install_file(&store, &path) } else { ext_registry::install_from_command_line(&cfg, &registries, f) };
+        let result = if from_file {
+            ext::install_file(&store, &path, accept_permissions)
+        } else {
+            ext_registry::install_from_command_line(&cfg, &registries, f, accept_permissions)
+        };
         match result {
-            Ok(m) => println!("installed {} {}", m.id, m.version),
+            Ok(m) => {
+                // What was granted, as the sheet put it.
+                let source = store.locked().ok().and_then(|l| l.get(&m.id).map(|l| l.source.clone()));
+                if let Some(sheet) = source.and_then(|s| ext::permission_sheet(&m, &s)) {
+                    println!("{sheet}");
+                }
+                println!("installed {} {}", m.id, m.version)
+            }
             Err(e) => {
                 eprintln!("{f}: {e}");
                 status = 1;
@@ -732,6 +832,40 @@ fn install_extensions(files: &[String]) -> i32 {
         }
     }
     status
+}
+
+/// `--update-extensions`: what the daily update check does for extensions installed from a registry (update, roll
+/// back a yanked version, stop a revoked one), asking those registries now, without a window. One line per change;
+/// exit status 1 when a registry could not be read.
+fn update_extensions() -> i32 {
+    let Some(cfg) = settings::config_dir() else {
+        eprintln!("codeyard: no settings folder");
+        return 1;
+    };
+    let settings =
+        std::fs::read_to_string(cfg.join("settings.jsonc")).ok().and_then(|t| settings::parse_layers(&t, &[]).ok()).map(|(s, _)| s).unwrap_or_default();
+    let registries = ext_registry::registries(&settings);
+    let report = ext_updates::check_now(&cfg, &registries, settings.extension_auto_update, ext_registry::now());
+    for line in report.done.iter().chain(&report.stopped) {
+        println!("{line}");
+    }
+    for (id, s) in &report.status {
+        if let (ext_core::update::Standing::Revoked { reason }, None) = (&s.standing, &s.offer) {
+            println!("{}", i18n::tf("{0} stays stopped: the registry revoked the installed version ({1}) and has no other version to install", &[id, reason]));
+        }
+        let Some(offer) = &s.offer else { continue };
+        let v = offer.version();
+        match offer {
+            ext_updates::Offer::Waiting { .. } => println!("{id} {v} runs code: it installs by itself 48 h after it was published"),
+            ext_updates::Offer::Available { .. } => println!("{id} {v} is available"),
+            ext_updates::Offer::Failed { error, .. } => println!("{id} {v} could not be installed: {error}"),
+            _ => println!("{id} {v} needs your review in the Extensions view"),
+        }
+    }
+    for e in &report.errors {
+        eprintln!("{e}");
+    }
+    i32::from(!report.errors.is_empty())
 }
 
 /// The windows an update restart left for this process; the file is consumed here. Anything wrong with it is logged and means
@@ -783,6 +917,8 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
         no_extensions: false,
         extension_dev: None,
         install: Vec::new(),
+        update_extensions: false,
+        accept_permissions: false,
     };
     let mut it = argv;
     while let Some(a) = it.next() {
@@ -793,6 +929,8 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             "--no-extensions" => args.no_extensions = true,
             "--extension-dev" => args.extension_dev = it.next(),
             "--install-extension" => args.install.extend(it.next()),
+            "--update-extensions" => args.update_extensions = true,
+            "--accept-permissions" => args.accept_permissions = true,
             update_restart::FLAG => args.after_update = true,
             "--search" => args.search = it.next(),
             "--panel" => args.panel = it.next(),
@@ -811,7 +949,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             }
             "-h" | "--help" => {
                 println!(
-                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|ID[@VERSION]]"
+                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|FOLDER|ID[@VERSION] [--accept-permissions]] [--update-extensions]"
                 );
                 std::process::exit(0);
             }
@@ -819,6 +957,13 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
         }
     }
     args
+}
+
+/// `--accept-permissions` grants what a package being installed asks for. An update that asks for more is reviewed in the
+/// Extensions view, so the flag does nothing there: say so rather than ignore it.
+fn accept_permissions_misuse(args: &Args) -> Option<&'static str> {
+    (args.accept_permissions && args.install.is_empty())
+        .then_some("--accept-permissions only goes with --install-extension; an update that asks for more permissions is reviewed in the Extensions view")
 }
 
 #[cfg(test)]
@@ -851,6 +996,15 @@ mod args_tests {
         assert_eq!((dev.extension_dev.as_deref(), dev.path.as_deref()), (Some("/ext"), Some("/work")), "its value is not the folder to open");
         let inst = parse(false, &["--install-extension", "a.cyx", "--install-extension", "b.cyx"]);
         assert_eq!((inst.install.as_slice(), inst.path.as_deref()), (&["a.cyx".to_string(), "b.cyx".to_string()][..], None));
+        assert!(!inst.accept_permissions, "never without the flag");
+        let accepted = parse(false, &["--install-extension", "you.tools", "--accept-permissions"]);
+        assert!(accepted.accept_permissions && accepted.path.is_none());
+        let up = parse(false, &["--update-extensions"]);
+        assert!(up.update_extensions && up.path.is_none());
+        // The flag grants installs only: with an update, or alone, it is refused instead of ignored.
+        assert!(super::accept_permissions_misuse(&parse(false, &["--update-extensions", "--accept-permissions"])).is_some());
+        assert!(super::accept_permissions_misuse(&accepted).is_none());
+        assert!(super::accept_permissions_misuse(&up).is_none());
     }
 }
 
@@ -1000,6 +1154,23 @@ pub fn open_workbench_window(cx: &mut App) -> Option<gpui::WindowHandle<Workbenc
 }
 
 fn main() {
+    // The process guard started below runs this same binary: it ends this window's tasks and terminals if the app is
+    // killed (see `agent::guard`).
+    #[cfg(unix)]
+    if std::env::args_os().nth(1).is_some_and(|arg| arg == "--process-guard") {
+        agent::guard::run(std::io::stdin().lock());
+        return;
+    }
+    // The terminal daemon (started by a window with `window.restoreSession`): its shells outlive the app.
+    #[cfg(any(unix, windows))]
+    if std::env::args_os().nth(1).is_some_and(|arg| arg == "--daemon") {
+        let Some(socket) = std::env::args_os().nth(2) else { std::process::exit(2) };
+        if let Err(e) = agent::daemon::run(std::path::Path::new(&socket)) {
+            eprintln!("codeyard: terminal daemon: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
     perf::init();
     if std::env::args_os().len() == 2 && std::env::args_os().nth(1).is_some_and(|arg| arg == "--check-agent-bundle") {
         match bundled_agents::check() {
@@ -1020,8 +1191,23 @@ fn main() {
     workbench::migrate_legacy_dirs();
     crash::install(workbench::crash_dir());
     let args = parse_args();
-    if !args.install.is_empty() {
-        std::process::exit(install_extensions(&args.install));
+    // Windows and Linux start Codeyard with an extension's sign-in address: hand it to the running one.
+    if let Some(url) = args.path.as_deref().filter(|p| p.starts_with("codeyard://")) {
+        std::process::exit(workbench::forward_callback_from_command_line(url));
+    }
+    if let Some(message) = accept_permissions_misuse(&args) {
+        eprintln!("{message}");
+        std::process::exit(2);
+    }
+    if !args.install.is_empty() || args.update_extensions {
+        let mut status = 0;
+        if !args.install.is_empty() {
+            status = install_extensions(&args.install, args.accept_permissions);
+        }
+        if args.update_extensions {
+            status = status.max(update_extensions());
+        }
+        std::process::exit(status);
     }
     if args.no_extensions {
         ext::turn_off();
@@ -1031,6 +1217,13 @@ fn main() {
     }
     // A folder or host on the command line wins; the file is consumed either way.
     let reopen = args.after_update.then(update_handover).flatten().filter(|_| args.path.is_none() && args.connect.is_none());
+    // Before anything can start a task or a terminal: if the app dies by a signal or a crash, the guard ends them.
+    #[cfg(any(unix, windows))]
+    if let Some(socket) = workbench::terminal_daemon_socket() {
+        workbench::enable_terminal_daemon(socket);
+    }
+    #[cfg(unix)]
+    let _guard = std::env::current_exe().and_then(|exe| agent::guard::spawn(&exe)).map_err(|e| eprintln!("codeyard: no process guard: {e}")).ok();
     // Finder's "Open With", dropping on the Dock icon and `open -a Codeyard x` addresses are forwarded to the window through this channel
     // (the handler must be set up before the app opens; a request that arrives on first launch isn't lost either).
     let (open_tx, mut open_rx) = futures::channel::mpsc::unbounded::<Vec<String>>();
@@ -1201,8 +1394,14 @@ fn main() {
             .detach();
         }
         // All ssh ControlMasters are closed on every exit, including ⌘Q and the last window closing.
-        cx.on_app_quit(|_| {
+        cx.on_app_quit(|cx| {
             host::ssh::close_all_masters();
+            // Quitting is not closing: every window's terminals stay with the terminal daemon for the next start.
+            for window in cx.windows() {
+                if let Some(wb) = window.downcast::<Workbench>() {
+                    let _ = wb.update(cx, |wb, _, cx| wb.keep_terminals_for_restart(cx));
+                }
+            }
             async {}
         })
         .detach();

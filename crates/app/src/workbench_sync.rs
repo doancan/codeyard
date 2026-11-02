@@ -2,6 +2,7 @@
 //! background fetch (`git.autofetch`) and the guard that keeps two network operations from running at once.
 
 use gpui::{AppContext as _, Context, SharedString, Window};
+use std::sync::Arc;
 
 use super::git_glue::first_line;
 use super::{Notice, OverlayKind, Workbench};
@@ -86,6 +87,7 @@ impl Workbench {
     /// Pull / push / fetch / publish, several in sequence (sync: pull first, then push). Never two at once.
     pub(super) fn git_sync(&mut self, ops: Vec<SyncOp>, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
+        let target = root.clone();
         match self.vcs.sync.running {
             Some(Running::Sync) => {
                 self.notice = Some(Notice::Info(crate::i18n::t("A sync is already running.").into()));
@@ -105,7 +107,6 @@ impl Workbench {
         cx.notify();
         let host = self.remote.host.clone();
         let source_host = host.clone();
-        let source_root = root.clone();
         let opts = options(cx.global::<Settings>());
         let list = ops.clone();
         let task = cx.background_executor().spawn(async move {
@@ -120,12 +121,26 @@ impl Workbench {
             }
             Ok::<_, (SyncOp, String)>(steps)
         });
+        let picked = self.vcs.repos.inventory.repos.len() > 1;
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
                 this.vcs.sync.running = None;
                 this.set_scm_syncing(false, cx);
-                if !this.git_context_matches(&source_host, &source_root) {
+                // Another connection was opened while the sync ran: its result belongs to neither what is shown nor
+                // that connection, and must not refresh or keep it.
+                if !Arc::ptr_eq(&source_host, &this.remote.host) {
+                    return;
+                }
+                if picked && this.vcs.repos.inventory.by_worktree(&target).is_none() && !this.all_roots(cx).contains(&target) {
+                    // The repository left the workspace while its sync ran: its result says nothing about what is shown.
+                    this.notice = Some(Notice::Error(crate::i18n::t("Repository changed while the operation was pending.").into()));
+                    this.refresh_git(0, cx);
+                    cx.notify();
+                    return;
+                }
+                // Another repository is shown now: the old result must not replace its notice.
+                if !this.git_context_matches(&source_host, &target) {
                     cx.notify();
                     return;
                 }
@@ -179,12 +194,30 @@ impl Workbench {
             return;
         }
         let upstream = st.upstream.clone().unwrap_or_default();
-        let detail = match (pulls, pushes) {
+        let mut detail = match (pulls, pushes) {
             (true, true) => crate::i18n::tf("This pulls and pushes commits from and to “{}”.", &[&upstream]),
             (true, false) => crate::i18n::tf("This pulls commits from “{}”.", &[&upstream]),
             _ => crate::i18n::tf("This pushes commits to “{}”.", &[&upstream]),
         };
-        self.confirm_git(window, crate::i18n::t("Sync changes?"), &detail, crate::i18n::t("Sync"), cx, move |this, cx| this.git_sync(ops, cx));
+        if self.vcs.repos.inventory.repos.len() > 1 {
+            // Several repositories: the question names the one it applies to.
+            detail = format!("{}\n{detail}", crate::i18n::tf("Repository: {}", &[&st.root]));
+        }
+        // The answer applies to the connection and repository the question was about, never to one selected while it
+        // was open.
+        let root = st.root.clone();
+        let host = self.remote.host.clone();
+        self.confirm(window, crate::i18n::t("Sync changes?"), &detail, crate::i18n::t("Sync"), cx, move |this, cx| {
+            if !Arc::ptr_eq(&host, &this.remote.host) {
+                return;
+            }
+            if this.git_status().map(|s| s.root.clone()) != Some(root.clone()) {
+                this.notice = Some(Notice::Error(crate::i18n::t("Repository changed while the operation was pending.").into()));
+                cx.notify();
+                return;
+            }
+            this.git_sync(ops, cx)
+        });
     }
 
     pub(super) fn git_publish_branch(&mut self, cx: &mut Context<Self>) {

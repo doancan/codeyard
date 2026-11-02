@@ -10,6 +10,25 @@ pub struct ActiveTheme(pub Palette);
 
 impl Global for ActiveTheme {}
 
+/// Whether the last input was the keyboard. Focus rings show only then: a click lights the button it presses instead of
+/// outlining it, and Tab still shows where the focus went.
+#[derive(Default)]
+struct InputModality {
+    keyboard: bool,
+}
+
+impl Global for InputModality {}
+
+pub fn keyboard_focus(cx: &App) -> bool {
+    cx.try_global::<InputModality>().is_some_and(|m| m.keyboard)
+}
+
+pub fn set_keyboard_focus(keyboard: bool, cx: &mut App) {
+    if keyboard_focus(cx) != keyboard {
+        cx.set_global(InputModality { keyboard });
+    }
+}
+
 pub fn palette(cx: &App) -> &Palette {
     &cx.global::<ActiveTheme>().0
 }
@@ -166,6 +185,11 @@ pub fn icon(name: &str, size: f32, color: u32) -> Svg {
     svg().path(format!("icons/{name}.svg")).size(px(size)).flex_none().text_color(c(color))
 }
 
+/// Whether `name` is one of the app's icons (an extension's icon name may not be).
+pub fn has_icon(name: &str) -> bool {
+    ICONS.iter().any(|(p, _)| p.strip_prefix("icons/").and_then(|p| p.strip_suffix(".svg")) == Some(name))
+}
+
 /// Spinning "loading" icon (one turn per second; still with reduced motion). `id` must be unique among siblings.
 pub fn spinner(id: impl Into<gpui::ElementId>, size: f32, color: u32) -> gpui::AnyElement {
     use gpui::{Animation, AnimationExt as _, IntoElement as _, Transformation, percentage};
@@ -225,6 +249,7 @@ const ICONS: &[(&str, &[u8])] = icons![
     "check",
     "chevron-down",
     "chevron-right",
+    "chevron-up",
     "circle-x",
     "file",
     "file-code",
@@ -410,6 +435,16 @@ pub fn local_path(path: &std::path::Path) -> String {
         path.strip_prefix(r"\\?\").unwrap_or(&path).replace('\\', "/")
     };
     path
+}
+
+/// Tests: `std::fs::canonicalize` in the form the workbench keeps a local folder (`local_path`): on Windows without
+/// the `\\?\` prefix and with `/`, so an expected path compares equal to the app's and git accepts it. The same as
+/// `canonicalize` elsewhere.
+#[cfg(test)]
+pub fn canonical_for_test(path: impl AsRef<std::path::Path>) -> std::path::PathBuf {
+    let path = path.as_ref();
+    let canonical = std::fs::canonicalize(path).unwrap_or_else(|e| panic!("canonicalize {}: {e}", path.display()));
+    std::path::PathBuf::from(local_path(&canonical))
 }
 
 /// Bridge a blocking channel to an async channel: a small separate thread does the receiving,

@@ -150,11 +150,11 @@ impl Workbench {
             (detail, choices)
         };
         let mut choices = choices;
-        choices.push((Choice::Cancel, crate::i18n::t("Cancel")));
         let labels: Vec<&str> = choices.iter().map(|(_, l)| *l).collect();
-        let answer = window.prompt(PromptLevel::Warning, &title, Some(&detail), &labels, cx);
+        let answer = crate::questions::structural_replace(&title, &detail, &labels).ask(window, cx);
+        choices.push((Choice::Cancel, crate::i18n::t("Cancel")));
         cx.spawn_in(window, async move |this, cx| {
-            let files = match answer.await.ok().and_then(|i| choices.get(i)).map(|(c, _)| *c) {
+            let files = match answer.await.and_then(|i| choices.get(i)).map(|(c, _)| *c) {
                 Some(Choice::All) => files,
                 Some(Choice::SkipBroken) => files.into_iter().filter(|f| !broken.contains(f)).collect(),
                 _ => return,

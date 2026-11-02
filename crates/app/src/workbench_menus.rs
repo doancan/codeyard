@@ -93,7 +93,9 @@ impl Workbench {
             items.push(MenuItem::new(crate::i18n::t("Reveal in Finder")).separator());
             commands.push(MenuCmd::Reveal);
         }
-        self.show_menu(items, commands, Vec::new(), target, position, window, cx);
+        let mut actions = Vec::new();
+        self.add_extension_items(ext_manifest::MenuLocation::FileTree, Some(&target.path), &mut items, &mut commands, &mut actions, cx);
+        self.show_menu(items, commands, actions, target, position, window, cx);
         if let Some(menu) = &mut self.menu {
             menu.context = Some(context);
         }
@@ -187,7 +189,7 @@ impl Workbench {
             (crate::i18n::t("Compare with Commit…"), Box::new(GitCompareCommit), false),
             (crate::i18n::t("Command Palette…"), Box::new(CommandPalette), true),
         ];
-        self.show_action_menu(entries, position, window, cx);
+        self.show_action_menu_with_extensions(entries, ext_manifest::MenuLocation::EditorContext, position, window, cx);
     }
 
     /// Context menu from an action list: (label, action, separator before). Shortcuts
@@ -255,6 +257,18 @@ impl Workbench {
         let status_bar = self.chrome.zen.is_none() && cx.global::<Settings>().status_bar;
         let origin = Self::manage_menu_origin(window.viewport_size().height, status_bar);
         self.show_action_menu_at(Self::manage_menu_entries(), origin, gpui::Corner::BottomLeft, window, cx);
+        if let Some(state) = &mut self.menu {
+            state.follows_manage = true;
+        }
+    }
+
+    /// Keep an open Manage menu at the gear button: the button sits at the bottom of the viewport, which changes when the
+    /// window is resized or the interface scale changes.
+    pub(super) fn sync_manage_menu(&mut self, window: &Window, cx: &App) {
+        let status_bar = self.chrome.zen.is_none() && cx.global::<Settings>().status_bar;
+        if let Some(state) = self.menu.as_mut().filter(|m| m.follows_manage) {
+            state.position = Self::manage_menu_origin(window.viewport_size().height, status_bar);
+        }
     }
 
     pub(super) fn show_menu(
@@ -267,6 +281,10 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.view_host_window().is_some_and(|h| h != window.window_handle()) {
+            self.reroute_to_view_window(window, cx, move |this, window, cx| this.show_menu(items, commands, actions, target, position, window, cx));
+            return;
+        }
         let menu = cx.new(|cx| ContextMenu::new(items, cx));
         let sub = cx.subscribe_in(&menu, window, |this, _, event: &MenuEvent, window, cx| {
             if let MenuEvent::Horizontal(forward) = event {
@@ -294,7 +312,8 @@ impl Workbench {
         let return_focus = window.focused(cx);
         window.focus(&menu.focus_handle(cx));
         self.scm.update(cx, |scm, cx| scm.set_menu_open(true, cx));
-        self.menu = Some(MenuState { menu, position, target, commands, actions, return_focus, app_path: None, context: None, _sub: sub });
+        self.menu =
+            Some(MenuState { menu, position, target, commands, actions, return_focus, app_path: None, context: None, follows_manage: false, _sub: sub });
         cx.notify();
     }
 
@@ -364,6 +383,7 @@ impl Workbench {
             }
             MenuCmd::OpenTerminal => self.new_terminal_in(Some(dir), window, cx),
             MenuCmd::TerminalLaunch(ix) => self.launch_from_menu(ix, window, cx),
+            MenuCmd::ExtViewChoice(ix) => self.ext_view_choice_from_menu(ix, window, cx),
             MenuCmd::SelectForCompare => {
                 self.notice = Some(Notice::Info(
                     crate::i18n::tf("Selected {} for compare. Right-click another file and choose Compare.", &[&ui::file_name(&target.path)]).into(),
@@ -403,7 +423,7 @@ impl Workbench {
                 }
             }
             MenuCmd::CommitBranch => self.show_input(
-                InputPurpose::CommitBranch { hash: target.path },
+                InputPurpose::CommitBranch { hash: target.path, repo: self.vcs.menu_repo.clone() },
                 crate::i18n::t("Create branch"),
                 crate::i18n::t("Name of the new branch (starts at this commit)"),
                 "",
@@ -411,7 +431,7 @@ impl Workbench {
                 cx,
             ),
             MenuCmd::CommitTag => self.show_input(
-                InputPurpose::CommitTag { hash: target.path },
+                InputPurpose::CommitTag { hash: target.path, repo: self.vcs.menu_repo.clone() },
                 crate::i18n::t("Create tag"),
                 crate::i18n::t("Tag name, then an optional message for an annotated tag"),
                 "",
@@ -427,7 +447,10 @@ impl Workbench {
                     MenuCmd::CommitReset(m) => CommitOp::Reset(m),
                     _ => return,
                 };
-                self.scm.update(cx, |s, cx| s.commit_op(target.path, op, window, cx));
+                // Pinned to the repository the menu was opened on; without one (no history loaded) nothing runs.
+                if let Some(repo) = self.vcs.menu_repo.clone() {
+                    self.scm.update(cx, |s, cx| s.commit_op_in(Some(repo), target.path, op, window, cx));
+                }
             }
             // --- git-refs ---
             MenuCmd::GitIgnore => self.git_ignore_path(target.path, target.is_dir, cx),

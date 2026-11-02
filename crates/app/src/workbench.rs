@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Duration;
 
 use gpui::{
-    AnyElement, App, Context, Entity, FocusHandle, Focusable, MouseButton, PathPromptOptions, PromptLevel, SharedString, Subscription, Window, actions,
-    deferred, div, prelude::*, px,
+    AnyElement, App, Context, Entity, FocusHandle, Focusable, MouseButton, PathPromptOptions, SharedString, Subscription, Window, actions, deferred, div,
+    prelude::*, px,
 };
 use host::Host;
 use host::ssh::{AgentBundle, SshHost, Step};
@@ -47,10 +47,19 @@ mod container_overview_glue;
 #[path = "workbench_docker.rs"]
 mod docker_glue;
 // --- data ---
+#[path = "workbench_ext_accounts.rs"]
+mod accounts_glue;
+pub(crate) use accounts_glue::{deliver_callback as deliver_extension_callback, forward_callback_from_command_line};
+#[path = "workbench_ext_code.rs"]
+mod code_glue;
+#[path = "workbench_ext_core.rs"]
+mod core_commands_glue;
 #[path = "workbench_data.rs"]
 mod data_glue;
 #[path = "workbench_debug.rs"]
 mod debug;
+#[path = "workbench_ext_dev.rs"]
+mod dev_glue;
 #[cfg(test)]
 #[path = "editor_grid_tests.rs"]
 mod editor_grid_tests;
@@ -58,8 +67,18 @@ mod editor_grid_tests;
 mod editors_glue;
 #[path = "workbench_ext.rs"]
 mod ext_glue;
+#[path = "workbench_ext_hosts.rs"]
+mod ext_hosts_glue;
+#[path = "workbench_ext_scm.rs"]
+mod ext_scm_glue;
+#[path = "ext_ui_render.rs"]
+mod ext_ui_glue;
 #[path = "workbench_ext_view.rs"]
 mod ext_view_glue;
+#[path = "workbench_ext_views.rs"]
+mod ext_views_glue;
+#[path = "workbench_ext_watch.rs"]
+mod ext_watch_glue;
 #[path = "workbench_extras.rs"]
 mod extras_glue;
 #[path = "workbench_file_batch.rs"]
@@ -72,6 +91,23 @@ mod fsops_glue;
 mod git_glue;
 #[path = "workbench_groups.rs"]
 mod groups_glue;
+#[path = "workbench_ext_inspector.rs"]
+mod inspector_glue;
+#[path = "workbench_market.rs"]
+mod market_glue;
+#[path = "workbench_market_view.rs"]
+mod market_view_glue;
+#[path = "workbench_ext_memory.rs"]
+mod memory_glue;
+#[path = "workbench_ext_prompts.rs"]
+mod prompts_glue;
+#[path = "workbench_ext_providers.rs"]
+mod providers_glue;
+#[path = "workbench_repos.rs"]
+pub(crate) mod repos_glue;
+#[path = "workbench_ext_updates.rs"]
+mod updates_glue;
+
 use groups_glue::{Group, GroupKey, GroupResize};
 #[path = "workbench_hosts.rs"]
 mod hosts;
@@ -94,8 +130,12 @@ mod palette_glue;
 mod panels_glue;
 #[cfg(test)]
 pub use panels_glue::ProblemRow;
+#[cfg(test)]
+pub(crate) use panels_glue::interface_scale_notice;
 #[path = "workbench_cyx.rs"]
 mod cyx_glue;
+#[path = "workbench_ext_pulls.rs"]
+mod ext_pulls_glue;
 #[path = "workbench_ports.rs"]
 mod ports_glue;
 #[path = "workbench_projects.rs"]
@@ -104,6 +144,9 @@ pub mod projects;
 mod pulls_glue;
 #[path = "workbench_remote.rs"]
 mod remote_glue;
+#[path = "workbench_row_nav.rs"]
+mod row_nav_glue;
+pub use row_nav_glue::{ROW_LIST, RowActivate, RowFirst, RowLast, RowNext, RowPrevious};
 #[path = "workbench_rust.rs"]
 mod rust_glue;
 // --- git-refs ---
@@ -118,6 +161,8 @@ mod replace_glue;
 // --- structural ---
 #[path = "workbench_schema.rs"]
 mod schema_glue;
+#[path = "workbench_search_editor.rs"]
+mod search_editor_glue;
 #[path = "workbench_session.rs"]
 mod session_glue;
 #[path = "workbench_settings.rs"]
@@ -125,14 +170,32 @@ pub mod settings_ui;
 #[path = "workbench_spell.rs"]
 mod spell_glue;
 // --- git-sync ---
+#[path = "workbench_actions.rs"]
+mod actions_glue;
+#[path = "workbench_docks.rs"]
+mod docks_glue;
+#[path = "workbench_editor_windows.rs"]
+mod editor_windows_glue;
 #[path = "workbench_state.rs"]
 mod state_glue;
 #[path = "workbench_structural.rs"]
 mod structural_glue;
 #[path = "workbench_sync.rs"]
 mod sync_glue;
+#[path = "workbench_tab_drag.rs"]
+mod tab_drag_glue;
+#[path = "workbench_task_run.rs"]
+mod task_run_glue;
 #[path = "workbench_tasks.rs"]
 pub mod tasks;
+#[path = "workbench_term_daemon.rs"]
+mod term_daemon_glue;
+#[path = "workbench_term_tabs.rs"]
+mod term_tabs_glue;
+#[path = "workbench_view_windows.rs"]
+mod view_windows_glue;
+#[cfg(any(unix, windows))]
+pub use term_daemon_glue::{enable_terminal_daemon, terminal_daemon_socket};
 #[path = "workbench_terminals.rs"]
 mod terminals_glue;
 #[cfg(test)]
@@ -140,6 +203,8 @@ mod terminals_glue;
 mod testing_glue;
 #[path = "workbench_test_explorer.rs"]
 mod tests_glue;
+#[path = "workbench_views.rs"]
+mod views_glue;
 #[cfg(test)]
 pub(crate) use testing_glue::DialogView;
 #[path = "workbench_theme.rs"]
@@ -166,6 +231,8 @@ mod watch_glue;
 mod web_preview_glue;
 #[path = "workbench_welcome.rs"]
 pub(crate) mod welcome_glue;
+#[path = "workbench_workspace.rs"]
+mod workspace_glue;
 
 /// Project settings file (root-relative).
 const PROJECT_SETTINGS: &str = ".codeyard/settings.jsonc";
@@ -196,6 +263,7 @@ actions!(
         KillTerminal,
         FindInFiles,
         OpenSearchInEditor,
+        UndoSearchReplace,
         OpenAsHex,
         OpenSettings,
         OpenKeybindings,
@@ -267,6 +335,8 @@ actions!(
         RunTask,
         RunBuildTask,
         RerunLastTask,
+        TerminateTask,
+        RestartRunningTask,
         RunTestAtCursor,
         RunFileTests,
         StartDebugging,
@@ -280,6 +350,10 @@ actions!(
         AddDataBreakpoint,
         RemoveDataBreakpoints,
         OpenWorkspaceFile,
+        SaveWorkspace,
+        SaveWorkspaceAs,
+        ReloadWorkspace,
+        OpenActiveWorkspaceFile,
         AddFolderInNewWindow,
         AddFolderToWorkspace,
         RemoveFolderFromWorkspace,
@@ -292,6 +366,14 @@ actions!(
         ShowDebugPanel,
         ConfigureTasks,
         TogglePanelPosition,
+        MoveViewToSecondarySideBar,
+        MoveViewToPrimarySideBar,
+        ToggleSecondarySideBar,
+        MoveTerminalIntoNewWindow,
+        MoveTerminalsBackToPanel,
+        MoveTerminalIntoEditorArea,
+        MoveTerminalBackToPanelFromEditor,
+        ClearSavedTerminalHistory,
         ToggleMaximizedPanel,
         GitCheckout,
         GitCreateBranch,
@@ -476,6 +558,8 @@ enum Page {
     Containers,
     /// The Extensions view's detail page and consent sheet (state in `ConfigState::exts`).
     Extension,
+    /// **Developer: Extension Inspector** (workbench_ext_inspector.rs).
+    ExtensionInspector,
     Settings(Entity<crate::settings_page::SettingsPage>),
     Markdown(Entity<crate::markdown::MarkdownPreview>),
     Shortcuts(Entity<crate::shortcuts_page::ShortcutsPage>),
@@ -483,6 +567,12 @@ enum Page {
     Merge(Entity<crate::merge::MergeView>),
     // --- compare ---
     Compare(Entity<crate::compare_folders::CompareView>),
+    /// The Search Editor in front; every open one is also listed in its group's `searches`.
+    Search(Entity<crate::search_editor::SearchEditor>),
+    /// An extension view in the editor area, by its full id (workbench_ext_views.rs).
+    ExtView(String),
+    /// A terminal moved into the editor area in front; every one is also listed in its group's `terminals`.
+    Terminal(Entity<crate::terminal::TerminalView>),
 }
 
 /// Floating picker on top: theme picker or palette (files / commands / line).
@@ -497,14 +587,20 @@ pub use debug::{
     AddDebugConfiguration, AddFunctionBreakpoint, ConsoleComplete, ConsoleHistoryNext, ConsoleHistoryPrev, DisableAllBreakpoints, EnableAllBreakpoints,
     OpenLaunchConfiguration, RunToCursor, RunWithoutDebugging, ShowRunAndDebug, StopAllDebugging, ToggleBreakpointEnabled, ToggleBreakpointsActive,
 };
+pub use docks_glue::{MovePanelLeft, MovePanelRight, MovePanelToBottom};
+pub use editor_windows_glue::{CopyEditorIntoNewWindow, MoveEditorIntoNewWindow, MoveEditorsBackToMainWindow};
 pub use ext_glue::{CancelExtensionConsent, InstallExtensionFromFile, InstallExtensionFromFolder, InstallExtensionFromRegistry, ShowExtensions};
 pub use host::askpass::{AskKind, AskRequest};
+pub use inspector_glue::ShowExtensionInspector;
+pub use market_glue::{MarketNext, MarketPrevious, ShowMarket};
+pub use providers_glue::RunExtensionCommand;
 pub use remote_glue::ShowRemoteExplorer;
 pub use terminals_glue::{
     ChangeTerminalColor, ConfigureTerminalSettings, FocusNextTerminal, FocusPreviousTerminal, KillAllTerminals, KillOtherTerminals, NewTerminalWithProfile,
     RenameTerminal, SelectDefaultTerminalProfile,
 };
 pub use tests_glue::{DebugTestAtCursor, RefreshTests, RunAllTests, RunFailedTests, ShowTesting, StopTests};
+pub use view_windows_glue::{MoveViewBackToSideBar, MoveViewIntoNewWindow};
 pub type AskReply = std::sync::mpsc::Sender<Option<String>>;
 
 /// Options in the status bar pickers.
@@ -539,7 +635,7 @@ type NavPos = (String, u32, u32);
 const MAX_TERMINALS: usize = 8;
 
 /// What the bottom panel shows.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Bottom {
     Terminal,
     Problems,
@@ -547,6 +643,8 @@ enum Bottom {
     Ports,
     /// Debug: call stack, variables, console.
     Debug,
+    /// The extension view in `cfg.exts.views.bottom`.
+    ExtView,
 }
 
 /// Settings files of a folder (lowest to highest priority).
@@ -555,7 +653,7 @@ fn folder_settings_paths(root: &str) -> Vec<String> {
 }
 
 /// Separator between extra folder name and path in the Go to file list (never occurs in file names).
-pub(super) const ROOT_SEP: &str = " › ";
+pub(crate) const ROOT_SEP: &str = " › ";
 
 /// ID of the extra folder section (header drawing needs `&'static str`; IDs are created once).
 fn extra_folder_id(i: usize) -> &'static str {
@@ -573,6 +671,8 @@ struct MenuState {
     return_focus: Option<FocusHandle>,
     app_path: Option<Vec<usize>>,
     context: Option<types::InputContext>,
+    /// The Manage menu: re-anchored to the gear button whenever the viewport changes (zoom, resize).
+    follows_manage: bool,
     _sub: Subscription,
 }
 
@@ -628,7 +728,7 @@ pub fn user_theme_dir() -> Option<std::path::PathBuf> {
 /// Dev only: fake host name that exercises the remote code path without ssh.
 pub const LOCAL_AGENT_ALIAS: &str = "agent-stdio";
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Panel {
     Explorer,
     Search,
@@ -638,6 +738,8 @@ enum Panel {
     Remote,
     Containers,
     Extensions,
+    /// The extension view in `cfg.exts.views.sidebar`.
+    ExtView,
 }
 
 enum Conn {
@@ -730,6 +832,8 @@ pub struct Workbench {
     update: state_glue::UpdateUi,
     /// Editor groups: tabs, separate tab views (diff, large file, page) and startup state.
     tabs: state_glue::TabsState,
+    /// Search Editors: subscriptions, the last replacement's undo record and saved state (see workbench_search_editor.rs).
+    searches: search_editor_glue::SearchEditors,
     // --- data ---
     /// Data lens: the query bar and the status bar path (see workbench_data.rs).
     data: data_glue::DataState,
@@ -975,11 +1079,15 @@ impl Workbench {
                     this.tabs.pending_reveal = Some((path.clone(), *line, *column, *len));
                     this.open_file(path.clone(), window, cx);
                 }
-                SearchEvent::OpenInEditor(text) => {
-                    this.create_scratch_with("search-results.txt".into(), text, window, cx);
+                SearchEvent::OpenInEditor(spec) => {
+                    this.open_search_editor(spec.clone(), None, window, cx);
                 }
-                SearchEvent::ReplaceAll { files, query, replacement, preserve_case, matches, truncated } => {
-                    this.confirm_replace_all(files.clone(), query.clone(), replacement.clone(), *preserve_case, *matches, *truncated, window, cx)
+                SearchEvent::ReviewReplace { spec, only } => {
+                    let review = match only {
+                        Some(path) => crate::search_editor::Review::Only(path.clone()),
+                        None => crate::search_editor::Review::All,
+                    };
+                    this.open_search_editor(spec.clone(), Some(review), window, cx);
                 }
                 // --- structural ---
                 SearchEvent::StructuralBuffers { generation, family } => this.structural_buffers(*generation, family, cx),
@@ -1017,10 +1125,41 @@ impl Workbench {
                         let _ = s.set("scm_sections", text);
                     }
                 }
+                crate::scm::ScmEvent::SelectRepository(key) => {
+                    this.select_repository(*key, cx);
+                }
+                crate::scm::ScmEvent::OpenRepoDiff { repo, path, staged } => {
+                    if this.select_repository(*repo, cx) {
+                        this.open_diff(path.clone(), *staged, window, cx);
+                    }
+                }
+                crate::scm::ScmEvent::RepoFileMenu(repo, path, staged, position) => {
+                    if this.select_repository(*repo, cx) {
+                        this.open_scm_file_menu(path, *staged, *position, window, cx);
+                    }
+                }
+                crate::scm::ScmEvent::RefreshRepo(key) => this.refresh_repo(*key, cx),
+                crate::scm::ScmEvent::Rediscover => this.rediscover(cx),
+                crate::scm::ScmEvent::RefreshInventory => this.refresh_inventory(cx),
+                crate::scm::ScmEvent::Ext(e) => this.on_ext_scm_event(e.clone(), window, cx),
+            }),
+            // Terminals in windows of their own or in the editor area belong to this window: they end with it, unless the
+            // app is quitting with them kept for the next start (`keep_terminals_for_restart`).
+            cx.on_release(|this, cx| {
+                if !this.persist.keeping_terminals {
+                    this.close_detached_terminals(cx);
+                }
+                this.close_editor_windows(cx);
+                this.close_view_windows(cx);
+                if !this.persist.keeping_terminals {
+                    this.close_editor_terminals(cx);
+                }
             }),
             // A download in progress is cancelled and its partial file removed before the process ends.
             cx.on_app_quit(|this, cx| {
                 this.discard_response_on_quit();
+                // Tasks lead their own process groups: they would outlive the app if they were not stopped here.
+                this.stop_task_runs_for_quit();
                 let wait = this.cancel_update_for_quit().map(|exited| Workbench::wait_for_update_thread(exited, cx));
                 async move {
                     if let Some(wait) = wait {
@@ -1034,6 +1173,10 @@ impl Workbench {
             cx.observe_window_activation(window, |this, window, cx| {
                 #[cfg(target_os = "macos")]
                 crate::menus::refresh_dock_windows(cx);
+                // Back in this window: commands act on its tabs again, not on an editor's own window.
+                if window.is_window_active() {
+                    this.leave_editor_window();
+                }
                 // Reduce motion / Increase contrast may have changed in System Settings meanwhile.
                 if window.is_window_active() && crate::system_prefs::refresh(cx) {
                     let choice = this.theme_choice.clone();
@@ -1064,7 +1207,13 @@ impl Workbench {
             .unwrap_or(layout::SIDEBAR_W)
             .clamp(layout::SIDEBAR_MIN, layout::SIDEBAR_MAX);
         let panel_h = state.as_ref().and_then(|s| s.get("panel_h")).and_then(|v| v.parse::<f32>().ok()).unwrap_or(layout::PANEL_H).max(PANEL_MIN);
-        let panel_right = state.as_ref().and_then(|s| s.get("panel_right")).is_some_and(|v| v == "1");
+        let panel_dock = docks_glue::PanelDock::load(state.as_ref());
+        let in_secondary = state.as_ref().and_then(|s| s.get("secondary_views")).map(|v| views_glue::parse_secondary(&v)).unwrap_or_default();
+        let secondary = state
+            .as_ref()
+            .and_then(|s| s.get("secondary_open"))
+            .and_then(|v| views_glue::parse_secondary(&v).first().copied())
+            .filter(|v| in_secondary.contains(v));
         let panel_w = state.as_ref().and_then(|s| s.get("panel_w")).and_then(|v| v.parse::<f32>().ok()).unwrap_or(480.).max(PANEL_MIN * 2.);
         let term_list_w = state
             .as_ref()
@@ -1102,7 +1251,18 @@ impl Workbench {
             active_terminal: 0,
             shell: None,
             dbg: Default::default(),
-            jobs: state_glue::TaskState { last: None, terminal: None, root: None, problems: Vec::new(), scan_pending: false, tests: Default::default() },
+            jobs: state_glue::TaskState {
+                pending: None,
+                asking: 0,
+                runs: Vec::new(),
+                next_token: 0,
+                last: None,
+                terminal: None,
+                root: None,
+                problems: Vec::new(),
+                scan_pending: false,
+                tests: Default::default(),
+            },
             lsp: state_glue::LspState {
                 restricted_notified: Default::default(),
                 servers: Default::default(),
@@ -1141,9 +1301,12 @@ impl Workbench {
                 scm_root: None,
                 marks_busy: Default::default(),
                 tree_marks: Default::default(),
+                repos: Default::default(),
+                menu_repo: None,
             },
             chrome: state_glue::ChromeLayout {
                 a11y_bounds: Default::default(),
+                row_nav: row_nav_glue::RowNav::new(cx),
                 resources: cx.new(crate::resource_monitor::ResourceMonitor::new),
                 web_preview: Default::default(),
                 panel: Some(Panel::Explorer),
@@ -1152,15 +1315,28 @@ impl Workbench {
                 resizing_sidebar: false,
                 panel_open: false,
                 panel_h,
-                panel_right,
+                in_secondary,
+                secondary,
+                secondary_last: secondary,
+                last_primary: Some(Panel::Explorer),
+                detached: Vec::new(),
+                editor_windows: Vec::new(),
+                editor_host: None,
+                view_windows: Vec::new(),
+                view_host: None,
+                panel_dock,
+                view_drag: None,
+                tab_drag: None,
                 panel_w,
                 panel_max: false,
+                panel_anim: None,
+                panel_area: None,
                 resizing_panel: false,
                 term_list_w,
                 resizing_term_list: false,
                 resizing_split: false,
-                zoom: 0.,
-                zoom_base: (theme::text::CODE.0, theme::text::CODE.1, theme::text::CODE.0),
+                activity_scroll: gpui::ScrollHandle::new(),
+                activity_hints: Default::default(),
                 zen: None,
                 window_bounds: None,
             },
@@ -1181,18 +1357,30 @@ impl Workbench {
                 trusted: Default::default(),
                 dirty: false,
                 folders: Default::default(),
+                folder_texts: Default::default(),
+                user_text: None,
                 exts: Default::default(),
             },
             persist: state_glue::PersistState {
                 workspace_id: None,
                 data_dir: None,
                 pending_restore: None,
+                pending_restore_workspace: None,
                 backup_task: None,
                 backed_up: Default::default(),
                 state,
                 recent,
                 pinned,
                 opening_recent: None,
+                term_daemon: None,
+                term_socket: None,
+                term_restoring: false,
+                panel_restoring: false,
+                terminal_wanted: false,
+                pending_moved: None,
+                moved_back: Vec::new(),
+                keeping_terminals: false,
+                remote_claim: None,
             },
             remote: state_glue::RemoteState {
                 docker: Default::default(),
@@ -1219,8 +1407,12 @@ impl Workbench {
                 compare_folder_a: None,
                 favorites: Vec::new(),
                 file_index: None,
+                workspace: None,
+                workspace_request: 0,
+                workspace_generation: 0,
             },
             tabs: Default::default(),
+            searches: Default::default(),
             update: state_glue::UpdateUi::new(dev, cx),
             data: Default::default(),
             focus_handle: cx.focus_handle(),
@@ -1230,6 +1422,7 @@ impl Workbench {
         wb.reload_config(window, cx);
         wb.watch_config(window, cx);
         wb.poll_git(window, cx);
+        wb.poll_extension_updates(window, cx);
         wb.poll_autofetch(window, cx);
         wb.listen_fs(cx);
         wb
@@ -1262,7 +1455,7 @@ impl Workbench {
     /// are left alone). If the theme isn't here, copy it from the installed VS Code theme.
     fn import_vscode(&mut self, _: &ImportVsCode, window: &mut Window, cx: &mut Context<Self>) {
         let Some(dir) = crate::vscode::user_dir() else {
-            self.notice = Some(Notice::Info(crate::i18n::t("No VS Code settings found on this machine").into()));
+            self.notice = Some(Notice::Info(crate::i18n::t("No settings from another editor found on this machine").into()));
             cx.notify();
             return;
         };
@@ -1320,7 +1513,7 @@ impl Workbench {
             skipped_keys = skipped;
         }
         let mut msg = crate::i18n::tf(
-            "Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)",
+            "Imported {0} settings and {1} shortcuts ({2} settings and {3} shortcuts have no equivalent here)",
             &[&n_settings, &n_keys, &skipped_settings, &skipped_keys],
         );
         if let Some(n) = notes.first() {
@@ -1336,6 +1529,11 @@ impl Workbench {
     }
 
     fn show_overlay(&mut self, picker: Entity<Picker>, kind: OverlayKind, window: &mut Window, cx: &mut Context<Self>) {
+        // Asked for from a view in a window of its own (its command, its tree's menu): the picker opens there.
+        if self.view_host_window().is_some_and(|h| h != window.window_handle()) {
+            self.reroute_to_view_window(window, cx, move |this, window, cx| this.show_overlay(picker, kind, window, cx));
+            return;
+        }
         let sub = cx.subscribe_in(&picker, window, |this, _, event: &PickerEvent, window, cx| {
             this.on_overlay_event(event, window, cx);
         });
@@ -1348,6 +1546,9 @@ impl Workbench {
     /// Close the overlay, give focus back to where it was before it opened.
     fn close_overlay(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<Overlay> {
         let ov = self.overlay.take()?;
+        if matches!(ov.kind, OverlayKind::TaskInput(_) | OverlayKind::Input { purpose: InputPurpose::TaskInput, .. }) {
+            self.task_input_closed(window, cx);
+        }
         match &ov.return_focus {
             Some(f) => window.focus(f),
             None => window.focus(&self.focus_handle),
@@ -1383,18 +1584,24 @@ impl Workbench {
 
     fn panel(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
         let resizing = self.chrome.resizing_panel;
-        let (right, max) = (self.chrome.panel_right, self.chrome.panel_max);
+        let (beside, left, max) = (self.chrome.panel_dock.beside(), self.chrome.panel_dock == docks_glue::PanelDock::Left, self.chrome.panel_max);
         div()
+            .debug_selector(|| "panel".into())
             .relative()
             .flex()
             .flex_col()
             .bg(c(p.bg))
             .border_color(c(p.border))
-            .map(|d| match (max, right) {
-                (true, _) => d.flex_1().min_h_0().min_w_0(),
-                (false, true) => d.w(px(self.chrome.panel_w)).flex_none().h_full().border_l_1(),
-                (false, false) => d.h(px(self.chrome.panel_h)).flex_none().border_t_1(),
+            .map(|d| match (self.animated_panel_size(), max, beside) {
+                (Some(size), _, true) => d.w(px(size)).flex_none().h_full(),
+                (Some(size), _, false) => d.h(px(size)).flex_none().border_t_1(),
+                (None, true, _) => d.flex_1().min_h_0().min_w_0(),
+                (None, false, true) => d.w(px(self.chrome.panel_w)).flex_none().h_full(),
+                (None, false, false) => d.h(px(self.chrome.panel_h)).flex_none().border_t_1(),
             })
+            // Beside the editor, the border is on the editor's side.
+            .when(beside && (!max || self.chrome.panel_anim.is_some()) && left, |d| d.border_r_1())
+            .when(beside && (!max || self.chrome.panel_anim.is_some()) && !left, |d| d.border_l_1())
             .child(
                 div()
                     .id("panel-sash")
@@ -1403,7 +1610,10 @@ impl Workbench {
                     .occlude()
                     .when(max, |d| d.invisible())
                     .map(|d| {
-                        if right {
+                        // Docked left, the sash is on the panel's right edge (towards the editor).
+                        if beside && left {
+                            d.right(px(-layout::SASH / 2.)).top_0().bottom_0().w(px(layout::SASH)).cursor(gpui::CursorStyle::ResizeLeftRight)
+                        } else if beside {
                             d.left(px(-layout::SASH / 2.)).top_0().bottom_0().w(px(layout::SASH)).cursor(gpui::CursorStyle::ResizeLeftRight)
                         } else {
                             d.top(px(-layout::SASH / 2.)).left_0().right_0().h(px(layout::SASH)).cursor(gpui::CursorStyle::ResizeUpDown)
@@ -1429,45 +1639,8 @@ impl Workbench {
                     .text_size(px(text::SM.0))
                     .line_height(px(text::SM.1))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child({
-                        let (errors, warnings) = self.problem_counts();
-                        panel_tab("problems-tab", crate::i18n::t("Problems").into(), self.chrome.bottom == Bottom::Problems, errors + warnings, p).on_click(
-                            cx.listener(|this, _, _, cx| {
-                                this.chrome.bottom = Bottom::Problems;
-                                cx.notify();
-                            }),
-                        )
-                    })
-                    .child(panel_tab("output-tab", crate::i18n::t("Output").into(), self.chrome.bottom == Bottom::Output, 0, p).on_click(cx.listener(
-                        |this, _, _, cx| {
-                            this.chrome.bottom = Bottom::Output;
-                            cx.notify();
-                        },
-                    )))
-                    .when(self.dbg.has_sessions(), |d| {
-                        d.child(panel_tab("debug-tab", crate::i18n::t("Debug Console").into(), self.chrome.bottom == Bottom::Debug, 0, p).on_click(
-                            cx.listener(|this, _, _, cx| {
-                                this.chrome.bottom = Bottom::Debug;
-                                cx.notify();
-                            }),
-                        ))
-                    })
-                    .child(panel_tab("ports-tab", crate::i18n::t("Ports").into(), self.chrome.bottom == Bottom::Ports, self.active_forwards(), p).on_click(
-                        cx.listener(|this, _, _, cx| {
-                            this.chrome.bottom = Bottom::Ports;
-                            cx.notify();
-                        }),
-                    ))
-                    .child(
-                        panel_tab("terminal-tab", crate::i18n::t("Terminal").into(), self.chrome.bottom == Bottom::Terminal, self.terminals_asking(cx), p)
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                if this.terminals.is_empty() {
-                                    this.new_terminal(&NewTerminal, window, cx);
-                                } else {
-                                    this.focus_terminal(window, cx);
-                                }
-                            })),
-                    )
+                    .children(self.panel_tabs(p, cx))
+                    .children(self.ext_view_panel_tabs(p, cx))
                     .child(div().flex_1())
                     // The terminal's own actions only while the terminal is the panel's view.
                     .when(self.chrome.bottom == Bottom::Terminal, |d| {
@@ -1477,23 +1650,41 @@ impl Workbench {
                                 .items_center()
                                 .child(
                                     ui::icon_button("panel-new", "tb-plus", crate::i18n::t("New Terminal (⌃⇧`)"), p)
+                                        .relative()
+                                        .child(self.ctl(crate::i18n::t("Panel"), "panel-new", crate::i18n::t("New Terminal (⌃⇧`)"), cx, |this, w, cx| {
+                                            this.new_terminal(&NewTerminal, w, cx)
+                                        }))
                                         .on_click(cx.listener(|this, _, w, cx| this.new_terminal(&NewTerminal, w, cx))),
                                 )
-                                .child(ui::icon_button("panel-launch", "tb-dropdown", crate::i18n::t("Launch Profile…"), p).w(px(16.)).on_click(cx.listener(
-                                    |this, ev: &gpui::ClickEvent, w, cx| {
-                                        // Below the button, right-aligned with it (a keyboard press has no position: under the pointer then).
-                                        let at = ev.position();
-                                        let at = gpui::point(at.x + px(8.), at.y + px(14.));
-                                        this.open_terminal_launch_menu(at, w, cx);
-                                    },
-                                ))),
+                                .child(
+                                    ui::icon_button("panel-launch", "tb-dropdown", crate::i18n::t("Launch Profile…"), p)
+                                        .w(px(16.))
+                                        .relative()
+                                        .child(self.ctl(crate::i18n::t("Panel"), "panel-launch", crate::i18n::t("Launch Profile…"), cx, |this, w, cx| {
+                                            this.terminal_launch_menu_at_button(w, cx)
+                                        }))
+                                        .on_click(cx.listener(|this, ev: &gpui::ClickEvent, w, cx| {
+                                            // Below the button, right-aligned with it (a keyboard press has no position: under the pointer then).
+                                            let at = ev.position();
+                                            let at = gpui::point(at.x + px(8.), at.y + px(14.));
+                                            this.open_terminal_launch_menu(at, w, cx);
+                                        })),
+                                ),
                         )
                         .child(
                             ui::icon_button("panel-split", "tb-split", crate::i18n::t("Split Terminal"), p)
+                                .relative()
+                                .child(self.ctl(crate::i18n::t("Panel"), "panel-split", crate::i18n::t("Split Terminal"), cx, |this, w, cx| {
+                                    this.split_terminal(&SplitTerminal, w, cx)
+                                }))
                                 .on_click(cx.listener(|this, _, w, cx| this.split_terminal(&SplitTerminal, w, cx))),
                         )
                         .child(
                             ui::icon_button("panel-kill", "tb-trash", crate::i18n::t("Kill Terminal"), p)
+                                .relative()
+                                .child(self.ctl(crate::i18n::t("Panel"), "panel-kill", crate::i18n::t("Kill Terminal"), cx, |this, w, cx| {
+                                    this.kill_terminal(&KillTerminal, w, cx)
+                                }))
                                 .on_click(cx.listener(|this, _, w, cx| this.kill_terminal(&KillTerminal, w, cx))),
                         )
                         .child(div().w(px(1.)).h(px(16.)).mx(px(theme::SPACE[2])).bg(c(p.border)))
@@ -1501,10 +1692,18 @@ impl Workbench {
                     .child(
                         ui::icon_button(
                             "panel-move",
-                            if self.chrome.panel_right { "tb-panel-bottom" } else { "tb-panel-right" },
-                            if self.chrome.panel_right { crate::i18n::t("Move Panel to Bottom") } else { crate::i18n::t("Move Panel Right") },
+                            if self.chrome.panel_dock.beside() { "tb-panel-bottom" } else { "tb-panel-right" },
+                            if self.chrome.panel_dock.beside() { crate::i18n::t("Move Panel to Bottom") } else { crate::i18n::t("Move Panel Right") },
                             p,
                         )
+                        .relative()
+                        .child(self.ctl(
+                            crate::i18n::t("Panel"),
+                            "panel-move",
+                            if self.chrome.panel_dock.beside() { crate::i18n::t("Move Panel to Bottom") } else { crate::i18n::t("Move Panel Right") },
+                            cx,
+                            |this, w, cx| this.dispatch_now(&TogglePanelPosition, w, cx),
+                        ))
                         .on_click(cx.listener(|this, _, w, cx| this.dispatch_now(&TogglePanelPosition, w, cx))),
                     )
                     .child(
@@ -1515,10 +1714,22 @@ impl Workbench {
                             self.chrome.panel_max,
                             p,
                         )
+                        .relative()
+                        .child(self.ctl(
+                            crate::i18n::t("Panel"),
+                            "panel-max",
+                            if self.chrome.panel_max { crate::i18n::t("Restore Panel Size") } else { crate::i18n::t("Maximize Panel") },
+                            cx,
+                            |this, w, cx| this.dispatch_now(&ToggleMaximizedPanel, w, cx),
+                        ))
                         .on_click(cx.listener(|this, _, w, cx| this.dispatch_now(&ToggleMaximizedPanel, w, cx))),
                     )
                     .child(
                         ui::icon_button("panel-close", "tb-close", crate::i18n::t("Hide Panel (⌘J)"), p)
+                            .relative()
+                            .child(self.ctl(crate::i18n::t("Panel"), "panel-close", crate::i18n::t("Hide Panel (⌘J)"), cx, |this, w, cx| {
+                                this.toggle_panel(&TogglePanel, w, cx)
+                            }))
                             .on_click(cx.listener(|this, _, w, cx| this.toggle_panel(&TogglePanel, w, cx))),
                     ),
             )
@@ -1528,6 +1739,7 @@ impl Workbench {
                     Bottom::Output => d.child(self.output_view(p)),
                     Bottom::Debug => d.child(self.debug_view(p, cx)),
                     Bottom::Ports => d.child(self.ports_view(p, cx)),
+                    Bottom::ExtView => d.child(self.ext_view_in(ext_manifest::ViewLocation::Bottom, p, cx)),
                     Bottom::Terminal => {
                         // Several terminals: their list on the right.
                         let list = self.terminal_list(p, cx);
@@ -1582,17 +1794,18 @@ impl Workbench {
             Run::Action(action) => window.defer(cx, move |window, cx| window.dispatch_action(action, cx)),
             Run::Connect(alias) => self.connect(alias, window, cx),
             Run::Disconnect => self.disconnect(cx),
+            Run::Extension { extension, command } => self.run_extension_command(&extension, &command, window, cx),
+            Run::ExtensionView(view) => self.open_ext_view(&view, window, cx),
         }
     }
 
-    /// All editors in both groups (focused group first; one open in both counts once).
+    /// Every open document: the tabs of all groups (focused group first; one open in several counts once) and the editors
+    /// in windows of their own.
     fn all_editors(&self) -> Vec<Entity<EditorView>> {
         let mut v = self.tabs.editors.clone();
-        for g in self.tabs.groups.values() {
-            for ed in &g.editors {
-                if !v.contains(ed) {
-                    v.push(ed.clone());
-                }
+        for ed in self.tabs.groups.values().flat_map(|g| g.editors.iter().cloned()).chain(self.window_editors()) {
+            if !v.contains(&ed) {
+                v.push(ed);
             }
         }
         v
@@ -1604,7 +1817,13 @@ impl Workbench {
         self.all_editors().iter().any(|e| e.read(cx).is_dirty())
     }
 
+    /// The editor commands act on: the one in its own window while that window is in use, else the focused tab.
     fn active_editor(&self) -> Option<&Entity<EditorView>> {
+        self.hosted_editor().or_else(|| self.tab_editor())
+    }
+
+    /// The focused group's editor tab in front (what this window shows).
+    fn tab_editor(&self) -> Option<&Entity<EditorView>> {
         self.tabs.active.and_then(|i| self.tabs.editors.get(i))
     }
 
@@ -1634,8 +1853,8 @@ impl Workbench {
     /// Change the root folder (same host).
     pub fn set_root(&mut self, path: String, cx: &mut Context<Self>) {
         let path = if self.remote.host.is_remote() { path } else { ui::local_path(std::path::Path::new(&path)) };
-        // Same folder: keep tabs in place.
-        if self.root(cx).as_deref() == Some(path.as_str()) {
+        // Same folder: keep tabs in place. Opened through a workspace file, the folder opens on its own instead.
+        if self.root(cx).as_deref() == Some(path.as_str()) && self.roots.workspace.is_none() {
             self.cancel_pending_connection();
             cx.notify();
             return;
@@ -1658,8 +1877,16 @@ impl Workbench {
         self.roots.extra_roots.clear();
         self.roots.extra_trees.clear();
         self.roots.pending_extra_roots.clear();
+        // The workspace file's settings layer goes with it: the settings are read again.
+        self.cfg.dirty |= self.roots.workspace.take().is_some_and(|w| w.doc.settings_json().is_some());
+        self.roots.workspace_request += 1;
         self.cfg.folders.clear();
+        self.cfg.folder_texts.clear();
+        self.persist.pending_restore_workspace = None;
         self.persist.backed_up.clear();
+        self.return_all_editor_terminals();
+        self.close_editor_windows(cx);
+        self.close_view_windows(cx);
         self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.open_error = None;
@@ -1670,6 +1897,7 @@ impl Workbench {
         self.vcs.status = None;
         self.scm.update(cx, |s, cx| s.set_status(self.remote.host.clone(), None, cx));
         self.vcs.scm_root = None;
+        self.reset_repos(cx);
         self.vcs.tree_marks.clear();
         self.roots.primary.update(cx, |t, cx| t.set_git(Arc::default(), cx));
         self.refresh_git_at(&path, 0, cx);
@@ -1677,6 +1905,7 @@ impl Workbench {
         self.search.update(cx, |s, cx| s.set_context(h, r, cx));
         let host = self.remote.host.clone();
         self.roots.primary.update(cx, |t, cx| t.set_root(host, Some(path.clone()), cx));
+        self.discover_repos(cx);
         let alias = match &self.remote.conn {
             Conn::Connected { alias } => Some(alias.as_str()),
             _ => None,
@@ -1732,7 +1961,7 @@ impl Workbench {
                     if this.lsp.generation != generation || !Arc::ptr_eq(&this.remote.host, &source) {
                         return None;
                     }
-                    let changed = loaded != this.cfg.project;
+                    let changed = loaded != this.cfg.project || this.cfg.dirty;
                     this.cfg.project = loaded;
                     changed.then_some(this.window_handle)
                 })
@@ -1788,9 +2017,10 @@ impl Workbench {
         let abs = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
         if abs.is_file() {
             if let Some(dir) = abs.parent() {
-                self.set_root(dir.to_string_lossy().into_owned(), cx);
+                self.set_root(ui::local_path(dir), cx);
             }
-            self.open_file(abs.to_string_lossy().into_owned(), window, cx);
+            // The form the explorer and the tabs use (without Windows' `\\?\` prefix of `canonicalize`).
+            self.open_file(ui::local_path(&abs), window, cx);
         } else {
             self.set_root(abs.to_string_lossy().into_owned(), cx);
         }
@@ -1809,6 +2039,8 @@ impl Workbench {
         self.tabs.editors.push(ed.clone());
         self.attach_lsp(&ed, cx);
         self.apply_task_problems(&ed, cx);
+        self.attach_extensions(&ed, window, cx);
+        self.attach_ext_watch(&ed, window, cx);
         self.schedule_schema(&ed, Duration::ZERO, cx);
         self.attach_speller(&ed, cx);
         self.apply_breakpoints_to(&ed, cx);
@@ -1823,6 +2055,9 @@ impl Workbench {
     }
 
     fn activate(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if self.run_in_main_window(window, cx, move |this, window, cx| this.activate(ix, window, cx)) {
+            return;
+        }
         self.chrome.panel_max = false;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
@@ -1835,13 +2070,14 @@ impl Workbench {
         if cx.global::<Settings>().auto_reveal {
             self.reveal_in_trees(&path, cx);
         }
-        if let Some((p, line, col)) = self.lsp.pending_reveal.take()
+        if let Some((p, line, col, fix)) = self.lsp.pending_reveal.take()
             && p == path
         {
             let ed = self.tabs.editors[ix].clone();
             self.refresh_active_flags(cx);
             self.tabs.open_error = None;
-            ed.update(cx, |e, cx| e.reveal_lsp(line, col, window, cx));
+            self.reveal_location(ed.clone(), (line, col), fix, window, cx);
+            self.select_for_extension(&ed, cx);
             self.persist_session(cx);
             cx.notify();
             return;
@@ -1868,67 +2104,19 @@ impl Workbench {
     }
 
     fn close_editor_at(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(ed) = self.tabs.editors.get(ix) else { return };
-        if !ed.read(cx).is_dirty() || self.also_in_other(ed) {
-            self.remove_editor(ix, window, cx);
-            return;
-        }
-        let name = ed.read(cx).name.clone();
-        let answer = window.prompt(
-            PromptLevel::Warning,
-            &crate::i18n::tf("Do you want to save the changes you made to {}?", &[&name]),
-            Some(crate::i18n::t("Your changes will be lost if you don't save them.")),
-            &[crate::i18n::t("Save"), crate::i18n::t("Don't Save"), crate::i18n::t("Cancel")],
-            cx,
-        );
-        let ed = ed.downgrade();
-        cx.spawn_in(window, async move |this, cx| {
-            let choice = answer.await;
-            this.update_in(cx, |this, window, cx| {
-                let Some(entity) = ed.upgrade() else { return };
-                match choice {
-                    // Save: closes when the write finishes (and succeeds); stays open on conflict/error.
-                    Ok(0) => {
-                        let done = std::rc::Rc::new(std::cell::Cell::new(false));
-                        cx.subscribe_in(&entity, window, move |this, e, ev: &EditorEvent, window, cx| {
-                            if done.get() || !matches!(ev, EditorEvent::Saved) {
-                                return;
-                            }
-                            done.set(true);
-                            if let Some(ix) = this.tabs.editors.iter().position(|x| x == e) {
-                                this.remove_editor(ix, window, cx);
-                            }
-                        })
-                        .detach();
-                        entity.update(cx, |e, cx| e.save_now(cx));
-                    }
-                    Ok(1) => {
-                        if let Some(ix) = this.tabs.editors.iter().position(|e| *e == entity) {
-                            this.remove_editor(ix, window, cx);
-                        }
-                    }
-                    _ => {}
-                }
-            })
-            .ok();
-        })
-        .detach();
+        let Some(ed) = self.tabs.editors.get(ix).cloned() else { return };
+        let last = !self.also_in_other(&ed);
+        self.close_view_asking(ed, last, window, cx, |this, ed, window, cx| {
+            if let Some(ix) = this.tabs.editors.iter().position(|e| e == ed) {
+                this.remove_editor(ix, window, cx);
+            }
+        });
     }
 
     fn remove_editor(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         let ed = self.tabs.editors.remove(ix);
-        // If also open in the other group, only this view closes; the backup stays.
-        if !self.also_in_other(&ed) {
-            let path = ed.read(cx).path.clone();
-            self.discard_response_file(&path);
-            self.drop_backup(&path, cx);
-            let (line, col) = ed.read(cx).cursor_position();
-            self.nav.closed.retain(|c| c.0 != path);
-            self.nav.closed.push((path, line as u32, col.saturating_sub(1) as u32));
-            if self.nav.closed.len() > 20 {
-                self.nav.closed.remove(0);
-            }
-        }
+        // If also open in another group or window, only this view closes; the backup stays.
+        self.forget_closed_view(&ed, cx);
         self.sync_slots(cx);
         // When a split group's last tab closes, the group closes too and the other becomes the only one.
         let group_key = self.tabs.current_key();
@@ -1956,6 +2144,12 @@ impl Workbench {
     }
 
     fn close_editor(&mut self, _: &CloseEditor, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(Page::Search(ed)) = self.tabs.page.clone().filter(|_| self.tabs.page_active) {
+            return self.close_search_editor(&ed, cx);
+        }
+        if let Some(Page::Terminal(term)) = self.tabs.page.clone().filter(|_| self.tabs.page_active) {
+            return self.return_editor_terminal(&term, window, cx);
+        }
         if self.tabs.diff_active {
             return self.close_diff(window, cx);
         }
@@ -2068,45 +2262,14 @@ impl Workbench {
         self.confirm_quit(window, cx);
     }
 
-    /// Replace in files: can't be undone (closed files are written to disk), so ask first.
-    fn confirm_replace_all(
-        &mut self,
-        files: Vec<String>,
-        query: proto::SearchQuery,
-        replacement: String,
-        preserve: bool,
-        matches: u32,
-        truncated: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let n = files.len();
-        let (m, r) = (matches as usize, &replacement);
-        let title = if n == 1 {
-            crate::i18n::tn("Replace {0} match in 1 file with “{1}”?", "Replace {0} matches in 1 file with “{1}”?", m, &[r])
-        } else {
-            crate::i18n::tn("Replace {0} match in {1} files with “{2}”?", "Replace {0} matches in {1} files with “{2}”?", m, &[&n, r])
-        };
-        let detail = if truncated {
-            crate::i18n::t(
-                "The search stopped at the result limit: only the files listed are changed. Open files can be undone; closed files are written to disk.",
-            )
-        } else {
-            crate::i18n::t("Open files can be undone with ⌘Z; closed files are written to disk.")
-        };
-        let answer = window.prompt(PromptLevel::Warning, &title, Some(detail), &[crate::i18n::t("Replace"), crate::i18n::t("Cancel")], cx);
-        cx.spawn_in(window, async move |this, cx| {
-            if answer.await == Ok(0) {
-                this.update(cx, |this, cx| this.replace_in_files_with(files, query, replacement, preserve, cx)).ok();
-            }
-        })
-        .detach();
-    }
-
+    /// Replace in files without review (tests drive the shared `apply_file_edits` path with it; the UI goes through a
+    /// Search Editor preview).
+    #[cfg(test)]
     pub fn replace_in_files(&mut self, files: Vec<String>, query: proto::SearchQuery, replacement: String, cx: &mut Context<Self>) {
         self.replace_in_files_with(files, query, replacement, false, cx)
     }
 
+    #[cfg(test)]
     pub fn replace_in_files_with(&mut self, files: Vec<String>, query: proto::SearchQuery, replacement: String, preserve: bool, cx: &mut Context<Self>) {
         let re = match agent::search::compile(&query) {
             Ok(re) => re,
@@ -2152,13 +2315,9 @@ impl Workbench {
             self.finish_quit(mode, cx);
             return;
         }
-        let (detail, leave) = match mode {
-            update_glue::QuitMode::Quit => (crate::i18n::t("Quitting loses everything since the last save."), crate::i18n::t("Quit without saving")),
-            update_glue::QuitMode::Restart(_) => (crate::i18n::t("Restarting loses everything since the last save."), crate::i18n::t("Restart without saving")),
-        };
-        let answer = window.prompt(PromptLevel::Warning, crate::i18n::t("You have unsaved changes"), Some(detail), &[leave, crate::i18n::t("Cancel")], cx);
+        let answer = crate::questions::leave_unsaved(matches!(mode, update_glue::QuitMode::Restart(_))).ask(window, cx);
         cx.spawn(async move |this, cx| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 this.update(cx, |this, cx| this.finish_quit(mode, cx)).ok();
             }
         })
@@ -2167,15 +2326,9 @@ impl Workbench {
 
     /// Close the window (others stay open); asks if there are unsaved changes.
     pub fn confirm_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let answer = window.prompt(
-            PromptLevel::Warning,
-            crate::i18n::t("You have unsaved changes"),
-            Some(crate::i18n::t("Closing the window loses everything since the last save.")),
-            &[crate::i18n::t("Close without saving"), crate::i18n::t("Cancel")],
-            cx,
-        );
+        let answer = crate::questions::close_window_unsaved().ask(window, cx);
         cx.spawn_in(window, async move |_, cx| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 cx.update(|window, _| window.remove_window()).ok();
             }
         })
@@ -2209,8 +2362,12 @@ impl Workbench {
         }
         match r.host.clone() {
             None => {
-                // If the folder was deleted or moved, don't open it; ask whether to remove it from the list.
-                if !std::path::Path::new(&r.path).is_dir() {
+                let workspace_file = crate::workspace_file::is_workspace_file(&r.path);
+                // If the folder (or workspace file) was deleted or moved, don't open it; ask whether to remove it from the list.
+                if workspace_file && !std::path::Path::new(&r.path).is_file() {
+                    return self.ask_forget_unreachable(r, crate::i18n::t("The workspace file no longer exists on this computer.").into(), window, cx);
+                }
+                if !workspace_file && !std::path::Path::new(&r.path).is_dir() {
                     return self.ask_forget_unreachable(r, "The folder no longer exists on this computer.".into(), window, cx);
                 }
                 if self.remote.host.is_remote() {
@@ -2218,6 +2375,9 @@ impl Workbench {
                     if self.remote.host.is_remote() {
                         return;
                     }
+                }
+                if workspace_file {
+                    return self.open_path(&r.path, window, cx);
                 }
                 self.set_root(r.path, cx);
             }
@@ -2235,7 +2395,7 @@ impl Workbench {
     /// "● file — folder" (window title and drawn title bar).
     fn title_text(&self, cx: &App) -> Option<String> {
         let root = self.roots.primary.read(cx).root().map(|r| ui::file_name(r).to_string());
-        let file = self.active_editor().map(|e| {
+        let file = self.tab_editor().map(|e| {
             let e = e.read(cx);
             format!("{}{}", if e.is_dirty() { "● " } else { "" }, e.name)
         });
@@ -2268,70 +2428,6 @@ impl Workbench {
             })),
             _ => None,
         };
-    }
-
-    /// Error card: bottom right, above the status bar; closed with ×.
-    fn error_toast(&self, p: &Palette, cx: &mut Context<Self>) -> Option<impl IntoElement> {
-        let Some(Notice::Error(message)) = &self.notice else { return None };
-        Some(
-            div()
-                .id("error-toast")
-                .absolute()
-                .right(px(theme::SPACE[6]))
-                .bottom(px(layout::STATUSBAR_H + theme::SPACE[4]))
-                .w(px(420.))
-                .flex()
-                .items_start()
-                .gap(px(theme::SPACE[3]))
-                .p(px(theme::SPACE[4]))
-                .bg(c(p.surface_raised))
-                .border_1()
-                .border_color(c(p.border))
-                .rounded(px(theme::radius::MD))
-                .shadow_lg()
-                .text_size(px(text::SM.0))
-                .text_color(c(p.text))
-                .occlude()
-                .child(div().flex_none().pt(px(1.)).child(icon("circle-x", 16., p.danger)))
-                .child(div().flex_1().min_w_0().child(message.clone()))
-                .when(matches!(self.remote.conn, Conn::Failed { .. }), |d| {
-                    d.child(
-                        div()
-                            .id("error-toast-reconnect")
-                            .flex_none()
-                            .h(px(22.))
-                            .px(px(theme::SPACE[4]))
-                            .flex()
-                            .items_center()
-                            .rounded(px(theme::radius::SM))
-                            .bg(c(p.accent))
-                            .text_color(c(p.on_accent))
-                            .text_size(px(text::XS.0))
-                            .cursor_pointer()
-                            .hover(|d| d.opacity(0.9))
-                            .child(crate::i18n::t("Reconnect"))
-                            .on_click(cx.listener(|this, _, window, cx| this.reconnect_lost(window, cx))),
-                    )
-                })
-                .child(
-                    div()
-                        .id("error-toast-close")
-                        .flex_none()
-                        .size(px(20.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded(px(theme::radius::SM))
-                        .cursor_pointer()
-                        .hover(|d| d.bg(c(p.surface_hover)))
-                        .child(icon("x", 14., p.text_muted))
-                        .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Close").into())).into())
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.notice = None;
-                            cx.notify();
-                        })),
-                ),
-        )
     }
 
     /// Title layout: `● file — folder — ssh-host` (● unsaved).
@@ -2379,6 +2475,14 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
             }
             EditorEvent::Overwrote(text) => return this.keep_overwritten(ed, text, cx),
             EditorEvent::OpenLocation { path, line, col } => {
+                // From an editor's own window: the same file moves there; another file opens in this window, in front.
+                if this.reveal_in_editor_window(ed, path, *line, *col, cx) {
+                    return;
+                }
+                if this.host_window_of(ed).is_some() {
+                    this.leave_editor_window();
+                    window.activate_window();
+                }
                 return this.open_location(path.clone(), *line, *col, window, cx);
             }
             EditorEvent::Log(line) => {
@@ -2392,21 +2496,32 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 return;
             }
             EditorEvent::ShowLocations { locs, what } => {
-                return this.show_locations(locs.clone(), what, window, cx);
+                let (locs, what) = (locs.clone(), *what);
+                if let Some((_, handle)) = this.host_window_of(ed) {
+                    return this.run_in_editor_window(handle, cx, move |this, window, cx| this.show_locations(locs, what, window, cx));
+                }
+                return this.show_locations(locs, what, window, cx);
             }
-            EditorEvent::BreakpointsChanged => {
-                this.on_breakpoints_changed(ed, cx);
-                return;
-            }
+            EditorEvent::BreakpointsChanged => return this.on_breakpoints_changed(ed, cx),
             EditorEvent::BookmarksChanged => {
                 this.save_bookmarks(ed, cx);
                 cx.notify();
                 return;
             }
-            EditorEvent::ContextMenu(position) => return this.open_editor_menu(*position, window, cx),
+            // From an editor's own window, the menu opens there (its position is in that window).
+            EditorEvent::ContextMenu(position) => {
+                let position = *position;
+                if let Some((_, handle)) = this.host_window_of(ed) {
+                    return this.run_in_editor_window(handle, cx, move |this, window, cx| this.open_editor_menu(position, window, cx));
+                }
+                return this.open_editor_menu(position, window, cx);
+            }
             EditorEvent::OpenMergeEditor => return this.open_merge_editor(&OpenMergeEditor, window, cx),
             EditorEvent::SendRequest(line) => return this.send_request_at(Some(*line), window, cx),
+            EditorEvent::Extension(_) => return, // workbench_ext_lenses.rs
             EditorEvent::Changed => {
+                // The user moved on: what extensions were asked about the old text is cancelled.
+                this.cancel_providers_about(&ed.read(cx).path.clone());
                 // Breakpoints shift with edits: keep the store (used on close and saved) current.
                 this.sync_breakpoints_from(ed, cx);
                 this.note_edit(ed, cx);
@@ -2463,22 +2578,4 @@ impl Render for Tooltip {
             .text_color(c(p.text))
             .child(self.0.clone())
     }
-}
-
-/// Panel views use quiet button backgrounds for selection and hover.
-fn panel_tab(id: &'static str, label: String, active: bool, badge: usize, p: &Palette) -> gpui::Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .h(px(layout::VIEW_HEADER_H - 8.))
-        .flex()
-        .items_center()
-        .gap(px(theme::SPACE[2]))
-        .px(px(theme::SPACE[3]))
-        .cursor_pointer()
-        .rounded(px(theme::radius::SM))
-        .when(active, |d| d.bg(c(p.surface_active)))
-        .text_color(c(if active { p.text } else { p.text_muted }))
-        .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text))))
-        .child(label)
-        .when(badge > 0, |d| d.child(div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).child(badge.to_string())))
 }

@@ -33,6 +33,11 @@ pub enum DebugMenuCmd {
     CopyValue,
     CopyExpression,
     AddToWatch,
+    /// "Break on Value Change": a data breakpoint on the variable.
+    BreakOnValueChange,
+    /// Data breakpoint rows: by their place in the session's list.
+    ToggleDataBreakpoint(usize),
+    RemoveDataBreakpoint(usize),
     /// Frame rows carry the frame index.
     RestartFrame,
     CopyCallStack,
@@ -48,7 +53,7 @@ const SECTIONS: [(&str, &str, f32); 4] = [
 
 /// A row of Variables or Watch.
 #[derive(Clone, Debug, PartialEq)]
-pub(super) struct VarRow {
+pub(in crate::workbench) struct VarRow {
     pub depth: usize,
     pub name: String,
     pub value: String,
@@ -65,7 +70,7 @@ pub(super) struct VarRow {
 }
 
 /// Scopes and their open children, depth first (depth capped like the old panel).
-pub(super) fn variable_rows(d: &DebugState) -> Vec<VarRow> {
+pub(in crate::workbench) fn variable_rows(d: &DebugState) -> Vec<VarRow> {
     fn walk(d: &DebugState, out: &mut Vec<VarRow>, reference: i64, depth: usize) {
         if depth >= 8 || !d.expanded.contains(&reference) {
             return;
@@ -113,7 +118,7 @@ pub(super) fn variable_rows(d: &DebugState) -> Vec<VarRow> {
 
 /// A row of Call Stack.
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum StackRow {
+pub(in crate::workbench) enum StackRow {
     /// Shown when there is more than one session.
     Session {
         id: u64,
@@ -137,7 +142,7 @@ pub(super) enum StackRow {
     Note(String),
 }
 
-pub(super) fn stack_rows(sessions: &[DebugState], current: Option<u64>) -> Vec<StackRow> {
+pub(in crate::workbench) fn stack_rows(sessions: &[DebugState], current: Option<u64>) -> Vec<StackRow> {
     let mut out = Vec::new();
     let many = sessions.len() > 1;
     for d in sessions {
@@ -186,7 +191,7 @@ fn frame_rows(d: &DebugState) -> impl Iterator<Item = StackRow> + '_ {
 }
 
 /// Short status of a session.
-pub(super) fn status_text(s: &DebugStatus) -> String {
+pub(in crate::workbench) fn status_text(s: &DebugStatus) -> String {
     match s {
         DebugStatus::Starting => crate::i18n::t("starting").into(),
         DebugStatus::Running => crate::i18n::t("running").into(),
@@ -252,6 +257,15 @@ impl Workbench {
                 self.dbg.bps.remove(&path, line);
                 self.breakpoints_changed_in_store(&path, true, cx);
             }
+            (DebugMenuCmd::ToggleDataBreakpoint(i), _) => {
+                let on = self.dbg.cur().and_then(|d| d.data_breakpoints.get(i)).is_some_and(|b| !b.enabled);
+                self.set_data_breakpoint_enabled(i, on, cx);
+            }
+            (DebugMenuCmd::RemoveDataBreakpoint(i), _) => self.remove_data_breakpoint(i, cx),
+            (DebugMenuCmd::BreakOnValueChange, _) => {
+                let Some((parent, name)) = target.path.split_once('\t').and_then(|(p, n)| Some((p.parse::<i64>().ok()?, n.to_string()))) else { return };
+                self.add_data_breakpoint_in(Some(parent), name, cx);
+            }
             (DebugMenuCmd::RestartFrame, _) => self.restart_frame(target.path.parse().unwrap_or(0), cx),
             (DebugMenuCmd::CopyCallStack, _) => self.copy_call_stack(cx),
             (DebugMenuCmd::SetValue | DebugMenuCmd::CopyValue | DebugMenuCmd::CopyExpression | DebugMenuCmd::AddToWatch, _) => {
@@ -268,21 +282,34 @@ impl Workbench {
         }
     }
 
-    fn open_variable_menu(&mut self, parent: i64, name: String, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(in crate::workbench) fn open_variable_menu(
+        &mut self,
+        parent: i64,
+        name: String,
+        position: gpui::Point<gpui::Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let stopped = self.dbg.cur().is_some_and(|d| matches!(d.status, DebugStatus::Stopped(_)));
         let can_set = self.dbg.cur().and_then(|d| d.session.as_ref()).is_some_and(|s| s.supports("supportsSetVariable") || s.supports("supportsSetExpression"));
-        let items = vec![
+        let mut items = vec![
             MenuItem::new(crate::i18n::t("Set Value…")).enabled(stopped && can_set),
             MenuItem::new(crate::i18n::t("Copy Value")).separator(),
             MenuItem::new(crate::i18n::t("Copy as Expression")),
             MenuItem::new(crate::i18n::t("Add to Watch")).separator(),
         ];
-        let commands = [DebugMenuCmd::SetValue, DebugMenuCmd::CopyValue, DebugMenuCmd::CopyExpression, DebugMenuCmd::AddToWatch].map(MenuCmd::Debug).to_vec();
+        let mut commands =
+            [DebugMenuCmd::SetValue, DebugMenuCmd::CopyValue, DebugMenuCmd::CopyExpression, DebugMenuCmd::AddToWatch].map(MenuCmd::Debug).to_vec();
+        // Only offered when the debugger can watch a value.
+        if self.dbg.cur().and_then(|d| d.session.as_ref()).is_some_and(|s| s.supports_data_breakpoints()) {
+            items.push(MenuItem::new(crate::i18n::t("Break on Value Change")).enabled(stopped).separator());
+            commands.push(MenuCmd::Debug(DebugMenuCmd::BreakOnValueChange));
+        }
         let target = MenuTarget { path: format!("{parent}\t{name}"), is_dir: false, tab: None };
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
     }
 
-    fn open_frame_menu(&mut self, index: usize, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(in crate::workbench) fn open_frame_menu(&mut self, index: usize, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
         let can_restart = self
             .dbg
             .cur()
@@ -293,7 +320,7 @@ impl Workbench {
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
     }
 
-    fn open_config_menu(&mut self, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(in crate::workbench) fn open_config_menu(&mut self, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
         let mut items: Vec<MenuItem> = self.dbg.catalog.iter().map(|n| MenuItem::new(n).checked(self.dbg.last.as_ref() == Some(n))).collect();
         let mut commands: Vec<MenuCmd> = (0..items.len()).map(|i| MenuCmd::Debug(DebugMenuCmd::Select(i))).collect();
         items.push(MenuItem::new(crate::i18n::t("Open Launch Configuration")).separator());
@@ -302,7 +329,7 @@ impl Workbench {
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
     }
 
-    fn open_breakpoint_menu(
+    pub(in crate::workbench) fn open_breakpoint_menu(
         &mut self,
         path: String,
         line: usize,
@@ -318,6 +345,23 @@ impl Workbench {
         ];
         let commands = [DebugMenuCmd::EditBreakpoint, DebugMenuCmd::ToggleBreakpoint, DebugMenuCmd::RemoveBreakpoint].map(MenuCmd::Debug).to_vec();
         let target = MenuTarget { path: format!("{path}\t{line}"), is_dir: false, tab: None };
+        self.show_menu(items, commands, Vec::new(), target, position, window, cx);
+    }
+
+    pub(in crate::workbench) fn open_data_breakpoint_menu(
+        &mut self,
+        index: usize,
+        enabled: bool,
+        position: gpui::Point<gpui::Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let items = vec![
+            MenuItem::new(if enabled { crate::i18n::t("Disable Breakpoint") } else { crate::i18n::t("Enable Breakpoint") }),
+            MenuItem::new(crate::i18n::t("Remove Breakpoint")).separator(),
+        ];
+        let commands = [DebugMenuCmd::ToggleDataBreakpoint(index), DebugMenuCmd::RemoveDataBreakpoint(index)].map(MenuCmd::Debug).to_vec();
+        let target = MenuTarget { path: String::new(), is_dir: false, tab: None };
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
     }
 
@@ -375,6 +419,8 @@ impl Workbench {
             .child(
                 div()
                     .id("dbg-config")
+                    .relative()
+                    .child(a11y::part_frame(a11y::Part::Control("dbg-config"), cx))
                     .flex_1()
                     .min_w_0()
                     .h(px(24.))
@@ -439,10 +485,17 @@ impl Workbench {
                             this.toggle_breakpoints_active(&super::ToggleBreakpointsActive, w, cx);
                         })),
                     )
-                    .child(ui::icon_button("dbg-bp-clear", "x", crate::i18n::t("Remove All Breakpoints"), p).on_click(cx.listener(|this, _, w, cx| {
-                        cx.stop_propagation();
-                        this.remove_all_breakpoints(&super::super::RemoveAllBreakpoints, w, cx);
-                    }))),
+                    .child(
+                        ui::icon_button("dbg-bp-clear", "x", crate::i18n::t("Remove All Breakpoints"), p)
+                            .relative()
+                            .child(self.ctl(crate::i18n::t("Run and Debug"), "dbg-bp-clear", crate::i18n::t("Remove All Breakpoints"), cx, |this, w, cx| {
+                                this.remove_all_breakpoints(&super::super::RemoveAllBreakpoints, w, cx)
+                            }))
+                            .on_click(cx.listener(|this, _, w, cx| {
+                                cx.stop_propagation();
+                                this.remove_all_breakpoints(&super::super::RemoveAllBreakpoints, w, cx);
+                            })),
+                    ),
                 _ => head,
             };
             view = view.child(head.on_click(cx.listener(move |this, _, _, cx| {
@@ -492,6 +545,17 @@ impl Workbench {
             .child(
                 div()
                     .id("dbg-create-launch")
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::new(
+                            crate::i18n::t("Run and Debug"),
+                            "dbg-create-launch",
+                            accesskit::Role::Link,
+                            crate::i18n::t("Create a launch configuration"),
+                        )
+                        .description(crate::i18n::t("To customize Run and Debug, create a launch configuration."))
+                        .on_entity(cx.entity().downgrade(), |this: &mut Self, w, cx| this.open_launch_file(w, cx)),
+                    ))
                     .text_color(c(p.accent))
                     .cursor_pointer()
                     .hover(|d| d.underline())
@@ -542,10 +606,11 @@ impl Workbench {
 
     fn var_list(&self, id: &'static str, rows: Vec<VarRow>, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         let p = *p;
-        gpui::uniform_list(
+        let kind = if id == "dbg-watch-rows" { a11y::RowFrame::DebugWatch } else { a11y::RowFrame::DebugVariable };
+        let list = gpui::uniform_list(
             id,
             rows.len(),
-            cx.processor(move |_, range: std::ops::Range<usize>, _, cx| {
+            cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
                 range
                     .filter_map(|ix| {
                         let r = rows.get(ix)?;
@@ -553,84 +618,87 @@ impl Workbench {
                         let watch = r.watch;
                         let group = SharedString::from(format!("{id}-{ix}"));
                         if let Some(paged) = r.more {
-                            return Some(
-                                div()
-                                    .id((id, ix))
-                                    .h(px(layout::ROW_H))
-                                    .w_full()
-                                    .flex()
-                                    .items_center()
-                                    .pl(px(theme::SPACE[5] + 12. + theme::SPACE[2] + layout::TREE_INDENT * r.depth as f32))
-                                    .text_color(c(p.accent))
-                                    .cursor_pointer()
-                                    .hover(|d| d.bg(c(p.surface_hover)))
-                                    .child(r.name.clone())
-                                    .on_click(cx.listener(move |this, _, _, cx| this.load_more_variables(paged, cx)))
-                                    .into_any_element(),
-                            );
-                        }
-                        // Variables (not scopes or watches) have a menu.
-                        let menu = (r.parent != 0).then(|| (r.parent, r.name.clone()));
-                        Some(
-                            div()
+                            let el = div()
                                 .id((id, ix))
-                                .group(group.clone())
                                 .relative()
                                 .h(px(layout::ROW_H))
                                 .w_full()
                                 .flex()
                                 .items_center()
-                                .gap(px(theme::SPACE[2]))
-                                .pl(px(theme::SPACE[5] + layout::TREE_INDENT * r.depth as f32))
-                                .pr(px(theme::SPACE[3]))
-                                .whitespace_nowrap()
-                                .overflow_hidden()
+                                .pl(px(theme::SPACE[5] + 12. + theme::SPACE[2] + layout::TREE_INDENT * r.depth as f32))
+                                .text_color(c(p.accent))
+                                .cursor_pointer()
                                 .hover(|d| d.bg(c(p.surface_hover)))
-                                .child(
+                                .child(r.name.clone())
+                                .on_click(cx.listener(move |this, _, _, cx| this.load_more_variables(paged, cx)))
+                                .into_any_element();
+                            return Some(this.nav_row(kind, ix, el, window, cx));
+                        }
+                        // Variables (not scopes or watches) have a menu.
+                        let menu = (r.parent != 0).then(|| (r.parent, r.name.clone()));
+                        let el = div()
+                            .id((id, ix))
+                            .group(group.clone())
+                            .relative()
+                            .h(px(layout::ROW_H))
+                            .w_full()
+                            .flex()
+                            .items_center()
+                            .gap(px(theme::SPACE[2]))
+                            .pl(px(theme::SPACE[5] + layout::TREE_INDENT * r.depth as f32))
+                            .pr(px(theme::SPACE[3]))
+                            .whitespace_nowrap()
+                            .overflow_hidden()
+                            .hover(|d| d.bg(c(p.surface_hover)))
+                            .child(
+                                div()
+                                    .w(px(12.))
+                                    .flex_none()
+                                    .when(reference > 0, |d| d.child(icon(if r.open { "chevron-down" } else { "chevron-right" }, 12., p.text_muted))),
+                            )
+                            .child(
+                                div().flex_none().text_color(c(if r.depth == 0 && watch.is_none() { p.text } else { p.syntax_function })).child(r.name.clone()),
+                            )
+                            .when(!r.value.is_empty(), |d| {
+                                d.child(div().flex_none().text_color(c(p.text_muted)).child(if watch.is_some() { "=" } else { ":" }))
+                                    .child(div().min_w_0().overflow_hidden().font_family(ui::MONO_FONT).child(r.value.clone()))
+                            })
+                            .when_some(r.ty.clone(), |d, t| d.child(div().flex_none().text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(t)))
+                            .when_some(watch, |d, i| {
+                                d.child(
                                     div()
-                                        .w(px(12.))
-                                        .flex_none()
-                                        .when(reference > 0, |d| d.child(icon(if r.open { "chevron-down" } else { "chevron-right" }, 12., p.text_muted))),
-                                )
-                                .child(
-                                    div()
-                                        .flex_none()
-                                        .text_color(c(if r.depth == 0 && watch.is_none() { p.text } else { p.syntax_function }))
-                                        .child(r.name.clone()),
-                                )
-                                .when(!r.value.is_empty(), |d| {
-                                    d.child(div().flex_none().text_color(c(p.text_muted)).child(if watch.is_some() { "=" } else { ":" }))
-                                        .child(div().min_w_0().overflow_hidden().font_family(ui::MONO_FONT).child(r.value.clone()))
-                                })
-                                .when_some(r.ty.clone(), |d, t| d.child(div().flex_none().text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(t)))
-                                .when_some(watch, |d, i| {
-                                    d.child(div().absolute().right(px(theme::SPACE[3])).invisible().group_hover(group.clone(), |d| d.visible()).child(
-                                        ui::icon_button(("dbg-watch-x", i), "x", crate::i18n::t("Remove Expression"), &p).on_click(cx.listener(
+                                        .absolute()
+                                        .right(px(theme::SPACE[3]))
+                                        .invisible()
+                                        .group_hover(group.clone(), |d| d.visible())
+                                        .child(a11y::part_frame(a11y::Part::RowButton(kind, ix, 1), cx))
+                                        .child(ui::icon_button(("dbg-watch-x", i), "x", crate::i18n::t("Remove Expression"), &p).on_click(cx.listener(
                                             move |this, _, _, cx| {
                                                 cx.stop_propagation();
                                                 this.remove_watch(i, cx);
                                             },
-                                        )),
-                                    ))
-                                })
-                                .when(reference > 0, |d| d.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| this.toggle_variable(reference, cx))))
-                                .when_some(menu, |d, (parent, name)| {
-                                    d.on_mouse_down(
-                                        MouseButton::Right,
-                                        cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
-                                            cx.stop_propagation();
-                                            this.open_variable_menu(parent, name.clone(), ev.position, w, cx);
-                                        }),
-                                    )
-                                })
-                                .into_any_element(),
-                        )
+                                        ))),
+                                )
+                            })
+                            .when(reference > 0, |d| d.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| this.toggle_variable(reference, cx))))
+                            .when_some(menu, |d, (parent, name)| {
+                                d.on_mouse_down(
+                                    MouseButton::Right,
+                                    cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
+                                        cx.stop_propagation();
+                                        this.open_variable_menu(parent, name.clone(), ev.position, w, cx);
+                                    }),
+                                )
+                            })
+                            .into_any_element();
+                        Some(this.nav_row(kind, ix, el, window, cx))
                     })
                     .collect()
             }),
         )
-        .size_full()
-        .into_any_element()
+        .track_scroll(self.row_scroll(kind))
+        .size_full();
+        self.row_list(kind, list, cx)
     }
 
     fn stack_body(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
@@ -639,10 +707,11 @@ impl Workbench {
             return self.note(crate::i18n::t("No debug session."), p);
         }
         let p = *p;
-        gpui::uniform_list(
+        let kind = a11y::RowFrame::DebugStack;
+        let list = gpui::uniform_list(
             "dbg-stack-rows",
             rows.len(),
-            cx.processor(move |_, range: std::ops::Range<usize>, _, cx| {
+            cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
                 range
                     .filter_map(|ix| {
                         let row = rows.get(ix)?;
@@ -704,36 +773,19 @@ impl Workbench {
                                 .on_click(cx.listener(|this, _, _, cx| this.load_more_frames(cx))),
                             StackRow::Note(t) => base.pl(px(theme::SPACE[6])).text_color(c(p.text_muted)).child(t.clone()),
                         };
-                        Some(el.into_any_element())
+                        Some(this.nav_row(kind, ix, el.into_any_element(), window, cx))
                     })
                     .collect()
             }),
         )
-        .size_full()
-        .into_any_element()
+        .track_scroll(self.row_scroll(kind))
+        .size_full();
+        self.row_list(kind, list, cx)
     }
 
     fn breakpoints_body(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let rows = self.dbg.bps.rows();
         // Data breakpoints belong to the session (the adapter's id for a value), so they are listed while it lives.
-        let data: Vec<String> = self.dbg.cur().map(|d| d.data_breakpoints.iter().map(|(_, desc)| desc.clone()).collect()).unwrap_or_default();
-        if !data.is_empty() {
-            let list = div().flex().flex_col().children(data.into_iter().map(|desc| {
-                div()
-                    .h(px(layout::ROW_H))
-                    .flex()
-                    .items_center()
-                    .gap(px(theme::SPACE[2]))
-                    .pl(px(theme::SPACE[5] + 22.))
-                    .whitespace_nowrap()
-                    .overflow_hidden()
-                    .child(div().flex_none().size(px(8.)).rounded_full().bg(c(p.danger)))
-                    .child(div().flex_none().text_color(c(p.text_muted)).child(crate::i18n::t("breaks when written:")))
-                    .child(div().min_w_0().overflow_hidden().child(desc))
-            }));
-            let rest = if rows.is_empty() { div().into_any_element() } else { self.breakpoint_list(rows, p, cx) };
-            return div().size_full().flex().flex_col().child(list).child(div().flex_1().min_h_0().child(rest)).into_any_element();
-        }
+        let rows = self.bp_rows();
         if rows.is_empty() {
             return self.note(crate::i18n::t("No breakpoints: F9 or a click in the gutter adds one."), p);
         }
@@ -744,14 +796,16 @@ impl Workbench {
         let root = self.root(cx);
         let active = self.dbg.bps.active;
         let p = *p;
-        gpui::uniform_list(
+        let kind = a11y::RowFrame::DebugBreakpoint;
+        let list = gpui::uniform_list(
             "dbg-bp-rows",
             rows.len(),
-            cx.processor(move |_, range: std::ops::Range<usize>, _, cx| {
+            cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
                 range
                     .filter_map(|ix| {
                         let row = rows.get(ix)?;
                         let (enabled, verified) = match row {
+                            BpRow::Data { bp, .. } => (bp.enabled, Verified::Yes),
                             BpRow::Line { meta, .. } => (!meta.disabled, meta.verified.clone()),
                             BpRow::Function { bp, .. } => (!bp.disabled, bp.verified.clone()),
                         };
@@ -791,6 +845,37 @@ impl Workbench {
                             .hover(|d| d.bg(c(p.surface_hover)))
                             .when(!enabled || !active, |d| d.text_color(c(p.text_muted)));
                         let el = match row {
+                            BpRow::Data { index, bp } => {
+                                let (index, on) = (*index, bp.enabled);
+                                base.child(checkbox(SharedString::from(format!("dbg-dbp-check-{ix}"))).on_click(cx.listener(move |this, _, _, cx| {
+                                    cx.stop_propagation();
+                                    this.set_data_breakpoint_enabled(index, !on, cx);
+                                })))
+                                .child(div().flex_none().size(px(8.)).rounded(px(1.)).bg(c(dot)))
+                                .child(div().flex_none().text_color(c(p.text_muted)).child(crate::i18n::t("breaks when written:")))
+                                .child(div().flex_shrink().min_w_0().overflow_hidden().child(bp.desc.clone()))
+                                .child(
+                                    div()
+                                        .absolute()
+                                        .right(px(theme::SPACE[3]))
+                                        .invisible()
+                                        .group_hover(group.clone(), |d| d.visible())
+                                        .child(a11y::part_frame(a11y::Part::RowButton(kind, ix, 1), cx))
+                                        .child(ui::icon_button(("dbg-dbp-x", ix), "x", crate::i18n::t("Remove Breakpoint"), &p).on_click(cx.listener(
+                                            move |this, _, _, cx| {
+                                                cx.stop_propagation();
+                                                this.remove_data_breakpoint(index, cx);
+                                            },
+                                        ))),
+                                )
+                                .on_mouse_down(
+                                    MouseButton::Right,
+                                    cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
+                                        cx.stop_propagation();
+                                        this.open_data_breakpoint_menu(index, on, ev.position, w, cx);
+                                    }),
+                                )
+                            }
                             BpRow::Line { path, line, meta } => {
                                 let (path, line) = (path.clone(), *line);
                                 let shown = root.as_deref().and_then(|r| path.strip_prefix(&format!("{r}/"))).unwrap_or(&path).to_string();
@@ -814,19 +899,25 @@ impl Workbench {
                                     d.child(div().flex_shrink().min_w_0().overflow_hidden().text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(detail))
                                 })
                                 .when_some(tip, |d, tip| d.tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone())).into()))
-                                .child(div().absolute().right(px(theme::SPACE[3])).invisible().group_hover(group.clone(), |d| d.visible()).child(
-                                    ui::icon_button(("dbg-bp-x", ix), "x", crate::i18n::t("Remove Breakpoint"), &p).on_click(cx.listener(
-                                        move |this, _, w, cx| {
-                                            cx.stop_propagation();
-                                            this.run_debug_menu(
-                                                DebugMenuCmd::RemoveBreakpoint,
-                                                MenuTarget { path: format!("{p2}\t{line}"), is_dir: false, tab: None },
-                                                w,
-                                                cx,
-                                            );
-                                        },
-                                    )),
-                                ))
+                                .child(
+                                    div()
+                                        .absolute()
+                                        .right(px(theme::SPACE[3]))
+                                        .invisible()
+                                        .group_hover(group.clone(), |d| d.visible())
+                                        .child(a11y::part_frame(a11y::Part::RowButton(kind, ix, 1), cx))
+                                        .child(ui::icon_button(("dbg-bp-x", ix), "x", crate::i18n::t("Remove Breakpoint"), &p).on_click(cx.listener(
+                                            move |this, _, w, cx| {
+                                                cx.stop_propagation();
+                                                this.run_debug_menu(
+                                                    DebugMenuCmd::RemoveBreakpoint,
+                                                    MenuTarget { path: format!("{p2}\t{line}"), is_dir: false, tab: None },
+                                                    w,
+                                                    cx,
+                                                );
+                                            },
+                                        ))),
+                                )
                                 .on_mouse_down(
                                     MouseButton::Right,
                                     cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
@@ -846,24 +937,29 @@ impl Workbench {
                                 .child(div().flex_none().size(px(8.)).rounded(px(2.)).bg(c(dot)))
                                 .child(div().flex_shrink().min_w_0().overflow_hidden().font_family(ui::MONO_FONT).child(format!("{}()", bp.name)))
                                 .child(
-                                    div().absolute().right(px(theme::SPACE[3])).invisible().group_hover(group.clone(), |d| d.visible()).child(
-                                        ui::icon_button(("dbg-fbp-x", ix), "x", crate::i18n::t("Remove Breakpoint"), &p).on_click(cx.listener(
+                                    div()
+                                        .absolute()
+                                        .right(px(theme::SPACE[3]))
+                                        .invisible()
+                                        .group_hover(group.clone(), |d| d.visible())
+                                        .child(a11y::part_frame(a11y::Part::RowButton(kind, ix, 1), cx))
+                                        .child(ui::icon_button(("dbg-fbp-x", ix), "x", crate::i18n::t("Remove Breakpoint"), &p).on_click(cx.listener(
                                             move |this, _, _, cx| {
                                                 cx.stop_propagation();
                                                 this.remove_function_breakpoint(index, cx);
                                             },
-                                        )),
-                                    ),
+                                        ))),
                                 )
                             }
                         };
-                        Some(el.into_any_element())
+                        Some(this.nav_row(kind, ix, el.into_any_element(), window, cx))
                     })
                     .collect()
             }),
         )
-        .size_full()
-        .into_any_element()
+        .track_scroll(self.row_scroll(kind))
+        .size_full();
+        self.row_list(kind, list, cx)
     }
 
     /// The view's rows as text: Variables (`name: value`, indented by depth) and Call Stack (`session|thread|frame:…`).

@@ -10,6 +10,11 @@ impl Workbench {
     pub fn file_clipboard_paths_for_test(&self) -> Vec<String> {
         self.roots.file_clip.as_ref().map_or_else(Vec::new, |c| c.paths.clone())
     }
+
+    /// The label of the host the workspace's files go through, when it is a remote one.
+    pub fn remote_host_label_for_test(&self) -> Option<String> {
+        self.remote.host.is_remote().then(|| self.remote.host.label())
+    }
     /// Recents in display order: (host, path, pinned).
     pub fn recent_for_test(&self) -> Vec<(Option<String>, String, bool)> {
         super::projects::ordered_recent(&self.persist.recent, &self.persist.pinned).into_iter().map(|(r, pinned)| (r.host, r.path, pinned)).collect()
@@ -184,6 +189,11 @@ impl Workbench {
         self.lsp.diagnostics.get(path).cloned().unwrap_or_default()
     }
 
+    /// Language-server slots (starting, running or failed): any entry means a server process was attempted.
+    pub fn lsp_server_keys_for_test(&self) -> Vec<String> {
+        self.lsp.servers.keys().cloned().collect()
+    }
+
     pub fn open_paths(&self, cx: &App) -> Vec<String> {
         self.tabs.editors.iter().map(|e| e.read(cx).path.clone()).collect()
     }
@@ -215,6 +225,11 @@ impl Workbench {
         }
     }
 
+    /// Whether the activity bar showed its "more above" and "more below" hints in the last frame.
+    pub fn activity_hints_for_test(&self) -> (bool, bool) {
+        self.chrome.activity_hints.get()
+    }
+
     pub fn sidebar_width_for_test(&self) -> f32 {
         self.chrome.sidebar_w
     }
@@ -237,6 +252,7 @@ impl Workbench {
             Panel::Remote => "remote",
             Panel::Containers => "containers",
             Panel::Extensions => "extensions",
+            Panel::ExtView => "extension-view",
         })
     }
 
@@ -335,6 +351,25 @@ impl Workbench {
         welcome_glue::tip_of_the_day(day)
     }
 
+    /// Replace the network for extensions (`net.fetch`, `auth.fetch`) in this window.
+    pub fn set_ext_transport_for_test(&mut self, transport: std::sync::Arc<dyn crate::ext_fetch::Transport>) {
+        self.cfg.exts.accounts.transport = transport;
+    }
+
+    pub fn has_overlay_for_test(&self) -> bool {
+        self.overlay.is_some()
+    }
+
+    /// The last JSON a command of the extension answered.
+    pub fn extension_answer_for_test(&self, id: &str) -> Option<String> {
+        self.cfg.exts.code.last_answer.get(id).cloned()
+    }
+
+    /// Whether the extension's exthost is running in this window.
+    pub fn extension_running_for_test(&self, id: &str) -> bool {
+        self.cfg.exts.code.running(id)
+    }
+
     pub fn run_command_for_test(&mut self, label: &str, window: &mut Window, cx: &mut Context<Self>) {
         let run = self.commands().into_iter().find(|c| c.label == label).unwrap_or_else(|| panic!("no such command: {label}")).run;
         self.run_command(run, window, cx);
@@ -359,6 +394,11 @@ impl Workbench {
 
     pub fn overlay_query(&self, cx: &App) -> Option<String> {
         self.overlay.as_ref().map(|o| o.picker.read(cx).query().to_string())
+    }
+
+    /// The open overlay's query as the screen shows it (dots for a password).
+    pub fn overlay_query_shown_for_test(&self, cx: &App) -> Option<String> {
+        self.overlay.as_ref().map(|o| o.picker.read(cx).shown_query())
     }
 
     pub fn set_overlay_query_for_test(&mut self, query: String, cx: &mut Context<Self>) {
@@ -747,6 +787,16 @@ impl Workbench {
         self.install_extension_from_folder(&InstallExtensionFromFolder, window, cx);
     }
 
+    /// A notification from extension `id`'s exthost (diagnostics, decorations, status items), as it arrives.
+    pub fn extension_notify_for_test(&mut self, id: &str, n: ext_api::value::Notify, cx: &mut Context<Self>) {
+        self.on_provider_notify(id, n, cx);
+    }
+
+    /// Every file's diagnostics from extensions.
+    pub fn extension_problems_for_test(&self) -> std::collections::BTreeMap<String, Vec<crate::lsp::Diagnostic>> {
+        self.extension_problems().map(|(p, d)| (p.clone(), d)).collect()
+    }
+
     pub fn permission_lines_for_test(p: &ext_manifest::Permissions) -> Vec<String> {
         ext_glue::permission_lines(p)
     }
@@ -756,7 +806,7 @@ impl Workbench {
     }
 
     pub fn review_registry_extension_for_test(&mut self, spec: &str, window: &mut Window, cx: &mut Context<Self>) {
-        self.review_registry_extension(spec.to_string(), window, cx);
+        self.review_registry_extension(spec.to_string(), None, window, cx);
     }
 
     /// The consent sheet's source line and its warnings.
@@ -765,12 +815,98 @@ impl Workbench {
         Some((ext_glue::source_line(&p.source), p.warnings.clone()))
     }
 
+    /// Type into the consent sheet's field for the extension id (native programs, §6.3); whether Install would act.
+    pub fn type_consent_id_for_test(&mut self, text: &str, cx: &mut Context<Self>) -> bool {
+        if let Some(f) = self.cfg.exts.consent_typed.clone() {
+            f.update(cx, |f, cx| f.set_text(text, cx));
+        }
+        self.consent_typed_ok(cx)
+    }
+
+    /// Whether the keyboard is in the consent sheet's id field.
+    pub fn consent_typing_focused_for_test(&self, window: &Window, cx: &App) -> bool {
+        self.cfg.exts.consent_typed.as_ref().is_some_and(|f| f.focus_handle(cx).is_focused(window))
+    }
+
     pub fn answer_consent_for_test(&mut self, install: bool, window: &mut Window, cx: &mut Context<Self>) {
         if install {
             self.confirm_consent(window, cx);
         } else {
-            self.cancel_consent(cx);
+            self.cancel_consent(window, cx);
         }
+    }
+
+    // --- Market ---
+
+    pub fn extensions_tab_for_test(&mut self, market: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let tab = if market { market_glue::ExtTab::Market } else { market_glue::ExtTab::Installed };
+        self.set_extensions_tab(tab, window, cx);
+    }
+
+    pub fn market_search_for_test(&mut self, text: &str, cx: &mut Context<Self>) {
+        if let Some(f) = self.cfg.exts.market.search.clone() {
+            f.update(cx, |f, cx| f.set_text(text, cx));
+        }
+    }
+
+    /// The Market's results on screen (ids, best first) and its status line.
+    pub fn market_for_test(&self) -> (Vec<String>, String) {
+        let m = &self.cfg.exts.market;
+        let ids = m.catalog.as_ref().map(|c| m.results.iter().map(|&i| c.item(i).id.to_string()).collect()).unwrap_or_default();
+        (ids, market_view_glue::market_status(m).0)
+    }
+
+    pub fn market_cursor_for_test(&self) -> usize {
+        self.cfg.exts.market.cursor
+    }
+
+    /// The Market page in front: (title, its lines as a screen reader gets them, the install button's label, README
+    /// text or the error).
+    pub fn market_page_for_test(&self) -> Option<(String, Vec<String>, Option<String>, Result<Option<String>, String>)> {
+        let snap = self.a11y_extension_page()?;
+        let readme = match &self.cfg.exts.market.page.as_ref()?.loaded {
+            None => Ok(None),
+            Some(Err(e)) => Err(e.clone()),
+            Some(Ok(l)) => Ok(l.readme.as_deref().map(crate::markdown::plain_text)),
+        };
+        Some((snap.title, snap.lines, snap.install, readme))
+    }
+
+    pub fn open_market_row_for_test(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_market_row(ix, window, cx);
+    }
+
+    pub fn install_from_market_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.install_from_market(window, cx);
+    }
+
+    // --- Updates ---
+
+    /// What the last update check found for `id`.
+    pub fn extension_update_for_test(&self, id: &str) -> Option<crate::ext_updates::Status> {
+        self.cfg.exts.updates.status.get(&ext_manifest::ExtId::parse(id).ok()?).cloned()
+    }
+
+    /// The list row's badge and the page's stop line of an installed extension.
+    pub fn extension_state_for_test(&self, id: &str) -> Option<(&'static str, Option<String>)> {
+        let e = self.cfg.exts.list.iter().find(|e| e.manifest.id.as_str() == id)?;
+        Some((self.extension_badge(e), e.stopped.clone()))
+    }
+
+    pub fn check_extension_updates_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.check_extension_updates(window, cx);
+    }
+
+    pub fn update_extension_now_for_test(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.update_extension_now(ext_manifest::ExtId::parse(id).unwrap(), window, cx);
+    }
+
+    pub fn accept_extension_update_for_test(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.accept_extension_update(ext_manifest::ExtId::parse(id).unwrap(), window, cx);
+    }
+
+    pub fn set_extension_pre_release_for_test(&mut self, id: &str, on: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.set_extension_pre_release(ext_manifest::ExtId::parse(id).unwrap(), on, window, cx);
     }
 
     /// The detail page's extension: (id, version, contribution lines, permission lines, version a rollback goes to).

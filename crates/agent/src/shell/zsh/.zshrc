@@ -7,7 +7,7 @@ if [[ -o interactive && -z "$__cy_loaded" && "$TERM_PROGRAM" == codeyard ]]; the
   __cy_ran=
   __cy_precmd() {
     local ret=$?
-    local __cy_pwd=${PWD//%/%25}
+    local __cy_pwd=${PWD//\%/%25}
     [[ -n "$__cy_ran" ]] && printf '\e]133;D;%s\a' "$ret"
     __cy_ran=
     printf '\e]7;file://%s%s\a' "${HOST}" "$__cy_pwd"

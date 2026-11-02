@@ -40,7 +40,7 @@ pub struct Converted {
 pub fn convert_settings(text: &str, themes: &[(String, String)]) -> Converted {
     let mut out = Converted::default();
     let Ok(Value::Object(obj)) = serde_json::from_str::<Value>(&theme::themes::strip_jsonc(text)) else {
-        out.notes.push(crate::i18n::t("VS Code settings.json could not be read").into());
+        out.notes.push(crate::i18n::t("The other editor's settings.json could not be read").into());
         return out;
     };
     let mut set = |k: &str, v: Value| out.settings.push((k.to_string(), v));
@@ -437,8 +437,10 @@ pub fn convert_keybindings(text: &str) -> (Vec<Value>, usize) {
     (out, skipped)
 }
 
-pub const BEGIN: &str = "  // --- imported from VS Code (re-import replaces this block) ---";
-pub const END: &str = "  // --- end of VS Code import ---";
+pub const BEGIN: &str = "  // --- imported shortcuts (re-import replaces this block) ---";
+pub const END: &str = "  // --- end of imported shortcuts ---";
+/// The markers earlier versions wrote: a block between them is replaced by a re-import too.
+const OLD_MARKERS: (&str, &str) = ("  // --- imported from VS Code (re-import replaces this block) ---", "  // --- end of VS Code import ---");
 
 /// Write the shortcuts into codeyard's keybindings.jsonc; a previous import block is replaced.
 pub fn merge_keybindings(ours: &str, entries: &[Value]) -> String {
@@ -446,7 +448,8 @@ pub fn merge_keybindings(ours: &str, entries: &[Value]) -> String {
         let lines: Vec<String> = entries.iter().map(|e| format!("  {e},")).collect();
         format!("{BEGIN}\n{}\n{END}\n", lines.join("\n"))
     };
-    if let (Some(a), Some(b)) = (ours.find(BEGIN), ours.find(END)) {
+    let found = [(BEGIN, END), OLD_MARKERS].into_iter().find_map(|(begin, end)| Some((ours.find(begin)?, ours.find(end)?)));
+    if let Some((a, b)) = found {
         let end = ours[b..].find('\n').map_or(ours.len(), |i| b + i + 1);
         return format!("{}{block}{}", &ours[..a], &ours[end..]);
     }
@@ -558,6 +561,12 @@ mod tests {
         let (parsed, warnings) = crate::settings::parse_keybindings(&twice);
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(parsed.len(), 2);
+
+        // A block written by an earlier version, under its old markers, is replaced too (not kept next to the new one).
+        let old = once.replace(BEGIN, OLD_MARKERS.0).replace(END, OLD_MARKERS.1);
+        let again = merge_keybindings(&old, &entries[..1]);
+        assert!(!again.contains(OLD_MARKERS.0) && again.matches(BEGIN).count() == 1, "{again}");
+        assert!(!again.contains("editor.toggleComment") && again.contains("// benim"));
     }
 
     #[test]

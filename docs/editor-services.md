@@ -101,7 +101,7 @@ colours log levels. `.log` files follow automatically. *Filter Log Lines* runs
   `Host::proc_*`; diagnostics, completion, hover, rename, code actions, inlay hints, semantic tokens, call hierarchy.
 - **DAP** (`dap.rs`, `workbench_debug.rs`): debug adapters through the same process interface; launch configurations
   come from `launch.json` (see `debug_config.rs`).
-- **VS Code import** (`vscode.rs`): converts settings and keybindings it understands, reports what it skipped; VS Code's
-  files are never modified.
+- **Import from another editor** (`vscode.rs`): converts settings and keybindings it understands, reports what it skipped;
+  the other editor's files are never modified.
 - **EditorConfig, Emmet, linked tags, hex view, snippets**: pure functions with budgets (Emmet: 2000 nodes, 256 KB of
   output; EditorConfig: bounded globs and sections).

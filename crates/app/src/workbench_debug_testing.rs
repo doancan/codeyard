@@ -11,6 +11,14 @@ impl Workbench {
         self.start_debug(config, cx);
     }
 
+    /// Offers `configs` as F5 does and returns the picker's (label, detail) rows, closing it again.
+    pub fn debug_picker_rows_for_test(&mut self, configs: Vec<LaunchConfig>, window: &mut Window, cx: &mut Context<Self>) -> Vec<(String, String)> {
+        self.choose_debug_config_trusted(configs, window, cx);
+        let rows = self.overlay_labels(cx).unwrap_or_default().into_iter().zip(self.overlay_details(cx).unwrap_or_default()).collect();
+        self.close_overlay(window, cx);
+        rows
+    }
+
     /// Summary of state for tests: (state, frame names, stopped line, console).
     pub fn debug_snapshot(&self) -> Option<(String, Vec<String>, Option<(String, usize)>, Vec<String>)> {
         self.dbg.cur().map(|d| {
@@ -79,6 +87,55 @@ impl Workbench {
         self.answer_launch_input(value.into(), window, cx);
     }
 
+    /// A session without an adapter, paused on a breakpoint in `main` (src/main.rs:3, called from `start`), with the
+    /// scope `Locals` holding `point` (whose child `x` is loaded but closed) and `n`. It becomes the current session.
+    pub fn push_paused_session_for_test(&mut self, name: &str, cx: &mut Context<Self>) -> u64 {
+        self.dbg.next_id += 1;
+        let id = self.dbg.next_id;
+        let config = LaunchConfig {
+            name: name.into(),
+            adapter: Err(String::new()),
+            request: "launch".into(),
+            args: serde_json::Value::Null,
+            pre_launch: None,
+            pre_launch_task: None,
+            cargo_target: None,
+            post_debug: None,
+            no_debug: false,
+            inputs: Vec::new(),
+        };
+        let frame = |id: i64, name: &str, line: u32| Frame { id, name: name.into(), path: Some("/p/src/main.rs".into()), line, column: 1, can_restart: false };
+        let var = |name: &str, value: &str, reference: i64| Variable { name: name.into(), value: value.into(), reference, ..Default::default() };
+        let input = cx.new(|cx| TextField::new(crate::i18n::tr("Evaluate an expression (↵)"), cx));
+        self.dbg.sessions.push(DebugState {
+            id,
+            config,
+            session: None,
+            status: DebugStatus::Stopped("breakpoint".into()),
+            thread: 1,
+            frames: vec![frame(1, "main", 3), frame(2, "start", 9)],
+            frame: 0,
+            scopes: vec![Scope { name: "Locals".into(), reference: 1 }],
+            children: HashMap::from([(1, vec![var("point", "Point", 2), var("n", "1", 0)]), (2, vec![var("x", "4", 0)])]),
+            expanded: HashSet::from([1]),
+            console: Vec::new(),
+            partial: None,
+            stopped_once: true,
+            breakpoints_set: 0,
+            location: Some(("/p/src/main.rs".into(), 2)),
+            input,
+            watch_values: Vec::new(),
+            threads: vec![(1, "main".into())],
+            data_breakpoints: Vec::new(),
+            total_frames: None,
+            pages: HashMap::new(),
+            group: None,
+        });
+        self.dbg.focused = Some(id);
+        cx.notify();
+        id
+    }
+
     pub fn debug_catalog_for_test(&self) -> Vec<String> {
         self.dbg.catalog.clone()
     }
@@ -116,7 +173,28 @@ impl Workbench {
     }
 
     pub fn data_breakpoints_for_test(&self) -> Vec<String> {
-        self.dbg.cur().map(|d| d.data_breakpoints.iter().map(|(_, desc)| desc.clone()).collect()).unwrap_or_default()
+        self.dbg.cur().map(|d| d.data_breakpoints.iter().map(|b| b.desc.clone()).collect()).unwrap_or_default()
+    }
+
+    /// The current session's data breakpoints: (description, enabled).
+    pub fn data_breakpoint_states_for_test(&self) -> Vec<(String, bool)> {
+        self.dbg.cur().map(|d| d.data_breakpoints.iter().map(|b| (b.desc.clone(), b.enabled)).collect()).unwrap_or_default()
+    }
+
+    pub fn set_data_breakpoint_enabled_for_test(&mut self, index: usize, on: bool, cx: &mut Context<Self>) {
+        self.set_data_breakpoint_enabled(index, on, cx);
+    }
+
+    pub fn remove_data_breakpoint_for_test(&mut self, index: usize, cx: &mut Context<Self>) {
+        self.remove_data_breakpoint(index, cx);
+    }
+
+    /// Right click on the variable `name` (the first loaded one with that name).
+    pub fn open_variable_menu_for_test(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let parent = self.dbg.cur().and_then(|d| d.children.iter().find(|(_, vs)| vs.iter().any(|v| v.name == name)).map(|(r, _)| *r));
+        if let Some(parent) = parent {
+            self.open_variable_menu(parent, name.to_string(), gpui::point(gpui::px(10.), gpui::px(10.)), window, cx);
+        }
     }
 
     pub fn add_watch_for_test(&mut self, expr: &str, cx: &mut Context<Self>) {

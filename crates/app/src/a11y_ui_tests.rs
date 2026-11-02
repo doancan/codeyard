@@ -59,11 +59,25 @@ fn find_bar_reports_its_fields_status_and_options(cx: &mut TestAppContext) {
     cx.run_until_parked();
     let snap = wb.update_in(cx, |wb, window, cx| wb.a11y_snapshot(window, cx));
     assert_eq!(snap.focus, FocusSnap::Find(0));
-    let find = snap.find.expect("the find bar is in the tree");
+    let find = snap.find.clone().expect("the find bar is in the tree");
     assert_eq!(find.query, "needle");
     assert_eq!(find.replacement, None);
     assert!(find.status.as_deref().is_some_and(|s| s.contains('2')), "{:?}", find.status);
     assert_eq!(find.controls[0].1, Some(false), "match case starts off");
+    // The fields, the status and every control have their painted frames, and a hit test finds each one.
+    let tree = accesskit_consumer::Tree::new(snap.to_tree(), true);
+    let state = tree.state();
+    let nodes = snap.to_tree().nodes;
+    let query = nodes.iter().find(|(_, n)| n.role() == accesskit::Role::SearchInput && n.label() == Some("Find")).cloned();
+    let status = nodes.iter().find(|(_, n)| n.role() == accesskit::Role::Status && n.label() == find.status.as_deref()).cloned();
+    let mut framed = vec![query.expect("the query field"), status.expect("the status")];
+    framed.extend(find.controls.iter().map(|(label, _)| nodes.iter().find(|(_, n)| n.label() == Some(label.as_str())).cloned().expect("the control")));
+    for (id, node) in framed {
+        let b = node.bounds().unwrap_or_else(|| panic!("{:?} has a frame", node.label()));
+        let at = accesskit::Point::new((b.x0 + b.x1) / 2., (b.y0 + b.y1) / 2.);
+        let hit = state.root().node_at_point(at, &|_| accesskit_consumer::FilterResult::Include).unwrap();
+        assert_eq!(hit.locate().0, id, "hit test at {:?}", node.label());
+    }
     // Pressing the option from the tree turns it on, as a click would.
     let bar = wb.read_with(cx, |wb, cx| wb.active_editor_entity().and_then(|e| e.read(cx).find_bar())).unwrap();
     bar.update(cx, |b, cx| b.a11y_press(0, cx));
@@ -87,6 +101,17 @@ fn terminal_screen_is_exposed_as_text(cx: &mut TestAppContext) {
         if let Some(term) = snap.terminal.as_ref().filter(|t| t.runs.iter().any(|r| r.text.starts_with("a11y-42"))) {
             assert_eq!(snap.focus, FocusSnap::Terminal);
             assert!(term.cursor.is_some());
+            // Every row on screen is painted: its characters sit on the grid, one cell each.
+            let run = term.runs.iter().find(|r| r.text.starts_with("a11y-42")).unwrap();
+            let frame = run.frame.as_ref().expect("the row's frame");
+            let cell = frame.widths[0];
+            assert!(cell > 0. && frame.positions.iter().enumerate().take(7).all(|(i, x)| (x - cell * i as f32).abs() < 0.01), "{frame:?}");
+            // The caret's bounds, as a magnifier asks for them.
+            let tree = accesskit_consumer::Tree::new(snap.to_tree(), true);
+            let state = tree.state();
+            let node = state.focus().expect("the terminal has the focus");
+            let caret = node.text_selection().expect("the cursor").bounding_boxes();
+            assert!(caret.len() == 1 && caret[0].height() > 0., "{caret:?}");
             break;
         }
         assert!(start.elapsed() < std::time::Duration::from_secs(10 * crate::test_sshd::timeout_scale()), "terminal output never reached the tree");

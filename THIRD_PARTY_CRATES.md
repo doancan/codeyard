@@ -5,7 +5,7 @@ field of each crate's `Cargo.toml`. `cargo deny check` (see `deny.toml`) enforce
 allowed licence. This list covers all target platforms, including crates that a given build does not compile.
 Crates marked vendored live in `vendor/`.
 
-842 crates.
+901 crates.
 
 | Crate | Version | Licence | |
 | --- | --- | --- | --- |
@@ -14,6 +14,7 @@ Crates marked vendored live in `vendor/`.
 | accesskit_macos | 0.27.1 | MIT OR Apache-2.0 |  |
 | accesskit_windows | 0.35.2 | MIT OR Apache-2.0 |  |
 | addr2line | 0.25.1 | Apache-2.0 OR MIT |  |
+| addr2line | 0.26.1 | Apache-2.0 OR MIT |  |
 | adler2 | 2.0.1 | 0BSD OR MIT OR Apache-2.0 |  |
 | aes | 0.8.4 | MIT OR Apache-2.0 |  |
 | ahash | 0.8.12 | MIT OR Apache-2.0 |  |
@@ -135,8 +136,22 @@ Crates marked vendored live in `vendor/`.
 | core_detect | 1.0.0 | MIT/Apache-2.0 |  |
 | core_maths | 0.1.1 | MIT |  |
 | cosmic-text | 0.14.2 | MIT OR Apache-2.0 |  |
+| cpp_demangle | 0.5.1 | MIT OR Apache-2.0 |  |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 |  |
 | cpufeatures | 0.3.1 | MIT OR Apache-2.0 |  |
+| cranelift-assembler-x64 | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-assembler-x64-meta | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-bforest | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-bitset | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-codegen | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-codegen-meta | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-codegen-shared | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-control | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-entity | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-frontend | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-isle | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-native | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-srcgen | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
 | crc32fast | 1.5.3 | MIT OR Apache-2.0 |  |
 | critical-section | 1.2.0 | MIT OR Apache-2.0 |  |
 | crossbeam-deque | 0.8.8 | MIT OR Apache-2.0 |  |
@@ -242,6 +257,7 @@ Crates marked vendored live in `vendor/`.
 | getrandom | 0.4.3 | MIT OR Apache-2.0 |  |
 | gif | 0.14.2 | MIT OR Apache-2.0 |  |
 | gimli | 0.32.3 | MIT OR Apache-2.0 |  |
+| gimli | 0.33.0 | MIT OR Apache-2.0 |  |
 | git2 | 0.20.4 | MIT OR Apache-2.0 |  |
 | glob | 0.3.4 | MIT OR Apache-2.0 |  |
 | globset | 0.4.20 | Unlicense OR MIT |  |
@@ -268,6 +284,7 @@ Crates marked vendored live in `vendor/`.
 | hash32 | 0.2.1 | MIT OR Apache-2.0 |  |
 | hashbrown | 0.14.5 | MIT OR Apache-2.0 |  |
 | hashbrown | 0.15.5 | MIT OR Apache-2.0 |  |
+| hashbrown | 0.16.1 | MIT OR Apache-2.0 |  |
 | hashbrown | 0.17.1 | MIT OR Apache-2.0 |  |
 | hashlink | 0.12.2 | MIT OR Apache-2.0 |  |
 | heapless | 0.7.17 | MIT OR Apache-2.0 |  |
@@ -296,6 +313,7 @@ Crates marked vendored live in `vendor/`.
 | icu_properties | 2.4.0 | Unicode-3.0 |  |
 | icu_properties_data | 2.4.0 | Unicode-3.0 |  |
 | icu_provider | 2.4.0 | Unicode-3.0 |  |
+| id-arena | 2.3.0 | MIT/Apache-2.0 |  |
 | idna | 1.1.0 | MIT OR Apache-2.0 |  |
 | idna_adapter | 1.2.2 | Apache-2.0 OR MIT |  |
 | ignore | 0.4.33 | Unlicense OR MIT |  |
@@ -326,9 +344,11 @@ Crates marked vendored live in `vendor/`.
 | khronos-egl | 6.0.0 | MIT/Apache-2.0 |  |
 | kurbo | 0.11.3 | Apache-2.0 OR MIT |  |
 | kv-log-macro | 1.0.7 | MIT OR Apache-2.0 |  |
+| landlock | 0.4.7 | MIT OR Apache-2.0 |  |
 | lazy_static | 1.5.1 | MIT OR Apache-2.0 |  |
 | leak | 0.1.2 | Apache-2.0 OR MIT |  |
 | leaky-cow | 0.1.1 | MIT / Apache-2.0 |  |
+| leb128fmt | 0.1.0 | MIT OR Apache-2.0 |  |
 | lebe | 0.5.3 | BSD-3-Clause |  |
 | libc | 0.2.191 | MIT OR Apache-2.0 |  |
 | libfuzzer-sys | 0.4.13 | (MIT OR Apache-2.0) AND NCSA |  |
@@ -338,7 +358,7 @@ Crates marked vendored live in `vendor/`.
 | libmimalloc-sys | 0.1.49 | MIT |  |
 | libredox | 0.1.25 | MIT |  |
 | libsqlite3-sys | 0.39.0 | MIT |  |
-| libz-sys | 1.1.30 | MIT OR Apache-2.0 |  |
+| libz-sys | 1.1.31 | MIT OR Apache-2.0 |  |
 | linux-raw-sys | 0.12.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | linux-raw-sys | 0.4.15 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | litemap | 0.8.3 | Unicode-3.0 |  |
@@ -352,11 +372,13 @@ Crates marked vendored live in `vendor/`.
 | lyon_path | 1.0.19 | MIT OR Apache-2.0 |  |
 | lyon_tessellation | 1.0.23 | MIT OR Apache-2.0 |  |
 | mac | 0.1.1 | MIT/Apache-2.0 |  |
+| mach2 | 0.6.0 | BSD-2-Clause OR MIT OR Apache-2.0 |  |
 | malloc_buf | 0.0.6 | MIT |  |
 | maybe-owned | 0.3.4 | MIT OR Apache-2.0 |  |
 | maybe-rayon | 0.1.1 | MIT |  |
 | md-5 | 0.10.6 | MIT OR Apache-2.0 |  |
 | memchr | 2.8.3 | Unlicense OR MIT |  |
+| memfd | 0.6.6 | MIT OR Apache-2.0 |  |
 | memmap2 | 0.9.12 | MIT OR Apache-2.0 |  |
 | memoffset | 0.9.1 | MIT |  |
 | metal | 0.29.0 | MIT OR Apache-2.0 |  |
@@ -417,6 +439,7 @@ Crates marked vendored live in `vendor/`.
 | objc_id | 0.1.1 | MIT |  |
 | object | 0.37.3 | Apache-2.0 OR MIT |  |
 | object | 0.39.1 | Apache-2.0 OR MIT |  |
+| object | 0.40.0 | Apache-2.0 OR MIT |  |
 | once_cell | 1.21.4 | MIT OR Apache-2.0 |  |
 | oo7 | 0.5.0 | MIT |  |
 | open | 5.4.5 | MIT |  |
@@ -450,6 +473,7 @@ Crates marked vendored live in `vendor/`.
 | potential_utf | 0.1.6 | Unicode-3.0 |  |
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 |  |
 | prettyplease | 0.2.37 | MIT OR Apache-2.0 |  |
+| prettyplease | 0.3.0 | MIT OR Apache-2.0 |  |
 | proc-macro-crate | 3.5.0 | MIT OR Apache-2.0 |  |
 | proc-macro-error-attr2 | 2.0.0 | MIT OR Apache-2.0 |  |
 | proc-macro-error2 | 2.0.1 | MIT OR Apache-2.0 |  |
@@ -458,6 +482,8 @@ Crates marked vendored live in `vendor/`.
 | profiling-procmacros | 1.0.18 | MIT OR Apache-2.0 |  |
 | psm | 0.1.32 | MIT OR Apache-2.0 |  |
 | pulldown-cmark | 0.13.5 | MIT |  |
+| pulley-interpreter | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| pulley-macros | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
 | pulp | 0.22.3 | MIT |  |
 | pulp-wasm-simd-flag | 0.1.1 | MIT |  |
 | pxfm | 0.1.30 | BSD-3-Clause OR Apache-2.0 |  |
@@ -496,6 +522,7 @@ Crates marked vendored live in `vendor/`.
 | ref-cast | 1.0.27 | MIT OR Apache-2.0 |  |
 | ref-cast-impl | 1.0.27 | MIT OR Apache-2.0 |  |
 | referencing | 0.60.1 | MIT |  |
+| regalloc2 | 0.15.2 | Apache-2.0 WITH LLVM-exception |  |
 | regex | 1.13.1 | MIT OR Apache-2.0 |  |
 | regex-automata | 0.4.18 | MIT OR Apache-2.0 |  |
 | regex-syntax | 0.8.11 | MIT OR Apache-2.0 |  |
@@ -615,6 +642,7 @@ Crates marked vendored live in `vendor/`.
 | taffy | 0.9.2 | MIT |  |
 | take-until | 0.2.0 | MIT |  |
 | tao-core-video-sys | 0.2.0 | MIT |  |
+| target-lexicon | 0.13.5 | Apache-2.0 WITH LLVM-exception |  |
 | tempfile | 3.27.0 | MIT OR Apache-2.0 |  |
 | tendril | 0.4.3 | MIT/Apache-2.0 |  |
 | termcolor | 1.4.1 | Unlicense OR MIT |  |
@@ -720,7 +748,30 @@ Crates marked vendored live in `vendor/`.
 | wasm-bindgen-macro | 0.2.129 | MIT OR Apache-2.0 |  |
 | wasm-bindgen-macro-support | 0.2.129 | MIT OR Apache-2.0 |  |
 | wasm-bindgen-shared | 0.2.129 | MIT OR Apache-2.0 |  |
+| wasm-encoder | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wasm-encoder | 0.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wasm-metadata | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wasm-metadata | 0.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | wasm-streams | 0.4.2 | MIT OR Apache-2.0 |  |
+| wasmparser | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wasmparser | 0.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wasmprinter | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wasmtime | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-environ | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-component-macro | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-component-util | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-core | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-cranelift | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-fiber | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-jit-debug | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-jit-icache-coherence | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-unwinder | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-versioned-export-macros | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-wit-bindgen | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-wasi | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-wasi-io | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wast | 262.0.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wat | 1.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | wayland-backend | 0.3.17 | MIT |  |
 | wayland-client | 0.31.15 | MIT |  |
 | wayland-cursor | 0.31.14 | MIT |  |
@@ -804,6 +855,14 @@ Crates marked vendored live in `vendor/`.
 | winx | 0.36.4 | Apache-2.0 WITH LLVM-exception |  |
 | wio | 0.2.2 | MIT/Apache-2.0 |  |
 | wit-bindgen | 0.57.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-bindgen | 0.63.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-bindgen-core | 0.63.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-bindgen-rust | 0.63.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-bindgen-rust-macro | 0.63.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-component | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-component | 0.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-parser | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-parser | 0.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | writeable | 0.6.4 | Unicode-3.0 |  |
 | x11 | 2.21.0 | MIT |  |
 | x11-clipboard | 0.9.3 | MIT |  |

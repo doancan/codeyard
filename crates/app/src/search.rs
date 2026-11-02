@@ -18,8 +18,11 @@ gpui::actions!(search, [HistoryPrev, HistoryNext, NextResult, PrevResult]);
 // --- structural ---
 gpui::actions!(search, [StructuralSearch, StructuralReplace]);
 
+#[path = "search_access.rs"]
+mod access;
 #[path = "search_structural.rs"]
 mod structural_mode;
+pub(crate) use access::{AccessField, AccessFrame, AccessKey, AccessView, DISMISS_FILE, REPLACE_IN_FILE, SearchOption};
 pub(crate) use structural_mode::describe as describe_pattern_error;
 
 /// Number of remembered queries.
@@ -30,37 +33,16 @@ const DEBOUNCE: Duration = Duration::from_millis(250);
 
 pub enum SearchEvent {
     /// Go to a match: absolute path, 1-based line, 0-based column, length (characters).
-    Open {
-        path: String,
-        line: u32,
-        column: u32,
-        len: u32,
-    },
-    /// Replace all matches in the found files (workbench asks for confirmation).
-    /// "Open Results in Editor": results as plain text.
-    OpenInEditor(String),
-    ReplaceAll {
-        files: Vec<String>,
-        query: SearchQuery,
-        replacement: String,
-        preserve_case: bool,
-        matches: u32,
-        truncated: bool,
-    },
+    Open { path: String, line: u32, column: u32, len: u32 },
+    /// "Open Search Editor": keep this query in an editor tab of its own.
+    OpenInEditor(crate::search_doc::SearchSpec),
+    /// Replace: review the changes in a Search Editor before anything is written. `only`: just this file (absolute path).
+    ReviewReplace { spec: crate::search_doc::SearchSpec, only: Option<String> },
     // --- structural ---
     /// A structural search wants the unsaved text of the open files of this language; answered with `run_structural`.
-    StructuralBuffers {
-        generation: u32,
-        family: &'static str,
-    },
+    StructuralBuffers { generation: u32, family: &'static str },
     /// Replace the structural matches in these files (workbench asks for confirmation).
-    StructuralReplace {
-        files: Vec<String>,
-        family: &'static str,
-        pattern: String,
-        replacement: String,
-        matches: u32,
-    },
+    StructuralReplace { files: Vec<String>, family: &'static str, pattern: String, replacement: String, matches: u32 },
 }
 
 enum Status {
@@ -112,6 +94,8 @@ pub struct SearchPanel {
     current: Option<(usize, usize)>,
     // --- structural ---
     st: structural_mode::State,
+    /// Where the fields, options, status and rows were laid out in the last frame, for the accessibility tree.
+    painted: crate::painted::RowBounds<AccessFrame>,
     _subs: Vec<Subscription>,
 }
 
@@ -176,6 +160,7 @@ impl SearchPanel {
             history_ix: None,
             current: None,
             st,
+            painted: Default::default(),
             _subs: subs,
         }
     }
@@ -328,21 +313,32 @@ impl SearchPanel {
         }
     }
 
-    /// Replace only the matches in this file (workbench asks for confirmation).
+    /// Replace only the matches in this file: reviewed in a Search Editor first.
     fn replace_in_file(&mut self, fi: usize, cx: &mut Context<Self>) {
         if self.st.on {
             return self.request_structural_replace(Some(fi), cx);
         }
-        let (Some(query), Some(f)) = (self.query(cx), self.results.get(fi)) else { return };
-        let replacement = self.replace.read(cx).text().to_string();
-        cx.emit(SearchEvent::ReplaceAll {
-            files: vec![self.abs(&f.path)],
-            query,
-            replacement,
+        let Some(f) = self.results.get(fi) else { return };
+        if self.query.read(cx).text().is_empty() {
+            return;
+        }
+        let only = Some(self.abs(&f.path));
+        cx.emit(SearchEvent::ReviewReplace { spec: self.spec(cx), only });
+    }
+
+    /// The query, its options and the replacement, as a Search Editor keeps them.
+    pub fn spec(&self, cx: &App) -> crate::search_doc::SearchSpec {
+        crate::search_doc::SearchSpec {
+            pattern: self.query.read(cx).text().to_string(),
+            regex: self.regex,
+            case_sensitive: self.case_sensitive,
+            whole_word: self.whole_word,
             preserve_case: self.preserve_case,
-            matches: f.matches.len() as u32,
-            truncated: false,
-        });
+            include: if self.show_globs { self.include.read(cx).text().to_string() } else { String::new() },
+            exclude: if self.show_globs { self.exclude.read(cx).text().to_string() } else { String::new() },
+            context: 1,
+            replacement: self.replace.read(cx).text().to_string(),
+        }
     }
 
     /// "Find in Folder…": limit the search to this folder (the file filter opens).
@@ -409,22 +405,15 @@ impl SearchPanel {
         }));
     }
 
-    /// Replace request: found files and query go to the workbench.
+    /// Replace request: the query goes to a Search Editor, which searches again and shows every change before Apply.
     pub fn request_replace_all(&mut self, cx: &mut Context<Self>) {
         if self.st.on {
             return self.request_structural_replace(None, cx);
         }
-        let Some(query) = self.query(cx) else { return };
-        let (matches, truncated) = match self.status {
-            Status::Done { matches, truncated, .. } => (matches, truncated),
-            _ => return, // no replacing before the search finishes
-        };
-        let files: Vec<String> = self.results.iter().map(|f| self.abs(&f.path)).collect();
-        if files.is_empty() {
+        if self.root.is_none() || self.query.read(cx).text().is_empty() {
             return;
         }
-        let replacement = self.replace.read(cx).text().to_string();
-        cx.emit(SearchEvent::ReplaceAll { files, query, replacement, preserve_case: self.preserve_case, matches, truncated });
+        cx.emit(SearchEvent::ReviewReplace { spec: self.spec(cx), only: None });
     }
 
     #[cfg(test)]
@@ -599,40 +588,15 @@ impl SearchPanel {
 
     fn toggle(&self, id: &'static str, label: &'static str, on: bool, tip: &'static str, cx: &mut Context<Self>, set: fn(&mut Self)) -> impl IntoElement {
         let p = *palette(cx);
-        ui::option_toggle(id, label, on, tip, &p, p.bg).on_click(cx.listener(move |this, _, _, cx| {
+        ui::option_toggle(id, label, on, tip, &p, p.bg).relative().children(self.option_probe(id)).on_click(cx.listener(move |this, _, _, cx| {
             set(this);
             this.start(cx);
         }))
     }
 
-    /// Results as plain text: file header, below it `line: text` (like VS Code's search editor).
-    pub fn results_text(&self, cx: &App) -> String {
-        let (query, regex, case) = (self.active_query().read(cx).text().to_string(), self.regex && !self.st.on, self.case_sensitive);
-        let root = self.root.clone().unwrap_or_default();
-        let options = match (regex, case) {
-            (true, true) => crate::i18n::t("Regex, Match Case"),
-            (true, false) => crate::i18n::t("Regex, Ignore Case"),
-            (false, true) => crate::i18n::t("Match Case"),
-            (false, false) => crate::i18n::t("Ignore Case"),
-        };
-        let mut out = format!("# {}\n# {options}\n", crate::i18n::tf("Query: {}", &[&query]));
-        for f in &self.results {
-            let rel = f.path.strip_prefix(&format!("{}/", root.trim_end_matches('/'))).unwrap_or(&f.path);
-            out.push_str(&format!("\n{rel}:\n"));
-            for m in &f.matches {
-                out.push_str(&format!("  {}: {}\n", m.line, m.preview.trim_end()));
-            }
-        }
-        out
-    }
-
-    /// Open the results in an editor tab.
+    /// Keep this search in a Search Editor tab (it runs there again, in the first folder).
     pub fn open_in_editor(&mut self, cx: &mut Context<Self>) {
-        if self.results.is_empty() {
-            return;
-        }
-        let text = self.results_text(cx);
-        cx.emit(SearchEvent::OpenInEditor(text));
+        cx.emit(SearchEvent::OpenInEditor(self.spec(cx)));
     }
 
     #[cfg(test)]
@@ -654,34 +618,16 @@ impl SearchPanel {
 impl Render for SearchPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
-        let status: Option<(String, u32)> = match &self.status {
-            Status::Idle if self.root.is_none() => Some((crate::i18n::t("Open a folder to search in it.").into(), p.text_muted)),
-            Status::Idle => None,
-            Status::Searching => Some((crate::i18n::t("Searching…").into(), p.text_muted)),
-            Status::Done { matches: 0, files, .. } => {
-                Some((crate::i18n::tn("No results in {} file.", "No results in {} files.", *files as usize, &[]), p.text_muted))
-            }
-            Status::Done { files: _, matches, truncated } => {
-                let n = self.results.len();
-                let mut s = if n == 1 {
-                    crate::i18n::tn("{} result in 1 file", "{} results in 1 file", *matches as usize, &[])
-                } else {
-                    crate::i18n::tn("{0} result in {1} files", "{0} results in {1} files", *matches as usize, &[&n])
-                };
-                if *truncated {
-                    s = crate::i18n::tf("{0} (stopped at {1})", &[&s, &cx.global::<crate::settings::Settings>().search_max_results]);
-                }
-                Some((s, p.text_muted))
-            }
-            Status::Failed(e) => Some((e.to_string(), p.danger)),
-        };
+        self.painted.borrow_mut().clear();
+        let status = self.status_line(cx).map(|(s, error)| (s, if error { p.danger } else { p.text_muted }));
         let (q_focus, r_focus, i_focus, e_focus) = (
             self.active_query().focus_handle(cx).is_focused(window),
             self.replace.focus_handle(cx).is_focused(window),
             self.include.focus_handle(cx).is_focused(window),
             self.exclude.focus_handle(cx).is_focused(window),
         );
-        let field_box = |id: &'static str, focused: bool, child: gpui::AnyElement| crate::ui::input_box(id, &p, p.bg, focused).child(child);
+        let field_box = |id: &'static str, focused: bool, child: gpui::AnyElement| crate::ui::input_box(id, &p, p.bg, focused).relative().child(child);
+        let field = |which: AccessField| self.probe(AccessFrame::Field(which));
 
         div()
             .id("search-panel")
@@ -706,12 +652,23 @@ impl Render for SearchPanel {
                     .items_center()
                     .gap(px(theme::SPACE[2]))
                     .child(crate::ui::search_icon(&p))
-                    .child(div().flex_1().min_w_0().child(self.active_query().clone()))
+                    .child(div().flex_1().min_w_0().relative().child(self.active_query().clone()).child(field(AccessField::Query)))
                     // Clear button while there's text (doesn't touch results; only empties the field).
                     .when(!self.active_query().read(cx).text().is_empty(), |d| {
                         d.child(
                             div()
                                 .id("s-clear-field")
+                                .relative()
+                                .child(crate::a11y_controls::button_on(
+                                    cx,
+                                    crate::i18n::t("Search"),
+                                    "s-clear-field".into(),
+                                    crate::i18n::t("Clear the search field"),
+                                    |this, _, cx| {
+                                        this.clear_query(cx);
+                                        this.start(cx);
+                                    },
+                                ))
                                 .flex_none()
                                 .size(px(18.))
                                 .flex()
@@ -749,18 +706,22 @@ impl Render for SearchPanel {
                     .into_any_element(),
             ))
             .when_some(self.st.error.clone().filter(|_| self.st.on), |d, e| {
-                d.child(div().id("s-pattern-error").text_size(px(text::XS.0)).text_color(c(p.danger)).child(e))
+                d.child(
+                    div().id("s-pattern-error").relative().text_size(px(text::XS.0)).text_color(c(p.danger)).child(e).child(self.probe(AccessFrame::Status)),
+                )
             })
             .child(
                 div()
                     .flex()
                     .gap(px(theme::SPACE[2]))
                     .items_center()
-                    .child(field_box("search-replace-box", r_focus, self.replace.clone().into_any_element()).flex_1())
+                    .child(field_box("search-replace-box", r_focus, self.replace.clone().into_any_element()).child(field(AccessField::Replace)).flex_1())
                     .child({
                         let ready = matches!(self.status, Status::Done { matches, .. } if matches > 0);
                         div()
                             .id("s-replace-all")
+                            .relative()
+                            .child(self.probe(AccessFrame::ReplaceAll))
                             .h(px(28.))
                             .px(px(theme::SPACE[4]))
                             .flex()
@@ -777,7 +738,7 @@ impl Render for SearchPanel {
                             .when(!ready, |d| d.border_color(c(p.border)).text_color(c(p.text_muted)))
                             .child(crate::i18n::t("Replace All"))
                             .tooltip(|_, cx| {
-                                cx.new(|_| crate::workbench::Tooltip(crate::i18n::t("Replace every match in these files (↵ in the field)").into())).into()
+                                cx.new(|_| crate::workbench::Tooltip(crate::i18n::t("Review every change before replacing (↵ in the field)").into())).into()
                             })
                             .on_click(cx.listener(|this, _, _, cx| this.request_replace_all(cx)))
                     }),
@@ -785,6 +746,8 @@ impl Render for SearchPanel {
             .child(
                 div()
                     .id("s-globs")
+                    .relative()
+                    .child(self.probe(AccessFrame::Globs))
                     .flex()
                     .items_center()
                     .gap(px(theme::SPACE[2]))
@@ -800,11 +763,8 @@ impl Render for SearchPanel {
                     })),
             )
             .when(self.show_globs, |d| {
-                d.child(field_box("search-include-box", i_focus, self.include.clone().into_any_element())).child(field_box(
-                    "search-exclude-box",
-                    e_focus,
-                    self.exclude.clone().into_any_element(),
-                ))
+                d.child(field_box("search-include-box", i_focus, self.include.clone().into_any_element()).child(field(AccessField::Include)))
+                    .child(field_box("search-exclude-box", e_focus, self.exclude.clone().into_any_element()).child(field(AccessField::Exclude)))
             })
             .when_some(status, |d, (s, color)| {
                 let any = !self.results.is_empty();
@@ -814,34 +774,105 @@ impl Render for SearchPanel {
                         .flex()
                         .items_center()
                         .gap(px(theme::SPACE[1]))
-                        .child(div().flex_1().min_w_0().truncate().text_size(px(text::XS.0)).text_color(c(color)).child(s))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .relative()
+                                .truncate()
+                                .text_size(px(text::XS.0))
+                                .text_color(c(color))
+                                .child(s)
+                                .child(self.probe(AccessFrame::Status)),
+                        )
                         .when(any, |d| {
                             d.child(
                                 ui::icon_button("s-prev", "arrow-up", crate::i18n::t("Previous result (⇧F4)"), &p)
+                                    .relative()
+                                    .child(crate::a11y_controls::button_on(
+                                        cx,
+                                        crate::i18n::t("Search"),
+                                        "s-prev".into(),
+                                        crate::i18n::t("Previous result (⇧F4)"),
+                                        |this, _, cx| this.step_result(-1, cx),
+                                    ))
                                     .on_click(cx.listener(|this, _, _, cx| this.step_result(-1, cx))),
                             )
                             .child(
                                 ui::icon_button("s-next", "arrow-down", crate::i18n::t("Next result (F4)"), &p)
+                                    .relative()
+                                    .child(crate::a11y_controls::button_on(
+                                        cx,
+                                        crate::i18n::t("Search"),
+                                        "s-next".into(),
+                                        crate::i18n::t("Next result (F4)"),
+                                        |this, _, cx| this.step_result(1, cx),
+                                    ))
                                     .on_click(cx.listener(|this, _, _, cx| this.step_result(1, cx))),
                             )
                             .child(if all_collapsed {
                                 ui::icon_button("s-expand", "chevrons-up-down", crate::i18n::t("Expand all results"), &p)
+                                    .relative()
+                                    .child(crate::a11y_controls::button_on(
+                                        cx,
+                                        crate::i18n::t("Search"),
+                                        "s-expand".into(),
+                                        crate::i18n::t("Expand all results"),
+                                        |this, _, cx| this.set_all_collapsed(false, cx),
+                                    ))
                                     .on_click(cx.listener(|this, _, _, cx| this.set_all_collapsed(false, cx)))
                             } else {
                                 ui::icon_button("s-collapse", "chevrons-down-up", crate::i18n::t("Collapse all results"), &p)
+                                    .relative()
+                                    .child(crate::a11y_controls::button_on(
+                                        cx,
+                                        crate::i18n::t("Search"),
+                                        "s-collapse".into(),
+                                        crate::i18n::t("Collapse all results"),
+                                        |this, _, cx| this.set_all_collapsed(true, cx),
+                                    ))
                                     .on_click(cx.listener(|this, _, _, cx| this.set_all_collapsed(true, cx)))
                             })
                         })
                         .child(
+                            ui::icon_button("s-open-editor", "file-text", crate::i18n::t("Open in a Search Editor tab"), &p)
+                                .relative()
+                                .child(crate::a11y_controls::button_on(
+                                    cx,
+                                    crate::i18n::t("Search"),
+                                    "s-open-editor".into(),
+                                    crate::i18n::t("Open in a Search Editor tab"),
+                                    |this, _, cx| this.open_in_editor(cx),
+                                ))
+                                .on_click(cx.listener(|this, _, _, cx| this.open_in_editor(cx))),
+                        )
+                        .child(
                             ui::icon_button("s-rerun", "refresh-cw", crate::i18n::t("Run the search again"), &p)
+                                .relative()
+                                .child(crate::a11y_controls::button_on(
+                                    cx,
+                                    crate::i18n::t("Search"),
+                                    "s-rerun".into(),
+                                    crate::i18n::t("Run the search again"),
+                                    |this, _, cx| this.start(cx),
+                                ))
                                 .on_click(cx.listener(|this, _, _, cx| this.start(cx))),
                         )
-                        .child(ui::icon_button("s-clear", "x", crate::i18n::t("Clear the search"), &p).on_click(cx.listener(|this, _, _, cx| {
-                            this.clear_query(cx);
-                            this.results.clear();
-                            this.rebuild_rows();
-                            this.status = Status::Idle;
-                        }))),
+                        .child(
+                            ui::icon_button("s-clear", "x", crate::i18n::t("Clear the search"), &p)
+                                .relative()
+                                .child(crate::a11y_controls::button_on(
+                                    cx,
+                                    crate::i18n::t("Search"),
+                                    "s-clear".into(),
+                                    crate::i18n::t("Clear the search"),
+                                    |this, _, cx| {
+                                        this.clear_search(cx);
+                                        cx.notify();
+                                    },
+                                ))
+                                .on_click(cx.listener(|this, _, _, cx| this.clear_search(cx))),
+                        ),
                 )
             })
             .when_some(self.structural_note(cx).filter(|_| self.st.on), |d, n| {
@@ -858,8 +889,11 @@ impl Render for SearchPanel {
                                     Row::File(fi) => {
                                         let f = &this.results[fi];
                                         let (dir, name) = f.path.rsplit_once('/').unwrap_or(("", &f.path));
+                                        let key = AccessKey::File(f.path.clone());
                                         div()
                                             .id(("s-file", ix))
+                                            .relative()
+                                            .child(this.probe(AccessFrame::Row(key.clone())))
                                             .group(format!("s-file-{ix}"))
                                             .w_full()
                                             .h(px(layout::ROW_H))
@@ -885,6 +919,8 @@ impl Render for SearchPanel {
                                             .child(
                                                 div()
                                                     .id(("s-file-replace", fi))
+                                                    .relative()
+                                                    .child(this.probe(AccessFrame::Button(key.clone(), REPLACE_IN_FILE)))
                                                     .flex_none()
                                                     .invisible()
                                                     .group_hover(format!("s-file-{ix}"), |s| s.visible())
@@ -906,6 +942,8 @@ impl Render for SearchPanel {
                                             .child(
                                                 div()
                                                     .id(("s-file-dismiss", fi))
+                                                    .relative()
+                                                    .child(this.probe(AccessFrame::Button(key.clone(), DISMISS_FILE)))
                                                     .flex_none()
                                                     .invisible()
                                                     .group_hover(format!("s-file-{ix}"), |s| s.visible())
@@ -949,8 +987,11 @@ impl Render for SearchPanel {
                                         let highlights = ranges
                                             .into_iter()
                                             .map(|r| (r, HighlightStyle { background_color: Some(ui::ca(p.warning, 0.28).into()), ..Default::default() }));
+                                        let key = AccessKey::Match(this.results[fi].path.clone(), m.line, m.column);
                                         div()
                                             .id(("s-match", ix))
+                                            .relative()
+                                            .child(this.probe(AccessFrame::Row(key)))
                                             .w_full()
                                             .h(px(layout::ROW_H))
                                             .flex()
@@ -990,7 +1031,7 @@ impl Render for SearchPanel {
 
 /// Start the preview about 12 characters before the first match (if remote); highlight
 /// ranges (bytes) shift too.
-fn trim_preview(preview: &str, ranges: &[(u32, u32)]) -> (String, Vec<std::ops::Range<usize>>) {
+pub(crate) fn trim_preview(preview: &str, ranges: &[(u32, u32)]) -> (String, Vec<std::ops::Range<usize>>) {
     const KEEP_BEFORE: usize = 12;
     const MAX_LEAD: usize = 40;
     let first = ranges.first().map_or(0, |r| r.0 as usize).min(preview.len());

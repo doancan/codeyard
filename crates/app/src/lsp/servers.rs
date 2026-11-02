@@ -16,13 +16,23 @@ pub struct ServerConfig {
     pub init_options: Option<Value>,
     /// Only default commands may resolve to an explicitly installed managed service.
     pub managed: Option<crate::language_services::Service>,
+    /// `command` is a program inside an extension's package: it starts from the copy pushed to the host.
+    pub program: Option<crate::ext_programs::PackageServer>,
 }
 
 #[cfg(test)]
 impl ServerConfig {
     /// A server with no configuration of its own.
     pub fn plain(language: &str, command: &str, args: Vec<String>) -> Self {
-        ServerConfig { language: language.into(), command: command.into(), args, settings: Arc::new(Value::Null), init_options: None, managed: None }
+        ServerConfig {
+            language: language.into(),
+            command: command.into(),
+            args,
+            settings: Arc::new(Value::Null),
+            init_options: None,
+            managed: None,
+            program: None,
+        }
     }
 }
 
@@ -35,6 +45,8 @@ pub struct ServerSpec {
     /// megabytes.
     pub settings: Arc<Value>,
     pub init_options: Option<Value>,
+    /// An extension's language server whose `command` is a program inside its package (`./bin/server`).
+    pub program: Option<crate::ext_programs::PackageServer>,
 }
 
 impl From<(String, Vec<String>)> for ServerSpec {
@@ -47,7 +59,7 @@ impl ServerSpec {
     /// Whether a reload from `self` to `new` needs the server process restarted: everything but `settings` is only read
     /// at start; `settings` reach a running server through `workspace/didChangeConfiguration`.
     fn restart_needed(&self, new: &ServerSpec) -> bool {
-        (&self.command, &self.args, &self.init_options) != (&new.command, &new.args, &new.init_options)
+        (&self.command, &self.args, &self.init_options, &self.program) != (&new.command, &new.args, &new.init_options, &new.program)
     }
 }
 
@@ -220,11 +232,12 @@ pub fn server_for(key: &str, overrides: &ServerOverrides) -> Option<ServerConfig
     let settings = spec.map_or_else(|| Arc::new(Value::Null), |s| s.settings.clone());
     let settings = managed.map_or_else(|| settings.clone(), |service| Arc::new(service.configuration(&settings)));
     let init_options = spec.and_then(|s| s.init_options.clone());
+    let program = spec.filter(|s| s.command.is_some()).and_then(|s| s.program.clone());
     let init_options = match managed {
         Some(service) => service.initialization_options(init_options.as_ref()),
         None => init_options,
     };
-    Some(ServerConfig { language: key.into(), command, args, settings, init_options, managed })
+    Some(ServerConfig { language: key.into(), command, args, settings, init_options, managed, program })
 }
 
 /// What a settings reload means for the running language servers.
@@ -294,6 +307,26 @@ fn insert_path(obj: &mut Map<String, Value>, path: &[&str], v: Value) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// The ids `cyx check` and the contributions reference know (`ext_manifest::LANGUAGE_IDS`) are exactly the ones
+    /// Codeyard gives files: here and in snippets.
+    #[test]
+    fn language_ids_match_the_manifest_list() {
+        let files = [
+            "a.rs", "a.c", "a.cpp", "a.go", "a.py", "a.ts", "a.tsx", "a.js", "a.jsx", "a.java", "a.cs", "a.php", "a.rb", "Gemfile", "a.kt", "a.swift", "a.lua",
+            "a.sh", "a.zsh", "a.html", "a.vue", "a.css", "a.scss", "a.less", "a.json", "a.jsonc", "a.yaml", "a.toml", "a.md", "a.sql", "a.txt",
+        ];
+        let mut seen = std::collections::BTreeSet::new();
+        for f in files {
+            seen.insert(language_of(f).map_or("plaintext", |(id, _)| id));
+            seen.insert(crate::snippets::lang_of_path(f));
+        }
+        assert_eq!(seen.into_iter().collect::<Vec<_>>(), ext_manifest::LANGUAGE_IDS);
+        // The mock hosts and `cyx test` decide a file's language with the manifest crate's copy of the table.
+        for f in files.iter().chain(&["a.mjs", "b/c.PY", "x.hxx", "Rakefile", "a.gemspec", "a.phtml", "a.yml", "a.zzz", "noext", "dir.d/noext"]) {
+            assert_eq!(ext_manifest::builtin_language(f), language_of(f).map(|(id, _)| id).filter(|_| crate::ext::language_for(f).is_none()), "{f}");
+        }
+    }
 
     #[test]
     fn managed_services_apply_only_to_enabled_default_commands() {
@@ -387,7 +420,7 @@ mod tests {
     }
 
     fn spec(command: Option<&str>, settings: Value, init: Option<Value>) -> Option<ServerSpec> {
-        Some(ServerSpec { command: command.map(str::to_string), args: Vec::new(), settings: Arc::new(settings), init_options: init })
+        Some(ServerSpec { command: command.map(str::to_string), args: Vec::new(), settings: Arc::new(settings), init_options: init, program: None })
     }
 
     /// An entry with only `settings` keeps the default server and carries the settings; `command` replaces it.

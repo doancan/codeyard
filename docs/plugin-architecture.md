@@ -1,7 +1,9 @@
 # Codeyard extension platform
 
-**Status:** accepted 2026-10-28. Work is tracked in the extension platform epic on the Codeyard project. The current
-release has no extension support yet; this document describes what is being built and in which order.
+**Status:** accepted 2026-10-28. Phases 0 to 3 of the [roadmap](#14-roadmap) shipped in 0.7.0, with Extension API 1.0
+and 1.1. Two parts are still pending: extension code on Windows (AppContainer waits for its hardware check; declarative
+extensions work there) and the public registry, which is not online yet (self-hosted registries and `.cyx` files work).
+Work is tracked in the extension platform epic on the Codeyard project.
 
 The design is deliberately small enough for a small team to build and run in its first year. Anything that did not
 earn its place is in [Later](#13-later) with a one-line reason.
@@ -11,19 +13,19 @@ mentions §3, §6.2, §8, §10 or §11.
 
 ## 1. Summary
 
-The model is VS Code's: one manifest, contribution points, activation events, a typed API, a scaffold, a
-debug loop and a publish command. That model produced a large ecosystem, so we copy it. We fix only the four
-problems that hurt VS Code users.
+The model is the one the largest editor ecosystems use: one manifest, contribution points, activation events, a
+typed API, a scaffold, a debug loop and a publish command. That model produced large ecosystems, so we copy it. We
+fix only the four problems that hurt their users.
 
-| VS Code problem | Codeyard answer |
+| Problem elsewhere | Codeyard answer |
 | --- | --- |
 | Every extension can do anything the user can do | Code runs as WebAssembly in a sandboxed process and can reach only what its manifest declares. The app checks every call |
 | Eager activation slows startup | Activation is inferred from contributions and there is no `*`. 100 installed extensions cost under 5 ms at startup and start no process |
 | Webviews are heavy, inconsistent and an XSS surface | Extension UI is a tree of built-in elements drawn by GPUI with the user's theme and accessibility support |
 | Supply-chain attacks through stolen tokens and keys | Keyless publishing from CI, a registry-signed index, a re-prompt when permissions grow, a 48 h wait before new code reaches users, and revocation within 24 h |
 
-We keep VS Code's contribution names and its colour theme and snippet formats, so existing themes and
-snippets work unchanged.
+We keep the familiar contribution names and the widely used colour theme and snippet JSON formats, so existing
+themes and snippets work unchanged.
 
 Authors need five concepts: **manifest, contributions, activation, permissions, publish.** Everything else
 (`when` expressions, untrusted folders, limits, storage) is reference material and is not needed for a first
@@ -59,29 +61,53 @@ extension.
 Processes:
 - **`codeyard` (app).** Holds the contribution index, the broker and every permission decision. Never runs Wasm.
 - **`codeyard-exthost`.** One process per **active** code extension, running wasmtime inside an OS sandbox: no
-  network, no exec, read access only to that extension's package and data directory. It exits 5 minutes after
-  its last call or timer. An escape gets one extension's permissions, and crash blame needs no logic.
+  network, no exec, read access only to that extension's package and read/write access only to its data directory.
+  It exits 5 minutes after its last call or timer. An escape gets one extension's permissions, and crash blame needs
+  no logic.
 - **`codeyard-exthost --compile`.** Short-lived. Reads one `.wasm` on stdin, writes compiled code to stdout.
   The app stores it as `<wasm-sha>.cwasm` with a `.sha256` sidecar; the exthost checks the hash before loading,
   so one extension cannot plant compiled code for another.
+- On macOS the exthost alone carries one hardened-runtime exception, `allow-unsigned-executable-memory`, and copies
+  only the text of compiled code into anonymous memory; the app carries none. Measurements and the reasons are in
+  [extensions-spike.md](extensions-spike.md).
 
 Resource limits, all from one `limits` table in `ext-manifest` (author docs and perf rows are generated from it):
-- wasmtime epoch interruption makes guest code yield every 10 ms, so a busy task never blocks providers;
+- exports return quickly, because everything that waits finishes through a ticket (§5.2); wasmtime epoch
+  interruption checks guest code every 10 ms and traps a call that runs past its CPU budget
+  (`limits::GUEST_CALL_MILLIS`, `ACTIVATE_MILLIS`), which counts as a crash. An instance cannot be re-entered while
+  a call is suspended, so yielding would not let providers run meanwhile; the budget is what keeps them answered;
 - a provider reply that misses its deadline is dropped, not punished;
-- `StoreLimits` caps each instance's linear memory; an OS cap (Job Object, `RLIMIT_AS`) caps the process;
+- `StoreLimits` caps each instance's linear memory (`limits::GUEST_MEMORY_BYTES`; growing past it traps); an OS cap of `limits::EXTHOST_MEMORY_BYTES` caps the
+  process: a Job Object commit limit on Windows; on macOS and Linux the app reads the exthost's resident size every
+  3 s while any runs (`proc_pid_rusage` physical footprint; `/proc/<pid>/statm`) and kills one over it, as a crash.
+  wasmtime's guard regions reserve hundreds of GB of address space, so `RLIMIT_AS` is not used;
+- guest code is interrupted only while it runs, so an idle exthost causes no wakeups;
 - going over a memory cap, the IPC frame cap or the IPC byte rate kills the process.
 
 The app and exthost must share a build id. When the app updates in place, running exthosts are stopped and
 respawn on the next event.
 
-Sandboxes:
-- **macOS:** Seatbelt (`sandbox_init`).
-- **Windows:** AppContainer (LPAC) without `internetClient`, plus a Job Object. A Low-IL token alone still
-  reads the user's files, so it is not enough.
-- **Linux:** landlock, seccomp and an unshared network namespace.
-- Installed code extensions run only where the sandbox works; elsewhere only declarative extensions run.
-  `cyx dev` is the one exception: it runs the author's own local folder without the OS sandbox, still behind
-  Wasm and the broker, with a DEV badge. Otherwise authors on that platform could not build anything.
+Sandboxes (`ext-host/src/sandbox.rs`). The exthost enters its sandbox after the handshake and before it reads the
+extension's code; the policy is the same everywhere: no network, no new processes, read-only access to the package and
+the compiled file, read/write access to `data/<id>/`, nothing else of the disk.
+- **macOS:** Seatbelt (`sandbox_init`) with a deny-default profile (`ext-host/src/sandbox.sb`) plus one rule per
+  path. It adds about 6 ms to a cold start.
+- **Linux:** an unshared network namespace (when the system allows unprivileged user namespaces), landlock (ABI 1 or
+  later; without it no code runs) and a seccomp filter that refuses sockets, `execve`, `fork` and non-thread
+  `clone`, `ptrace` and access to other processes, namespaces and mounts, io_uring, BPF and terminal input injection.
+- **Windows:** the app starts the exthost in an AppContainer (LPAC) without `internetClient` and a Job Object with
+  the memory cap, one process and kill-on-close (`ext_proto::appcontainer::spawn`); the exthost refuses to run code
+  outside one. A Low-IL token alone still reads the user's files, so it is not enough. Off until
+  `scripts/check-exthost-sandbox-windows.ps1` passes on physical hardware (§15 decision 1).
+- `codeyard-exthost --check-sandbox` tells the app whether code can run here: one line, `ok: <what is enforced>`
+  with exit code 0, or `unavailable: <why>` with exit code 1. The app runs it once per session.
+- Installed code extensions run only where the sandbox works; elsewhere only declarative extensions run
+  ("Needs a sandbox this system does not provide"). `cyx dev` is the one exception: it runs the author's own local
+  folder without the OS sandbox (`Hello.sandbox = false`), still behind Wasm and the broker, with a DEV badge.
+  Otherwise authors on that platform could not build anything.
+- The escape probes (`codeyard-exthost --sandbox-selftest`, a test hook) run on macOS and Linux CI: reading the
+  home folder or files outside the policy, writing outside `data/<id>/`, TCP and Unix sockets and `exec` must all
+  fail with the OS's refusal.
 
 ## 4. The manifest
 
@@ -135,26 +161,36 @@ Codeyard version from the API items and contribution points used (each has a `si
 
 | Contribution | Needs code | Notes |
 | --- | --- | --- |
-| `themes` | no | Codeyard or VS Code colour theme JSON; contrast always repaired with `guard_contrast`. Id `ext:<publisher.name>/<file stem>` |
-| `snippets` | no | VS Code snippet format |
-| `keymap-preset` | no | Vim, Emacs, Sublime: a file in `keybindings.jsonc` format. Chosen with the `keymap.preset` setting; may override defaults |
+| `themes` | no | Codeyard colour theme JSON, or the JSON theme format other editors' extensions use; contrast always repaired with `guard_contrast`. Id `ext:<publisher.name>/<file stem>` |
+| `snippets` | no | The common JSON snippet format (`prefix`, `body`, `description`) |
+| `keymap-preset` | no | Another editor's or a modal key layout: a file in `keybindings.jsonc` format. Chosen with the `keymap.preset` setting; may override defaults |
 | `keybindings` | no | For your own or core (`core:workbench.toggleZenMode`) commands; no permission, since only the user's key press runs them. A key a built-in binding or the chosen preset uses is never taken: the binding is left out with a warning. `when` takes `editor`, `terminal`, `file-tree`, `scm`, `search` and `editor.language == '…'` |
 | `languages` | no | File names and extensions, a built-in grammar to highlight with, comment tokens. Only for files no built-in language claims (`files.associations` changes a built-in one) |
 | `json-schemas`, `yaml-schemas`, `settings` | no | Settings appear under "Extensions › Name" |
 | `language-servers` | no | Start a program from `PATH` where the files are (so also over SSH), so they need `run` and a trusted workspace. Entered before the user's `lsp.servers`; the user's entry for the same language wins |
+| `scm` | yes | Claims trusted folders that have a marker (`.hg`, `.jj`): Source Control and the gutter ask the provider there and its buttons run its commands; Git keeps the others |
 | `commands`, `menus`, `status-bar`, `views` | yes | |
 | `formatters`, `code-actions`, `diagnostics`, `decorations`, `tasks` | yes | |
-| `hover`, `completion`, `code-lens`, `inlay-hints`, SCM and PR providers | yes | Phase 3 |
+| `code-lens`, `inlay-hints` | yes | Asked for the lines in view, again after an edit (debounced) and a scroll; a lens runs its command through the broker |
+| `hover`, `completion`, SCM and PR providers | yes | Phase 3 |
 
 ### 5.2 The API
 
-One WIT package (`crates/ext-api/wit`). Authors use an SDK and never see WIT.
+One WIT package (`crates/ext-api/wit`, reference generated as `docs/extensions/reference/api.md`). Authors use an
+SDK and never see WIT. Each permission has its own interface, so a component's imports show which permissions its
+code can use at all; `ext_pkg::check_component` compares them with the manifest. Calls that reach the app return a
+ticket at once and finish through the guest's `complete` export (streamed data through `event`), so an export call
+never waits on I/O and providers stay responsive; the SDKs turn tickets into async functions and Promises. A code
+extension's package carries its component as `extension.wasm`.
 
 - **Rust:** `codeyard-extension`, target `wasm32-wasip2`, plain cargo.
-- **TypeScript:** `@codeyard/extension`, componentized with ComponentizeJS (StarlingMonkey). All calls return
-  Promises. Global `fetch` is provided and mapped to `net`, including streamed response bodies. Pure-JS npm
-  packages that use `fetch` work (Octokit, zod); Node built-ins (`fs`, `child_process`, `net`) do not.
-  Source maps are applied to traces in the Inspector.
+- **TypeScript:** `@codeyard/extension` (`sdk/typescript`), bundled with esbuild and componentized with
+  ComponentizeJS (StarlingMonkey) by `cyx`, which installs both at pinned versions in its cache: Node.js is the
+  only requirement. All calls return Promises. Global `fetch` is provided and mapped to `net`, including streamed
+  response bodies. Pure-JS npm packages that use `fetch` work (Octokit, zod); Node built-ins (`fs`,
+  `child_process`, `net`) fail the build at the import. A ComponentizeJS component imports every interface of its
+  world, so `cyx` builds against the world narrowed to what the manifest grants, and the SDK refuses a call to
+  anything else with the fix. Source maps are applied to traces in `cyx test`, and packaged for the Inspector.
 - **No permission needed for:** log, notices, quick-pick, input box, progress (all show the publisher), the
   extension's own views, status items, storage and settings, `env` (version, language, theme kind, platform),
   commands of dependencies, and `open-external` for `https:` URLs from a user action (command or link click).
@@ -165,13 +201,48 @@ One WIT package (`crates/ext-api/wit`). Authors use an SDK and never see WIT.
   runs in the background and shows progress. `ctx.spawn(program, args)` streams output as events.
   `ctx.every(seconds)` polls (minimum 30 s, paused while the window is unfocused); an active timer keeps the
   exthost alive. Numbers live in the generated `reference/limits.md`.
+- **Watches (API 1.1).** `watch.documents` reports documents opening (those already open first), changing (debounced,
+  with the version; the text only when asked) and being saved; `watch.files(glob)` reports workspace files created,
+  changed and deleted, by Codeyard or anything else, coalesced per file and delivered at most once a second. Events go
+  to the guest's `events` export. Both need `read`, and every event is checked as a read of its path is (grants ∩
+  trust, the user's switches), so untrusted folders get the events of what may be read there. File watches use the
+  window's file watcher (the matching files, their folders and the workspace folders, within `WATCHED_PATHS`, after
+  Codeyard's own paths) and list the folders again when one changes; files `.gitignore` ignores are not reported. An
+  active watch keeps the exthost alive like a timer, and watches end with the exthost. There is no activation event
+  for them: an extension starts them in `activate`.
 - **Errors.** `denied { permission, why }` with `why` one of `not-declared`, `revoked-by-user`,
   `untrusted-workspace`, `revoked-extension`; the SDK formats it with the fix. Others: `not-found`,
   `cancelled`, `timeout`, `invalid`, `other`.
 - **State.** `storage` is a persisted key-value store and the only persistence concept. In `cyx dev`, hot
-  reload keeps in-memory state automatically.
-- **Versioning.** `0.x` during beta, each break with a `cyx` error and migration note. From `1.0`, minors only
-  add, items carry `@since`, and a major stays supported for 24 months after the next ships.
+  reload keeps the in-memory values of `ctx.state`: the SDK saves them on `deactivate` under the reserved storage
+  key `codeyard.reload-state` and restores them when the new build activates with the reason `reload`.
+- **Versioning.** `codeyard:api` is 1.1.0; 1.0.0 (#147) is the first stable release and `0.x` was the beta, where a
+  minor could break. From 1.0 a minor only adds interfaces, functions and types, and a major stays supported for 24
+  months after the next ships. 1.1 added `watch` and the `events` export; both ship in Codeyard 0.7.0, with 1.0.
+  - *Items carry `@since`.* Every interface, function and type has a WIT `@since(version = …)` gate; the reference
+    shows an item newer than its interface. `ext_api::since` reads the gates, and `ext_pkg::check_component` takes
+    the newest one among the functions and types a component imports as its minimum API (`Component::min_api`);
+    `ext_api::RELEASES` maps that to the first Codeyard release with it, which `cyx check` prints. A component built
+    against a newer minor runs when every item it uses is here (wasmtime binds `@1.y` imports to the host's `@1.x`);
+    an item this build lacks is `CY0701`.
+  - *The compatibility check.* `crates/ext-api/released/<version>/` holds the WIT of the last released API.
+    `compat_tests` in ext-api fails when an item of it was removed, changed shape (a record field, a variant or enum
+    case, a parameter or result) or changed its `@since`, and when a new item has no `@since` or one outside (released,
+    current]. A new major may change anything. The component model has no optional fields or cases, so data grows by
+    new types and functions; a request kind added in a minor comes as a new exported interface that the host calls only
+    when the component has it (`events` in 1.1: the exthost looks it up beside `guest` and skips it when absent). Such
+    an interface defines its own types, so exporting it does not make a component need the newer API.
+  - *Releasing a minor.* While a minor is in the works, `released/` keeps the last released version and the check
+    compares with it; new items go into the existing files (every file must have its released copy). The release that
+    ships the minor adds its line to `ext_api::RELEASES` and commits `released/<version>/`.
+  - *Old builds.* A component built against an older 1.x runs unchanged (`testdata/probe-1.0.wasm` in the exthost
+    tests). A 0.x build is renamed to `@1.0.0` (`transition::UPGRADE_TO`), the shape it has, whatever this build's 1.x.
+  - *0.x components.* API 0.1 has the same shape as 1.0, so the host keeps running 0.1 builds during a transition
+    (`ext_api::TRANSITION`): the exthost renames their `codeyard:api/…@0.1.0` imports and exports to `@1.0.0` before
+    compiling (`ext_api::transition::upgrade`, same-length names, nothing else in the binary moves) and wasmtime
+    type-checks them as usual. `cyx check` warns, and `cyx publish` and Yard refuse 0.1 builds. The transition lasts
+    at least six months after Codeyard 0.7.0 and its end is announced one release ahead. Authors follow
+    [migrating-to-1.0.md](extensions/migrating-to-1.0.md).
 
 ### 5.3 Declarative UI
 
@@ -182,6 +253,8 @@ steps 0–4, so themes, high contrast and screen readers work with no author eff
 URL on a `net` host.
 
 - `ui::invalidate(view)` makes the host call `render` and diff by `key`. Input state lives in the host.
+- The tree travels as JSON in `response.view` and events as JSON in `request.ui-event`
+  (docs/extensions/reference/ui.md); the host checks the tree with `ext_ui::decode_json` before diffing it.
 - Lists, tables and trees are virtualised; trees load one page at a time.
 - Every extension surface shows the publisher id. Consent, trust and sign-in dialogs are drawn in a layer
   extension UI cannot reach.
@@ -195,12 +268,13 @@ URL on a `net` host.
 | Permission | Allows | Consent text |
 | --- | --- | --- |
 | `read` / `write` | workspace files matching globs, including open documents | "Read vercel.json" |
-| `net` | HTTPS to listed hosts. A wildcard directly under a public suffix counts as any host | "Connect to api.vercel.com" |
+| `net` | HTTPS to listed hosts, on any port: the grant is the host, by design (a port is not part of who the user trusts, and a service on another port of the same host is the same operator). A wildcard directly under a public suffix counts as any host | "Connect to api.vercel.com (any port)" |
+| `net-from-setting` | HTTPS to servers the user allows on the extension page, for a string setting that names one (a company GitHub Enterprise). Never from the setting's value alone | "Connect to a server you allow, named in its “server” setting" |
 | `auth` | requests signed by an account; the extension never sees the token | "Act as your GitHub account" |
 | `secrets` | its own keychain entries | "Store secrets in your keychain" |
 | `run` | listed programs, with any arguments | "Run vercel with any arguments" |
 | `clipboard`, `terminal` | read or write the clipboard; type into a terminal | |
-| `commands` | listed public core commands | Each core command declares the permission it implies; the caller must hold it too |
+| `commands` | listed public core commands (`ext_manifest::core_commands`, docs/extensions/reference/core-commands.md) | Each core command declares the permission it implies; the caller must hold it too |
 
 One function, `risk(permission_set)` in `ext-manifest`, decides everything risk-related: whether `why` is
 required, the banner on the consent sheet, whether the registry needs human review, and what
@@ -220,10 +294,17 @@ signed package; a language server wrapper is therefore a normal High-risk extens
 - **Wasm.** A component can call only what it imports; imports must fit permissions. One function in `ext-pkg`
   checks this and is called by `cyx`, the registry and the installer. Revoked permissions link to stubs.
 - **Broker (app).** Every file, network, process, account and command call is checked against
-  grants ∩ workspace trust, then the path, host or program, before `Host` is called.
+  grants ∩ workspace trust, then the path, host or program, before `Host` is called. A path is checked as written
+  and again where it really leads: the workspace's host resolves it with every symbolic link followed
+  (`RealPaths`, protocol 18), the result must be inside a workspace root and match the rules too, and the call
+  reaches that resolved path. So a link in the workspace cannot reach a file outside it (`src/out -> /etc`) or a
+  file the globs leave out (`src/settings.txt -> ../.env`, which must be named); listings and search results leave
+  such files out. A path outside the workspace, or an IP address for `net`, cannot be granted at all, and the
+  denial says so instead of naming a line to add.
 - **Processes.** The broker resolves the program to an absolute path on the target host, refuses paths under
-  a workspace root, and passes an explicit environment (proto v12 adds `Which` and `EnvSpec`).
-- **Network.** In-process hyper + rustls (already linked through GPUI). It checks the real peer address of
+  a workspace root, and passes an explicit environment (on Unix hosts the program runs under `env -i` with only
+  the variables the extension passed and a minimal PATH, HOME and LANG; the agent needs nothing new).
+- **Network.** In-process hyper + rustls (already linked through GPUI), in `ext-net`. It checks the real peer address of
   every connection, so private, CGNAT, link-local, metadata, NAT64 and IPv4-mapped ranges are blocked. No IP
   literals, at most 5 re-checked redirects, environment proxies ignored. WebSockets are not offered in v1.
 - **IPC.** `ext-proto` has its own frame cap (call limit + 64 KiB) and a per-process byte-rate budget.
@@ -259,6 +340,52 @@ One consent model (permission set + diff + risk) renders the install sheet, the 
 generic OAuth 2 PKCE flow: the manifest declares the authorize and token URLs, the app runs the browser flow
 through `codeyard://ext/<id>/callback`, keeps the token in the keychain, and signs requests to the declared
 hosts. The extension never sees the token. Pasting a raw token into `secrets` stays possible and is High risk.
+
+How it works (`ext_accounts.rs`, `ext_fetch.rs` and `workbench_ext_accounts.rs` in the app):
+
+- **Providers.** `github` is built in and signs requests to `api.github.com` and `uploads.github.com`. It uses the
+  sign-in Codeyard already has for pull requests (`gh auth token`, else `GH_TOKEN` / `GITHUB_TOKEN`); Codeyard has no
+  OAuth app of its own yet. Any other provider is an `[[oauth]]` table: `id`, `name`, `authorize-url`, `token-url`,
+  `client-id`, `scopes`, `hosts` and an optional `account-url`. URLs must be `https://` to a host name; every
+  `[[oauth]]` id must be in `auth`, and every `auth` entry must be built in or declared.
+- **Self-managed instances** (#184). An `[[oauth]]` table with `instances = true` (its URLs all on one host that
+  `hosts` lists) lets the user add servers of their own, such as a company GitLab, without repackaging. Only the
+  extension page adds one (Accounts › **Add Instance…**): the user types the host and the client id of the OAuth
+  application they registered there, and a system dialog names the extension, its publisher, the host, the client id
+  and the redirect URI before anything is stored, as for a permission. Instances live in
+  `<data>/extensions/instances.json`, keyed like the permission switches by extension id and publisher identity
+  (`ext_core::instances`); no extension, workspace or setting can write them. An instance is the table's URLs on the
+  new host, signing requests to that host only, under an account of its own, `<id>@<host>`, with its own keychain
+  entry; the `auth` entry `<id>` grants it, so turning that switch off turns it off. A `[[pull-requests]]` provider
+  whose `auth` is `<id>` claims the instance's remotes, which carry its account, and where `net` allows the table's
+  host it allows the instance's too. **Remove** on the page deletes it and its token.
+- **First use asks.** `auth.session` returns the stored account, or asks in a system dialog that no extension UI can
+  draw over. The dialog names the extension, its publisher identity (or that it was sideloaded) and, for GitHub, the
+  account. For `[[oauth]]` the browser opens the authorize URL with a PKCE challenge (S256) and a random `state`.
+- **Callbacks.** `codeyard://ext/<id>/callback?code&state` completes only the sign-in with that `state`, and only if
+  `<id>` is the extension that started it. macOS registers the scheme in Info.plist, Windows in the installer and Linux
+  with a `.desktop` file at the first sign-in. On Windows and Linux the system starts a second Codeyard, which hands the
+  address to the running one on a loopback port and exits. The code is traded at the token URL with the verifier.
+- **Keychain.** Tokens and `secrets` are entries in the macOS Keychain, Windows Credential Manager or the Secret
+  Service (GPUI's credential store, so no new dependency). The key is a hash of the publisher identity (registry,
+  issuer, account, owner id, repository id, workflow; or the sideload path, or the dev folder), then the extension id
+  and the entry, so a sideloaded package with the same id finds nothing. A `secrets` value is at most 2048 bytes, the
+  same on every platform.
+- **Signing.** `auth.fetch` is checked before the keychain is read: the provider must be in `auth`, the folder trusted,
+  the URL's host one of the provider's `hosts` (refused as `denied` with `[[oauth]] <id> hosts = ["<host>"]`, which
+  the SDKs and the Inspector turn into "add the host to that table"), and the request must not set `authorization`. The app adds
+  `Authorization: Bearer <token>` and sends through `ext-net` with the provider's hosts as the allowed list, so a
+  redirect cannot leave them and ext-net drops the header on any cross-origin redirect. The extension receives the
+  `http-head` and `data` events, never the token. A token that expires within a minute is refreshed first.
+- **Sign out.** The extension page lists each `auth` provider with the signed-in account and **Sign Out**, which
+  deletes the keychain entry.
+- **Servers from a setting** (`net-from-setting`, API 1.1). For a token in `secrets` used against a server the user
+  names, such as a GitHub Enterprise host. The manifest names a string setting; the extension reads it as usual, but a
+  request to its host is refused (`net-from-setting host = "<host>"`, which the SDKs turn into "the user allows it on
+  the extension page") until the user adds the host on the extension page (Servers › **Allow Host…**, the setting's
+  value filled in) and agrees in a system dialog that names the extension, its publisher and the host. Allowed hosts
+  live with the instances in `instances.json`, keyed the same way; no extension, workspace or setting can add one. They
+  join `net` while the `net-from-setting` switch is on and the folder is trusted, and **Remove** takes one back.
 
 ## 7. Remote
 
@@ -317,7 +444,9 @@ Updates and privacy:
 - `extensions.lock.jsonc` (config dir) is the only record of what is installed: requested version, resolved
   version, content digest, per-triple digests. It can be synced with dotfiles.
 - Version numbers are never reused. Stats are download counts kept as `(id, version, day)` with no logs,
-  labelled "including updates". No ratings or reviews. READMEs render natively without remote images.
+  labelled "including updates". No ratings or reviews. READMEs render natively without remote images; each version's
+  manifest and README are served as a details file whose sha256 is in the signed index, so a Market page needs no
+  package download.
 - Limits are registry policy: `.wasm` 64 MiB, package 64 MiB, per-triple package 128 MiB.
 
 ## 9. Developer experience
@@ -344,7 +473,7 @@ Author commands are `cyx new`, `cyx dev`, `cyx test`, `cyx publish [--dry-run|--
 commands `install|list|uninstall|sync`.
 
 `cyx` is a small GPUI-free console binary shipped in the app bundle (a Windows GUI exe cannot write to a
-terminal). **Extensions: Install cyx Command in PATH** adds it; CI uses `codeyard/setup-cyx`.
+terminal). **Extensions: Install cyx Command in PATH** adds it; CI uses `doancan/codeyard/actions/setup-cyx`.
 
 Errors have one format everywhere:
 
@@ -369,21 +498,25 @@ Each release builds the previous tag and the candidate on the reference Mac and 
 each. A metric blocks the release when it regresses past its budget and beyond the noise of the baseline (a
 bootstrap interval of the same statistic), or crosses its ceiling; `--aa` checks the machine's noise. Statistics
 and the metric catalogue (`perf/metrics.json`) are described in `scripts/perf/README.md`. PRs gate only on deterministic metrics; nightly runs open issues; Windows rows are
-`warn` until there is a physical Windows reference machine. Ceilings are provisional until the first baseline,
-then set to `min(stated, baseline × 1.25)` and only lowered. A waiver is one line in the release notes.
+`warn` until there is a physical Windows reference machine. Ceilings are the stated values and are only lowered. The
+keystroke ceiling with extensions is relative: the same keys typed without extensions, measured in the same run,
+plus 10%. A keystroke time includes up to two display refreshes (plain typing measures about 29 ms on the reference
+Mac), so the gate checks that extensions add nothing visible over typing without them rather than a number of
+milliseconds. A waiver is one line in the release notes.
 `CODEYARD_PERF=<file>` writes spans locally; when off, a span costs one relaxed atomic load.
 
 | Metric | Stat | Budget / release | Ceiling |
 | --- | --- | --- | --- |
 | Startup cost of 100 installed, inactive extensions | p95 delta | +1 ms | 5 ms, 0 processes, 0 requests |
-| Keystroke to frame, 5 query packs + 2 decoration providers active | p95 / p99 | +10% | same as without extensions (8 / 16 ms) |
+| Keystroke to frame, 2 decoration providers active (`typing.keystroke_frame_decorations_ms`) | p95 | +10% | the same keys without extensions, same run, +10% |
 | Idle memory, 100 installed, none active | median | +2 MB | welcome scene + 3 MB |
 | Activation, warm (process running, code cached) | p95 | +10% | 10 ms |
 | Activation, cold (spawn + sandbox + load) | p95 | +10% | macOS 150 ms, Windows 400 ms |
 | Provider platform overhead (excl. guest and I/O) | p95 | +10% | local 3 ms; remote 5 ms + RTT |
-| Exthost memory per extension (idle, Rust hello) | median | +10% | 25 MB; TypeScript set by the Phase 2 spike |
+| Exthost memory per extension (idle, Rust hello / TypeScript hello) | median | +10% | 25 MB / 50 MB |
 | Crash to providers answering again | p95 | +15% | 2 s |
 | Hot reload (2 MB Rust, compiler excluded) / declarative | p95 | +15% | 500 ms / 200 ms |
+| Hot reload, TypeScript (componentize excluded) | p95 | +15% | 750 ms |
 | Market search, keystroke to results, 10k entries | p95 | +10% | 16 ms, off the UI thread |
 
 Pass/fail gates: every hostile fixture is denied or trapped; fuzz targets run 10 minutes per PR and 4 hours
@@ -396,7 +529,9 @@ nightly with no new crash; the scripted "new theme → visible" check passes in 
 | `ext-manifest` | manifest types, validation, `risk()`, `limits`, `when` parser, error catalogue |
 | `ext-pkg` | `.cyx` reader/writer, content digest, path safety, import check |
 | `ext-core` | install transaction, store, lock, contribution index, grants ∩ trust, index and signature verification |
-| `ext-proto`, `ext-ui`, `ext-api` | app ↔ exthost frames; UI tree model and diff; WIT and generated docs |
+| `ext-net` | the `net` client: declared HTTPS hosts only, peer address checks, re-checked redirects, budgets |
+| `ext-ui` | view element tree, validation and caps, keyed diff, host-side input state, accessibility roles, events |
+| `ext-proto`, `ext-api` | app ↔ exthost frames and the Windows AppContainer launch; WIT and generated docs |
 | `ext-host` | the `codeyard-exthost` binary: engine, sandbox, `--compile`. The only crate that links wasmtime |
 | `cyx`, `ext-sdk`, `ext-test` | CLI, Rust SDK, mock host |
 | `yard` | the registry's publish service; runs on the registry's server, never with the app |
@@ -420,7 +555,7 @@ Settings: `extensions.autoUpdate` (`off | notify | install`, default `install`),
 | 1 | How code runs | Wasm components in `codeyard-exthost`, never in the app | Sandbox by construction; no JIT or third-party code in the app |
 | 2 | Process model | One process per active code extension, exits when idle | One rule; an escape gets one extension; crash blame is trivial |
 | 3 | OS sandbox | Required for installed code; `cyx dev` may run the author's own folder without it | Kept for safety: Wasm alone is one bug from the user's files. Dev exception so every platform can author |
-| 4 | Manifest | One TOML file, activation inferred, no engines field, always-prefixed ids | VS Code's shape with less to repeat and no namespace traps |
+| 4 | Manifest | One TOML file, activation inferred, no engines field, always-prefixed ids | The familiar shape with less to repeat and no namespace traps |
 | 5 | Permissions | Declared, enforced in the app broker, one `risk(set)` function | One place to audit; read + send is what makes exfiltration |
 | 6 | UI | 22 declarative elements drawn by GPUI, no webviews | No XSS; themes and accessibility for free; low memory |
 | 7 | Remote | Wasm on the UI machine; host calls through `Host` | Local and SSH share one path; the agent stays untouched |
@@ -436,18 +571,19 @@ Settings: `extensions.autoUpdate` (`off | notify | install`, default `install`),
 - Per-extension generated build world (undeclared API as a compile error): the import check covers it now.
 - Long-lived publisher keys, private registries, mirrors, managed policy: after the public registry is stable.
 - Malware scanning for native programs: with open native publishing, after Phase 3.
-- Sharing one process among network-less extensions: only if per-process memory misses its ceiling.
+- Sharing one process among network-less extensions: only if per-process memory misses its ceiling. It would save
+  about 32 MB per extra TypeScript extension on macOS.
 - WebSockets, and a sandboxed canvas for previews and charts: after the element set is proven.
 - Go and Python SDKs, source-level Wasm breakpoints: when each meets its ceilings or is proven on macOS arm64.
 
 ## 14. Roadmap
 
-| Phase | Scope | Exit |
-| --- | --- | --- |
-| **0: Measure, then declarative** (5 wk) | Week 1: spans, `scripts/perf/*`, baseline of today's editor. Then `ext-manifest`, `ext-pkg`, `ext-core`, lock, declarative contributions, Extensions view, `--no-extensions`, `cyx new/dev/check/package`, `import-vscode` for themes and snippets, quickstart. Extension language servers count as `run` from the start | A/A run shows no false regression; startup and idle-memory rows green; theme check ≤ 10 s; fuzz green |
-| **1: Signed registry** (5 wk) | Yard, keyless publish, client verification, version status, `codeyard/publish` action, Market with local search. Data-only publishing open to everyone | Search row green; 0 registry requests for users with no extensions; canary revocation within 24 h |
-| **2: Code extensions, API 0.x** (12 wk) | Entry: notarized release pipeline. Week 1 spike: spawn, memory per process, compile, hot reload, and a go/no-go for TypeScript against the memory and cold-activation ceilings (if no-go, TypeScript follows Rust by one release). Then exthost, broker, macOS and Linux sandboxes, SDKs, commands, views, formatters, code actions, GitHub and OAuth auth, Inspector, hot reload, `cyx test`. Windows code ships when AppContainer passes on physical hardware | Activation, provider, memory, crash and hot-reload rows green; hostile fixtures pass; 0 extension-caused app crashes; informal sessions with new authors before GA |
-| **3: GA, API 1.0** | Hover, completion, code lens, inlay hints, SCM and PR providers; native programs by invitation with human review | All `block` rows green for 2 releases with no waivers |
+| Phase | Scope | Exit | Status |
+| --- | --- | --- | --- |
+| **0: Measure, then declarative** (5 wk) | Week 1: spans, `scripts/perf/*`, baseline of today's editor. Then `ext-manifest`, `ext-pkg`, `ext-core`, lock, declarative contributions, Extensions view, `--no-extensions`, `cyx new/dev/check/package`, `import-vscode` for themes and snippets, quickstart. Extension language servers count as `run` from the start | A/A run shows no false regression; startup and idle-memory rows green; theme check ≤ 10 s; fuzz green | Shipped in 0.7.0, Windows included |
+| **1: Signed registry** (5 wk) | Yard, keyless publish, client verification, version status, `codeyard/publish` action, Market with local search. Data-only publishing open to everyone | Search row green; 0 registry requests for users with no extensions; canary revocation within 24 h | Shipped in 0.7.0 (client, `yard`, publish action, Market). The public registry is not online yet: `PUBLIC` in `ext_registry.rs` is `None` until the root key ceremony; self-hosted registries work |
+| **2: Code extensions, API 0.x** (12 wk) | Entry: notarized release pipeline. Week 1 spike: spawn, memory per process, compile, hot reload, and a go/no-go for TypeScript against the memory and cold-activation ceilings (if no-go, TypeScript follows Rust by one release). Then exthost, broker, macOS and Linux sandboxes, SDKs, commands, views, formatters, code actions, GitHub and OAuth auth, Inspector, hot reload, `cyx test`. Windows code ships when AppContainer passes on physical hardware | Activation, provider, memory, crash and hot-reload rows green; hostile fixtures pass; 0 extension-caused app crashes; informal sessions with new authors before GA | Shipped in 0.7.0 with the macOS and Linux sandboxes, Rust and TypeScript. Windows code pending: `ext_proto::appcontainer::VERIFIED` is false until `scripts/check-exthost-sandbox-windows.ps1` passes on physical hardware |
+| **3: GA, API 1.0** | Hover, completion, code lens, inlay hints, SCM and PR providers; native programs by invitation with human review | All `block` rows green for 2 releases with no waivers | Shipped in 0.7.0 as API 1.0, with API 1.1 (additions only) in the same release. Windows code pending as in Phase 2 |
 
 ## 15. Decisions taken on the open questions
 
@@ -463,3 +599,6 @@ Decided by the owner on 2026-10-28.
    accepted.
 4. **Root keys.** The owner holds 2 of 3 root key shares; the third is an offline backup. This is disclosed in
    SECURITY.md before Phase 1, and a second holder is added when one is available.
+5. **Phase 2 spike** (2026-10-29, [extensions-spike.md](extensions-spike.md)). TypeScript ships with Rust in Phase 2.
+   Rust measures well under 25 MB, so there is no shared process. TypeScript gets its own 50 MB memory ceiling: its
+   engine's machine code is about 32 MB per process on macOS, which the OS does not let processes share.

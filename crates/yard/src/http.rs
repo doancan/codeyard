@@ -5,8 +5,10 @@
 //! POST /v1/status                  framed bundle + status statement → 200 {id, version, status}
 //! GET  /packages/<digest>.cyx      the package; counts one download for today
 //! GET  /packages/<digest>.sigstore.json   its publisher signature, which clients verify themselves
+//! GET  /packages/<digest>.details.json     its manifest and README, for the Market's page (not a download)
 //! GET  /index.json, /index.json.sig, /root.json, /root.json.sig    the static files, for a registry without a CDN
 //! GET  /healthz
+//! GET  /metrics                   index version and expiry, online key expiry, counts (Prometheus text; local only)
 //! ```
 
 use std::convert::Infallible;
@@ -18,12 +20,13 @@ use hyper::body::{Bytes, Incoming};
 use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::{TokioIo, TokioTimer};
+use sha2::Digest as _;
 
 use crate::{Error, MAX_UPLOAD_BYTES, Yard};
 
 /// How often the index is signed again with nothing changed; it expires after 72 h.
 pub const RESIGN_EVERY: Duration = Duration::from_secs(24 * 3600);
-/// Uploads held in memory at once (each up to 65 MiB); more wait their turn.
+/// Uploads held in memory at once (each up to 129 MiB, a per-platform package); more wait their turn.
 const UPLOADS_AT_ONCE: usize = 4;
 /// A slow client cannot hold a connection: headers within 30 s, an upload within 5 minutes.
 const HEADER_TIMEOUT: Duration = Duration::from_secs(30);
@@ -41,6 +44,10 @@ pub async fn serve(yard: Arc<Yard>, listener: tokio::net::TcpListener) -> std::i
         loop {
             tick.tick().await;
             let y = y.clone();
+            let left = y.online_expires().saturating_sub(now());
+            if left < crate::ROTATE_WARNING_SECS {
+                eprintln!("yard: warning: the online key expires in {} days; rotate it now (docs/registry.md, Rotate the online key)", left / 86400);
+            }
             match tokio::task::spawn_blocking(move || y.resign(now())).await {
                 Ok(Ok(v)) => eprintln!("yard: signed index version {v}"),
                 Ok(Err(e)) => eprintln!("yard: cannot sign the index: {e}"),
@@ -67,6 +74,17 @@ async fn handle(yard: Arc<Yard>, uploads: Arc<tokio::sync::Semaphore>, req: Requ
     let path = req.uri().path().to_string();
     let response = match (req.method().clone(), path.as_str()) {
         (Method::GET, "/healthz") => text(StatusCode::OK, "ok"),
+        // For the server's own monitoring; the proxy keeps it from the internet (deploy/yard/Caddyfile).
+        (Method::GET, "/metrics") => match tokio::task::spawn_blocking({
+            let yard = yard.clone();
+            move || yard.health()
+        })
+        .await
+        {
+            Ok(Ok(h)) => file(h.metrics().into_bytes(), "text/plain; version=0.0.4; charset=utf-8", "no-store"),
+            Ok(Err(e)) => error(e),
+            Err(e) => error(Error::Internal(e.to_string())),
+        },
         (Method::POST, "/v1/publish") => match body(req, &uploads).await {
             Ok((b, _turn)) => blocking(yard, move |y| y.publish(&b, now()).map(|p| serde_json::to_vec(&p).expect("serializes"))).await,
             Err(e) => error(e),
@@ -89,6 +107,13 @@ async fn handle(yard: Arc<Yard>, uploads: Arc<tokio::sync::Semaphore>, req: Requ
                 Err(e) => error(e),
             }
         }
+        (Method::GET, p) if p.starts_with("/packages/") && p.ends_with(".details.json") => {
+            let digest = p["/packages/".len()..p.len() - ".details.json".len()].to_string();
+            match yard.details(&digest).and_then(|f| std::fs::read(f).map_err(|_| Error::NotFound("no such package".into()))) {
+                Ok(bytes) => file(bytes, "application/json", "public, max-age=31536000, immutable"),
+                Err(e) => error(e),
+            }
+        }
         (Method::GET, p) if p.starts_with("/packages/") && p.ends_with(".cyx") => {
             let digest = p["/packages/".len()..p.len() - ".cyx".len()].to_string();
             match tokio::task::spawn_blocking({
@@ -97,14 +122,35 @@ async fn handle(yard: Arc<Yard>, uploads: Arc<tokio::sync::Semaphore>, req: Requ
             })
             .await
             {
-                Ok(Ok(bytes)) => file(bytes, "application/gzip", "public, max-age=31536000, immutable"),
+                // Never kept by a shared cache (a CDN): each download reaches this service and is counted. The
+                // client may keep it.
+                Ok(Ok(bytes)) => file(bytes, "application/gzip", "private, max-age=31536000, immutable"),
                 Ok(Err(e)) => error(e),
                 Err(e) => error(Error::Internal(e.to_string())),
             }
         }
         (Method::GET, "/index.json" | "/index.json.sig" | "/root.json" | "/root.json.sig") => {
+            let asked = req.headers().get(hyper::header::IF_NONE_MATCH).and_then(|v| v.to_str().ok()).map(str::to_string);
             match tokio::fs::read(yard.config().public.join(&path[1..])).await {
-                Ok(bytes) => file(bytes, "application/json", "no-cache"),
+                // Clients ask daily with the ETag they have; most days the answer is 304 and nothing is sent. No cache
+                // may answer without asking here: the index and its signature must come from the same moment, and a
+                // revocation must reach clients on their next fetch.
+                Ok(bytes) => {
+                    let tag = format!("\"{}\"", crate::hex(&sha2::Sha256::digest(&bytes)));
+                    let cache = "no-cache";
+                    if asked.as_deref() == Some(tag.as_str()) {
+                        Response::builder()
+                            .status(StatusCode::NOT_MODIFIED)
+                            .header("etag", &tag)
+                            .header("cache-control", cache)
+                            .body(Full::new(Bytes::new()))
+                            .expect("valid response")
+                    } else {
+                        let mut r = file(bytes, "application/json", cache);
+                        r.headers_mut().insert("etag", tag.parse().expect("a valid header"));
+                        r
+                    }
+                }
                 Err(_) => text(StatusCode::NOT_FOUND, "not found"),
             }
         }

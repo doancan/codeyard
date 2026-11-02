@@ -8,7 +8,7 @@
 
 use serde_json::{Value, json};
 
-use crate::workbench::tasks::{Task, expand_variables};
+use crate::workbench::tasks::{Task, expand_variables, expand_variables_in};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Adapter {
@@ -28,8 +28,11 @@ pub struct LaunchConfig {
     pub request: String,
     /// Arguments sent to the adapter (`program`, `args`, `cwd`... variables expanded).
     pub args: Value,
-    /// Shell command to run before launch (`preLaunchTask` or automatic build).
+    /// Shell command to run before launch (automatic build, or a `preLaunchTask` without a task file).
     pub pre_launch: Option<String>,
+    /// `preLaunchTask` from a task file: the task runs as a planned task (dependencies, inputs, background readiness)
+    /// and the adapter starts only after it succeeds or becomes ready.
+    pub pre_launch_task: Option<String>,
     /// Automatically detected Cargo target; its executable is resolved from build artifacts.
     pub cargo_target: Option<crate::cargo_project::CargoTarget>,
     /// Task to run after the session ends (`postDebugTask`): (label, command).
@@ -335,7 +338,7 @@ pub fn install_js_debug_archive(dir: &std::path::Path, archive: &std::path::Path
 fn node_adapter(server: Option<std::path::PathBuf>) -> Result<Adapter, String> {
     match server {
         Some(server) => Ok(Adapter { id: "pwa-node".into(), command: "node".into(), args: vec![server.to_string_lossy().into_owned(), "${port}".into(), "127.0.0.1".into()], connect: None }),
-        None => Err(crate::i18n::t("JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install VS Code (its copy is used).").into()),
+        None => Err(crate::i18n::t("JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install an editor that ships it (its copy is used).").into()),
     }
 }
 
@@ -364,7 +367,13 @@ pub fn adapter_for(ty: &str) -> Result<Adapter, String> {
 
 /// From `launch.json`: variables (`${workspaceFolder}`, `${file}`...) are expanded, `preLaunchTask`
 /// is looked up by label in `tasks` (if not found the label isn't treated as a command, ignored).
+#[cfg(test)]
 pub fn parse_launch_json(text: &str, root: &str, file: Option<&str>, tasks: &[Task]) -> Vec<LaunchConfig> {
+    parse_launch_json_in(text, root, file, tasks, &[])
+}
+
+/// `parse_launch_json` in a workspace with several folders (name, path): `${workspaceFolder:name}` names one of them.
+pub fn parse_launch_json_in(text: &str, root: &str, file: Option<&str>, tasks: &[Task], folders: &[(String, String)]) -> Vec<LaunchConfig> {
     let Ok(v) = serde_json::from_str::<Value>(&theme::themes::strip_jsonc(text)) else { return Vec::new() };
     let items = match &v {
         Value::Array(a) => a.clone(),
@@ -419,9 +428,10 @@ pub fn parse_launch_json(text: &str, root: &str, file: Option<&str>, tasks: &[Ta
                 // Project root if no working directory is given.
                 o.entry("cwd").or_insert_with(|| json!("${workspaceFolder}"));
             }
-            let args = expand_value(&args, root, file);
-            let pre_launch =
-                c["preLaunchTask"].as_str().and_then(|label| tasks.iter().find(|t| t.label == label)).map(|t| expand_variables(&t.command, root, file));
+            let args = expand_value(&args, root, file, folders);
+            let pre = c["preLaunchTask"].as_str().and_then(|label| tasks.iter().find(|t| t.label == label));
+            let pre_launch_task = pre.filter(|t| t.file.is_some()).map(|t| t.label.clone());
+            let pre_launch = pre.filter(|t| t.file.is_none()).map(|t| expand_variables(&t.command, root, file));
             let post_debug = task_command(&c["postDebugTask"], tasks, root, file);
             let mut config = LaunchConfig {
                 name,
@@ -429,6 +439,7 @@ pub fn parse_launch_json(text: &str, root: &str, file: Option<&str>, tasks: &[Ta
                 request: c["request"].as_str().unwrap_or("launch").to_string(),
                 args,
                 pre_launch,
+                pre_launch_task,
                 cargo_target: None,
                 post_debug,
                 no_debug: false,
@@ -441,11 +452,11 @@ pub fn parse_launch_json(text: &str, root: &str, file: Option<&str>, tasks: &[Ta
         .collect()
 }
 
-fn expand_value(v: &Value, root: &str, file: Option<&str>) -> Value {
+fn expand_value(v: &Value, root: &str, file: Option<&str>, folders: &[(String, String)]) -> Value {
     match v {
-        Value::String(s) => Value::String(expand_variables(s, root, file)),
-        Value::Array(a) => Value::Array(a.iter().map(|x| expand_value(x, root, file)).collect()),
-        Value::Object(o) => Value::Object(o.iter().map(|(k, x)| (k.clone(), expand_value(x, root, file))).collect()),
+        Value::String(s) => Value::String(expand_variables_in(s, root, file, folders)),
+        Value::Array(a) => Value::Array(a.iter().map(|x| expand_value(x, root, file, folders)).collect()),
+        Value::Object(o) => Value::Object(o.iter().map(|(k, x)| (k.clone(), expand_value(x, root, file, folders))).collect()),
         other => other.clone(),
     }
 }
@@ -461,6 +472,7 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             request: "launch".into(),
             args: json!({ "args": [], "cwd": root }),
             pre_launch: None,
+            pre_launch_task: None,
             cargo_target: Some(crate::cargo_project::CargoTarget::binary(name)),
             post_debug: None,
             no_debug: false,
@@ -475,6 +487,7 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             // outputMode remote: program output reaches the console as a DAP event (default: delve's stdout).
             args: json!({ "mode": "debug", "program": root, "cwd": root, "outputMode": "remote" }),
             pre_launch: None,
+            pre_launch_task: None,
             cargo_target: None,
             post_debug: None,
             no_debug: false,
@@ -489,6 +502,7 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             request: "launch".into(),
             args: json!({ "type": "pwa-node", "name": format!("Debug Node: {base}"), "program": f, "cwd": root, "console": "internalConsole" }),
             pre_launch: None,
+            pre_launch_task: None,
             cargo_target: None,
             post_debug: None,
             no_debug: false,
@@ -503,6 +517,7 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             request: "launch".into(),
             args: json!({ "program": f, "cwd": root, "console": "internalConsole" }),
             pre_launch: None,
+            pre_launch_task: None,
             cargo_target: None,
             post_debug: None,
             no_debug: false,
@@ -618,12 +633,22 @@ pub fn rust_formatters(host: &dyn host::Host, root: &str, existing: &[String]) -
 
 #[cfg(test)]
 mod tests {
+    /// In a workspace with several folders, `${workspaceFolder:name}` names one of them, in the program and in its
+    /// arguments; an unknown name stays as written (no folder is guessed).
+    #[test]
+    fn named_workspace_folders_are_expanded_in_launch_configurations() {
+        let folders = vec![("repoA".to_string(), "/w/repoA".to_string()), ("repoB".to_string(), "/w/repoB/".to_string())];
+        let text = r#"{ "configurations": [ { "name": "hello", "type": "lldb", "request": "launch",
+            "program": "${workspaceFolder:repoA}/hello", "args": ["${workspaceFolderBasename:repoB}", "${workspaceFolder:nope}"] } ] }"#;
+        let c = parse_launch_json_in(text, "/w/repoA", None, &[], &folders);
+        assert_eq!(c[0].args["program"], "/w/repoA/hello");
+        assert_eq!(c[0].args["args"], json!(["repoB", "${workspaceFolder:nope}"]));
+    }
+
     #[test]
     fn compounds_inputs_and_the_post_debug_task_are_read() {
-        let tasks = vec![
-            Task { label: "build".into(), command: "make".into(), source: "tasks.jsonc" },
-            Task { label: "clean".into(), command: "rm -rf ${workspaceFolder}/out".into(), source: "tasks.jsonc" },
-        ];
+        let tasks =
+            vec![Task::shell("build".into(), "make".into(), "tasks.jsonc"), Task::shell("clean".into(), "rm -rf ${workspaceFolder}/out".into(), "tasks.jsonc")];
         let text = r#"{
           // comment
           "configurations": [
@@ -726,7 +751,7 @@ mod tests {
     }
 
     fn task(label: &str, command: &str) -> Task {
-        Task { label: label.into(), command: command.into(), source: "tasks.json" }
+        Task::shell(label.into(), command.into(), "tasks.json")
     }
 
     #[test]

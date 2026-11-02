@@ -4,6 +4,16 @@
 
 use serde::{Deserialize, Serialize};
 
+/// A `run` entry that names a program inside the package (`./bin/server` or `bin/server`) rather than one on PATH.
+pub fn is_package_program(run: &str) -> bool {
+    run.contains('/') && !run.starts_with('/') && !run.contains(['\\', ':'])
+}
+
+/// The same program however it is written: `./bin/server` and `bin/server` are one entry.
+pub fn package_program_path(run: &str) -> &str {
+    run.trim_start_matches("./")
+}
+
 /// Programs that run whatever script or command line they are given. Allowed in `run` only when the script ships inside
 /// the package (checked by `ext-pkg`), so a language server wrapper is a normal high-risk extension, not a way around
 /// review. Matched on the file name without `.exe`/`.cmd`/`.bat`/`.com`, ignoring case.
@@ -77,6 +87,10 @@ pub struct Permissions {
     pub write: Vec<String>,
     /// Hosts, optionally `*.example.com`.
     pub net: Vec<String>,
+    /// A string setting that names a server: hosts the user allowed on the extension page join `net`
+    /// (docs/plugin-architecture.md §6.1). Never filled from the setting's value alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub net_from_setting: Option<String>,
     /// Account providers (`github`, or an OAuth provider declared by the extension).
     pub auth: Vec<String>,
     pub secrets: bool,
@@ -95,12 +109,24 @@ impl Permissions {
         self.read.is_empty()
             && self.write.is_empty()
             && self.net.is_empty()
+            && self.net_from_setting.is_none()
             && self.auth.is_empty()
             && !self.secrets
             && self.run.is_empty()
             && self.clipboard == Clipboard::None
             && !self.terminal
             && self.commands.is_empty()
+    }
+
+    /// Whether `net` lets the extension connect to `host`. See [`net_allows`].
+    pub fn allows_host(&self, host: &str) -> bool {
+        net_allows(&self.net, host)
+    }
+
+    /// Programs in `run` that ship inside the package (`./bin/server`), as written. Such an extension is built per
+    /// platform and its programs run on the workspace's host (docs/plugin-architecture.md §7).
+    pub fn package_programs(&self) -> impl Iterator<Item = &str> {
+        self.run.iter().map(String::as_str).filter(|p| is_package_program(p))
     }
 
     /// Interpreters in `run`; each needs its script inside the package.
@@ -114,16 +140,19 @@ impl Permissions {
         let mut out = Vec::new();
         let list = |v: &[String]| v.join(", ");
         if !self.read.is_empty() {
-            out.push(if self.read.iter().any(|g| is_wide_glob(g)) { Line::ReadAll } else { Line::Read(list(&self.read)) });
+            out.push(if self.read.iter().any(|g| is_whole_workspace(g)) { Line::ReadAll } else { Line::Read(list(&self.read)) });
             if self.read.iter().any(|g| is_sensitive_glob(g)) {
                 out.push(Line::ReadSecrets);
             }
         }
         if !self.write.is_empty() {
-            out.push(if self.write.iter().any(|g| is_wide_glob(g)) { Line::ChangeAll } else { Line::Change(list(&self.write)) });
+            out.push(if self.write.iter().any(|g| is_whole_workspace(g)) { Line::ChangeAll } else { Line::Change(list(&self.write)) });
         }
         if !self.net.is_empty() {
             out.push(if self.net.iter().any(|h| is_wide_host(h)) { Line::ConnectAny } else { Line::Connect(list(&self.net)) });
+        }
+        if let Some(key) = &self.net_from_setting {
+            out.push(Line::ConnectSetting(key.clone()));
         }
         out.extend(self.auth.iter().map(|a| Line::Account(provider_name(a))));
         if self.secrets {
@@ -146,6 +175,32 @@ impl Permissions {
     pub fn describe(&self) -> Vec<String> {
         self.lines().iter().map(Line::english).collect()
     }
+
+    /// What `self` asks for that `old` did not: the update card shows only this, and an empty result updates without
+    /// asking. Entries compare as written, so a narrower glob or host than before still counts as new. `why` is not
+    /// a permission.
+    pub fn added_since(&self, old: &Permissions) -> Permissions {
+        let new = |mine: &[String], theirs: &[String]| mine.iter().filter(|x| !theirs.contains(x)).cloned().collect::<Vec<_>>();
+        let clipboard = match (self.clipboard.reads() && !old.clipboard.reads(), self.clipboard.writes() && !old.clipboard.writes()) {
+            (true, true) => Clipboard::ReadWrite,
+            (true, false) => Clipboard::Read,
+            (false, true) => Clipboard::Write,
+            (false, false) => Clipboard::None,
+        };
+        Permissions {
+            read: new(&self.read, &old.read),
+            write: new(&self.write, &old.write),
+            net: new(&self.net, &old.net),
+            net_from_setting: self.net_from_setting.clone().filter(|k| old.net_from_setting.as_ref() != Some(k)),
+            auth: new(&self.auth, &old.auth),
+            secrets: self.secrets && !old.secrets,
+            run: new(&self.run, &old.run),
+            clipboard,
+            terminal: self.terminal && !old.terminal,
+            commands: new(&self.commands, &old.commands),
+            why: None,
+        }
+    }
 }
 
 /// One line of the consent sheet.
@@ -160,6 +215,8 @@ pub enum Line {
     Change(String),
     ConnectAny,
     Connect(String),
+    /// `net-from-setting`: the setting's key.
+    ConnectSetting(String),
     /// The account provider's display name.
     Account(String),
     Secrets,
@@ -178,7 +235,8 @@ impl Line {
             Line::ChangeAll => "Change all files in the workspace".into(),
             Line::Change(g) => format!("Change {g}"),
             Line::ConnectAny => "Connect to any website".into(),
-            Line::Connect(h) => format!("Connect to {h}"),
+            Line::Connect(h) => format!("Connect to {h} (any port)"),
+            Line::ConnectSetting(k) => format!("Connect to a server you allow, named in its “{k}” setting"),
             Line::Account(a) => format!("Act as your {a} account"),
             Line::Secrets => "Store secrets in your keychain".into(),
             Line::Run(p) => format!("Run {p} with any arguments"),
@@ -232,6 +290,13 @@ pub fn is_wide_glob(glob: &str) -> bool {
     }
     let after = last.split_once('*').map_or("", |(_, a)| a);
     !(after.len() > 1 && after.starts_with('.'))
+}
+
+/// A glob that matches every file of the workspace (`**`, `**/*`): the only kind the sheet may call "all files".
+/// `src/**/*.rs` and `notes/**` are wide for the risk level but reach a part of it, so the sheet shows them as written.
+pub fn is_whole_workspace(glob: &str) -> bool {
+    let parts = segments(glob);
+    parts.contains(&"**") && parts.iter().all(|p| matches!(*p, "**" | "*"))
 }
 
 /// Folders and files that hold credentials, or that run code when a tool opens them. Reading them counts as reading
@@ -290,6 +355,20 @@ pub fn is_sensitive_glob(glob: &str) -> bool {
 pub fn is_wide_host(host: &str) -> bool {
     let Some(rest) = host.strip_prefix("*.") else { return host == "*" };
     rest.split('.').count() < 2 || SHARED_SUFFIXES.contains(&rest)
+}
+
+/// Whether a `net` list allows `host`: an entry names it exactly, or a `*.` entry has it below, at any depth
+/// (`*.example.com` allows `a.example.com` and `a.b.example.com`, not `example.com`). The host is compared as given: the
+/// caller lowercases it and drops a trailing dot. A `*.` entry directly under a public suffix allows every host under
+/// that suffix, which is why [`is_wide_host`] shows it as "any host".
+pub fn net_allows(net: &[String], host: &str) -> bool {
+    if host.is_empty() || host.starts_with('.') || host.ends_with('.') || host.contains("..") {
+        return false;
+    }
+    net.iter().any(|entry| match entry.strip_prefix("*.") {
+        Some(base) => !base.is_empty() && host.strip_suffix(base).is_some_and(|sub| sub.len() > 1 && sub.ends_with('.')),
+        None => entry != "*" && entry == host,
+    })
 }
 
 /// Suffixes under which anyone can get a host name. A full public-suffix list would be exact; this list covers the common
@@ -386,7 +465,7 @@ pub fn risk(p: &Permissions) -> Risk {
         reads.push("auth");
     }
     let mut sends = Vec::new();
-    if !p.net.is_empty() {
+    if !p.net.is_empty() || p.net_from_setting.is_some() {
         sends.push("net");
     }
     if !p.run.is_empty() {

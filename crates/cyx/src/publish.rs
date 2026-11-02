@@ -29,6 +29,8 @@ pub struct Publish<'a> {
     pub registry: &'a str,
     pub dry_run: bool,
     pub pre_release: bool,
+    /// The platform of an extension with native programs (`native/<triple>/`); each is published as its own package.
+    pub target: Option<&'a str>,
 }
 
 /// What the install sheet will show for this manifest: permissions in plain words, the red line, the author's reason.
@@ -40,6 +42,9 @@ pub fn sheet(m: &Manifest) -> String {
     }
     for l in lines {
         out.push_str(&format!("  • {l}\n"));
+    }
+    if m.has_native_programs() {
+        out.push_str(&format!("  It ships native programs: users type {} to install it.\n", m.id));
     }
     if let Some(h) = m.risk().headline() {
         out.push_str(&format!("  {h}\n"));
@@ -53,10 +58,33 @@ pub fn sheet(m: &Manifest) -> String {
 /// Publish the folder; the report to print.
 pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<String, String>, now: u64) -> Result<String, String> {
     let report = crate::check(p.dir)?;
-    let files = ext_pkg::collect_dir(p.dir).map_err(|e| format!("error: {e}"))?;
+    let files = ext_pkg::collect_dir_for(p.dir, p.target).map_err(|e| format!("error: {e}"))?;
     let (bytes, digest) = ext_pkg::write(files).map_err(|e| format!("error: {e}"))?;
-    let m = ext_pkg::read(&bytes).map_err(|e| format!("error: {e}"))?.manifest;
+    let package = ext_pkg::read(&bytes).map_err(|e| format!("error: {e}"))?;
+    if let Some(c) = package.component.as_ref().filter(|c| c.in_transition()) {
+        return Err(format!(
+            "error: {} was built against API {}, and registries take only API {}.x builds\n   = fix: rebuild with the current SDK (`cyx package`); docs/extensions/migrating-to-1.0.md lists what changed",
+            ext_pkg::COMPONENT,
+            c.built_for,
+            ext_api::VERSION.0
+        ));
+    }
+    let m = package.manifest;
+    if let Some(o) = crate::placeholder_client_ids(&m).first() {
+        return Err(format!(
+            "error: the client id of [[oauth]] {} is a placeholder ({:?}), so every sign-in would fail\n   = fix: register an OAuth application with the provider and put its client id in {}",
+            o.id,
+            o.client_id,
+            ext_manifest::FILE_NAME
+        ));
+    }
     let mut notes = report.warnings;
+    if let Some(t) = p.target {
+        notes.push(format!(
+            "note: {} ships native programs: this is its package for {t}. Registries take native programs from invited publishers only, and a publisher's first one waits for a human review before it is listed",
+            m.id
+        ));
+    }
     match (p.pre_release, m.version.pre.is_some()) {
         (true, false) => {
             return Err(format!(
@@ -70,8 +98,13 @@ pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<Strin
         (false, true) => notes.push(format!("note: {} is a pre-release (it has a suffix): users get it only when they opt in to pre-releases", m.version)),
         _ => {}
     }
-    if !m.is_declarative() {
-        return Err("error: this extension runs code; the registry accepts data-only extensions until code extensions ship".into());
+    // The registry reads the `code` flag of its index from the package (an update to a code extension waits 48 h);
+    // nothing to send.
+    let code = !m.is_declarative();
+    if code && p.pre_release {
+        notes.push(format!("note: {} runs code: the index marks it as code; a pre-release installs at once for users who opted in", m.id));
+    } else if code {
+        notes.push(format!("note: {} runs code: the index marks it as code, and users who have an earlier version get each update 48 hours after it is published; a new install takes it at once", m.id));
     }
     let mut out = notes.join("\n");
     if !out.is_empty() {
@@ -79,9 +112,10 @@ pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<Strin
     }
     if p.dry_run {
         out.push_str(&format!(
-            "Would publish {} {} to {} (content digest {}).\n\nThe install sheet will show:\n{}\nNothing was signed or sent.",
+            "Would publish {} {}{} to {} (content digest {}).\n\nThe install sheet will show:\n{}\nNothing was signed or sent.",
             m.id,
             m.version,
+            p.target.map(|t| format!(" for {t}")).unwrap_or_default(),
             p.registry,
             digest.hex(),
             sheet(&m)
@@ -95,14 +129,42 @@ pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<Strin
         .map_err(|e| format!("{e}\n   = note: the signature does not verify against the registry's Sigstore roots; nothing was uploaded"))?;
     let res = net::request("POST", &format!("{}/v1/publish", p.registry), &[("content-type", "application/octet-stream")], yard::frame(&bundle, &bytes))?;
     if !res.ok() {
-        return Err(format!("error: the registry refused {} {}: {}", m.id, m.version, res.text()));
+        let why = res.text();
+        // Phase 1 registries take themes, snippets, keymaps and languages only (docs/registry.md).
+        if code && why.contains("accepts data-only extensions") {
+            return Err(format!(
+                "error: {} accepts data-only extensions; {} {} runs code, so it was not published\n   = note: code extensions open on the registry in a later phase; until then share the .cyx from `cyx package`, which installs from a file",
+                p.registry, m.id, m.version
+            ));
+        }
+        return Err(format!("error: the registry refused {} {}: {why}", m.id, m.version));
     }
     let published: serde_json::Value = serde_json::from_slice(&res.body).map_err(|e| format!("error: the registry's answer: {e}"))?;
-    let available = published["available"].as_u64().unwrap_or(now);
-    // The registry's clock decides; a few minutes either way is still "now".
-    let when = if available <= now + 600 { "now".to_string() } else { format!("in {} hours (code waits 48 h)", (available - now).div_ceil(3600)) };
-    out.push_str(&format!("Published {} {} as {}.\nUsers get it {when}.", m.id, m.version, signed.publisher));
+    if published["review"].as_bool() == Some(true) {
+        out.push_str(&format!(
+            "Uploaded {} {} as {}. It is your first native program on this registry, so it stays unlisted until a reviewer approves it; users get it after that.",
+            m.id, m.version, signed.publisher
+        ));
+        return Ok(out);
+    }
+    let when = when_available(published["available"].as_u64().unwrap_or(now), now);
+    out.push_str(&format!("Published {} {} as {}.\n{}", m.id, m.version, signed.publisher, availability(&when)));
     Ok(out)
+}
+
+/// What users get when: a new install takes the newest version at once; the registry's wait is for updates.
+fn availability(when: &str) -> String {
+    if when == "now" { "Users get it now.".into() } else { format!("New installs get it now; users who have an earlier version are updated {when}.") }
+}
+
+/// When users get a version the registry makes available at `available`: "now", or "in 48 hours (…)". The registry's
+/// clock decides, so a few minutes either way is still "now", and hours are rounded to the nearest.
+fn when_available(available: u64, now: u64) -> String {
+    if available <= now + 600 {
+        return "now".into();
+    }
+    let hours = (available - now + 1800) / 3600;
+    format!("in {hours} hour{} (updates that run code wait 48 h)", if hours == 1 { "" } else { "s" })
 }
 
 /// Yank, restore or deprecate a version of the folder's extension.

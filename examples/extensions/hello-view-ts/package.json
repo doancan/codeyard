@@ -1,0 +1,15 @@
+{
+  "name": "hello-view-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\"",
+    "check": "tsc"
+  },
+  "devDependencies": {
+    "@codeyard/extension": "file:../../../sdk/typescript",
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3"
+  }
+}

@@ -173,6 +173,8 @@ fn pins_come_from_the_same_registry() {
         previous: None,
         source,
         disabled: false,
+        pre_release: false,
+        targets: Default::default(),
     };
     let me = github(7, 42);
     let from_test = locked(crate::Source::Registry { registry: "test".into(), publisher: me.clone() });
@@ -213,4 +215,84 @@ fn a_registry_that_moved_on_without_us_is_still_read_through_the_retry() {
     let e = index(&reg, &s.cache, &s.fetch, NOW, true).unwrap_err();
     assert!(matches!(e, Error::Index(_)), "{e}");
     assert_eq!(s.fetch.count(), 8, "two attempts, four files each");
+}
+
+#[test]
+fn a_page_is_fetched_once_checked_against_the_index_and_cached() {
+    let s = setup("page");
+    let reg = s.yard.registry();
+    let v = index(&reg, &s.cache, &s.fetch, NOW, true).unwrap();
+    let r = v.index.latest(&id("you.night"), false).unwrap();
+    let dir = cache_dir(&s.cache, &reg);
+    let before = s.fetch.count();
+    let p = page(&reg, &dir, &id("you.night"), r, &s.fetch).unwrap();
+    assert_eq!((p.manifest.name.as_str(), p.manifest.version.to_string().as_str()), ("Night", "1.1.0"));
+    assert_eq!(s.fetch.count(), before + 1, "one request, and not for the package");
+    assert!(s.fetch.requests.lock().unwrap().last().unwrap().ends_with(".details.json"));
+    page(&reg, &dir, &id("you.night"), r, &s.fetch).unwrap();
+    assert_eq!(s.fetch.count(), before + 1, "opened again: from the cache");
+}
+
+#[test]
+fn a_changed_page_or_one_for_another_package_is_refused() {
+    let s = setup("page-tamper");
+    let reg = s.yard.registry();
+    let v = index(&reg, &s.cache, &s.fetch, NOW, true).unwrap();
+    let dir = cache_dir(&s.cache, &reg);
+    let new = v.index.latest(&id("you.night"), false).unwrap();
+    let old = v.index.release(&id("you.night"), &Version::parse("1.0.0").unwrap()).unwrap();
+    s.yard.tamper(&format!("packages/{}.details.json", new.digest), |b| b.extend_from_slice(b" "));
+    let e = page(&reg, &dir, &id("you.night"), new, &s.fetch).unwrap_err();
+    assert!(e.to_string().contains("does not match the registry's index"), "{e}");
+    // The page of 1.0.0 served for 1.1.0, with the index saying so: the manifest gives it away.
+    let mut lying = new.clone();
+    lying.details = old.details.clone();
+    lying.digest = old.digest.clone();
+    let e = page(&reg, &dir, &id("you.night"), &lying, &s.fetch).unwrap_err();
+    assert!(e.to_string().contains("is for another package"), "{e}");
+    // A damaged cache copy is fetched again, not believed.
+    page(&reg, &dir, &id("you.night"), old, &s.fetch).unwrap();
+    let cached = dir.join("details").join(format!("{}.json", old.details.as_deref().unwrap()));
+    std::fs::write(&cached, b"{}").unwrap();
+    assert_eq!(page(&reg, &dir, &id("you.night"), old, &s.fetch).unwrap().manifest.version.to_string(), "1.0.0");
+    let mut none = old.clone();
+    none.details = None;
+    assert!(matches!(page(&reg, &dir, &id("you.night"), &none, &s.fetch), Err(Error::NotFound(_))));
+}
+
+/// #146: a release with native programs has one package per platform; the client takes the workspace host's and gets
+/// every platform's digest for the lock.
+#[test]
+fn a_native_release_is_downloaded_for_one_platform() {
+    let (linux, mac) = ("x86_64-unknown-linux-musl", "aarch64-apple-darwin");
+    let mut s = setup("native");
+    s.yard.publish(&crate::testing::native_package("you.hello", "1.0.0", linux), &github(7, 42), NOW);
+    let r = s.yard.publish(&crate::testing::native_package("you.hello", "1.0.0", mac), &github(7, 42), NOW);
+    assert_eq!(r.targets.len(), 2);
+    let reg = s.yard.registry();
+    let v = index(&reg, &s.cache, &s.fetch, NOW, true).unwrap();
+    let d = download_for(&reg, &v, &id("you.hello"), None, false, mac, &s.fetch, NOW).unwrap();
+    assert_eq!(ext_pkg::read(&d.bytes).unwrap().target.as_deref(), Some(mac));
+    assert_eq!(d.targets.len(), 2);
+    assert_eq!(d.targets[linux].hex(), r.targets[linux].digest);
+    let e = download_for(&reg, &v, &id("you.hello"), None, false, "x86_64-pc-windows-msvc", &s.fetch, NOW).unwrap_err();
+    assert!(matches!(e, Error::NotFound(_)) && e.to_string().contains("not built for"), "{e}");
+    // The index lists the Linux package under the Mac: its TARGET says otherwise, so nothing is installed.
+    let swapped = r.targets[linux].clone();
+    s.yard.edit_release("you.hello", "1.0.0", NOW, |r| drop(r.targets.insert(mac.into(), swapped)));
+    let v = index(&reg, &s.cache, &s.fetch, NOW, true).unwrap();
+    let e = download_for(&reg, &v, &id("you.hello"), None, false, mac, &s.fetch, NOW).unwrap_err();
+    assert!(e.to_string().contains("platform"), "{e}");
+}
+
+/// e2e trial 2: with only pre-releases published, the install said "no version that can be installed".
+#[test]
+fn an_extension_with_only_pre_releases_says_so() {
+    let mut s = setup("pre-only");
+    s.yard.publish(&package("you.beta", "0.2.0-beta.1"), &github(7, 42), NOW);
+    let reg = s.yard.registry();
+    let v = index(&reg, &s.cache, &s.fetch, NOW, true).unwrap();
+    let e = download_for(&reg, &v, &id("you.beta"), None, false, "aarch64-apple-darwin", &s.fetch, NOW).unwrap_err().to_string();
+    assert!(e.contains("only pre-releases") && e.contains("you.beta@0.2.0-beta.1"), "{e}");
+    assert!(download_for(&reg, &v, &id("you.beta"), None, true, "aarch64-apple-darwin", &s.fetch, NOW).is_ok());
 }

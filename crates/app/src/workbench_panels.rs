@@ -2,58 +2,183 @@
 
 use super::*;
 
+/// How long the panel takes to maximize or restore.
+const PANEL_ANIM: std::time::Duration = std::time::Duration::from_millis(180);
+#[cfg(test)]
+pub(super) const PANEL_ANIM_FOR_TEST: std::time::Duration = PANEL_ANIM;
+
 #[cfg(test)]
 #[path = "workbench_panel_tests.rs"]
 mod panel_tests;
 
+/// "Interface scale: 110%" in the interface language (Turkish puts the sign first: "%110").
+pub(crate) fn interface_scale_notice(scale: f32) -> String {
+    crate::i18n::tf("Interface scale: {}%", &[&settings::ui_scale_percent(scale)])
+}
+
+/// Panel views use quiet button backgrounds for selection and hover; the tab records where it is laid out.
+fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, p: &Palette, cx: &Context<Workbench>) -> gpui::Stateful<gpui::Div> {
+    let id = match tab {
+        Bottom::Problems => "problems-tab",
+        Bottom::Output => "output-tab",
+        Bottom::Debug => "debug-tab",
+        Bottom::Ports => "ports-tab",
+        Bottom::Terminal => "terminal-tab",
+        Bottom::ExtView => "ext-view-tab",
+    };
+    div()
+        .id(id)
+        .relative()
+        .child(a11y::part_frame(a11y::Part::PanelTab(tab), cx))
+        .h(px(layout::VIEW_HEADER_H - 8.))
+        .flex()
+        .items_center()
+        .gap(px(theme::SPACE[2]))
+        .px(px(theme::SPACE[3]))
+        .cursor_pointer()
+        .rounded(px(theme::radius::SM))
+        .when(active, |d| d.bg(c(p.surface_active)))
+        .text_color(c(if active { p.text } else { p.text_muted }))
+        .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text))))
+        .child(label)
+        .when(badge > 0, |d| d.child(div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).child(badge.to_string())))
+}
+
 impl Workbench {
-    /// Zoom: editor and terminal font size (for the session; applied on top if the
-    /// settings file changes).
-    pub(super) fn apply_zoom(&mut self, delta: f32, window: &mut Window, cx: &mut Context<Self>) {
-        self.chrome.zoom = if delta == 0. { 0. } else { (self.chrome.zoom + delta).clamp(-6., 16.) };
-        let mut s = cx.global::<Settings>().clone();
-        s.editor_font_size = (self.chrome.zoom_base.0 + self.chrome.zoom).max(6.);
-        s.editor_line_height = (self.chrome.zoom_base.1 + self.chrome.zoom * 1.5).max(10.);
-        s.terminal_font_size = (self.chrome.zoom_base.2 + self.chrome.zoom).max(6.);
-        cx.set_global(s);
-        self.notice = Some(Notice::Info(crate::i18n::tf("Zoom: {}", &[&format!("{:+}", self.chrome.zoom)]).into()));
-        window.refresh();
-        cx.notify();
+    /// The bottom panel's own tabs (Problems, Output, Debug Console while debugging, Ports, Terminal).
+    pub(super) fn panel_tabs(&self, p: &Palette, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
+        let (errors, warnings) = self.problem_counts();
+        let mut tabs = vec![(Bottom::Problems, crate::i18n::t("Problems"), errors + warnings), (Bottom::Output, crate::i18n::t("Output"), 0)];
+        if self.dbg.has_sessions() {
+            tabs.push((Bottom::Debug, crate::i18n::t("Debug Console"), 0));
+        }
+        tabs.push((Bottom::Ports, crate::i18n::t("Ports"), self.active_forwards()));
+        tabs.push((Bottom::Terminal, crate::i18n::t("Terminal"), self.terminals_asking(cx)));
+        tabs.into_iter()
+            .map(|(tab, label, badge)| {
+                panel_tab(tab, label.into(), self.chrome.bottom == tab, badge, p, cx)
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        if tab == Bottom::Terminal {
+                            if this.terminals.is_empty() {
+                                this.new_terminal(&NewTerminal, window, cx);
+                            } else {
+                                this.focus_terminal(window, cx);
+                            }
+                        } else {
+                            this.chrome.bottom = tab;
+                            cx.notify();
+                        }
+                    }))
+                    .into_any_element()
+            })
+            .collect()
     }
 
-    pub(super) fn zoom_in(&mut self, _: &ZoomIn, window: &mut Window, cx: &mut Context<Self>) {
-        self.apply_zoom(1., window, cx);
+    /// The terminal profiles' menu from the tree: under the panel's Launch Profile button, where a click opens it.
+    pub(super) fn terminal_launch_menu_at_button(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let at = crate::a11y_controls::bounds_of(cx, window, "Panel", "panel-launch").map(|b| b.bottom_left());
+        self.open_terminal_launch_menu(at.unwrap_or_default(), window, cx);
     }
 
-    pub(super) fn zoom_out(&mut self, _: &ZoomOut, window: &mut Window, cx: &mut Context<Self>) {
-        self.apply_zoom(-1., window, cx);
-    }
-
-    pub(super) fn zoom_reset(&mut self, _: &ZoomReset, window: &mut Window, cx: &mut Context<Self>) {
-        self.apply_zoom(0., window, cx);
-    }
-
-    /// Bottom ↔ right. A maximized panel covers the editor wherever it is docked, so moving it also restores its size:
-    /// otherwise the move would not show.
-    pub(super) fn toggle_panel_position(&mut self, cx: &mut Context<Self>) {
-        self.chrome.panel_right = !self.chrome.panel_right;
-        self.chrome.panel_max = false;
-        self.chrome.panel_open = true;
-        if let Some(s) = &self.persist.state {
-            let _ = s.set("panel_right", if self.chrome.panel_right { "1" } else { "0" });
+    /// Zoom: the interface scale (`ui.scale`) of every window. The editor and terminal font sizes stay what the user
+    /// set; the window scales them once together with everything else. The new value is written to the user's
+    /// settings file once and applied right away; other windows follow through `App::set_ui_scale` and, when they
+    /// re-read the file, find the same value and do nothing.
+    pub(super) fn set_interface_scale(&mut self, scale: f32, window: &mut Window, cx: &mut Context<Self>) {
+        let scale = if (settings::UI_SCALE_MIN..=settings::UI_SCALE_MAX).contains(&scale) { scale } else { 1. };
+        let current = cx.global::<Settings>().ui_scale;
+        if scale != current {
+            let session = cx.try_global::<settings::SessionScale>().copied().unwrap_or_default();
+            let file_before = session.file_value(current);
+            cx.set_global(settings::SessionScale(None));
+            if self.config_paths().is_some() {
+                self.write_setting("ui.scale", settings::ui_scale_value(scale), window, cx);
+            }
+            // Without a settings folder, or if the file could not be written, the scale still applies for this session
+            // and survives settings reloads until the file's own value changes.
+            if cx.global::<Settings>().ui_scale != scale {
+                cx.set_global(settings::SessionScale(Some(settings::UnsavedScale { scale, file: file_before })));
+                cx.global_mut::<Settings>().ui_scale = scale;
+            }
+            cx.set_ui_scale(scale);
+        }
+        if !matches!(self.notice, Some(Notice::Error(_))) {
+            self.notice = Some(Notice::Info(interface_scale_notice(scale).into()));
         }
         cx.notify();
     }
 
+    pub(super) fn zoom_in(&mut self, _: &ZoomIn, window: &mut Window, cx: &mut Context<Self>) {
+        let next = settings::step_ui_scale(cx.global::<Settings>().ui_scale, true);
+        self.set_interface_scale(next, window, cx);
+    }
+
+    pub(super) fn zoom_out(&mut self, _: &ZoomOut, window: &mut Window, cx: &mut Context<Self>) {
+        let next = settings::step_ui_scale(cx.global::<Settings>().ui_scale, false);
+        self.set_interface_scale(next, window, cx);
+    }
+
+    pub(super) fn zoom_reset(&mut self, _: &ZoomReset, window: &mut Window, cx: &mut Context<Self>) {
+        self.set_interface_scale(1., window, cx);
+    }
+
+    /// Bottom ↔ right (from the left: to the bottom).
+    pub(super) fn toggle_panel_position(&mut self, cx: &mut Context<Self>) {
+        let dock = if self.chrome.panel_dock.beside() { docks_glue::PanelDock::Bottom } else { docks_glue::PanelDock::Right };
+        self.dock_panel(dock, cx);
+    }
+
+    /// Maximize or restore. An open panel grows towards the top (or the left when docked right) and shrinks back, unless
+    /// motion is reduced.
     pub(super) fn toggle_maximized_panel(&mut self, cx: &mut Context<Self>) {
+        let animate = self.chrome.panel_open && self.chrome.panel_area.is_some() && !crate::system_prefs::reduce_motion(cx);
         self.chrome.panel_max = !self.chrome.panel_max;
         self.chrome.panel_open = true;
+        self.chrome.panel_anim = animate.then(|| (std::time::Instant::now(), self.chrome.panel_max));
         cx.notify();
+    }
+
+    /// Ends a finished (or overtaken) maximize/restore animation, or asks for its next frame.
+    pub(super) fn step_panel_anim(&mut self, window: &mut Window) {
+        let Some((start, maximizing)) = self.chrome.panel_anim else {
+            return;
+        };
+        if maximizing != self.chrome.panel_max || !self.chrome.panel_open || start.elapsed() >= PANEL_ANIM {
+            self.chrome.panel_anim = None;
+        } else {
+            window.request_animation_frame();
+        }
+    }
+
+    /// The panel's size along its docking axis while it animates: from its own size to the whole area, eased.
+    pub(super) fn animated_panel_size(&self) -> Option<f32> {
+        let (start, maximizing) = self.chrome.panel_anim?;
+        let area = self.chrome.panel_area?;
+        let full = if self.chrome.panel_dock.beside() { area.size.width } else { area.size.height } / px(1.);
+        let own = if self.chrome.panel_dock.beside() { self.chrome.panel_w } else { self.chrome.panel_h }.min(full);
+        let t = gpui::ease_in_out((start.elapsed().as_secs_f32() / PANEL_ANIM.as_secs_f32()).min(1.));
+        let open = if maximizing { t } else { 1. - t };
+        Some(own + (full - own) * open)
+    }
+
+    /// Records the editor-and-panel area after layout, without drawing anything.
+    pub(super) fn panel_area_probe(cx: &Context<Self>) -> impl IntoElement + use<> {
+        let entity = cx.entity().downgrade();
+        gpui::canvas(
+            |bounds, _, _| bounds,
+            move |_, bounds, _, cx| {
+                entity.update(cx, |wb, _| wb.chrome.panel_area = Some(bounds)).ok();
+            },
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
     }
 
     /// The panel's width in a window `total` wide: its own when docked right, else the editor area's.
     pub(super) fn panel_width(&self, total: f32) -> f32 {
-        if self.chrome.panel_right && !self.chrome.panel_max {
+        if self.chrome.panel_dock.beside() && !self.chrome.panel_max {
             return self.chrome.panel_w;
         }
         let sidebar = if self.chrome.panel.is_some() && self.chrome.zen.is_none() { self.chrome.sidebar_w } else { 0. };
@@ -62,7 +187,7 @@ impl Workbench {
 
     #[cfg(test)]
     pub fn panel_layout_for_test(&self) -> (bool, bool, bool) {
-        (self.chrome.panel_open, self.chrome.panel_right, self.chrome.panel_max)
+        (self.chrome.panel_open, self.chrome.panel_dock.beside(), self.chrome.panel_max)
     }
 
     pub(super) fn show_ports(&mut self, _: &ShowPorts, _: &mut Window, cx: &mut Context<Self>) {
@@ -143,8 +268,17 @@ impl Workbench {
         self.all_problems().iter().map(|(p, d)| (p.clone(), d.len())).collect()
     }
 
+    /// What the Problems panel lists: language server diagnostics, with task and extension problems when there are any.
+    pub(super) fn problems_shown(&self) -> std::borrow::Cow<'_, std::collections::BTreeMap<String, Vec<crate::lsp::Diagnostic>>> {
+        if self.jobs.problems.is_empty() && self.extension_problems().next().is_none() {
+            std::borrow::Cow::Borrowed(&self.lsp.diagnostics)
+        } else {
+            std::borrow::Cow::Owned(self.all_problems())
+        }
+    }
+
     pub(super) fn problems_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let all = if self.jobs.problems.is_empty() { std::borrow::Cow::Borrowed(&self.lsp.diagnostics) } else { std::borrow::Cow::Owned(self.all_problems()) };
+        let all = self.problems_shown();
         if all.is_empty() {
             let msg = if self.lsp.servers.is_empty() {
                 crate::i18n::t("No problems. Language servers start when you open a file.")
@@ -189,6 +323,8 @@ impl Workbench {
                     .into_any_element(),
             })
             .collect();
+        // Each row records where it is painted, for the accessibility tree.
+        let rows = rows.into_iter().enumerate().map(|(i, row)| div().relative().child(row).child(a11y::part_frame(a11y::Part::Problem(i), cx)));
         div().id("problems").size_full().overflow_y_scroll().children(rows).into_any_element()
     }
 
@@ -199,6 +335,27 @@ impl Workbench {
             problem_rows(&self.all_problems(), root.as_deref()).into_iter().nth(i)
         {
             self.open_location(path, line, col, window, cx);
+        }
+    }
+
+    /// "Quick Fix…" on Problems row `i`: the problem opens at its place, then its fixes are asked for there, as Quick
+    /// Fix at the caret does (a file that is still opening asks once it is in front).
+    pub(super) fn quick_fix_problem_row(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let root = self.root(cx);
+        let Some(ProblemRow::Problem { path, line, col, .. }) = problem_rows(&self.all_problems(), root.as_deref()).into_iter().nth(i) else { return };
+        self.open_location(path.clone(), line, col, window, cx);
+        match &mut self.lsp.pending_reveal {
+            // Still opening: the fixes are asked for when it is in front.
+            Some((p, _, _, fix)) if *p == path => *fix = true,
+            _ => self.code_actions(&CodeActions, window, cx),
+        }
+    }
+
+    /// A location shown in its editor (`activate`), and its fixes asked for when Problems' Quick Fix… waits for them.
+    pub(super) fn reveal_location(&mut self, ed: Entity<EditorView>, (line, col): (u32, u32), fix: bool, window: &mut Window, cx: &mut Context<Self>) {
+        ed.update(cx, |e, cx| e.reveal_lsp(line, col, window, cx));
+        if fix {
+            self.code_actions(&CodeActions, window, cx);
         }
     }
 

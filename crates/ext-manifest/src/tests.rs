@@ -99,6 +99,23 @@ fn syntax_errors_point_at_the_line() {
     assert!(e[0].render(FILE_NAME, &text).starts_with("error[CY0101]: unknown field `titel`"));
 }
 
+/// Every unknown field at once, then the rest of the checks (e2e trial: one per run).
+#[test]
+fn every_unknown_field_is_reported_at_once() {
+    let text = with(
+        "[[commands]]\nid = \"x\"\ntitle = \"X\"\ncolour = \"red\"\n\n[[commands]]\nid = \"y\"\ntitle = \"Y\"\nicon = \"y\"\n\n[bogus]\nfoo = 1\nbar = 2\n\n[[snippets]]\nlanguage = \"rust\"\npath = \"/abs.json\"\n",
+    );
+    let e = errors(&text);
+    let unknown: Vec<_> = e.iter().filter(|d| d.code == Code::Syntax).map(|d| d.message.clone()).collect();
+    assert_eq!(unknown.len(), 3, "{unknown:?}");
+    assert!(unknown[0].contains("`colour`") && unknown[1].contains("`icon`") && unknown[2].contains("`bogus`"), "{unknown:?}");
+    // Each points at its own line in the author's text.
+    let lines: Vec<_> = e.iter().filter(|d| d.code == Code::Syntax).map(|d| d.line_col(&text).unwrap().0).collect();
+    assert!(lines.windows(2).all(|w| w[0] < w[1]), "{lines:?}");
+    // The problems after them are found too: the absolute snippet path.
+    assert!(e.iter().any(|d| d.code != Code::Syntax && d.message.contains("snippets path")), "{e:?}");
+}
+
 #[test]
 fn a_missing_extension_table_says_how_to_start() {
     let e = errors("[code]\nentry = \"Cargo.toml\"\n");
@@ -290,7 +307,7 @@ fn keybindings_resolve_their_command() {
     assert_eq!(cmds, vec!["a.b.go", "other.ext.open", "core:debug.start"]);
     assert_eq!(m.dependencies, vec![(ExtId::parse("other.ext").unwrap(), Version::parse("1.2.0").unwrap())]);
     assert_eq!(codes(&format!("{base}[[keybindings]]\nkey = \"cmd-x\"\ncommand = \"stranger.ext.x\"\n")), vec![Code::BadContribution]);
-    assert_eq!(codes(&format!("{base}[[keybindings]]\nkey = \"cmd--\"\ncommand = \"go\"\n")), vec![Code::BadContribution]);
+    assert_eq!(codes(&format!("{base}[[keybindings]]\nkey = \"cmd-\"\ncommand = \"go\"\n")), vec![Code::BadContribution]);
 }
 
 #[test]
@@ -356,6 +373,41 @@ fn every_error_code_is_distinct() {
     }
 }
 
+/// Every code a manifest can produce, from a manifest that produces it, printed with a fix line. CY0700 and CY0701 come
+/// from the component (ext-pkg's component_tests). docs/extensions/reference/errors.md lists them all (cyx's tests).
+#[test]
+fn every_error_code_has_an_example_with_a_fix_line() {
+    let code = "[code]\nentry = \"Cargo.toml\"\n";
+    let command = "[[commands]]\nid = \"go\"\ntitle = \"Go\"\n";
+    let examples = [
+        (Code::Syntax, with("[permissions]\nnett = [\"a.example.com\"]\n")),
+        (Code::TooLarge, format!("{THEME}\n#{}", "x".repeat(limits::MANIFEST_BYTES))),
+        (Code::BadId, THEME.replace("you.midnight", "Midnight")),
+        (Code::BadVersion, THEME.replace("0.1.0", "0.1")),
+        (Code::BadText, THEME.replace("name    = \"Midnight\"", "name = \"\"")),
+        (Code::BadPath, THEME.replace("themes/midnight.json", "/etc/passwd")),
+        (Code::BadPermission, with("[permissions]\nnet = [\"https://a.example.com/x\"]\n")),
+        (Code::NotDeclared, with("[[language-servers]]\ncommand = \"taplo\"\nlanguages = [\"toml\"]\n")),
+        (Code::WhyRequired, with(&format!("{code}{command}[permissions]\nread = [\"**\"]\nnet = [\"a.example.com\"]\n"))),
+        (Code::BadContribution, with(&format!("{code}[[views]]\nid = \"v\"\ntitle = \"V\"\nlocation = \"top\"\n"))),
+        (Code::DuplicateId, with(&format!("{code}{command}{command}"))),
+        (Code::NeedsCode, with(command)),
+        (Code::NeverActivates, with(code)),
+        (Code::BadWhen, with(&format!("{code}[[commands]]\nid = \"go\"\ntitle = \"Go\"\nenablement = \"secret.key\"\n"))),
+        (Code::BadDependency, with("[dependencies]\n\"a.b\" = \"1\"\n")),
+    ];
+    for c in Code::ALL {
+        let Some((_, text)) = examples.iter().find(|(e, _)| *e == c) else {
+            assert!(matches!(c, Code::BadComponent | Code::NeedsNewerCodeyard), "{} has no example here", c.as_str());
+            continue;
+        };
+        let e = errors(text);
+        let d = e.iter().find(|d| d.code == c).unwrap_or_else(|| panic!("{}: got {:?}", c.as_str(), codes(text)));
+        assert!(d.render(FILE_NAME, text).contains("\n   = fix: "), "{}", c.as_str());
+        assert!(!c.summary().is_empty() && !c.fix().is_empty(), "{}", c.as_str());
+    }
+}
+
 #[test]
 fn when_expressions() {
     let ctx = |k: &str| match k {
@@ -391,9 +443,21 @@ fn consent_lines_use_plain_words() {
         run: vec!["vercel".into()],
         ..Default::default()
     };
-    assert_eq!(p.describe(), vec!["Read vercel.json", "Connect to api.vercel.com", "Act as your GitHub account", "Run vercel with any arguments"]);
+    assert_eq!(p.describe(), vec!["Read vercel.json", "Connect to api.vercel.com (any port)", "Act as your GitHub account", "Run vercel with any arguments"]);
     let wide = Permissions { read: vec!["**".into()], net: vec!["*.com".into()], ..Default::default() };
     assert_eq!(wide.describe(), vec!["Read all files in the workspace", "Connect to any website"]);
+}
+
+#[test]
+fn the_sheet_calls_only_a_whole_workspace_glob_all_files() {
+    for g in ["**", "**/*", "./**", "**/**"] {
+        let p = Permissions { read: vec![g.into()], write: vec![g.into()], ..Default::default() };
+        assert_eq!(p.describe(), vec!["Read all files in the workspace", "Change all files in the workspace"], "{g}");
+    }
+    let p = Permissions { read: vec!["src/**/*.rs".into(), "notes/**".into()], write: vec!["*/x.json".into()], ..Default::default() };
+    assert_eq!(p.describe(), vec!["Read src/**/*.rs, notes/**", "Change */x.json"]);
+    let p = Permissions { read: vec!["src/**/*.rs".into(), "**".into()], ..Default::default() };
+    assert_eq!(p.describe(), vec!["Read all files in the workspace"]);
 }
 
 // Regressions from the hardening review of #50: each input once rated too low or was accepted.
@@ -523,4 +587,348 @@ fn more_shared_suffixes_are_any_host() {
     for h in ["*.s3.amazonaws.com", "*.ngrok.io", "*.workers.dev", "*.com.br"] {
         assert!(is_wide_host(h), "{h}");
     }
+}
+
+#[test]
+fn net_allows_exact_hosts_and_names_under_a_wildcard() {
+    let net: Vec<String> = vec!["api.vercel.com".into(), "*.example.com".into(), "*.co.uk".into()];
+    for h in ["api.vercel.com", "a.example.com", "a.b.example.com", "anything.co.uk"] {
+        assert!(net_allows(&net, h), "{h}");
+    }
+    for h in [
+        "vercel.com",
+        "x.api.vercel.com",
+        "api.vercel.com.evil.test",
+        "example.com",
+        "badexample.com",
+        ".example.com",
+        "a..example.com",
+        "a.example.com.",
+        "",
+        "co.uk",
+    ] {
+        assert!(!net_allows(&net, h), "{h}");
+    }
+    // `*` is refused by validation; even if it got through, it matches nothing.
+    assert!(!net_allows(&["*".into()], "api.x.com"));
+    assert!(!net_allows(&["*.".into()], "a."));
+    let p = Permissions { net: vec!["*.example.com".into()], ..Default::default() };
+    assert!(p.allows_host("api.example.com") && !p.allows_host("api.example.org"));
+}
+
+#[test]
+fn an_update_asks_only_for_what_is_new() {
+    let old = Permissions {
+        read: vec!["*.toml".into()],
+        net: vec!["api.x.com".into()],
+        clipboard: Clipboard::Write,
+        why: Some("Old reason.".into()),
+        ..Default::default()
+    };
+    // Fewer, or the same with another reason: nothing to ask.
+    assert!(Permissions { read: vec!["*.toml".into()], ..Default::default() }.added_since(&old).is_empty());
+    assert!(Permissions { why: Some("New reason.".into()), ..old.clone() }.added_since(&old).is_empty());
+    let new = Permissions {
+        read: vec!["*.toml".into(), "*.lock".into()],
+        net: vec!["api.x.com".into()],
+        clipboard: Clipboard::ReadWrite,
+        terminal: true,
+        ..Default::default()
+    };
+    let added = new.added_since(&old);
+    assert_eq!(added.describe(), ["Read *.lock", "Read the clipboard", "Type into terminals"]);
+    // A narrower entry than before is still a new one: entries compare as written.
+    let narrower = Permissions { net: vec!["v2.api.x.com".into()], ..Default::default() };
+    assert_eq!(narrower.added_since(&old).describe(), ["Connect to v2.api.x.com (any port)"]);
+}
+
+const ACME: &str = "[[oauth]]\nid = \"acme\"\nname = \"Acme\"\nauthorize-url = \"https://acme.example.com/oauth/authorize\"\ntoken-url = \"https://acme.example.com/oauth/token\"\nclient-id = \"cy-123\"\nscopes = [\"read\", \"deploy:write\"]\nhosts = [\"api.acme.example.com\"]\naccount-url = \"https://api.acme.example.com/me\"\n";
+
+#[test]
+fn an_oauth_provider_is_declared_and_named_in_auth() {
+    let m = parse(&with(&format!("[permissions]\nauth = [\"github\", \"acme\"]\nwhy = \"x\"\n{ACME}"))).unwrap();
+    let p = m.oauth_provider("acme").expect("declared");
+    assert_eq!(p.name, "Acme");
+    assert_eq!(p.token_url, "https://acme.example.com/oauth/token");
+    assert_eq!(p.scopes, ["read", "deploy:write"]);
+    assert_eq!(p.hosts, ["api.acme.example.com"]);
+    assert_eq!(p.account_url.as_deref(), Some("https://api.acme.example.com/me"));
+    assert!(m.oauth_provider("github").is_none(), "GitHub is built in");
+    // An `auth` entry that is neither built in nor declared.
+    let e = errors(&with("[permissions]\nauth = [\"acme\"]\n"));
+    assert_eq!(e[0].code, Code::NotDeclared);
+    assert!(e[0].fix.as_deref().is_some_and(|f| f.contains("[[oauth]]")), "{:?}", e[0].fix);
+    // A provider that `auth` does not name.
+    assert_eq!(codes(&with(&format!("[permissions]\nauth = [\"github\"]\n{ACME}"))), vec![Code::NotDeclared]);
+    // GitHub cannot be redeclared, and an id is used once.
+    let gh = ACME.replace("id = \"acme\"", "id = \"github\"");
+    assert_eq!(codes(&with(&format!("[permissions]\nauth = [\"github\"]\n{gh}"))), vec![Code::BadContribution]);
+    assert_eq!(codes(&with(&format!("[permissions]\nauth = [\"acme\"]\n{ACME}{ACME}"))), vec![Code::DuplicateId]);
+}
+
+/// #184: a provider with `instances = true` can be copied onto a self-managed host with the user's client id.
+#[test]
+fn an_oauth_provider_with_instances_moves_to_another_host() {
+    let forge = "[[oauth]]\nid = \"forge\"\nname = \"Forge\"\nauthorize-url = \"https://forge.example.com/oauth/authorize\"\ntoken-url = \"https://forge.example.com/oauth/token\"\nclient-id = \"cy-1\"\nscopes = [\"api\"]\nhosts = [\"forge.example.com\"]\naccount-url = \"https://forge.example.com/api/user\"\ninstances = true\n";
+    let m = parse(&with(&format!("[permissions]\nauth = [\"forge\"]\nwhy = \"x\"\n{forge}"))).unwrap();
+    let p = m.oauth_provider("forge").unwrap();
+    assert!(p.instances);
+    assert_eq!(p.home().as_deref(), Some("forge.example.com"));
+    let i = p.instance("git.corp.example", "abc").unwrap();
+    assert_eq!(i.id, "forge@git.corp.example");
+    assert_eq!(i.name, "Forge (git.corp.example)");
+    assert_eq!(i.authorize_url, "https://git.corp.example/oauth/authorize");
+    assert_eq!(i.token_url, "https://git.corp.example/oauth/token");
+    assert_eq!(i.account_url.as_deref(), Some("https://git.corp.example/api/user"));
+    assert_eq!(
+        (i.client_id.as_str(), i.hosts.as_slice(), i.scopes.as_slice()),
+        ("abc", ["git.corp.example".to_string()].as_slice(), ["api".to_string()].as_slice())
+    );
+    assert_eq!(crate::split_account(&i.id), ("forge", Some("git.corp.example")));
+    assert_eq!(crate::split_account("forge"), ("forge", None));
+    // Without `instances`, nothing moves.
+    let acme = parse(&with(&format!("[permissions]\nauth = [\"acme\"]\nwhy = \"x\"\n{ACME}"))).unwrap();
+    assert!(acme.oauth_provider("acme").unwrap().instance("git.corp.example", "abc").is_none());
+    // The URLs must share one host that `hosts` lists: Acme's account URL is on another host.
+    let e = errors(&with(&format!("[permissions]\nauth = [\"acme\"]\nwhy = \"x\"\n{ACME}instances = true\n")));
+    assert_eq!(e[0].code, Code::BadContribution);
+    assert!(e[0].message.contains("instances = true"), "{}", e[0].message);
+    let unlisted = forge.replace("hosts = [\"forge.example.com\"]", "hosts = [\"api.forge.example.com\"]");
+    assert_eq!(codes(&with(&format!("[permissions]\nauth = [\"forge\"]\nwhy = \"x\"\n{unlisted}"))), vec![Code::BadContribution]);
+}
+
+#[test]
+fn oauth_urls_are_https_with_a_host_name() {
+    let bad = [
+        ("token-url = \"https://acme.example.com/oauth/token\"", "token-url = \"http://acme.example.com/oauth/token\""),
+        ("token-url = \"https://acme.example.com/oauth/token\"", "token-url = \"https://10.0.0.1/token\""),
+        ("token-url = \"https://acme.example.com/oauth/token\"", "token-url = \"https://user:pw@acme.example.com/token\""),
+        ("token-url = \"https://acme.example.com/oauth/token\"", "token-url = \"https://localhost/token\""),
+        ("authorize-url = \"https://acme.example.com/oauth/authorize\"", "authorize-url = \"javascript:alert(1)\""),
+        ("authorize-url = \"https://acme.example.com/oauth/authorize\"", "authorize-url = \"https://acme.example.com/a#frag\""),
+        ("account-url = \"https://api.acme.example.com/me\"", "account-url = \"file:///etc/passwd\""),
+        ("hosts = [\"api.acme.example.com\"]", "hosts = [\"*\"]"),
+        ("hosts = [\"api.acme.example.com\"]", "hosts = []"),
+        ("client-id = \"cy-123\"", "client-id = \"a&redirect_uri=x\""),
+        ("scopes = [\"read\", \"deploy:write\"]", "scopes = [\"read write\"]"),
+    ];
+    for (from, to) in bad {
+        let text = with(&format!("[permissions]\nauth = [\"acme\"]\n{}", ACME.replace(from, to)));
+        assert!(parse(&text).is_err(), "{to}");
+    }
+    assert_eq!(check_https_url("https://auth.example.com:8443/token?x=1").as_deref(), Ok("auth.example.com"));
+    assert!(check_https_url("https://auth.example.com:99999/").is_err());
+    // An unknown field is an error, as everywhere in the manifest.
+    let typo = ACME.replace("client-id", "client_id");
+    assert_eq!(codes(&with(&format!("[permissions]\nauth = [\"acme\"]\n{typo}"))), vec![Code::Syntax]);
+}
+
+const CODE: &str = "[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n[[views]]\nid = \"list\"\ntitle = \"List\"\nlocation = \"sidebar\"\n[dependencies]\n\"other.ext\" = \"1\"\n";
+
+#[test]
+fn menus_name_a_command_a_place_and_for_view_titles_a_view() {
+    let base = with(CODE);
+    let m = parse(&format!(
+        "{base}[[menus]]\ncommand = \"go\"\nlocation = \"editor-context\"\nwhen = \"editor.language == 'rust'\"\n\
+         [[menus]]\ncommand = \"other.ext.open\"\nlocation = \"file-tree\"\n\
+         [[menus]]\ncommand = \"go\"\nlocation = \"view-title\"\nview = \"list\"\n"
+    ))
+    .unwrap();
+    let menus = &m.contributions.menus;
+    assert_eq!(
+        menus.iter().map(|m| (m.command.as_str(), m.location)).collect::<Vec<_>>(),
+        [("a.b.go", MenuLocation::EditorContext), ("other.ext.open", MenuLocation::FileTree), ("a.b.go", MenuLocation::ViewTitle)]
+    );
+    assert_eq!(menus[2].view.as_deref(), Some("a.b.list"));
+    assert_eq!(menus[0].when.as_deref(), Some("editor.language == 'rust'"));
+    for bad in [
+        "[[menus]]\ncommand = \"stranger.ext.x\"\nlocation = \"file-tree\"\n",
+        "[[menus]]\ncommand = \"go\"\nlocation = \"toolbar\"\n",
+        "[[menus]]\ncommand = \"go\"\nlocation = \"view-title\"\n",
+        "[[menus]]\ncommand = \"go\"\nlocation = \"view-title\"\nview = \"nope\"\n",
+        "[[menus]]\ncommand = \"go\"\nlocation = \"file-tree\"\nview = \"list\"\n",
+    ] {
+        assert_eq!(codes(&format!("{base}{bad}")), vec![Code::BadContribution], "{bad}");
+    }
+    assert_eq!(codes(&format!("{base}[[menus]]\ncommand = \"go\"\nlocation = \"file-tree\"\nwhen = \"editor &&\"\n")), vec![Code::BadWhen]);
+}
+
+#[test]
+fn menus_may_name_listed_core_commands_that_need_no_argument() {
+    let base = with(CODE);
+    let m = parse(&format!("{base}[[menus]]\ncommand = \"core:workbench.saveAll\"\nlocation = \"view-title\"\nview = \"list\"\n")).unwrap();
+    assert_eq!(m.contributions.menus[0].command, "core:workbench.saveAll");
+    for bad in ["core:workbench.quit", "core:editor.open"] {
+        let text = format!("{base}[[menus]]\ncommand = \"{bad}\"\nlocation = \"file-tree\"\n");
+        assert_eq!(codes(&text), vec![Code::BadContribution], "{bad}");
+    }
+}
+
+#[test]
+fn status_items_have_local_ids_and_their_own_commands() {
+    let base = with(CODE);
+    let m = parse(&format!("{base}[[status-bar]]\nid = \"deploy\"\ncommand = \"go\"\n[[status-bar]]\nid = \"count\"\n")).unwrap();
+    let items: Vec<_> = m.contributions.status_items.iter().map(|s| (s.id.as_str(), s.command.as_deref())).collect();
+    assert_eq!(items, [("a.b.deploy", Some("a.b.go")), ("a.b.count", None)]);
+    assert_eq!(codes(&format!("{base}[[status-bar]]\nid = \"x\"\n[[status-bar]]\nid = \"x\"\n")), vec![Code::DuplicateId]);
+    assert_eq!(codes(&format!("{base}[[status-bar]]\nid = \"x\"\ncommand = \"nope\"\n")), vec![Code::BadContribution]);
+}
+
+#[test]
+fn providers_declare_languages_and_start_the_extension_for_them() {
+    let m = parse(&with(
+        "[code]\nentry = \"Cargo.toml\"\n[[formatters]]\nlanguages = [\"toml\"]\n[[code-actions]]\nlanguages = [\"toml\", \"rust\"]\n\
+         [[diagnostics]]\nid = \"todos\"\nlanguages = [\"rust\"]\n[[decorations]]\nid = \"coverage\"\nlanguages = [\"rust\", \"rust\"]\n[[tasks]]\nid = \"deploys\"\n",
+    ))
+    .unwrap();
+    let c = &m.contributions;
+    assert!(c.formatters[0].handles("toml") && !c.formatters[0].handles("rust"));
+    assert_eq!(c.diagnostics[0].id, "a.b.todos");
+    assert_eq!(c.decorations[0].languages, ["rust"], "a language named twice counts once");
+    assert_eq!(c.tasks, ["a.b.deploys"]);
+    assert_eq!(m.activation, [Activation::Language("toml".into()), Activation::Language("rust".into()), Activation::Tasks]);
+    // Providers run code, so they need [code]; and they need a language that looks like one.
+    assert_eq!(codes(&with("[[formatters]]\nlanguages = [\"toml\"]\n")), vec![Code::NeedsCode]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[formatters]]\nlanguages = []\n")), vec![Code::BadContribution, Code::NeverActivates]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[code-actions]]\nlanguages = [\"rust\", \"C++\"]\n")), vec![Code::BadContribution]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[diagnostics]]\nid = \"Bad\"\nlanguages = [\"rust\"]\n")), vec![Code::BadContribution]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[formatters]]\nlanguage = \"toml\"\n")), vec![Code::Syntax]);
+}
+
+#[test]
+fn hover_and_completion_declare_languages_and_trigger_characters() {
+    let m = parse(&with(
+        "[code]\nentry = \"Cargo.toml\"\n[[hover]]\nlanguages = [\"toml\"]\n[[completion]]\nlanguages = [\"toml\", \"rust\"]\ntrigger-characters = [\".\", \":\", \".\"]\n",
+    ))
+    .unwrap();
+    let c = &m.contributions;
+    assert!(c.hover[0].handles("toml") && !c.hover[0].handles("rust"));
+    assert!(c.completion[0].handles("rust"));
+    assert_eq!(c.completion[0].trigger_characters, ['.', ':'], "a character named twice counts once");
+    assert_eq!(m.activation, [Activation::Language("toml".into()), Activation::Language("rust".into())]);
+    // Without trigger characters, typing a word or asking still works.
+    let m = parse(&with("[code]\nentry = \"Cargo.toml\"\n[[completion]]\nlanguages = [\"toml\"]\n")).unwrap();
+    assert!(m.contributions.completion[0].trigger_characters.is_empty());
+    assert_eq!(codes(&with("[[hover]]\nlanguages = [\"toml\"]\n")), vec![Code::NeedsCode]);
+    assert_eq!(codes(&with("[[completion]]\nlanguages = [\"toml\"]\n")), vec![Code::NeedsCode]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[hover]]\nlanguages = []\n")), vec![Code::BadContribution, Code::NeverActivates]);
+    for bad in ["\"ab\"", "\"a\"", "\" \"", "\"\"", "\"_\"", "\"\\u202e\""] {
+        let toml = format!("[code]\nentry = \"Cargo.toml\"\n[[completion]]\nlanguages = [\"toml\"]\ntrigger-characters = [{bad}]\n");
+        assert_eq!(codes(&with(&toml)), vec![Code::BadContribution], "{bad}");
+    }
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[completion]]\nlanguages = [\"toml\"]\ntrigger = [\".\"]\n")), vec![Code::Syntax]);
+}
+
+#[test]
+fn code_lenses_and_inlay_hints_declare_languages_and_start_the_extension_for_them() {
+    let m = parse(&with("[code]\nentry = \"Cargo.toml\"\n[[code-lens]]\nlanguages = [\"rust\"]\n[[inlay-hints]]\nlanguages = [\"toml\", \"rust\"]\n")).unwrap();
+    let c = &m.contributions;
+    assert!(c.code_lenses[0].handles("rust") && !c.code_lenses[0].handles("toml"));
+    assert_eq!(c.inlay_hints[0].languages, ["toml", "rust"]);
+    assert!(c.needs_code());
+    assert_eq!(m.activation, [Activation::Language("rust".into()), Activation::Language("toml".into())]);
+    assert_eq!(codes(&with("[[code-lens]]\nlanguages = [\"rust\"]\n")), vec![Code::NeedsCode]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[inlay-hints]]\nlanguages = []\n")), vec![Code::BadContribution, Code::NeverActivates]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[code-lens]]\nlanguages = [\"rust\", \"C++\"]\n")), vec![Code::BadContribution]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[code-lens]]\nlanguage = \"rust\"\n")), vec![Code::Syntax]);
+}
+
+/// #146: a `run` entry inside the package is a native program, built per platform.
+#[test]
+fn native_programs_are_run_entries_inside_the_package() {
+    let m = parse(&format!(
+        "{}\n[permissions]\nrun = [\"./bin/server\", \"git\"]\nwhy = \"Runs its server.\"\n",
+        "[extension]\nid = \"you.lsp\"\nversion = \"1.0.0\"\nname = \"Lsp\"\nlicense = \"MIT\""
+    ))
+    .unwrap();
+    assert!(m.has_native_programs());
+    assert_eq!(m.permissions.package_programs().collect::<Vec<_>>(), ["./bin/server"]);
+    assert_eq!(crate::program_file("./bin/server", "x86_64-unknown-linux-musl"), "bin/server");
+    assert_eq!(crate::program_file("bin/server", "aarch64-pc-windows-msvc"), "bin/server.exe");
+    assert_eq!(crate::program_file("bin/server.exe", "x86_64-pc-windows-msvc"), "bin/server.exe");
+    assert!(crate::TARGETS.iter().all(|t| crate::is_target(t)));
+    assert_eq!(crate::target_for("x86_64", "linux"), Some("x86_64-unknown-linux-musl"));
+    assert_eq!(crate::target_for("aarch64", "macos"), Some("aarch64-apple-darwin"));
+    assert_eq!(crate::target_for("riscv64", "linux"), None);
+    assert!(crate::this_target().is_none_or(crate::is_target));
+    let path_only =
+        parse("[extension]\nid = \"you.lsp\"\nversion = \"1.0.0\"\nname = \"Lsp\"\nlicense = \"MIT\"\n[permissions]\nrun = [\"git\"]\nwhy = \"Runs git.\"\n")
+            .unwrap();
+    assert!(!path_only.has_native_programs());
+}
+
+#[test]
+fn scm_providers_claim_folders_by_marker_and_start_the_extension_there() {
+    let code = "[code]\nentry = \"Cargo.toml\"\n";
+    let m = parse(&with(&format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"Mercurial\"\nmarkers = [\".hg\", \".hg\", \".hg/store\"]\n"))).unwrap();
+    let s = &m.contributions.scm[0];
+    assert_eq!((s.id.as_str(), s.label.as_str()), ("a.b.hg", "Mercurial"));
+    assert_eq!(s.markers, [".hg", ".hg/store"], "a marker named twice counts once");
+    assert_eq!(m.activation, [Activation::Scm("a.b.hg".into())]);
+    assert!(m.contributions.needs_code());
+    assert_eq!(codes(&with("[[scm]]\nid = \"hg\"\nlabel = \"Mercurial\"\nmarkers = [\".hg\"]\n")), vec![Code::NeedsCode]);
+    assert_eq!(codes(&with(&format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"Mercurial\"\nmarkers = []\n"))), vec![Code::BadContribution]);
+    for bad in ["*.hg", "../.hg", "/repo/.hg", ".hg/"] {
+        let text = with(&format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"Mercurial\"\nmarkers = [\"{bad}\"]\n"));
+        assert_eq!(codes(&text), vec![Code::BadPath], "{bad}");
+    }
+    let twice = format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"A\"\nmarkers = [\".hg\"]\n[[scm]]\nid = \"hg\"\nlabel = \"B\"\nmarkers = [\".hg\"]\n");
+    assert_eq!(codes(&with(&twice)), vec![Code::DuplicateId]);
+    assert_eq!(codes(&with(&format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"\"\nmarkers = [\".hg\"]\n"))), vec![Code::BadText]);
+    assert_eq!(codes(&with(&format!("{code}[[scm]]\nid = \"hg\"\nmarkers = [\".hg\"]\n"))), vec![Code::Syntax]);
+}
+
+#[test]
+fn a_denial_no_entry_can_lift_names_its_reason() {
+    let line = crate::ungrantable_line("read file:///etc/passwd", "the file is outside the workspace");
+    assert_eq!(line, "read file:///etc/passwd (cannot be granted: the file is outside the workspace)");
+    assert_eq!(crate::parse_ungrantable_line(&line), Some(("read file:///etc/passwd", "the file is outside the workspace")));
+    assert_eq!(crate::parse_ungrantable_line("net = [\"api.example.com\"]"), None);
+    for ip in ["127.0.0.1", "[::1]", "::1", "127.1", "2130706433", "0x7f.1", "0x7f.0x1", "10.0.0.256"] {
+        assert!(crate::is_ip_address(ip), "{ip}");
+    }
+    for name in ["api.example.com", "1password.com", "x1.example.org", "a.b.c0m"] {
+        assert!(!crate::is_ip_address(name), "{name}");
+    }
+}
+
+/// `net-from-setting`: a string setting names the server; the sheet says so, and it counts as sending.
+#[test]
+fn net_from_setting_names_a_string_setting() {
+    let code = "[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n";
+    let setting = "[settings.server]\ntype = \"string\"\ndescription = \"Your GitHub Enterprise host\"\n";
+    let m = parse(&with(&format!("{code}[permissions]\nnet-from-setting = \"server\"\n{setting}"))).unwrap();
+    assert_eq!(m.permissions.net_from_setting.as_deref(), Some("server"));
+    assert_eq!(m.permissions.describe(), ["Connect to a server you allow, named in its “server” setting"]);
+    assert_eq!(risk(&m.permissions).sends, ["net"]);
+    // With secrets it can send what it reads: high risk, so `why` is required.
+    assert!(codes(&with(&format!("{code}[permissions]\nnet-from-setting = \"server\"\nsecrets = true\n{setting}"))).contains(&Code::WhyRequired));
+    // The setting must exist and hold a string.
+    let missing = errors(&with(&format!("{code}[permissions]\nnet-from-setting = \"host\"\n{setting}")));
+    assert!(missing.iter().any(|d| d.message.contains("net-from-setting 'host' is not one of the extension's settings")), "{missing:?}");
+    let number = errors(&with(&format!("{code}[permissions]\nnet-from-setting = \"n\"\n[settings.n]\ntype = \"number\"\ndescription = \"N\"\n")));
+    assert!(number.iter().any(|d| d.message.contains("is not a string setting")), "{number:?}");
+    // An update that adds it asks; one that keeps it does not.
+    let old = Permissions::default();
+    assert_eq!(m.permissions.added_since(&old).describe(), m.permissions.describe());
+    assert!(m.permissions.added_since(&m.permissions).is_empty());
+    assert_eq!(
+        crate::user_host_fix(&crate::user_host_line("ghe.example.com")).unwrap(),
+        "the user has not allowed \"ghe.example.com\": they add it on the extension page with Allow Host…"
+    );
+}
+
+/// Key bindings name real modifiers and keys (e2e trial: "hyper-banana" passed `cyx check` and never fired).
+#[test]
+fn key_bindings_name_real_keys() {
+    use crate::validate::check_key;
+    for ok in ["cmd-shift-r", "ctrl-k ctrl-r", "ctrl--", "alt-f12", "secondary-/", "shift-enter", "pageup", "a", "cmd-alt-shift-z"] {
+        assert_eq!(check_key(ok), Ok(()), "{ok}");
+    }
+    for bad in ["hyper-banana", "cmd-banana", "ctrl-", "cmd--shift", "ctrl-k  ctrl-r", "", "f36", "cmd-shift"] {
+        assert!(check_key(bad).is_err(), "{bad}");
+    }
+    assert!(check_key("hyper-banana").unwrap_err().contains("'hyper', which is not a modifier"));
+    let text = with("[[keybindings]]\nkey = \"hyper-banana\"\ncommand = \"core:workbench.toggleZenMode\"\n");
+    assert_eq!(errors(&text).iter().map(|d| d.code).collect::<Vec<_>>(), [Code::BadContribution]);
 }

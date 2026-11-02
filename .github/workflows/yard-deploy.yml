@@ -1,0 +1,49 @@
+# Build yard for the registry's server (Linux x86_64) and install it there (docs/registry.md, "Deploy"). Run by hand;
+# the `yard` environment can require an approval. The binary is also kept as an artifact for setup.sh. The server
+# key can only install a yard binary that runs and restart the service (deploy/yard/install-binary).
+name: yard-deploy
+on:
+  workflow_dispatch:
+    inputs:
+      install:
+        description: Install it on the server (else only build the artifact)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yard-deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: yard
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: yard-deploy
+      - run: cargo build --release --locked -p yard
+      - run: target/release/yard --version
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
+        with:
+          name: yard-linux-x86_64
+          path: target/release/yard
+          retention-days: 30
+      - name: Install on the server
+        if: inputs.install && vars.YARD_SSH_HOST != ''
+        env:
+          SSH_KEY: ${{ secrets.YARD_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.YARD_SSH_KNOWN_HOSTS }}
+          HOST: ${{ vars.YARD_SSH_HOST }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes "deploy@$HOST" < target/release/yard

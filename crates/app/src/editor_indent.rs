@@ -14,8 +14,11 @@ impl EditorView {
     /// (indent is spaces?, width): the folder's setting if there is one, otherwise the global setting.
     pub(super) fn indent_prefs(&self, cx: &App) -> (Option<bool>, Option<usize>) {
         let s = cx.global::<Settings>();
-        let f = self.folder.as_deref();
-        (f.and_then(|f| f.insert_spaces).or(s.insert_spaces), f.and_then(|f| f.tab_size).or(s.tab_size))
+        match self.folder.as_deref() {
+            // Fully resolved for its own folder: "not set" means guess from the file, not the first folder's value.
+            Some(f) if f.isolated => (f.insert_spaces, f.tab_size),
+            f => (f.and_then(|f| f.insert_spaces).or(s.insert_spaces), f.and_then(|f| f.tab_size).or(s.tab_size)),
+        }
     }
 
     /// Folder setting (files in additional folders): the indent is re-resolved when it changes.

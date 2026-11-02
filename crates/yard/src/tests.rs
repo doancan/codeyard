@@ -39,7 +39,7 @@ impl Test {
         let dir = std::env::temp_dir().join(format!("yard-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let authority = Authority::new();
-        let cfg = init(&dir, "yard.test", &authority.fulcio_pem(), &authority.rekor_pem(), NOW).unwrap();
+        let cfg = init(&dir, "yard.test", &authority.fulcio_pem(), &authority.rekor_pem(), None, NOW).unwrap();
         let yard = Yard::open(Config::load(&cfg).unwrap()).unwrap();
         Test { dir, authority, yard }
     }
@@ -98,6 +98,55 @@ fn a_published_package_is_in_the_signed_index_and_on_disk() {
     assert_eq!(r.size, on_disk.len() as u64);
     assert_eq!(r.permissions, y::permission_digest(&ext_pkg::read(&on_disk).unwrap().manifest));
     assert!(v.index.expires <= NOW + 60 + y::INDEX_LIFETIME_SECS && !v.stale);
+}
+
+#[test]
+fn the_market_page_is_the_manifest_and_readme_with_its_digest_in_the_index() {
+    let t = Test::new("details");
+    let me = github(7, 42);
+    let long = "A line of the README.\n".repeat(y::MAX_README_BYTES / 10);
+    let m = manifest("you.night", "1.0.0", "Night", "[[themes]]\nlabel = \"Night\"\npath = \"t.json\"\n");
+    let pkg = package_with(&m, &[("t.json", THEME), ("README.md", &long)]);
+    t.publish(&pkg, &me).unwrap();
+    let r = t.release("you.night", "1.0.0");
+    let bytes = std::fs::read(t.dir.join("public/packages").join(format!("{}.details.json", r.digest))).unwrap();
+    assert_eq!(r.details.as_deref(), Some(y::Details::digest(&bytes).as_str()));
+    let d: y::Details = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(d.manifest, m);
+    let readme = d.readme.unwrap();
+    assert!(d.readme_cut && readme.len() <= y::MAX_README_BYTES && readme.ends_with('\n') && long.starts_with(&readme));
+    assert!(bytes.len() <= y::MAX_DETAILS_BYTES);
+    // Without a README there is none, and nothing is cut.
+    t.publish(&package("you.day", "1.0.0", "Day"), &me).unwrap();
+    let r = t.release("you.day", "1.0.0");
+    let d: y::Details = serde_json::from_slice(&std::fs::read(t.dir.join("public/packages").join(format!("{}.details.json", r.digest))).unwrap()).unwrap();
+    assert_eq!((d.readme, d.readme_cut), (None, false));
+}
+
+#[test]
+fn versions_published_before_details_get_them_on_the_next_start() {
+    let t = Test::new("details-later");
+    let pkg = package("you.night", "1.0.0", "Night");
+    t.publish(&pkg, &github(7, 42)).unwrap();
+    let digest = pkg.1.hex();
+    let details = t.dir.join("public/packages").join(format!("{digest}.details.json"));
+    // As a registry from before details files: no file, no digest.
+    std::fs::remove_file(&details).unwrap();
+    {
+        let mut conn = t.yard.lock();
+        let tx = conn.transaction().unwrap();
+        assert!(db::releases_without_details(&tx).unwrap().is_empty());
+        let mut release: y::Release = serde_json::from_str(&tx.query_row("SELECT release FROM versions", [], |r| r.get::<_, String>(0)).unwrap()).unwrap();
+        release.details = None;
+        db::put_release(&tx, &ExtId::parse("you.night").unwrap(), &release).unwrap();
+        assert_eq!(db::releases_without_details(&tx).unwrap().len(), 1);
+        tx.commit().unwrap();
+    }
+    let cfg = Config::load(&t.dir.join("yard.json")).unwrap();
+    let again = Yard::open(cfg).unwrap();
+    again.resign(NOW + 120).unwrap();
+    let r = t.release("you.night", "1.0.0");
+    assert_eq!(r.details.as_deref(), Some(y::Details::digest(&std::fs::read(&details).unwrap()).as_str()));
 }
 
 #[test]
@@ -161,8 +210,13 @@ fn what_is_signed_must_be_what_is_uploaded() {
 #[test]
 fn code_waits_for_phase_2() {
     let t = Test::new("code");
-    let pkg =
-        package_with(&manifest("you.code", "1.0.0", "Code", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n"), &[("main.ts", "")]);
+    let manifest = manifest("you.code", "1.0.0", "Code", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n");
+    let pkg = ext_pkg::write(vec![
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.into_bytes(), executable: false },
+        ext_pkg::Entry { path: "main.ts".into(), data: vec![], executable: false },
+        ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: ext_pkg::testing::COMPONENT.to_vec(), executable: false },
+    ])
+    .unwrap();
     let e = t.publish(&pkg, &github(7, 42)).unwrap_err();
     assert!(matches!(&e, Error::Invalid(m) if m.contains("data-only")), "{e:?}");
 }
@@ -211,6 +265,36 @@ fn the_security_role_revokes_and_clears_advisory_fixes() {
     assert!(matches!(t.yard.revoke(&id, &Version::parse("3.0.0").unwrap(), "x", NOW), Err(Error::NotFound(_))));
 }
 
+/// What `yard status` and the hourly alert check read: the served index, the online key and the review queue.
+#[test]
+fn health_reports_expiry_and_counts_and_names_the_problem() {
+    let t = Test::new("health");
+    let me = github(7, 42);
+    t.publish(&package("you.night", "1.0.0", "Night"), &me).unwrap();
+    t.publish(&package("you.night", "1.0.1", "Night"), &me).unwrap();
+    t.yard.revoke(&ExtId::parse("you.night").unwrap(), &Version::parse("1.0.0").unwrap(), "Bad.", NOW).unwrap();
+    let h = t.yard.health().unwrap();
+    assert_eq!((h.extensions, h.versions, h.revoked, h.waiting_for_review), (1, 2, 1, 0));
+    assert_eq!(h.index_expires, NOW + y::INDEX_LIFETIME_SECS);
+    assert_eq!(h.online_expires, NOW + ONLINE_KEY_LIFETIME_SECS);
+    assert_eq!(h.problem(NOW, 24, 14), None);
+    // Signed daily, so with 48 h or less left a signing was missed; the alert fires inside the last 24 h.
+    assert_eq!(h.problem(NOW + 47 * 3600, 24, 14), None);
+    assert!(h.problem(NOW + 49 * 3600, 24, 14).unwrap().contains("expires in 23 h"));
+    assert!(h.problem(NOW + y::INDEX_LIFETIME_SECS, 24, 14).unwrap().contains("has expired"));
+    // A signing as of 73 h ago (`yard resign --expired`) is already expired.
+    t.yard.resign(NOW - y::INDEX_LIFETIME_SECS - 3600).unwrap();
+    assert!(t.yard.health().unwrap().problem(NOW, 24, 14).unwrap().contains("has expired"));
+    // 13 days before the online key expires, with the index signed that day: rotate.
+    let day77 = NOW + ONLINE_KEY_LIFETIME_SECS - 13 * 86400;
+    t.yard.resign(day77).unwrap();
+    let h = t.yard.health().unwrap();
+    assert!(h.problem(day77, 24, 14).unwrap().contains("online key expires in 13 days"), "{h:?}");
+    let text = h.metrics();
+    assert!(text.contains(&format!("\nyard_index_version {}\n", h.index_version)), "{text}");
+    assert!(text.contains("\nyard_versions_revoked 1\n") && text.contains("\nyard_reviews_waiting 0\n"), "{text}");
+}
+
 #[test]
 fn every_signing_raises_the_index_version_and_counts_downloads() {
     let t = Test::new("counter");
@@ -242,7 +326,7 @@ fn the_index_never_outlives_the_online_key() {
 #[test]
 fn opening_checks_the_online_key_and_init_refuses_twice() {
     let t = Test::new("open");
-    assert!(init(&t.dir, "yard.test", &t.authority.fulcio_pem(), &t.authority.rekor_pem(), NOW).unwrap_err().contains("already has a registry"));
+    assert!(init(&t.dir, "yard.test", &t.authority.fulcio_pem(), &t.authority.rekor_pem(), None, NOW).unwrap_err().contains("already has a registry"));
     let mut cfg = t.yard.config().clone();
     cfg.online_key = t.dir.join("keys/root.key");
     assert!(Yard::open(cfg).err().unwrap().contains("is not the online key"));
@@ -251,7 +335,76 @@ fn opening_checks_the_online_key_and_init_refuses_twice() {
         use std::os::unix::fs::PermissionsExt as _;
         assert_eq!(std::fs::metadata(t.dir.join("keys/online.key")).unwrap().permissions().mode() & 0o777, 0o600);
     }
-    assert!(init(&t.dir.join("x"), "yard.test", "nope", "nope", NOW).is_err());
+    assert!(init(&t.dir.join("x"), "yard.test", "nope", "nope", None, NOW).is_err());
+}
+
+/// A raw request; the response's head (status line and headers), lower-cased header names.
+fn raw(addr: std::net::SocketAddr, request: &str) -> String {
+    let mut s = std::net::TcpStream::connect(addr).unwrap();
+    s.write_all(request.as_bytes()).unwrap();
+    let mut out = Vec::new();
+    s.read_to_end(&mut out).unwrap();
+    let end = out.windows(4).position(|w| w == b"\r\n\r\n").unwrap_or(out.len());
+    let head = String::from_utf8_lossy(&out[..end]).into_owned();
+    head.lines().map(|l| l.split_once(": ").map_or(l.to_string(), |(k, v)| format!("{}: {v}", k.to_ascii_lowercase()))).collect::<Vec<_>>().join("\n")
+}
+
+/// The production path: the root keys are made off the server, the root waits for a threshold of their signatures,
+/// and every 90 days the next online key goes live only once the holders signed the root that names it.
+#[test]
+fn the_root_key_ceremony_and_an_online_key_rotation() {
+    let dir = std::env::temp_dir().join(format!("yard-ceremony-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let authority = Authority::new();
+    let holders: Vec<SigningKey> = (0..3).map(|_| SigningKey::generate().unwrap().0).collect();
+    let trust = RootKeys { keys: holders.iter().map(SigningKey::public).collect(), threshold: 2 };
+    let cfg = init(&dir, "yard.test", &authority.fulcio_pem(), &authority.rekor_pem(), Some(trust.clone()), NOW).unwrap();
+    assert!(!dir.join("keys/root.key").exists() && !dir.join("root-key.txt").exists(), "no root key on the server");
+    assert_eq!(Config::load(&cfg).unwrap().trust(), Some(trust.clone()));
+    let sign = |file: &std::path::Path, who: &[usize]| {
+        let bytes = std::fs::read(file).unwrap();
+        let mut sig = std::fs::read_to_string(sig_path(file)).unwrap();
+        for &i in who {
+            sig = y::add_signature(&sig, &holders[i], y::Role::Root, &bytes).unwrap();
+        }
+        std::fs::write(sig_path(file), sig).unwrap();
+    };
+    let client = |at: u64| {
+        let read = |n: &str| std::fs::read(dir.join("public").join(n)).unwrap();
+        let files = [read("root.json"), read("root.json.sig"), read("index.json"), read("index.json.sig")];
+        y::verify(&trust, [&files[0], &files[1], &files[2], &files[3]], at, Seen::default())
+    };
+    // Unsigned, clients refuse it; with two of the three holders, they accept it.
+    Yard::open(Config::load(&cfg).unwrap()).unwrap().resign(NOW).unwrap();
+    assert!(matches!(client(NOW).unwrap_err(), y::Error::Signature { valid: 0, needed: 2, .. }));
+    sign(&dir.join("root.json"), &[0, 2]);
+    Yard::open(Config::load(&cfg).unwrap()).unwrap().resign(NOW).unwrap();
+    assert_eq!(client(NOW).unwrap().root.version, 1);
+
+    // 80 days later: rotate. One signature is not enough to promote; two are.
+    let later = NOW + 80 * 86400;
+    let next = rotate(&cfg, later).unwrap();
+    assert!(rotate(&cfg, later).unwrap_err().contains("rotation is under way"));
+    sign(&next, &[1]);
+    assert!(promote(&cfg, later).unwrap_err().contains("1 valid signature"), "one holder alone cannot change the root");
+    assert_eq!(client(later).unwrap().root.version, 1, "nothing changed");
+    sign(&next, &[2]);
+    assert_eq!(promote(&cfg, later).unwrap(), 2);
+    // Past the first key's 90 days the service still signs, and clients accept it.
+    let past = NOW + 95 * 86400;
+    Yard::open(Config::load(&cfg).unwrap()).unwrap().resign(past).unwrap();
+    let v = client(past).unwrap();
+    assert_eq!(v.root.version, 2);
+    assert!(!v.stale);
+    assert!(!next.exists() && !dir.join("keys/online.next.key").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn promote_needs_the_root_keys_in_the_config() {
+    let t = Test::new("promote-dev");
+    rotate(&t.dir.join("yard.json"), NOW).unwrap();
+    assert!(promote(&t.dir.join("yard.json"), NOW).unwrap_err().contains("no root-keys"));
 }
 
 /// One HTTP/1.1 request on a fresh connection: (status, body).
@@ -292,14 +445,30 @@ fn the_http_service_end_to_end() {
     assert_eq!(status, 200);
     assert_eq!(index, std::fs::read(dir.join("public/index.json")).unwrap());
     assert_eq!(request(addr, "GET", "/root.json.sig", b"").0, 200);
+    // The daily conditional request: unchanged, nothing is sent; no cache may answer without asking.
+    let head = raw(addr, "GET /index.json HTTP/1.1\r\nHost: yard\r\nConnection: close\r\n\r\n");
+    assert!(head.contains("cache-control: no-cache"), "{head}");
+    let tag = head.lines().find_map(|l| l.strip_prefix("etag: ")).unwrap().trim().to_string();
+    let again = raw(addr, &format!("GET /index.json HTTP/1.1\r\nHost: yard\r\nIf-None-Match: {tag}\r\nConnection: close\r\n\r\n"));
+    assert!(again.starts_with("HTTP/1.1 304"), "{again}");
+    let pkg_head = raw(addr, &format!("GET /packages/{}.cyx HTTP/1.1\r\nHost: yard\r\nConnection: close\r\n\r\n", digest.hex()));
+    assert!(pkg_head.contains("cache-control: private"), "a CDN must not keep packages, or downloads go uncounted: {pkg_head}");
     let (status, pkg) = request(addr, "GET", &format!("/packages/{}.cyx", digest.hex()), b"");
     assert_eq!((status, pkg), (200, bytes));
     let (status, served) = request(addr, "GET", &format!("/packages/{}.sigstore.json", digest.hex()), b"");
     assert_eq!((status, served), (200, bundle.clone()), "the publisher signature, as uploaded");
+    let (status, page) = request(addr, "GET", &format!("/packages/{}.details.json", digest.hex()), b"");
+    assert_eq!((status, page), (200, std::fs::read(dir.join(format!("public/packages/{}.details.json", digest.hex()))).unwrap()));
+    assert_eq!(request(addr, "GET", "/packages/zz.details.json", b"").0, 404);
     assert_eq!(request(addr, "GET", "/packages/../yard.sigstore.json", b"").0, 404);
     assert_eq!(request(addr, "GET", "/packages/zz.cyx", b"").0, 404);
     assert_eq!(request(addr, "GET", "/yard.sqlite", b"").0, 404, "only the public files are served");
     assert_eq!(request(addr, "DELETE", "/index.json", b"").0, 405);
+    // Monitoring on the server: the metrics name the served index.
+    let (status, metrics) = request(addr, "GET", "/metrics", b"");
+    let metrics = String::from_utf8(metrics).unwrap();
+    assert_eq!(status, 200);
+    assert!(metrics.contains("# TYPE yard_index_expires_timestamp_seconds gauge\n") && metrics.contains("\nyard_versions 1\n"), "{metrics}");
 
     let statement = StatusChange::Yank.statement(&p.id, &p.version);
     let (status, body) = request(addr, "POST", "/v1/status", &y::frame(&t.authority.sign(&statement, &me, http::now()), &statement));
@@ -317,4 +486,120 @@ fn the_http_service_end_to_end() {
 #[test]
 fn the_production_pins_load() {
     Pins::from_pem(SIGSTORE_FULCIO, SIGSTORE_REKOR).unwrap();
+}
+
+const LINUX: &str = "x86_64-unknown-linux-musl";
+const MAC: &str = "aarch64-apple-darwin";
+
+impl Test {
+    /// A registry whose policy invites the publisher names `invited` to publish code and native programs.
+    fn inviting(name: &str, invited: &[&str]) -> Test {
+        let mut t = Test::new(name);
+        let path = t.dir.join("yard.json");
+        let mut cfg: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        cfg["invited"] = serde_json::json!(invited);
+        std::fs::write(&path, serde_json::to_vec_pretty(&cfg).unwrap()).unwrap();
+        t.yard = Yard::open(Config::load(&path).unwrap()).unwrap();
+        t
+    }
+
+    fn native(&self, version: &str, target: &str) -> Result<Published, Error> {
+        let bytes = ext_core::testing::native_package("you.hello", version, target);
+        let digest = ext_pkg::read(&bytes).unwrap().digest;
+        self.publish(&(bytes, digest), &github(7, 42))
+    }
+
+    fn listed(&self, version: &str) -> Option<y::Release> {
+        self.index().index.release(&ExtId::parse("you.hello").unwrap(), &Version::parse(version).unwrap()).cloned()
+    }
+}
+
+/// #147: a component built against API 0.1 still runs during the move to 1.0, but the registry refuses new uploads of one.
+#[test]
+fn a_0_1_component_is_refused() {
+    let t = Test::inviting("transition", &["you"]);
+    let manifest = manifest("you.code", "1.0.0", "Code", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n");
+    let entries = |component: &[u8]| {
+        vec![
+            ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.clone().into_bytes(), executable: false },
+            ext_pkg::Entry { path: "main.ts".into(), data: vec![], executable: false },
+            ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: component.to_vec(), executable: false },
+        ]
+    };
+    let e = t.publish(&ext_pkg::write(entries(ext_pkg::testing::COMPONENT_0_1)).unwrap(), &github(7, 42)).unwrap_err();
+    assert!(matches!(&e, Error::Invalid(m) if m.contains("built against API 0.1.0") && m.contains("migrating-to-1.0.md")), "{e:?}");
+    t.publish(&ext_pkg::write(entries(ext_pkg::testing::COMPONENT)).unwrap(), &github(7, 42)).unwrap();
+}
+
+/// #146: without an invitation the registry keeps Phase 1's policy: no code, and no native programs either.
+#[test]
+fn native_programs_need_an_invitation() {
+    let t = Test::new("native-default");
+    let e = t.native("1.0.0", LINUX).unwrap_err();
+    assert!(matches!(&e, Error::Forbidden(m) if m.contains("invited publishers")), "{e:?}");
+    // Another publisher name is invited: still refused.
+    let t = Test::inviting("native-other", &["someone"]);
+    assert!(matches!(t.native("1.0.0", LINUX), Err(Error::Forbidden(_))));
+    // Data-only publishing is open to everyone as before.
+    assert!(t.publish(&package("you.theme", "1.0.0", "Theme"), &github(7, 42)).is_ok());
+}
+
+/// A pre-release is installed at once by those who opted in, code or not, so the registry does not say it waits
+/// (e2e trial: `cyx publish --pre-release` said "in 49 hours").
+#[test]
+fn a_code_pre_release_is_available_at_once() {
+    let t = Test::inviting("native-pre", &["you"]);
+    let p = t.native("1.0.0-beta.1", LINUX).unwrap();
+    assert!(p.available <= NOW + 60, "{} > {}", p.available, NOW + 60);
+    assert!(t.native("1.0.0-beta.1", MAC).unwrap().available <= NOW + 60, "its other platform too");
+}
+
+/// AC3: a publisher's first native program stays unlisted, and out of the public folder, until a reviewer approves it.
+#[test]
+fn a_first_native_program_waits_for_review() {
+    let t = Test::inviting("native-review", &["you"]);
+    let p = t.native("1.0.0", LINUX).unwrap();
+    assert!(p.review, "the first native upload is held");
+    assert!(p.available >= NOW + CODE_WAIT_SECS, "native programs are code: updates wait");
+    assert!(t.native("1.0.0", MAC).unwrap().review, "its other platform waits with it");
+    assert!(t.listed("1.0.0").is_none());
+    assert!(!t.index().index.extensions.contains_key(&ExtId::parse("you.hello").unwrap()), "an extension with nothing listed is not in the index");
+    assert!(!t.dir.join(format!("public/packages/{}.cyx", p.digest)).exists());
+    assert!(t.yard.download(&p.digest, NOW).is_err(), "a waiting package is not served");
+    // The reviewer's queue shows it with both platforms and what the install sheet will say.
+    let queue = t.yard.review_queue().unwrap();
+    assert_eq!(queue.len(), 1);
+    assert_eq!((queue[0].id.as_str(), queue[0].version.to_string()), ("you.hello", "1.0.0".to_string()));
+    assert_eq!(queue[0].packages.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>(), [MAC, LINUX]);
+    assert!(queue[0].packages.iter().all(|(_, path)| path.is_file()));
+    assert!(queue[0].permissions.iter().any(|l| l.contains("./bin/hello")), "{:?}", queue[0].permissions);
+    // Approved: listed with both platforms, served, and the queue is empty.
+    t.yard.approve(&ExtId::parse("you.hello").unwrap(), &Version::parse("1.0.0").unwrap(), NOW + 60).unwrap();
+    let r = t.listed("1.0.0").unwrap();
+    assert_eq!(r.targets.keys().map(String::as_str).collect::<Vec<_>>(), [MAC, LINUX]);
+    assert!(t.dir.join(format!("public/packages/{}.cyx", r.targets[MAC].digest)).is_file());
+    assert!(t.yard.download(&r.targets[MAC].digest, NOW).is_ok(), "each platform's package counts its downloads");
+    assert!(t.yard.review_queue().unwrap().is_empty());
+    assert!(t.yard.approve(&ExtId::parse("you.hello").unwrap(), &Version::parse("1.0.0").unwrap(), NOW).is_err());
+    // The publisher's later native programs are listed without review.
+    let next = t.native("1.1.0", LINUX).unwrap();
+    assert!(!next.review);
+    assert!(t.listed("1.1.0").is_some());
+    // A platform once published is never replaced, and a version without native programs takes none.
+    assert!(matches!(t.native("1.1.0", LINUX), Err(Error::Conflict(_))));
+}
+
+#[test]
+fn a_rejected_native_program_is_never_listed() {
+    let t = Test::inviting("native-reject", &["you"]);
+    let p = t.native("1.0.0", LINUX).unwrap();
+    let (id, v) = (ExtId::parse("you.hello").unwrap(), Version::parse("1.0.0").unwrap());
+    assert!(t.yard.reject(&id, &v, "").is_err(), "a reason is required");
+    t.yard.reject(&id, &v, "The program downloads code at run time.").unwrap();
+    assert!(t.yard.review_queue().unwrap().is_empty());
+    assert!(t.listed("1.0.0").is_none());
+    assert!(!t.dir.join(format!("review/{}.cyx", p.digest)).exists(), "its files are deleted");
+    // Its version number stays used, for every platform; the publisher is still not trusted for native programs.
+    assert!(matches!(t.native("1.0.0", MAC), Err(Error::Forbidden(_))));
+    assert!(t.native("1.0.1", LINUX).unwrap().review);
 }

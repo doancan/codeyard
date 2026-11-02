@@ -96,22 +96,10 @@ impl Workbench {
             return;
         }
         let name = path.rsplit('/').next().unwrap_or(&path).to_string();
-        let detail = format!(
-            "{}\n• {}\n\n{}",
-            crate::i18n::tf("{} contains a request that:", &[&name]),
-            reasons.join("\n• "),
-            crate::i18n::t("Only send it if you trust this file.")
-        );
-        let answer = window.prompt(
-            gpui::PromptLevel::Warning,
-            crate::i18n::t("Send this request?"),
-            Some(&detail),
-            &[crate::i18n::t("Send"), crate::i18n::t("Cancel")],
-            cx,
-        );
+        let answer = crate::questions::send_request(&name, &reasons).ask(window, cx);
         let vars = parsed.vars.clone();
         cx.spawn_in(window, async move |this, cx| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 this.update_in(cx, |this, window, cx| {
                     if !sensitive.is_empty() {
                         this.lsp.http_trusted.insert(this.trust_key(&path));

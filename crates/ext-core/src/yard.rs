@@ -8,6 +8,10 @@
 //! index.json.sig  signature by the online key
 //! ```
 //!
+//! Beside each package the registry serves `packages/<digest>.details.json` ([`Details`]): its manifest and README, so
+//! the Market can show a page without downloading the package. The index carries its sha256, so it is as trusted as
+//! the index.
+//!
 //! The signed bytes are the files exactly as served, after a context line that says which file it is, so there is no
 //! canonical JSON to agree on and a signature over one file can never pass for the other. The root keys are not in
 //! any file: the app ships them, and `extensions.registries` adds another registry with its own.
@@ -15,7 +19,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use ext_manifest::{ExtId, Version};
+use ext_manifest::{ErrorDoc, ExtId, Version};
 use ring::signature::{ED25519, Ed25519KeyPair, KeyPair as _, UnparsedPublicKey};
 use serde::{Deserialize, Serialize};
 
@@ -30,6 +34,10 @@ pub const MAX_ROOT_BYTES: usize = 64 << 10;
 /// About 200 000 versions; the compressed transfer is a fraction of it. Index deltas come when it passes 5 MB (§13).
 pub const MAX_INDEX_BYTES: usize = 64 << 20;
 pub const MAX_SIG_BYTES: usize = 16 << 10;
+/// A README is cut to this for the details file; the full one stays in the package.
+pub const MAX_README_BYTES: usize = 256 << 10;
+/// A details file: the manifest, the README and the JSON around them.
+pub const MAX_DETAILS_BYTES: usize = ext_manifest::limits::MANIFEST_BYTES * 2 + MAX_README_BYTES * 2 + 1024;
 /// How long an index is good for after it is signed (the registry re-signs daily).
 pub const INDEX_LIFETIME_SECS: u64 = 72 * 3600;
 
@@ -214,9 +222,36 @@ pub struct Release {
     /// The registry's security role cleared it to update at once (an advisory fix), skipping the 48 h wait for code.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub immediate: bool,
+    /// sha256 of `packages/<digest>.details.json`, for the Market's extension page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<String>,
+    /// For an extension with native programs: one package per platform, by target triple (`<id>-<version>-<triple>.cyx`,
+    /// docs/plugin-architecture.md §7). `digest`, `sha256` and `size` above are those of the first one published. The
+    /// client installs the one for the workspace's host and checks it against these.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub targets: BTreeMap<String, TargetPackage>,
+}
+
+/// One platform's package of a release.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TargetPackage {
+    /// Content digest, as in the lock.
+    pub digest: String,
+    /// sha256 of the `.cyx` file as downloaded.
+    pub sha256: String,
+    pub size: u64,
 }
 
 impl Release {
+    /// The package for `target`: that platform's for a release with native programs (none if it was not built for it),
+    /// else the one package.
+    pub fn package_for(&self, target: &str) -> Option<TargetPackage> {
+        if self.targets.is_empty() {
+            return Some(TargetPackage { digest: self.digest.clone(), sha256: self.sha256.clone(), size: self.size });
+        }
+        self.targets.get(target).cloned()
+    }
+
     /// A pre-release is a version with a suffix (`1.2.0-beta.1`); users get it only when they opt in per extension.
     pub fn is_pre_release(&self) -> bool {
         self.version.pre.is_some()
@@ -278,30 +313,65 @@ pub enum Error {
     WrongRegistry { root: String, index: String },
 }
 
+/// The registry index's codes in the `CY` catalogue (docs/extensions/reference/errors.md); the 08xx range is the
+/// registry's.
+pub const CODES: [ErrorDoc; 7] = [
+    ErrorDoc {
+        code: "CY0801",
+        summary: "A file of the registry index is larger than its limit.",
+        fix: "nothing was installed; the registry's files are damaged or were changed on the way, so try again later",
+    },
+    ErrorDoc {
+        code: "CY0802",
+        summary: "A file of the registry index is not valid JSON, or a field is missing, unknown or out of range.",
+        fix: "nothing was installed; the registry's files are damaged or were changed on the way, so try again later",
+    },
+    ErrorDoc {
+        code: "CY0803",
+        summary: "The registry index is written in a newer format than this Codeyard reads.",
+        fix: "update Codeyard to read this registry",
+    },
+    ErrorDoc {
+        code: "CY0804",
+        summary: "A file of the registry index is not signed by enough trusted keys.",
+        fix: "nothing was installed; the registry's files are damaged or were changed on the way, so try again later",
+    },
+    ErrorDoc {
+        code: "CY0805",
+        summary: "The registry's online signing key is past its expiry.",
+        fix: "the registry has not renewed its signing key; try again later or update Codeyard",
+    },
+    ErrorDoc {
+        code: "CY0806",
+        summary: "The registry served an older copy of its index than one already accepted.",
+        fix: "an older copy of the registry was served (by a cache or an attacker); try again later",
+    },
+    ErrorDoc {
+        code: "CY0807",
+        summary: "The registry index names another registry than its root.",
+        fix: "check the registry's address in extensions.registries",
+    },
+];
+
 impl Error {
-    /// Stable codes in the `CY` catalogue (docs/extensions/developer-guide.md); the 08xx range is the registry's.
+    pub fn doc(&self) -> &'static ErrorDoc {
+        &CODES[match self {
+            Error::TooLarge { .. } => 0,
+            Error::Malformed { .. } => 1,
+            Error::Format { .. } => 2,
+            Error::Signature { .. } => 3,
+            Error::KeyExpired { .. } => 4,
+            Error::Rollback { .. } => 5,
+            Error::WrongRegistry { .. } => 6,
+        }]
+    }
+
     pub fn code(&self) -> &'static str {
-        match self {
-            Error::TooLarge { .. } => "CY0801",
-            Error::Malformed { .. } => "CY0802",
-            Error::Format { .. } => "CY0803",
-            Error::Signature { .. } => "CY0804",
-            Error::KeyExpired { .. } => "CY0805",
-            Error::Rollback { .. } => "CY0806",
-            Error::WrongRegistry { .. } => "CY0807",
-        }
+        self.doc().code
     }
 
     pub fn fix(&self) -> &'static str {
-        match self {
-            Error::TooLarge { .. } | Error::Malformed { .. } | Error::Signature { .. } => {
-                "nothing was installed; the registry's files are damaged or were changed on the way, so try again later"
-            }
-            Error::Format { .. } => "update Codeyard to read this registry",
-            Error::KeyExpired { .. } => "the registry has not renewed its signing key; try again later or update Codeyard",
-            Error::Rollback { .. } => "an older copy of the registry was served (by a cache or an attacker); try again later",
-            Error::WrongRegistry { .. } => "check the registry's address in extensions.registries",
-        }
+        self.doc().fix
     }
 }
 
@@ -334,15 +404,7 @@ pub fn verify(keys: &RootKeys, files: [&[u8]; 4], now: u64, seen: Seen) -> Resul
     limit(ROOT_SIG, root_sig, MAX_SIG_BYTES)?;
     limit(INDEX_SIG, index_sig, MAX_SIG_BYTES)?;
 
-    let needed = keys.threshold.max(1);
-    let valid = valid_signers(Role::Root, root_bytes, &parse_json(ROOT_SIG, root_sig)?, &keys.keys);
-    if valid < needed || keys.keys.len() < needed {
-        return Err(Error::Signature { file: ROOT_FILE, valid, needed });
-    }
-    let root: Root = parse_json(ROOT_FILE, root_bytes)?;
-    if root.format != FORMAT {
-        return Err(Error::Format { file: ROOT_FILE, found: root.format });
-    }
+    let root = verify_root(keys, root_bytes, root_sig)?;
     if root.version < seen.root {
         return Err(Error::Rollback { file: ROOT_FILE, seen: seen.root, found: root.version });
     }
@@ -369,6 +431,23 @@ pub fn verify(keys: &RootKeys, files: [&[u8]; 4], now: u64, seen: Seen) -> Resul
     // A signed index never outlives the key that signed it.
     let stale = now >= index.expires.min(root.online.expires);
     Ok(Verified { root, index, stale })
+}
+
+/// Check `root.json` and its signatures against the root keys: a threshold of them signed exactly these bytes, in
+/// a format this client reads. `yard promote` checks a new root with this before it goes live.
+pub fn verify_root(keys: &RootKeys, root_bytes: &[u8], root_sig: &[u8]) -> Result<Root, Error> {
+    limit(ROOT_FILE, root_bytes, MAX_ROOT_BYTES)?;
+    limit("root.json.sig", root_sig, MAX_SIG_BYTES)?;
+    let needed = keys.threshold.max(1);
+    let valid = valid_signers(Role::Root, root_bytes, &parse_json("root.json.sig", root_sig)?, &keys.keys);
+    if valid < needed || keys.keys.len() < needed {
+        return Err(Error::Signature { file: ROOT_FILE, valid, needed });
+    }
+    let root: Root = parse_json(ROOT_FILE, root_bytes)?;
+    if root.format != FORMAT {
+        return Err(Error::Format { file: ROOT_FILE, found: root.format });
+    }
+    Ok(root)
 }
 
 fn limit(file: &'static str, bytes: &[u8], limit: usize) -> Result<(), Error> {
@@ -426,6 +505,16 @@ fn check_index(index: &Index) -> Result<(), Error> {
                     return Err(bad(format!("{id} {}: {field} is not 64 lowercase hex digits", r.version)));
                 }
             }
+            // A platform this client does not know is skipped when downloading, not refused here: a registry may add
+            // platforms without a new format.
+            for (t, p) in &r.targets {
+                if t.len() > 64 || parse_hex::<32>(&p.digest).is_none() || parse_hex::<32>(&p.sha256).is_none() {
+                    return Err(bad(format!("{id} {}: the package for {t} has no hex digests", r.version)));
+                }
+            }
+            if r.details.as_deref().is_some_and(|d| parse_hex::<32>(d).is_none()) {
+                return Err(bad(format!("{id} {}: details is not 64 lowercase hex digits", r.version)));
+            }
             if let Status::Revoked { reason } = &r.status {
                 check_text(INDEX_FILE, &format!("{id} {}: revoked reason", r.version), reason, 500)?;
             }
@@ -450,6 +539,50 @@ impl Index {
 pub fn permission_digest(manifest: &ext_manifest::Manifest) -> String {
     use sha2::Digest as _;
     hex(&sha2::Sha256::digest(serde_json::to_vec(&manifest.permissions).expect("permissions serialize")))
+}
+
+/// `packages/<digest>.details.json`: what the Market's extension page shows, taken from the package by the registry.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Details {
+    /// `codeyard-extension.toml` as published.
+    pub manifest: String,
+    /// `README.md` at the package's root, cut at a line to [`MAX_README_BYTES`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub readme: Option<String>,
+    /// The README was cut.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub readme_cut: bool,
+}
+
+impl Details {
+    /// The details of a package that passed `ext_pkg::read`.
+    pub fn of(pkg: &ext_pkg::Package) -> Details {
+        let manifest = pkg.files.get(ext_manifest::FILE_NAME).map(|e| String::from_utf8_lossy(&e.data).into_owned()).unwrap_or_default();
+        // One spelling per name in a package (ext-pkg), so at most one file matches.
+        let readme = pkg.files.iter().find(|(p, _)| p.eq_ignore_ascii_case("README.md")).map(|(_, e)| String::from_utf8_lossy(&e.data).into_owned());
+        let (readme, readme_cut) = match readme {
+            Some(r) if r.len() > MAX_README_BYTES => {
+                let mut end = MAX_README_BYTES;
+                while !r.is_char_boundary(end) {
+                    end -= 1;
+                }
+                let end = r[..end].rfind('\n').map_or(end, |i| i + 1);
+                (Some(r[..end].to_string()), true)
+            }
+            r => (r, false),
+        };
+        Details { manifest, readme, readme_cut }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        serde_json::to_vec(self).expect("details serialize")
+    }
+
+    /// sha256 of the bytes, as [`Release::details`] lists it.
+    pub fn digest(bytes: &[u8]) -> String {
+        use sha2::Digest as _;
+        hex(&sha2::Sha256::digest(bytes))
+    }
 }
 
 /// What a publisher can do to a version they published, signed like a package (a Sigstore bundle over

@@ -158,6 +158,10 @@ pub struct Client {
 impl Client {
     /// Start the server and handshake. Error if the command is not found or fails to start.
     pub fn start(host: Arc<dyn Host>, mut config: ServerConfig, root: &str, events: mpsc::Sender<ServerEvent>) -> Result<Arc<Client>, String> {
+        // A program inside an extension's package runs from the copy on the host, after its hash is checked there.
+        if let Some(p) = &config.program {
+            config.command = crate::ext_programs::ready(host.as_ref(), &p.extension, &p.programs, &config.command)?;
+        }
         if let Some(service) = config.managed
             && let Ok(destination) = crate::language_service_install::destination(host.as_ref())
             && let Ok(Some(installed)) = crate::language_service_install::discover(host.as_ref(), &destination)
@@ -828,17 +832,18 @@ mod tests {
     #[test]
     fn real_clangd_round_trip() {
         if std::process::Command::new("clangd").arg("--version").output().is_err() {
-            eprintln!("clangd not found, skipped");
+            crate::test_sshd::skip_missing("clangd");
             return;
         }
         let dir = std::env::temp_dir().join(format!("codeyard-lsp-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let dir = std::fs::canonicalize(&dir).unwrap(); // servers return the canonical path (the app opens it that way too)
+        // Servers return the canonical path (the app opens it that way too), in the app's form on Windows.
+        let dir = crate::ui::canonical_for_test(&dir);
         let src = "int topla(int a, int b) { return a + b; }\nint main(void) { return topla(1, yok); }\n";
         let file = dir.join("main.c");
         std::fs::write(&file, src).unwrap();
-        let (root, path) = (dir.to_string_lossy().into_owned(), file.to_string_lossy().into_owned());
+        let (root, path) = (crate::ui::local_path(&dir), crate::ui::local_path(&file));
         let host: Arc<dyn Host> = Arc::new(host::local());
         let (tx, rx) = mpsc::channel();
         let cfg = server_for("c", &[]).unwrap();

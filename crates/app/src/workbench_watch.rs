@@ -35,6 +35,7 @@ impl Workbench {
         paths.extend(self.roots.extra_roots.iter().cloned());
         paths.extend(self.roots.extra_roots.iter().flat_map(|r| folder_settings_paths(r)));
         paths.extend(self.project_settings_paths(cx).into_iter().map(|(p, ..)| p));
+        paths.extend(self.workspace_watch_path());
         // Commit, checkout, `git add` from a terminal: index and HEAD change.
         if let Some(g) = &self.vcs.status {
             // In a worktree/submodule `.git` is a file: watch the real directory.
@@ -42,6 +43,12 @@ impl Workbench {
             paths.push(format!("{dir}/index"));
             paths.push(format!("{dir}/HEAD"));
         }
+        paths.extend(self.repo_watch_paths());
+        paths.sort();
+        paths.dedup();
+        // Extensions' file watches get what the watcher's cap leaves, so Codeyard's own paths are never dropped.
+        let budget = agent::watch::MAX_PATHS.saturating_sub(paths.len());
+        paths.extend(self.ext_watched_paths(budget));
         paths.sort();
         paths.dedup();
         if paths != self.watched {
@@ -55,12 +62,20 @@ impl Workbench {
         if changes.iter().any(|(p, _)| settings_files.contains(p)) {
             self.load_project_settings(cx);
         }
+        // Edited outside (or in an editor tab): read again; our own writes come back unchanged and are ignored.
+        if self.workspace_file_changed(&changes) {
+            self.reload_workspace(true, cx);
+        }
         // If extra folders' settings files changed, only that folder's settings are re-read.
         for root in self.roots.extra_roots.clone() {
             if changes.iter().any(|(p, _)| folder_settings_paths(&root).contains(p)) {
                 self.load_folder_settings(root, cx);
             }
         }
+        let changed: Vec<String> = changes.iter().map(|(p, _)| p.clone()).collect();
+        self.refresh_repos_for(&changed, cx);
+        self.ext_scm_files_changed(&changed);
+        self.ext_files_changed(&changes, cx);
         if let Some(g) = &self.vcs.status {
             let prefix = format!("{}/", g.root.trim_end_matches('/'));
             let git_dir = g.git_dir.as_ref().map(|d| format!("{}/", d.trim_end_matches('/')));
@@ -101,12 +116,15 @@ impl Workbench {
         // If there is no settings folder (tests) only project layers are applied; if there are none either,
         // don't touch anything (don't overwrite externally supplied settings with defaults).
         let paths = self.config_paths();
-        if paths.is_none() && self.cfg.project.is_empty() {
+        let workspace = self.workspace_settings();
+        if paths.is_none() && self.cfg.project.is_empty() && workspace.is_none() {
+            cx.set_global(settings::Sources::default());
             return;
         }
         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
         if let Some((spath, kpath)) = &paths {
-            self.cfg.stamp = (mtime(spath), mtime(kpath), mtime(&spath.with_file_name(crate::ext::LOCK_FILE)), crate::ext::dev_stamp());
+            self.cfg.stamp =
+                (mtime(spath), mtime(kpath), mtime(&spath.with_file_name(crate::ext::LOCK_FILE)), crate::ext::watch_stamp(spath.parent().unwrap_or(spath)));
         }
         let kpath = paths.as_ref().map(|(_, k)| k.clone());
         let file = paths.as_ref().and_then(|(s, _)| std::fs::read_to_string(s).ok());
@@ -114,18 +132,36 @@ impl Workbench {
         // them off (`extensions.enabled`), not a project's.
         let ext_enabled = file.as_deref().is_none_or(|f| settings::parse_layers(f, &[]).map_or(true, |(s, _)| s.extensions_enabled));
         let ext_before = crate::ext::schema_entries();
-        let mut ext_problems = crate::ext::reload_with(self.cfg.dir.as_deref(), ext_enabled);
+        let ext_problems = crate::ext::reload_with(self.cfg.dir.as_deref(), ext_enabled);
         let ext_schemas_changed = ext_before != crate::ext::schema_entries();
         if self.cfg.dir.is_some() {
             self.reload_user_themes();
         }
-        let layers: Vec<settings::Layer> = self.cfg.project.iter().map(|(n, t, w)| (n.as_str(), t.as_str(), *w)).collect();
         self.cfg.dirty = false;
+        // The user file as extra folders resolve over it: kept from the last reading that parsed (below).
+        let user_text = paths.as_ref().map(|_| file.clone().unwrap_or_else(|| "{}".into()));
         // If the user turned the gate off in their own file (even if not applied yet), every folder is trusted.
         let gate_off = file.as_deref().is_some_and(|f| settings::parse_layers(f, &[]).is_ok_and(|(s, _)| !s.workspace_trust));
         let trusted = gate_off || self.root(cx).is_none_or(|r| self.is_trusted_root(&r, cx));
-        let (new, mut warnings) = match settings::parse_layers_trusted(file.as_deref().unwrap_or("{}"), &layers, trusted) {
-            Ok(parsed) => parsed,
+        // user < workspace file < folder; the workspace file's restricted keys need its own folder to be trusted.
+        let mut layers: Vec<settings::ScopedLayer> = Vec::new();
+        if let Some((name, text)) = &workspace {
+            let trusted = gate_off || self.workspace_settings_trusted(cx);
+            layers.push(settings::ScopedLayer { name, text, warn: false, trusted, scope: settings::Scope::Workspace });
+        }
+        layers.extend(self.cfg.project.iter().map(|(name, text, warn)| settings::ScopedLayer {
+            name,
+            text,
+            warn: *warn,
+            trusted,
+            scope: settings::Scope::Folder,
+        }));
+        let (new, mut warnings) = match settings::parse_scoped(file.as_deref().unwrap_or("{}"), &layers) {
+            Ok((s, w, sources)) => {
+                cx.set_global(sources);
+                self.cfg.user_text = user_text;
+                (s, w)
+            }
             // Half-written file: the last valid settings stay, the error is shown.
             Err(e) => {
                 let mut warnings = vec![e];
@@ -142,20 +178,10 @@ impl Workbench {
         // Extension language servers go in front of the user's `lsp.servers`: for the same key the user's entry wins, and
         // a change restarts servers the same way an edit of the settings file does.
         let mut new = new;
-        let (servers, server_warnings) = crate::ext::server_entries();
-        ext_problems.extend(server_warnings);
+        let servers = crate::ext::server_entries(self.cfg.dir.as_deref(), &crate::ext_registry::registries(&new));
         new.lsp_servers.splice(0..0, servers);
         warnings.extend(ext_problems);
-        // Registries the user installed from: their index, at most daily, in the background (none asked otherwise).
-        if let Some(dir) = self.cfg.dir.clone().filter(|_| ext_enabled && !crate::ext::turned_off()) {
-            let registries = crate::ext_registry::registries(&new);
-            if !registries.is_empty() {
-                cx.background_executor().spawn(async move { crate::ext_registry::refresh_installed(&dir, &registries, crate::ext_registry::now()) }).detach();
-            }
-        }
         let old = cx.global::<Settings>().clone();
-        // Zoom is applied on top of the sizes in the settings file.
-        self.chrome.zoom_base = (new.editor_font_size, new.editor_line_height, new.terminal_font_size);
         if !new.docker_enabled && self.any_container_connected(cx) {
             new.docker_enabled = true;
             warnings.push(crate::i18n::t("Disconnect the container before disabling the container module. Your open files are kept.").into());
@@ -166,7 +192,7 @@ impl Workbench {
                 self.tabs.page_active = false;
                 self.chrome.panel = Some(Panel::Explorer);
             }
-            if self.chrome.panel == Some(Panel::Containers) {
+            if self.view_shown(Panel::Containers) {
                 self.chrome.panel = Some(Panel::Explorer);
             }
             if matches!(&self.remote.conn, Conn::Connecting { alias, .. } if crate::docker::is_target(alias)) {
@@ -184,12 +210,13 @@ impl Workbench {
                 self.close_overlay(window, cx);
             }
         }
-        if self.chrome.zoom != 0. {
-            new.editor_font_size = (new.editor_font_size + self.chrome.zoom).max(6.);
-            new.editor_line_height = (new.editor_line_height + self.chrome.zoom * 1.5).max(10.);
-            new.terminal_font_size = (new.terminal_font_size + self.chrome.zoom).max(6.);
-        }
+        // Interface scale: user settings only, the same for every window; an unchanged value does nothing. A zoom that
+        // could not be saved stays until the file's own value changes.
+        let mut session = cx.try_global::<settings::SessionScale>().copied().unwrap_or_default();
+        new.ui_scale = session.resolve(new.ui_scale);
+        cx.set_global(session);
         cx.set_global(new.clone());
+        cx.set_ui_scale(new.ui_scale);
         if !new.web_preview_enabled {
             self.stop_web_preview(cx);
         } else if self.web_preview_needs_restart(&new.web_preview) {
@@ -272,6 +299,14 @@ impl Workbench {
         }
         self.sync_settings_page(cx);
         self.sync_extensions_view();
+        self.sync_running_extensions(window, cx);
+        self.sync_ext_views(cx);
+        self.forget_removed_extension_marks(cx);
+        // Extra folders resolve over the user and workspace layers, which may have changed.
+        self.resolve_folder_settings(cx);
+        // Registries the user installed from: updates and version status, their index at most daily (none asked
+        // otherwise).
+        self.check_extension_updates(window, cx);
         window.refresh();
         cx.notify();
     }
@@ -289,6 +324,10 @@ impl Workbench {
                         let active = window.is_window_active() || cfg!(test);
                         if active && this.vcs.status.is_some() && this.git_refresh_idle() {
                             this.refresh_git(0, cx);
+                        }
+                        // The other repositories' rows are only on screen while Source Control is.
+                        if active && this.view_shown(Panel::Scm) {
+                            this.refresh_repos(cx);
                         }
                     })
                     .is_ok();
@@ -309,6 +348,7 @@ impl Workbench {
         if self.cfg.dir.is_none() {
             return;
         }
+        self.watch_dev_code(window, cx);
         cx.spawn_in(window, async move |this, cx| {
             loop {
                 cx.background_executor().timer(std::time::Duration::from_secs(1)).await;
@@ -317,7 +357,9 @@ impl Workbench {
                         let Some((spath, kpath)) = this.config_paths() else { return };
                         let lpath = spath.with_file_name(crate::ext::LOCK_FILE);
                         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
-                        if this.cfg.dirty || (mtime(&spath), mtime(&kpath), mtime(&lpath), crate::ext::dev_stamp()) != this.cfg.stamp {
+                        if this.cfg.dirty
+                            || (mtime(&spath), mtime(&kpath), mtime(&lpath), crate::ext::watch_stamp(spath.parent().unwrap_or(&spath))) != this.cfg.stamp
+                        {
                             this.reload_config(window, cx);
                         }
                     })

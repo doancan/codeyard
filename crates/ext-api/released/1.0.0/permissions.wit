@@ -1,0 +1,142 @@
+package codeyard:api@1.0.0;
+
+/// Reading workspace files. Needs `read` on the paths.
+@since(version = 1.0.0)
+interface workspace {
+  use types.{ticket, uri};
+
+  /// The workspace's folders.
+  @since(version = 1.0.0)
+  folders: func() -> list<uri>;
+  /// Completes with `bytes`.
+  @since(version = 1.0.0)
+  read-file: func(uri: uri) -> ticket;
+  /// Completes with `files`, one per uri, in one round trip.
+  @since(version = 1.0.0)
+  read-many: func(uris: list<uri>) -> ticket;
+  /// Completes with `stat`.
+  @since(version = 1.0.0)
+  stat: func(uri: uri) -> ticket;
+  /// Completes with `uris`: files matching `glob` under the workspace folders, at most `max`.
+  @since(version = 1.0.0)
+  find-files: func(glob: string, max: u32) -> ticket;
+
+  @since(version = 1.0.0)
+  record search-query {
+    pattern: string,
+    regex: bool,
+    case-sensitive: bool,
+    whole-word: bool,
+    /// Only files matching these globs; empty means all the extension may read.
+    %include: list<string>,
+    max: u32,
+  }
+
+  /// Streams `search-match` events, then completes with `done`.
+  @since(version = 1.0.0)
+  search: func(query: search-query) -> ticket;
+}
+
+/// Changing workspace files. Needs `write` on the paths.
+@since(version = 1.0.0)
+interface workspace-write {
+  use types.{ticket, uri};
+
+  @since(version = 1.0.0)
+  write-file: func(uri: uri, contents: list<u8>) -> ticket;
+  @since(version = 1.0.0)
+  delete: func(uri: uri) -> ticket;
+  @since(version = 1.0.0)
+  rename: func(%from: uri, to: uri) -> ticket;
+  @since(version = 1.0.0)
+  create-directory: func(uri: uri) -> ticket;
+}
+
+/// HTTPS to the hosts listed in `net`. Requests leave from the machine Codeyard runs on.
+@since(version = 1.0.0)
+interface net {
+  use types.{ticket, http-request};
+
+  /// Streams `http-head`, then the body as `data`, then completes with `done`.
+  @since(version = 1.0.0)
+  fetch: func(request: http-request) -> ticket;
+}
+
+/// Requests signed with an account listed in `auth`. The extension never sees the token.
+@since(version = 1.0.0)
+interface auth {
+  use types.{ticket, http-request};
+
+  /// Signs in if needed (the first use asks the user). Completes with `account`. `provider` is an id from `auth`, or
+  /// an instance account a `pull-requests.remote` carries.
+  @since(version = 1.0.0)
+  session: func(provider: string, scopes: list<string>) -> ticket;
+  /// Like `net.fetch`, signed for `provider` (as for `session`), to that account's hosts only.
+  @since(version = 1.0.0)
+  fetch: func(provider: string, request: http-request) -> ticket;
+}
+
+/// The extension's own entries in the system keychain. Needs `secrets`.
+@since(version = 1.0.0)
+interface secrets {
+  use types.{ticket};
+
+  /// Completes with `text`.
+  @since(version = 1.0.0)
+  get: func(key: string) -> ticket;
+  @since(version = 1.0.0)
+  set: func(key: string, value: string) -> ticket;
+  @since(version = 1.0.0)
+  delete: func(key: string) -> ticket;
+}
+
+/// Programs listed in `run`, on the workspace's host.
+@since(version = 1.0.0)
+interface process {
+  use types.{ticket, uri};
+
+  @since(version = 1.0.0)
+  record command {
+    /// A name from `run`, or a path inside the package.
+    program: string,
+    args: list<string>,
+    /// Defaults to the first workspace folder.
+    cwd: option<uri>,
+    /// Added to a minimal environment; the user's environment is not passed.
+    env: list<tuple<string, string>>,
+    stdin: option<list<u8>>,
+  }
+
+  /// Streams `stdout` and `stderr`, then completes with `exit`. `tickets.cancel` kills it.
+  @since(version = 1.0.0)
+  spawn: func(command: command) -> ticket;
+}
+
+/// Reading the clipboard. Needs `clipboard = "read"` (or `"read-write"`); the first read per session asks.
+@since(version = 1.0.0)
+interface clipboard-read {
+  use types.{ticket};
+
+  /// Completes with `text`.
+  @since(version = 1.0.0)
+  read-text: func() -> ticket;
+}
+
+/// Writing the clipboard. Needs `clipboard = "write"` (or `"read-write"`).
+@since(version = 1.0.0)
+interface clipboard-write {
+  use types.{ticket};
+
+  @since(version = 1.0.0)
+  write-text: func(text: string) -> ticket;
+}
+
+/// Typing into a terminal. Needs `terminal`.
+@since(version = 1.0.0)
+interface terminal {
+  use types.{ticket};
+
+  /// Types `text` into the active terminal. Completes with `failed(not-found)` when there is none.
+  @since(version = 1.0.0)
+  send-text: func(text: string) -> ticket;
+}

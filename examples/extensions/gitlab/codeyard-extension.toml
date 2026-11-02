@@ -1,0 +1,41 @@
+[extension]
+id          = "codeyard.gitlab"
+version     = "0.1.0"
+name        = "GitLab"
+license     = "MIT"
+description = "Merge requests of GitLab repositories in the Pull Requests view: details, pipelines, diffs, comments and checkout."
+repository  = "https://github.com/doancan/codeyard"
+
+[code]
+entry = "src/extension.ts"
+
+# Codeyard signs every request to GitLab with the user's GitLab account; the extension never sees the token.
+[permissions]
+auth = ["gitlab"]
+why  = "Lists, shows and comments on merge requests of your GitLab repositories."
+
+# A GitLab OAuth application (User Settings › Applications on gitlab.com): not confidential, scope `api`, redirect
+# URI codeyard://ext/codeyard.gitlab/callback. PKCE replaces the client secret, so the id below is all Codeyard needs.
+[[oauth]]
+id            = "gitlab"
+name          = "GitLab"
+authorize-url = "https://gitlab.com/oauth/authorize"
+token-url     = "https://gitlab.com/oauth/token"
+client-id     = "your-gitlab-application-id"
+scopes        = ["api"]
+hosts         = ["gitlab.com"]
+account-url   = "https://gitlab.com/api/v4/user"
+# A self-managed GitLab: the user adds its host and their own application id on the extension's page (Accounts ›
+# Add Instance…), and Codeyard uses these URLs on that host. Its remotes then come to the provider below.
+instances     = true
+
+[[commands]]
+id    = "sign-in"
+title = "GitLab: Sign In"
+
+# The remotes this provider answers for (origin = git@gitlab.com:group/app.git), and the account their requests use.
+[[pull-requests]]
+id    = "gitlab"
+label = "GitLab"
+hosts = ["gitlab.com"]
+auth  = "gitlab"

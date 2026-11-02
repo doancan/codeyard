@@ -25,8 +25,9 @@ only `crates/app` may depend on GPUI.
 ## Issues and labels
 
 Every issue is opened from a form in `.github/ISSUE_TEMPLATE/`: **Epic** (a goal made of several issues), **Feature** (a
-user-visible capability, written as a specification), **Task** (work with no user-visible behaviour of its own), **Bug** and
-**Translation**. Questions and open ideas go to Discussions.
+user-visible capability, written as a specification), **Task** (work with no user-visible behaviour of its own), **Bug**,
+**Translation** and **Accessibility barrier** (`6-accessibility.yml`, see [ACCESSIBILITY.md](ACCESSIBILITY.md)). Questions
+and open ideas go to Discussions.
 
 - **Title:** a plain summary, at most 78 characters, with no type prefix (the type label says it).
   Features and tasks start with a verb ("Show …", "Pass …"); bugs say what goes wrong.
@@ -35,12 +36,12 @@ user-visible capability, written as a specification), **Task** (work with no use
 
 | Group | Labels |
 | --- | --- |
-| Type | `epic`, `feature`, `task`, `bug` |
+| Type | `epic`, `feature`, `task`, `bug`, `accessibility` (a barrier for people with disabilities, triaged as a bug) |
 | Area | `lsp`, `debug`, `editor`, `git`, `remote`, `terminal`, `ui`, `i18n`, `docs`, `infra` (build, release, test harness) |
 | Environment | `local` (only local folders), `ssh` (only remote folders), `local+ssh` (both alike) |
 - **Relationships** live in the issue's sidebar, never in its text: a feature or task is a sub-issue of its epic, and
   *blocked by* names the issues it waits for. An epic is closed when all its sub-issues are.
-- **Milestone:** the release the issue ships in (`v0.6.0`). Its due date is the epic's Target date.
+- **Milestone:** the release the issue ships in (`v0.7.0`). Its due date is the epic's Target date.
 
 Every issue is on the [Codeyard project](https://github.com/users/doancan/projects/2). Priority, effort and dates are project
 fields, set at triage:

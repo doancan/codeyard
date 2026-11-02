@@ -46,7 +46,7 @@ impl EditorView {
         self.update_linked_tag(cx);
         self.schedule_blame(cx);
         self.refresh_conflicts_soon(cx);
-        self.sync_syntax();
+        self.sync_syntax(cx);
         if self.git_base.is_some() {
             self.schedule_git_marks(150, Some(cx));
         }

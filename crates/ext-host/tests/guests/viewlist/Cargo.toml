@@ -1,0 +1,23 @@
+[package]
+name = "viewlist"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# The extension scripts/perf/run.sh installs for its view scenario: a sidebar view with a list of 10 000 rows. Built for
+# wasm32-wasip2 by scripts/build-exthost-fixtures.sh; the result is crates/ext-host/testdata/viewlist.wasm. It needs no
+# permission.
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+wit-bindgen = "0.63"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = "symbols"
+panic = "abort"
+
+[workspace]

@@ -101,7 +101,7 @@ impl Workbench {
             | InputPurpose::CreateBranchFrom { root, .. }
             | InputPurpose::RenameRemote { root, .. }
             | InputPurpose::SetRemoteUrl { root, .. } => Some(root.clone()),
-            InputPurpose::CommitBranch { .. } | InputPurpose::CommitTag { .. } | InputPurpose::StashNamed => {
+            InputPurpose::CommitBranch { .. } | InputPurpose::CommitTag { .. } | InputPurpose::StashNamed { .. } => {
                 let Some(root) = self.repo_root(cx) else { return };
                 Some(root)
             }
@@ -120,6 +120,18 @@ impl Workbench {
         });
         let picker = cx.new(|cx| Picker::new(vec![PickSource::Input { verb, path }], placeholder, initial, None, cx));
         self.show_overlay(picker, OverlayKind::Input { purpose, context }, window, cx);
+    }
+
+    /// [`show_input`](Self::show_input), masked on screen and never prefilled: for a password or token.
+    pub(super) fn show_secret_input(&mut self, purpose: InputPurpose, verb: &'static str, placeholder: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.asking() {
+            return;
+        }
+        if self.overlay.is_some() {
+            self.close_overlay(window, cx);
+        }
+        let picker = cx.new(|cx| Picker::new(vec![PickSource::Secret { verb }], placeholder, "", None, cx));
+        self.show_overlay(picker, OverlayKind::Input { purpose, context: None }, window, cx);
     }
 
     pub fn start_create(&mut self, dir: String, is_dir: bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -172,12 +184,17 @@ impl Workbench {
 
     pub(super) fn finish_input(&mut self, purpose: InputPurpose, name: String, window: &mut Window, cx: &mut Context<Self>) {
         match purpose {
+            // Answered in on_extension_overlay_event before it gets here.
+            InputPurpose::ExtInput { .. } => {}
             InputPurpose::RenameSymbol { client, path, pos } => self.rename_symbol_to(client, path, pos, name, cx),
             InputPurpose::EditBreakpoint { path, line } => self.finish_edit_breakpoint(path, line, name, cx),
             InputPurpose::AddWatch => self.finish_add_watch(name, cx),
             InputPurpose::FunctionBreakpoint => self.finish_function_breakpoint(name, cx),
             InputPurpose::LaunchInput => self.answer_launch_input(name, window, cx),
+            InputPurpose::TaskInput => self.answer_task_input(name, window, cx),
             InputPurpose::RenameTerminal { terminal } => self.finish_rename_terminal(terminal, name, cx),
+            InputPurpose::AddInstance { extension, provider } => self.finish_add_extension_instance(extension, provider, name, window, cx),
+            InputPurpose::AllowHost { extension } => self.finish_allow_extension_host(extension, name, window, cx),
             InputPurpose::SetVariable { parent, name: var } => self.finish_set_variable(parent, var, name, cx),
             InputPurpose::PortLabel { remote } => self.finish_port_label(remote, name, cx),
             InputPurpose::PortLocal { remote } => self.finish_port_local(remote, name, cx),
@@ -235,6 +252,7 @@ impl Workbench {
             InputPurpose::CompareFolder { first } => self.finish_compare_input(first, name, window, cx),
             InputPurpose::SaveTheme => self.save_theme_as(name, window, cx),
             InputPurpose::CloneUrl => self.ask_clone_target(name, window, cx),
+            InputPurpose::PullComment(pull) => self.add_ext_pull_comment(*pull, name, window, cx),
             InputPurpose::ConnectHost => {
                 let host = name.trim().to_string();
                 if !host.is_empty() {
@@ -246,9 +264,13 @@ impl Workbench {
             InputPurpose::FilterLog { path } => self.run_filter_log(path, name, window, cx),
             InputPurpose::CloneTarget { url } => self.run_clone(url, name, cx),
             InputPurpose::NewExtension { kind } => self.create_extension(kind, name, window, cx),
-            InputPurpose::InstallFromRegistry => self.review_registry_extension(name, window, cx),
-            InputPurpose::CommitBranch { hash } => self.scm.update(cx, |s, cx| s.commit_op(hash, crate::graph::CommitOp::Branch(name), window, cx)),
-            InputPurpose::CommitTag { hash } => {
+            InputPurpose::InstallFromRegistry => self.review_registry_extension(name, None, window, cx),
+            InputPurpose::CommitBranch { hash, repo } => {
+                if repo.is_some() {
+                    self.scm.update(cx, |s, cx| s.commit_op_in(repo, hash, crate::graph::CommitOp::Branch(name), window, cx));
+                }
+            }
+            InputPurpose::CommitTag { hash, repo } => {
                 // Tag names cannot hold a space, so whatever follows the first word is the message of an annotated tag.
                 let op = match name.trim().split_once(char::is_whitespace) {
                     Some((tag, message)) if !message.trim().is_empty() => {
@@ -256,10 +278,12 @@ impl Workbench {
                     }
                     _ => crate::graph::CommitOp::Tag(name.trim().to_string()),
                 };
-                self.scm.update(cx, |s, cx| s.commit_op(hash, op, window, cx))
+                if repo.is_some() {
+                    self.scm.update(cx, |s, cx| s.commit_op_in(repo, hash, op, window, cx));
+                }
             }
             // --- git-refs ---
-            InputPurpose::CreateBranchFrom { .. } | InputPurpose::RenameRemote { .. } | InputPurpose::SetRemoteUrl { .. } | InputPurpose::StashNamed => {
+            InputPurpose::CreateBranchFrom { .. } | InputPurpose::RenameRemote { .. } | InputPurpose::SetRemoteUrl { .. } | InputPurpose::StashNamed { .. } => {
                 self.finish_ref_input(purpose, name, cx)
             }
             InputPurpose::SaveProject { path } => self.save_project(path, name, cx),
@@ -396,17 +420,10 @@ impl Workbench {
         if noop || !cx.global::<Settings>().confirm_drag_and_drop {
             return self.drop_entry(from, to_dir, window, cx);
         }
-        let title = crate::i18n::tf("Move “{0}” into “{1}”?", &[&ui::file_name(&from), &ui::file_name(&to_dir)]);
         let (host, root) = (self.remote.host.clone(), self.root(cx));
-        let answer = window.prompt(
-            PromptLevel::Info,
-            &title,
-            Some(crate::i18n::t("An existing file with the same name is never overwritten.")),
-            &[crate::i18n::t("Move"), crate::i18n::t("Cancel")],
-            cx,
-        );
+        let answer = crate::questions::move_into(ui::file_name(&from), ui::file_name(&to_dir)).ask(window, cx);
         cx.spawn_in(window, async move |this, cx| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 this.update_in(cx, |this, window, cx| {
                     if Arc::ptr_eq(&host, &this.remote.host) && this.root(cx) == root {
                         this.drop_entry(from, to_dir, window, cx);
@@ -454,19 +471,30 @@ impl Workbench {
         } else {
             let what = if is_dir { crate::i18n::t("The folder and everything in it will be deleted.") } else { "" };
             let sep_what = if what.is_empty() { "" } else { " " };
-            (
-                crate::i18n::tf("Delete “{}” permanently?", &[&name]),
-                format!("{what}{sep_what}{}{sep}{unsaved}", crate::i18n::t("This can't be undone.")),
-                crate::i18n::t("Delete"),
-            )
+            match self.remote.host.is_remote() {
+                // An SSH host has no Trash: the question names the host and the button says it is permanent.
+                true => {
+                    let host = self.file_host_name();
+                    (
+                        crate::i18n::tf("Permanently delete “{0}” on {1}?", &[&name, &host]),
+                        format!("{what}{sep_what}{}{sep}{unsaved}", crate::i18n::tf("{} has no Trash: it is deleted at once and can't be restored.", &[&host])),
+                        crate::i18n::t("Delete Permanently"),
+                    )
+                }
+                false => (
+                    crate::i18n::tf("Delete “{}” permanently?", &[&name]),
+                    format!("{what}{sep_what}{}{sep}{unsaved}", crate::i18n::t("This can't be undone.")),
+                    crate::i18n::t("Delete"),
+                ),
+            }
         };
         // The trash is recoverable: if the setting is off, move without asking.
         let ask = !trash || cx.global::<Settings>().confirm_delete;
         let (host, root) = (self.remote.host.clone(), self.root(cx));
-        let answer = ask.then(|| window.prompt(PromptLevel::Warning, &title, Some(&detail), &[verb, crate::i18n::t("Cancel")], cx));
+        let answer = ask.then(|| crate::questions::delete_entry(&title, &detail, verb, trash).ask(window, cx));
         cx.spawn_in(window, async move |this, cx| {
             if let Some(answer) = answer
-                && answer.await != Ok(0)
+                && answer.await != Some(0)
             {
                 return;
             }
@@ -504,16 +532,9 @@ impl Workbench {
     pub(super) fn confirm_permanent_delete(&mut self, path: String, why: String, window: &mut Window, cx: &mut Context<Self>) {
         let context = super::types::InputContext::Workspace { host: self.remote.host.clone(), root: self.root(cx) };
         let name = ui::file_name(&path).to_string();
-        let detail = crate::i18n::tf("It can't be moved to the Trash ({}). Deleting it permanently can't be undone.", &[&why]);
-        let answer = window.prompt(
-            PromptLevel::Warning,
-            &crate::i18n::tf("Delete “{}” permanently?", &[&name]),
-            Some(&detail),
-            &[crate::i18n::t("Delete Permanently"), crate::i18n::t("Cancel")],
-            cx,
-        );
+        let answer = crate::questions::delete_permanently(&name, &why).ask(window, cx);
         cx.spawn_in(window, async move |this, cx| {
-            if answer.await != Ok(0) {
+            if answer.await != Some(0) {
                 return;
             }
             this.update_in(cx, |this, window, cx| {
@@ -587,6 +608,7 @@ impl Workbench {
                 });
             }
         }
+        self.close_editor_windows_of_deleted(gone, cx);
         for group in self.tabs.groups.values_mut() {
             let active = group.active.and_then(|index| group.editors.get(index)).cloned();
             group.editors.retain(|ed| !gone(ed, cx) || ed.read(cx).is_dirty());

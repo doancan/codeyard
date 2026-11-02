@@ -119,6 +119,7 @@ impl Render for EditorView {
                             .when(minimap, |d| d.pr(px(MINIMAP_W + 16.)))
                             // While the completion list is open, Up/Down/Enter/Tab/Esc go to the list.
                             .key_context(key_context.as_str())
+                            .on_action(cx.on(Self::show_context_menu))
                             .on_action(cx.on(Self::trigger_completion))
                             .on_action(cx.on(Self::completion_next))
                             .on_action(cx.on(Self::completion_prev))
@@ -304,11 +305,15 @@ impl Render for EditorView {
                                         if range.is_empty() || n_lines == 0 {
                                             return Vec::new();
                                         }
+                                        this.sync_tree(cx);
                                         let rope = this.buffer.rope().clone();
                                         let first_line = this.display.line_at_row(range.start).0;
                                         let last_line = (this.display.line_at_row(range.end - 1).0 + 1).min(n_lines);
-                                        let spans =
-                                            this.syntax.as_ref().map(|s| s.highlights(&rope, rope.line_to_byte(first_line)..rope.line_to_byte(last_line)));
+                                        this.note_ext_view(first_line..last_line, cx);
+                                        let spans = this
+                                            .syntax
+                                            .as_ref()
+                                            .map(|s| s.highlights_shown(&rope, rope.line_to_byte(first_line)..rope.line_to_byte(last_line)));
                                         let folded = this.fold_headers();
                                         let bookmarks = this.bookmark_lines();
                                         let breakpoints = this.breakpoints();
@@ -330,7 +335,7 @@ impl Render for EditorView {
                                                 let (start, end) = (line_start + r.start, line_start + r.end);
                                                 let (b0, b1) = (byte_of(full, r.start), byte_of(full, r.end));
                                                 let text = full[b0..b1].to_string();
-                                                let annotation = |id: &'static str, hint: SharedString, opacity| {
+                                                let annotation = |id: &'static str, hint: SharedString, color: u32, opacity| {
                                                     let run = TextRun {
                                                         len: text.len(),
                                                         font: gpui::font(font_family.clone()),
@@ -340,6 +345,11 @@ impl Render for EditorView {
                                                         strikethrough: None,
                                                     };
                                                     let code = window.text_system().shape_line(text.clone().into(), px(font_size), &[run], None).width;
+                                                    // Extension lenses and hints name their extension.
+                                                    let tip: SharedString = match (id == "line-end-hint").then(|| this.ext_eol_tooltip(ix)).flatten() {
+                                                        Some(t) => format!("{hint}\n{t}").into(),
+                                                        None => hint.clone(),
+                                                    };
                                                     // Current layout clips to the space after code, including during a pane resize.
                                                     div()
                                                         .id((id, ix))
@@ -355,9 +365,9 @@ impl Render for EditorView {
                                                         .items_center()
                                                         .justify_end()
                                                         .text_size(px(font_size * 0.85))
-                                                        .text_color(ui::ca(p.text_muted, opacity))
+                                                        .text_color(ui::ca(color, opacity))
                                                         .child(div().min_w_0().max_w(px(480.)).truncate().child(hint.clone()))
-                                                        .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(hint.clone())).into())
+                                                        .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.clone())).into())
                                                 };
                                                 // A cursor at the end of a segment is drawn at the start of the next segment.
                                                 let here = |c: usize| c >= start && (c < end || (c == end && last_seg));
@@ -463,6 +473,9 @@ impl Render for EditorView {
                                                         None if debug_line == Some(ix) => d.bg(ui::ca(p.warning, 0.22)),
                                                         None => d.when(current && line_hl_on, |d| d.bg(c(p.current_line))),
                                                     })
+                                                    .when_some(this.ext_tone(ix, ext_api::value::DecorationPlace::Line), |d, tone| {
+                                                        d.bg(ui::ca(super::tone_color(&p, tone), 0.14))
+                                                    })
                                                     .child(
                                                         div()
                                                             .id(("gutter", row))
@@ -479,6 +492,21 @@ impl Render for EditorView {
                                                                 editor_decor::line_number(&numbers_mode, ix, cursor_line).filter(|_| seg == 0),
                                                                 |d, n| d.child(n),
                                                             )
+                                                            // An extension's gutter decoration: a dot in its tone.
+                                                            .when_some(
+                                                                this.ext_tone(ix, ext_api::value::DecorationPlace::Gutter).filter(|_| seg == 0),
+                                                                |d, tone| {
+                                                                    d.child(
+                                                                        div()
+                                                                            .absolute()
+                                                                            .left(px(theme::SPACE[4]))
+                                                                            .top(px(line_h / 2. - 3.))
+                                                                            .size(px(6.))
+                                                                            .rounded_full()
+                                                                            .bg(c(super::tone_color(&p, tone))),
+                                                                    )
+                                                                },
+                                                            )
                                                             // Breakpoint: red dot; on an empty gutter a dim preview on hover, toggled on click.
                                                             .when(seg == 0, |d| {
                                                                 let bp = breakpoints.binary_search_by_key(&ix, |(l, _)| *l).ok().map(|i| &breakpoints[i].1);
@@ -494,6 +522,27 @@ impl Render for EditorView {
                                                                 };
                                                                 let ring =
                                                                     bp.is_some_and(|m| m.disabled || matches!(m.verified, crate::debug_model::Verified::No(_)));
+                                                                // An existing breakpoint for the tree: pressing it removes it, as a click on the dot does
+                                                                // (F9 sets one at the caret).
+                                                                let heard = bp.map(|m| {
+                                                                    let state = match (&m.verified, m.disabled) {
+                                                                        (_, true) => crate::i18n::t("disabled").to_string(),
+                                                                        (crate::debug_model::Verified::No(why), _) => why.clone().unwrap_or_default(),
+                                                                        _ => m.condition.clone().or(m.log.clone()).unwrap_or_default(),
+                                                                    };
+                                                                    crate::a11y_controls::control(
+                                                                        crate::a11y_controls::Control::button(
+                                                                            this.name.to_string(),
+                                                                            format!("bp{ix}"),
+                                                                            crate::i18n::tf("Breakpoint on line {}", &[&(ix + 1)]),
+                                                                            |_, _| {},
+                                                                        )
+                                                                        .description(state)
+                                                                        .on_entity(cx.entity().downgrade(), move |e: &mut Self, _, cx| {
+                                                                            e.toggle_breakpoint_at(ix, cx)
+                                                                        }),
+                                                                    )
+                                                                });
                                                                 d.child(
                                                                     div()
                                                                         .id(("bp", row))
@@ -506,6 +555,7 @@ impl Render for EditorView {
                                                                         .items_center()
                                                                         .justify_center()
                                                                         .cursor(CursorStyle::PointingHand)
+                                                                        .children(heard)
                                                                         .child(
                                                                             div()
                                                                                 .w(px(9.))
@@ -556,6 +606,24 @@ impl Render for EditorView {
                                                                         .flex()
                                                                         .items_center()
                                                                         .cursor(CursorStyle::PointingHand)
+                                                                        .child(crate::a11y_controls::control(
+                                                                            crate::a11y_controls::Control::button(
+                                                                                this.name.to_string(),
+                                                                                format!("fold{ix}"),
+                                                                                if is_folded {
+                                                                                    crate::i18n::tf("Unfold line {}", &[&(ix + 1)])
+                                                                                } else {
+                                                                                    crate::i18n::tf("Fold line {}", &[&(ix + 1)])
+                                                                                },
+                                                                                |_, _| {},
+                                                                            )
+                                                                            .expanded(!is_folded)
+                                                                            .on_entity(cx.entity().downgrade(), move |e: &mut Self, _, cx| {
+                                                                                e.toggle_fold_line(ix);
+                                                                                cx.emit(EditorEvent::Changed);
+                                                                                cx.notify();
+                                                                            }),
+                                                                        ))
                                                                         .when(!is_folded, |d| d.opacity(0.).group_hover("gutter", |s| s.opacity(1.)))
                                                                         .child(icon(
                                                                             if is_folded { "chevron-right" } else { "chevron-down" },
@@ -576,7 +644,18 @@ impl Render for EditorView {
                                                             // Git: strip for added/changed lines, a notch at the top for deleted lines.
                                                             .when_some(this.git_marks.get(ix).copied().flatten().filter(|_| seg == 0), |d, m| {
                                                                 use crate::git::LineMark;
-                                                                let bar = div().absolute().right(px(theme::SPACE[3])).w(px(3.));
+                                                                let what = match m {
+                                                                    LineMark::Added => crate::i18n::tf("Line {} added", &[&(ix + 1)]),
+                                                                    LineMark::Modified => crate::i18n::tf("Line {} changed", &[&(ix + 1)]),
+                                                                    LineMark::DeletedAbove => crate::i18n::tf("Lines deleted above line {}", &[&(ix + 1)]),
+                                                                };
+                                                                let bar =
+                                                                    div().absolute().right(px(theme::SPACE[3])).w(px(3.)).child(crate::a11y_controls::said(
+                                                                        this.name.to_string(),
+                                                                        format!("git{ix}"),
+                                                                        accesskit::Role::Label,
+                                                                        what,
+                                                                    ));
                                                                 d.child(match m {
                                                                     LineMark::Added => bar.top_0().bottom_0().bg(c(p.success)),
                                                                     LineMark::Modified => bar.top_0().bottom_0().bg(c(p.info)),
@@ -586,11 +665,54 @@ impl Render for EditorView {
                                                     )
                                                     .when_some(
                                                         this.eol_hint(ix).filter(|_| seg == 0 && inline_blame.as_ref().is_none_or(|(l, ..)| *l != ix)),
-                                                        |d, hint| d.child(annotation("line-end-hint", hint.into(), 0.65)),
+                                                        |d, hint| {
+                                                            let lens_label = hint.to_string();
+                                                            let a = annotation("line-end-hint", hint.into(), p.text_muted, 0.65);
+                                                            // A line with an extension lens runs it on click.
+                                                            d.child(a.when(this.ext_lenses_on(ix).next().is_some(), |a| {
+                                                                a.cursor_pointer()
+                                                                    .relative()
+                                                                    .child(crate::a11y_controls::control(
+                                                                        crate::a11y_controls::Control::button(
+                                                                            this.name.to_string(),
+                                                                            format!("lens{ix}"),
+                                                                            lens_label,
+                                                                            |_, _| {},
+                                                                        )
+                                                                        .description(crate::i18n::tf("line {}", &[&(ix + 1)]))
+                                                                        .on_entity(
+                                                                            cx.entity().downgrade(),
+                                                                            move |e: &mut Self, _, cx| {
+                                                                                e.click_ext_lens(ix, cx);
+                                                                            },
+                                                                        ),
+                                                                    ))
+                                                                    .on_mouse_down(
+                                                                        MouseButton::Left,
+                                                                        cx.on(move |e, _: &MouseDownEvent, _, cx| {
+                                                                            cx.stop_propagation();
+                                                                            e.click_ext_lens(ix, cx);
+                                                                        }),
+                                                                    )
+                                                            }))
+                                                        },
+                                                    )
+                                                    // Extension text after the line, when nothing of the editor's own is there.
+                                                    .when_some(
+                                                        this.ext_after(ix).filter(|_| {
+                                                            last_seg && this.eol_hint(ix).is_none() && inline_blame.as_ref().is_none_or(|(l, ..)| *l != ix)
+                                                        }),
+                                                        |d, (text, tone, hover)| {
+                                                            let shown = match hover {
+                                                                Some(h) => format!("{text} · {h}"),
+                                                                None => text,
+                                                            };
+                                                            d.child(annotation("extension-decoration", shown.into(), super::tone_color(&p, tone), 0.8))
+                                                        },
                                                     )
                                                     // Right-aligned inside the space left after the shaped code.
                                                     .when_some(inline_blame.as_ref().filter(|(l, _, _)| *l == ix && seg == 0), |d, (_, _, text)| {
-                                                        d.child(annotation("inline-blame", text.clone(), 0.8))
+                                                        d.child(annotation("inline-blame", text.clone(), p.text_muted, 0.8))
                                                     })
                                                     .child(LineElement {
                                                         editor: entity.clone(),
@@ -654,6 +776,17 @@ impl Render for EditorView {
                                             let line = *line;
                                             div()
                                                 .id(("sticky", line))
+                                                .relative()
+                                                .child(crate::a11y_controls::control(
+                                                    crate::a11y_controls::Control::new(
+                                                        self.name.to_string(),
+                                                        format!("sticky{line}"),
+                                                        accesskit::Role::Link,
+                                                        text.to_string(),
+                                                    )
+                                                    .description(crate::i18n::tf("line {}", &[&(line + 1)]))
+                                                    .on_entity(cx.entity().downgrade(), move |e: &mut Self, w, cx| e.go_to_line(line + 1, w, cx)),
+                                                ))
                                                 .h(px(line_h))
                                                 .w_full()
                                                 .flex()

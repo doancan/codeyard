@@ -1,0 +1,9 @@
+# The hourly check (deploy/yard/watch): yard answers, the index does not expire within 24 h, the online key not within
+# 14 days, Litestream and Caddy run. A failure alerts the owner, again every hour until it is fixed.
+[Unit]
+Description=Check the extension registry
+OnFailure=yard-alert@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/yard-watch

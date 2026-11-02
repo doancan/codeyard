@@ -14,8 +14,13 @@ use std::io::{self, Read, Write};
 
 use serde::{Deserialize, Serialize};
 
+/// Prefix of a daemon session id that only one live connection may hold (a window's terminals on the local terminal
+/// daemon): a second `Hello` for it is refused while the first connection lives. Other sessions are taken over by the
+/// newest connection (an SSH reconnect while the old connection is still half-open).
+pub const EXCLUSIVE_SESSION: &str = "x-";
+
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 15;
+pub const VERSION: u32 = 19;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -32,7 +37,8 @@ pub struct Frame<T> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Request {
     /// `session`: ID of the previous session when reconnecting (in daemon mode
-    /// terminals and watches resume where they were).
+    /// terminals and watches resume where they were). A session id that starts with [`EXCLUSIVE_SESSION`] is refused
+    /// with `PermissionDenied` while another connection is attached to it, instead of being taken over.
     Hello {
         client_version: u32,
         session: Option<String>,
@@ -182,6 +188,41 @@ pub enum Request {
         from: String,
         to: String,
     },
+    /// Run a task: answered with `ProcSpawned`, then `ProcOutput` (stdout and stderr in one stream, as written) and
+    /// `ProcExit`. It leads its own process group (a job object on Windows), so `ProcKill` stops what it started too;
+    /// the `ProcExit` after a kill has `code: None`. Standard input is closed.
+    TaskSpawn {
+        command: TaskCommand,
+        cwd: Option<String>,
+        /// Set (`Some`) or remove (`None`) variables, in order, on top of the agent's environment.
+        env: Vec<(String, Option<String>)>,
+    },
+    /// The token a client keeps to attach to this terminal again after it restarts (`PtyToken`): the agent process's
+    /// random instance id and a random secret of this terminal. Never a process id.
+    PtyToken {
+        pty: u32,
+    },
+    /// Take this session's terminal `pty` back after a restart, proving it with its token (`PtyAttached`). Refused with
+    /// `NotFound` when the terminal has ended, and with `PermissionDenied` when the instance or secret is not the one this
+    /// agent gave (another agent process, a guessed or stale token).
+    PtyAttach {
+        pty: u32,
+        instance: String,
+        secret: String,
+    },
+    /// The session's open terminals (`PtyList`), so a client can close the ones it did not take back.
+    PtyList,
+    /// Daemon mode: keep this session (its terminals) this many seconds after its connection ends, instead of the
+    /// daemon's default; 0 ends it as soon as the connection ends. No reply.
+    KeepFor {
+        secs: u64,
+    },
+    /// Where each path really is (`RealPaths`): every symbolic link followed, the link at the end too when its target
+    /// does not exist, and missing parts appended to their nearest existing folder, so a check on the answer holds for
+    /// what reading or writing the path would reach. One result per path, in order.
+    RealPaths {
+        paths: Vec<String>,
+    },
     /// Metadata for the entry itself, without following a final symlink or directory junction.
     Lstat {
         path: String,
@@ -191,6 +232,16 @@ pub enum Request {
         path: String,
         data: Vec<u8>,
     },
+}
+
+/// What `TaskSpawn` runs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum TaskCommand {
+    /// `program` with exactly these arguments; a bare name is looked up on the user's PATH (login shell on Unix).
+    Process { program: String, args: Vec<String> },
+    /// `line` passed to a shell as one argument: `shell` (default: the user's login shell, `cmd.exe` on Windows) with
+    /// `args` before it (default: `-l -c`, `/d /s /c` for cmd.exe).
+    Shell { shell: Option<String>, args: Option<Vec<String>>, line: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -327,6 +378,19 @@ pub enum Response {
         cwd: Option<String>,
     },
     Shells(Vec<String>),
+    PtyToken {
+        instance: String,
+        secret: String,
+    },
+    PtyAttached {
+        pty: u32,
+        /// Bytes the terminal has written since it started (its output sequence number).
+        sequence: u64,
+        /// Bytes of its output lost while no client was attached (the backlog keeps the last 256 KB).
+        dropped: u64,
+    },
+    PtyList(Vec<u32>),
+    RealPaths(Vec<std::result::Result<String, Error>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -369,6 +433,11 @@ pub struct Meta {
     /// Unix epoch milliseconds.
     pub mtime_ms: i64,
     pub readonly: bool,
+    /// The file's identity on its filesystem (Unix: device and inode mixed into one value); 0 where unknown.
+    /// Writing to a file or into a folder keeps it; deleting and creating the path again changes it.
+    pub file_id: u64,
+    /// Creation time in Unix epoch milliseconds; 0 where the filesystem does not keep it.
+    pub created_ms: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -666,8 +735,10 @@ mod tests {
         for (request, tag) in [
             (Request::ReadPreview { root: "/root".into(), path: "file.txt".into() }, 29),
             (Request::Copy { from: "/from".into(), to: "/to".into() }, 30),
-            (Request::Lstat { path: "/entry".into() }, 31),
-            (Request::WriteNew { path: "/new-file".into(), data: vec![1, 2, 3] }, 32),
+            (Request::TaskSpawn { command: TaskCommand::Shell { shell: None, args: None, line: "true".into() }, cwd: None, env: Vec::new() }, 31),
+            (Request::RealPaths { paths: vec!["/a".into()] }, 36),
+            (Request::Lstat { path: "/entry".into() }, 37),
+            (Request::WriteNew { path: "/new-file".into(), data: vec![1, 2, 3] }, 38),
         ] {
             let bytes = postcard::to_stdvec(&request).unwrap();
             assert_eq!(bytes[0], tag);

@@ -16,7 +16,7 @@ try {
     $env:AGENTS_DIR = $agentsDir
     $cargo = (Get-Command cargo -ErrorAction SilentlyContinue).Source
     if (-not $cargo) { $cargo = Join-Path $env:USERPROFILE '.cargo/bin/cargo.exe' }
-    $cargoArgs = @('build', '--locked', '-p', 'app', '-p', 'cyx')
+    $cargoArgs = @('build', '--locked', '-p', 'app', '-p', 'cyx', '-p', 'ext-host')
     if ($Profile -eq 'Release') { $cargoArgs += '--release' }
     & $cargo @cargoArgs
     if ($LASTEXITCODE -ne 0) { throw 'Windows application build failed' }

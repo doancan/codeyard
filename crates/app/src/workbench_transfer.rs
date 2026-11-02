@@ -93,7 +93,8 @@ impl Job {
 fn probe_local_destination(path: &std::path::Path) -> Result<Option<bool>, String> {
     match std::fs::metadata(path) {
         Ok(meta) => Ok(Some(meta.is_dir())),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        // A file where a folder of the path should be means nothing is there; the transfer reports why it cannot write.
+        Err(error) if matches!(error.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory) => Ok(None),
         Err(error) => Err(format!("{}: {error}", path.display())),
     }
 }
@@ -295,19 +296,9 @@ impl Workbench {
                     this.run_job(job, &source_host, cx);
                     return;
                 }
-                let title = match existing.as_slice() {
-                    [one] => crate::i18n::tf("“{}” already exists. Replace it?", &[one]),
-                    many => crate::i18n::tn("{} item already exists. Replace it?", "{} items already exist. Replace them?", many.len(), &[]),
-                };
-                let answer = window.prompt(
-                    gpui::PromptLevel::Warning,
-                    &title,
-                    Some(crate::i18n::t("Files with the same name are overwritten; other files in the folder are kept.")),
-                    &[crate::i18n::t("Replace"), crate::i18n::t("Cancel")],
-                    cx,
-                );
+                let answer = crate::questions::replace_on_transfer(&existing).ask(window, cx);
                 cx.spawn(async move |this, cx| {
-                    if answer.await == Ok(0) {
+                    if answer.await == Some(0) {
                         this.update(cx, |this, cx| this.run_job(job, &source_host, cx)).ok();
                     }
                 })
@@ -412,15 +403,9 @@ impl Workbench {
     /// Click on the transfer in the status bar: ask whether to cancel.
     pub(super) fn ask_cancel_transfer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(run) = self.remote.transfer.clone() else { return };
-        let answer = window.prompt(
-            gpui::PromptLevel::Warning,
-            &crate::i18n::tf("Cancel “{}”?", &[&run.label]),
-            Some(crate::i18n::t("Temporary transfer data is removed. Changes already made at the destination may remain.")),
-            &[crate::i18n::t("Cancel Transfer"), crate::i18n::t("Keep Going")],
-            cx,
-        );
+        let answer = crate::questions::cancel_transfer(&run.label).ask(window, cx);
         cx.spawn(async move |_, _| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 run.cancel.store(true, Ordering::Relaxed);
             }
         })

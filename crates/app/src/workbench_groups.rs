@@ -11,11 +11,13 @@ pub(super) struct GroupKey {
     pub(super) epoch: u64,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(super) struct GroupResize {
     pub(super) split: u8,
     pub(super) axis: crate::editor_layout::Axis,
-    pub(super) bounds: gpui::Bounds<gpui::Pixels>,
+    /// The split's bounds as last painted: kept current during the drag, so a zoom or a window resize mid-drag does not
+    /// make the divider jump away from the pointer.
+    pub(super) bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     pub(super) anchor: GroupKey,
     pub(super) revision: u64,
 }
@@ -36,6 +38,10 @@ pub(super) struct Group {
     pub(super) page: Option<Page>,
     pub(super) page_active: bool,
     pub(super) _page_sub: Option<Subscription>,
+    /// Search Editor tabs of this group; the one in front is also `page`.
+    pub(super) searches: Vec<Entity<crate::search_editor::SearchEditor>>,
+    /// Terminals moved into this group (the panel no longer lists them); the one in front is also `page`.
+    pub(super) terminals: Vec<Entity<crate::terminal::TerminalView>>,
     /// Match to show in the file opened from a search result: (path, line, column, length).
     pub(super) pending_reveal: Option<(String, u32, u32, u32)>,
     /// Tab bar scroll (so the active tab stays visible).
@@ -58,6 +64,8 @@ impl Default for Group {
             page: None,
             page_active: false,
             _page_sub: None,
+            searches: Vec::new(),
+            terminals: Vec::new(),
             pending_reveal: None,
             tab_scroll: gpui::ScrollHandle::new(),
         }
@@ -135,7 +143,13 @@ impl state_glue::TabsState {
 
 impl Group {
     pub(super) fn is_empty(&self) -> bool {
-        self.editors.is_empty() && self.diff.is_none() && self.large.is_none() && self.page.is_none() && self.opening.is_none()
+        self.editors.is_empty()
+            && self.diff.is_none()
+            && self.large.is_none()
+            && self.page.is_none()
+            && self.opening.is_none()
+            && self.searches.is_empty()
+            && self.terminals.is_empty()
     }
 }
 
@@ -146,6 +160,7 @@ impl Workbench {
 
     pub(super) fn sync_slots(&self, cx: &mut App) {
         let ids = self.tabs.layout.groups();
+        let host = self.chrome.editor_host;
         for ed in self.all_editors() {
             let slots: Vec<usize> = ids.iter().copied().filter(|id| self.tabs.group(*id).is_some_and(|g| g.editors.contains(&ed))).map(usize::from).collect();
             ed.update(cx, |e, cx| {
@@ -159,6 +174,10 @@ impl Workbench {
                 let focused = self.focused_slot();
                 if let Some(home) = slots.iter().copied().find(|slot| *slot == focused).or_else(|| slots.first().copied()) {
                     e.set_home(home);
+                }
+                // While its own window is in use, calls from outside go to that window's view.
+                if let Some(slot) = host.filter(|s| e.has_slot(*s)) {
+                    e.set_home(slot);
                 }
             });
         }
@@ -177,14 +196,16 @@ impl Workbench {
                 }
                 group.active.and_then(|ix| group.editors.get(ix)).cloned()
             })
+            .chain(self.window_editors())
             .collect();
         for ed in self.all_editors() {
             ed.update(cx, |e, _| e.set_active(front.contains(&ed)));
         }
     }
 
+    /// Whether `ed` is also shown outside the focused group: in another group or in a window of its own.
     pub(super) fn also_in_other(&self, ed: &Entity<EditorView>) -> bool {
-        self.tabs.groups.values().any(|g| g.editors.contains(ed))
+        self.tabs.groups.values().any(|g| g.editors.contains(ed)) || self.in_editor_window(ed)
     }
 
     pub(super) fn ensure_group(&mut self, key: GroupKey) -> bool {
@@ -192,6 +213,9 @@ impl Workbench {
     }
 
     pub(super) fn focus_group_key(&mut self, key: GroupKey, window: &mut Window, cx: &mut Context<Self>) {
+        if self.run_in_main_window(window, cx, move |this, window, cx| this.focus_group_key(key, window, cx)) {
+            return;
+        }
         if !self.ensure_group(key) {
             return;
         }
@@ -206,7 +230,7 @@ impl Workbench {
                 window.focus(&view.focus_handle(cx));
             }
         } else if !self.tabs.page_active {
-            if let Some(ed) = self.active_editor() {
+            if let Some(ed) = self.tab_editor() {
                 window.focus(&ed.focus_handle(cx));
             } else {
                 window.focus(&self.focus_handle);
@@ -219,6 +243,8 @@ impl Workbench {
                 Some(Page::LanguageServices(view)) => view.focus_handle(cx),
                 Some(Page::Merge(view)) => view.focus_handle(cx),
                 Some(Page::Compare(view)) => view.focus_handle(cx),
+                Some(Page::Search(view)) => view.focus_handle(cx),
+                Some(Page::Terminal(view)) => view.focus_handle(cx),
                 _ => self.focus_handle.clone(),
             };
             window.focus(&handle);
@@ -290,7 +316,7 @@ impl Workbench {
     }
 
     fn split_direction(&mut self, direction: Direction, window: &mut Window, cx: &mut Context<Self>) {
-        let active = self.active_editor().cloned();
+        let active = self.tab_editor().cloned();
         let key = match self.tabs.split(direction) {
             Ok(key) => key,
             Err(_) => {
@@ -348,7 +374,7 @@ impl Workbench {
 
     pub(super) fn move_editor_to_other_group(&mut self, _: &MoveEditorToOtherGroup, window: &mut Window, cx: &mut Context<Self>) {
         let from = self.tabs.current_key();
-        let ed = self.active_editor().cloned();
+        let ed = self.tab_editor().cloned();
         let was_single = self.tabs.layout.groups().len() == 1;
         let target = self
             .tabs

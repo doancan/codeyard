@@ -68,7 +68,7 @@ pub(crate) fn desktop_menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
         I::separator(),
         I::action(tr("Settings…"), wb::OpenSettingsPage),
         I::action(tr("Open Settings (JSON)"), wb::OpenSettings),
-        I::action(tr("Import VS Code Settings and Shortcuts"), wb::ImportVsCode),
+        I::action(tr("Import Settings and Shortcuts from Another Editor"), wb::ImportVsCode),
         I::separator(),
         I::action(tr("Exit"), wb::Quit),
     ]);
@@ -320,7 +320,7 @@ pub(crate) fn menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
                 I::action(tr("Open Settings (JSON)"), wb::OpenSettings),
                 I::action(tr("Keyboard Shortcuts"), wb::OpenKeybindings),
                 I::action(tr("Color Theme…"), wb::SelectTheme),
-                I::action(tr("Import VS Code Settings and Shortcuts"), wb::ImportVsCode),
+                I::action(tr("Import Settings and Shortcuts from Another Editor"), wb::ImportVsCode),
                 sep(),
                 I::os_submenu(tr("Services"), SystemMenuType::Services),
                 sep(),

@@ -32,6 +32,13 @@ n=$(awk '/^pub struct Workbench( |<|\{)/{f=1} f{c++} f&&/^}/{print c; exit}' cra
 case "$n" in ''|*[!0-9]*) echo "FAIL Workbench struct: 'pub struct Workbench {' ... '}' not found in crates/app/src/workbench.rs"; fail=1 ;; *)
   if [ "$n" -gt 80 ]; then echo "FAIL Workbench struct $n lines (limit 80): put the new field in a state group"; fail=1; else echo "ok   Workbench struct: $n / 80"; fi ;;
 esac
+# No WebAssembly runtime or JIT in the app process (docs/plugin-architecture.md §2): wasmtime and Cranelift live only in
+# codeyard-exthost.
+if tree=$(cargo tree -p app -e normal --prefix none 2>/dev/null); then
+  if bad=$(printf '%s\n' "$tree" | grep -E '^(wasmtime|cranelift|ext-host)[ -]' | sort -u) && [ -n "$bad" ]; then
+    echo "FAIL the app depends on a WebAssembly runtime (move it to codeyard-exthost):"; echo "$bad"; fail=1
+  else echo "ok   app has no wasmtime, cranelift or ext-host"; fi
+else echo "FAIL cargo tree -p app failed"; fail=1; fi
 # vendor/ patches still in place (vendor/gpui/PATCHES.md).
 scripts/check-gpui-patches.sh || fail=1
 exit $fail

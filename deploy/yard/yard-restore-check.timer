@@ -1,0 +1,10 @@
+[Unit]
+Description=Check weekly that the extension registry's backup restores
+
+[Timer]
+OnCalendar=Sun *-*-* 05:30:00 UTC
+RandomizedDelaySec=30m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

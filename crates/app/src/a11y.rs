@@ -18,8 +18,14 @@ use accesskit::{Action, ActionData, ActionRequest, Live, Node, NodeId, Role, Tex
 
 #[path = "a11y_geometry.rs"]
 mod geometry;
+#[path = "a11y_text.rs"]
+mod text;
 pub use geometry::Geometry;
-pub(super) use geometry::{Landmark, PaintedBounds, landmark};
+pub(super) use geometry::{Landmark, MENU_BUTTON, PaintedBounds, Part, RowFrame, StatusPart, landmark, part_frame, part_frame_for, row_button, row_frame};
+pub use text::RunFrame;
+#[cfg(test)]
+use text::runs_for;
+use text::{char_of, position_of, run_nodes, runs_painted};
 
 const ROOT: NodeId = NodeId(1);
 const EXPLORER: NodeId = NodeId(2);
@@ -47,7 +53,25 @@ const SCM_EMPTY: NodeId = NodeId(23);
 const ABOUT_TAB: NodeId = NodeId(29);
 const ABOUT: NodeId = NodeId(30);
 const ABOUT_COPY: NodeId = NodeId(31);
+const SCM_REPOS: NodeId = NodeId(38);
+/// The change list of Source Control (scrolls its exposed range).
+const SCM_CHANGES: NodeId = NodeId(40);
 const ABOUT_DETAIL: u64 = 0xa0_0000;
+const EXT: NodeId = NodeId(41);
+const EXT_TABS: NodeId = NodeId(42);
+const EXT_TAB_INSTALLED: NodeId = NodeId(43);
+const EXT_TAB_MARKET: NodeId = NodeId(44);
+const EXT_SEARCH: NodeId = NodeId(45);
+const EXT_STATUS: NodeId = NodeId(46);
+const EXT_LIST: NodeId = NodeId(47);
+const EXT_PAGE: NodeId = NodeId(48);
+const EXT_PAGE_INSTALL: NodeId = NodeId(49);
+const EXT_ROW: u64 = 0xd0_0000;
+const EXT_PAGE_LINE: u64 = 0xe0_0000;
+const INSPECTOR: NodeId = NodeId(39);
+const INSPECTOR_LINE: u64 = 0x110_0000;
+/// Elements of extension views (a11y_ext_views.rs).
+const EXT_VIEW_NODE: u64 = 0x100_0000;
 const SERVICES: NodeId = NodeId(24);
 const SERVICES_INFO: NodeId = NodeId(25);
 const SERVICES_STATUS: NodeId = NodeId(26);
@@ -63,28 +87,21 @@ const COMPLETION_OPTION: u64 = 0x60_0000;
 const EXTRA_TREE: u64 = 0x70_0000;
 const SCM_GROUP: u64 = 0x80_0000;
 const SCM_FILE: u64 = 0x90_0000;
+/// Repositories of the Source Control inventory.
+const SCM_REPO: u64 = 0xf0_0000;
 /// Ids per block (status items, update buttons, tabs, ...).
 const BLOCK: u64 = 0x10_0000;
 const ROW_BASE: u64 = 0x2_0000_0000;
 const RUN_BASE: u64 = 0x4_0000_0000;
 const TERM_RUN_BASE: u64 = 0x8_0000_0000;
-const _: () = {
-    let blocks = [STATUS_ITEM, UPDATE_BUTTON, TAB_BASE, PICK_OPTION, FIND_CONTROL, COMPLETION_OPTION, EXTRA_TREE, SCM_GROUP, SCM_FILE, ABOUT_DETAIL, ROW_BASE];
-    let mut i = 1;
-    while i < blocks.len() {
-        assert!(blocks[i - 1] + BLOCK <= blocks[i]);
-        i += 1;
-    }
-    // Rows are ROW_BASE | 32-bit hash; editor and terminal runs sit above them.
-    assert!(ROW_BASE + 0xffff_ffff < RUN_BASE && RUN_BASE + 0xffff_ffff < TERM_RUN_BASE);
-};
-/// Window shown to AT in the editor: this many lines before/after the cursor line.
-const WINDOW_BEFORE: usize = 100;
-const WINDOW_AFTER: usize = 200;
+/// Lines of the editor shown to AT (see `window_start`).
+const EDITOR_WINDOW: usize = 300;
 /// Characters per text run (word_starts is u8, so at most 255).
 const RUN_CHARS: usize = 200;
-/// Max rows shown to AT in the explorer.
-const MAX_ROWS: usize = 5000;
+/// Rows of an explorer tree shown to AT (see `window_start`).
+const EXPLORER_WINDOW: usize = 1000;
+/// The "More Actions…" button of Explorer row `i` of tree `k` (`EXPLORER_MENU + k * EXPLORER_WINDOW + i`).
+const EXPLORER_MENU: u64 = 0x1e0_0000;
 /// Max rows shown to AT in a picker or the suggestion list.
 const MAX_OPTIONS: usize = 500;
 
@@ -103,6 +120,8 @@ pub struct ExplorerSnap {
     pub name: String,
     pub rows: Vec<RowSnap>,
     pub rows_total: usize,
+    /// Index of the first row of `rows` in the whole tree.
+    pub first: usize,
     pub focused: Option<u64>,
 }
 
@@ -115,6 +134,8 @@ pub struct RowSnap {
     pub is_dir: bool,
     pub expanded: bool,
     pub selected: bool,
+    /// Where the row was painted (`None`: scrolled out of view).
+    pub frame: Option<accesskit::Rect>,
 }
 
 /// A text run: a slice of a single line (at most RUN_CHARS characters).
@@ -125,6 +146,8 @@ pub struct RunSnap {
     /// Character count including the line ending.
     pub chars: usize,
     pub text: String,
+    /// Where it was painted (`None`: not on screen).
+    pub frame: Option<RunFrame>,
 }
 
 #[derive(Clone, PartialEq, Debug, Default)]
@@ -148,14 +171,28 @@ pub struct FindSnap {
     pub status: Option<String>,
     /// Options (with their state) and buttons, in visual order.
     pub controls: Vec<(String, Option<bool>)>,
+    /// Where its parts were painted.
+    pub frames: Vec<(crate::find::FindFrame, accesskit::Rect)>,
 }
 
-/// A list of options: picker rows or suggestions.
-#[derive(Clone, PartialEq, Debug)]
+impl FindSnap {
+    fn place(&self, part: crate::find::FindFrame, node: &mut Node) {
+        if let Some((_, bounds)) = self.frames.iter().find(|(k, _)| *k == part) {
+            node.set_bounds(*bounds);
+        }
+    }
+}
+
+/// A list of options: picker rows, suggestions or extensions.
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct ListSnap {
     pub rows: Vec<(String, Option<String>)>,
     pub rows_total: usize,
     pub selected: Option<usize>,
+    /// Where each row was painted (physical pixels; `None` or missing: not on screen).
+    pub frames: Vec<Option<accesskit::Rect>>,
+    /// Where the list itself was painted.
+    pub bounds: Option<accesskit::Rect>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -165,6 +202,25 @@ pub struct PickerSnap {
     pub query: String,
     pub list: ListSnap,
     pub empty: Option<String>,
+    /// Where the picker and its query box were painted in this window.
+    pub bounds: Option<accesskit::Rect>,
+    pub input: Option<accesskit::Rect>,
+}
+
+impl PickerSnap {
+    /// The picker as drawn in `window` (no bounds when it was drawn in another window).
+    pub(super) fn of(picker: &crate::picker::Picker, window: &Window) -> Self {
+        let v = picker.a11y_view(MAX_OPTIONS, window);
+        PickerSnap {
+            label: v.placeholder,
+            message: v.message,
+            query: v.query,
+            list: ListSnap { rows: v.rows, rows_total: v.rows_total, selected: v.selected, frames: v.frames, bounds: v.list },
+            empty: v.empty,
+            bounds: v.bounds,
+            input: v.input,
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -173,6 +229,8 @@ pub struct TerminalSnap {
     pub runs: Vec<RunSnap>,
     /// Character index of the cursor, if it is on screen.
     pub cursor: Option<usize>,
+    /// Lines scrolled back into the history, and the history's length.
+    pub scroll: (usize, usize),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -187,7 +245,12 @@ pub enum FocusSnap {
     Picker,
     Terminal,
     ScmMessage,
+    /// The change list of Source Control (its cursor row is the focused node).
+    ScmChanges,
+    /// The repository list of Source Control (the selected repository is the focused option).
+    ScmRepos,
     AboutCopy,
+    ExtSearch,
 }
 
 /// The update dialog (or the first-run question) while it is open.
@@ -223,10 +286,36 @@ pub struct NoticeSnap {
     pub error: bool,
 }
 
+#[path = "a11y_chrome.rs"]
+mod chrome_access;
+#[path = "a11y_extensions.rs"]
+mod ext_access;
+#[path = "a11y_ext_views.rs"]
+mod ext_views_access;
+#[path = "a11y_ids.rs"]
+mod ids;
+#[path = "a11y_inspector.rs"]
+mod inspector_access;
+pub(in crate::workbench) use chrome_access::view_part;
+#[path = "a11y_popups.rs"]
+mod popups_access;
+#[path = "a11y_problems.rs"]
+mod problems_access;
 #[path = "a11y_scm.rs"]
 mod scm_access;
+#[path = "a11y_search_editor.rs"]
+mod search_access;
 #[path = "a11y_language_services.rs"]
 mod services_access;
+#[cfg(test)]
+pub(crate) use ext_views_access::Act as ExtViewAct;
+#[path = "a11y_term_tabs.rs"]
+mod term_tab_access;
+#[path = "a11y_windows.rs"]
+pub(in crate::workbench) mod windows_access;
+use search_access::SEARCH_ED_TAB;
+pub(crate) use search_access::{SearchEdSnap, SearchTabSnap};
+pub(crate) use term_tab_access::TermTabSnap;
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct ScmSnap {
@@ -240,6 +329,8 @@ pub struct Snapshot {
     /// Physical landmark frames from the latest painted layout.
     pub geometry: Geometry,
     pub title: String,
+    /// Where the views are (side bars, panel dock): the window's description.
+    pub(crate) layout: String,
     pub explorers: Vec<ExplorerSnap>,
     pub tabs: Vec<TabSnap>,
     /// Index into `tabs` of the tab in front (`None` while a diff, large file or page tab is in front).
@@ -248,105 +339,70 @@ pub struct Snapshot {
     pub editor: Option<EditorSnap>,
     pub find: Option<FindSnap>,
     pub completion: Option<ListSnap>,
+    /// The editor's hover and signature popups.
+    pub(crate) popups: Option<crate::editor::PopupsA11y>,
+    /// The activity bar, the title bar, the caption buttons and the side views' header buttons.
+    pub(crate) chrome: chrome_access::ChromeSnap,
+    /// Controls the views declared where they are drawn (`a11y_controls.rs`), in this window's last frame.
+    pub(crate) controls: Vec<crate::a11y_controls::ControlSnap>,
     pub terminal: Option<TerminalSnap>,
     pub(crate) scm: Option<ScmSnap>,
+    pub(crate) views: problems_access::ViewsSnap,
     pub(crate) services: Option<crate::language_services_page::AccessView>,
+    pub(crate) exts: Option<ext_access::ExtSnap>,
+    pub(crate) ext_page: Option<ext_access::ExtPageSnap>,
+    pub(crate) inspector: Option<inspector_access::InspectorSnap>,
+    pub(crate) ext_views: Vec<ext_views_access::ViewSnap>,
+    /// The Search Editor in front, and every Search Editor tab of the focused group.
+    pub(crate) search_editor: Option<SearchEdSnap>,
+    pub(crate) search_tabs: Vec<SearchTabSnap>,
+    /// The terminal tabs of the focused group.
+    pub(crate) term_tabs: Vec<TermTabSnap>,
     pub picker: Option<PickerSnap>,
     pub notice: Option<NoticeSnap>,
     pub status: Vec<String>,
+    /// What each status item is (the same order as `status`).
+    pub(in crate::workbench) status_parts: Vec<StatusPart>,
     pub dialog: Option<DialogSnap>,
     pub focus: FocusSnap,
 }
 
-/// Split into runs: each line into runs of at most RUN_CHARS characters, the line ending in the last run.
-fn runs_for(lines: Vec<(usize, String)>, total_lines: usize, first_line: usize) -> Vec<RunSnap> {
-    let mut runs = Vec::new();
-    for (i, (start, line)) in lines.into_iter().enumerate() {
-        let last_in_doc = first_line + i + 1 >= total_lines;
-        let chars: Vec<char> = line.chars().collect();
-        let n = chars.len();
-        let mut off = 0;
-        loop {
-            let end = (off + RUN_CHARS).min(n);
-            let mut text: String = chars[off..end].iter().collect();
-            let mut count = end - off;
-            if end == n && !last_in_doc {
-                text.push('\n');
-                count += 1;
-            }
-            runs.push(RunSnap { start: start + off, chars: count, text });
-            if end == n {
-                break;
-            }
-            off = end;
-        }
-    }
-    runs
-}
-
-fn word_starts(text: &str) -> Vec<u8> {
-    #[derive(PartialEq, Clone, Copy)]
-    enum K {
-        Word,
-        Space,
-        Punct,
-    }
-    let kind = |c: char| {
-        if c.is_alphanumeric() || c == '_' {
-            K::Word
-        } else if c.is_whitespace() {
-            K::Space
-        } else {
-            K::Punct
-        }
+/// First of the `len` items (explorer rows, editor lines) of `total` shown to AT, so snapshots stay bounded: centred on
+/// `focus` (selection, caret) while it is on screen, otherwise on the `visible` range (after a scroll).
+pub(crate) fn window_start(total: usize, len: usize, focus: Option<usize>, visible: Option<(usize, usize)>) -> usize {
+    let centre = match (focus, visible) {
+        (Some(f), Some((a, b))) if (a..=b).contains(&f) => f,
+        (_, Some((a, b))) => (a + b) / 2,
+        (f, None) => f.unwrap_or(0),
     };
-    let mut out = Vec::new();
-    let mut prev: Option<K> = None;
-    for (i, c) in text.chars().enumerate() {
-        let k = kind(c);
-        // Each punctuation character is its own word; words and whitespace as clusters.
-        if (prev != Some(k) || k == K::Punct) && i > 0 && i < 256 {
-            out.push(i as u8);
+    centre.saturating_sub(len / 2).min(total.saturating_sub(len))
+}
+
+/// Scroll position of a windowed node, in items (rows, lines), and its scroll actions.
+fn set_scroll(node: &mut Node, first: usize, shown: usize, total: usize) {
+    node.set_scroll_y(first as f64);
+    node.set_scroll_y_min(0.);
+    node.set_scroll_y_max(total.saturating_sub(shown) as f64);
+    node.add_action(Action::ScrollUp);
+    node.add_action(Action::ScrollDown);
+}
+
+impl EditorSnap {
+    /// The lines around the caret, or the visible ones after a scroll; run offsets are document-relative. Runs on lines
+    /// painted in the editor's last frame (drawn at `scale`) carry where their characters are.
+    pub(super) fn of(e: &crate::editor::EditorView, scale: f32) -> EditorSnap {
+        let line = e.cursor_position().0.saturating_sub(1);
+        let first = window_start(e.line_count(), EDITOR_WINDOW, Some(line), e.visible_lines());
+        let (selection, total_lines, lines) = e.a11y_view(first, first + EDITOR_WINDOW);
+        EditorSnap {
+            name: e.name.to_string(),
+            dirty: e.is_dirty(),
+            runs: runs_painted(lines, total_lines, first, &e.a11y_layout(), scale),
+            selection,
+            total_lines,
+            first_line: first,
         }
-        prev = Some(k);
     }
-    out
-}
-
-/// Convert a character index to a (run, char index within run) position; clamp to the edge if outside the window.
-/// `base`: id of the first run.
-fn position_of(runs: &[RunSnap], base: u64, ix: usize) -> Option<TextPosition> {
-    let first = runs.first()?;
-    if ix <= first.start {
-        return Some(TextPosition { node: NodeId(base), character_index: 0 });
-    }
-    for (i, r) in runs.iter().enumerate() {
-        if ix < r.start + r.chars {
-            return Some(TextPosition { node: NodeId(base + i as u64), character_index: ix - r.start });
-        }
-    }
-    let i = runs.len() - 1;
-    Some(TextPosition { node: NodeId(base + i as u64), character_index: runs[i].text.chars().count() })
-}
-
-fn char_of(runs: &[RunSnap], p: TextPosition) -> Option<usize> {
-    let i = p.node.0.checked_sub(RUN_BASE)? as usize;
-    runs.get(i).map(|r| r.start + p.character_index.min(r.chars))
-}
-
-/// Text run nodes (one per run) with ids from `base`.
-fn run_nodes(runs: &[RunSnap], base: u64, nodes: &mut Vec<(NodeId, Node)>) -> Vec<NodeId> {
-    let mut ids = Vec::new();
-    for (i, r) in runs.iter().enumerate() {
-        let id = NodeId(base + i as u64);
-        let mut run = Node::new(Role::TextRun);
-        run.set_value(r.text.clone());
-        run.set_character_lengths(r.text.chars().map(|c| c.len_utf8() as u8).collect::<Vec<u8>>());
-        run.set_word_starts(word_starts(&r.text));
-        ids.push(id);
-        nodes.push((id, run));
-    }
-    ids
 }
 
 /// A list box with one option per row (ids from `base`); options can be focused and clicked.
@@ -362,6 +418,9 @@ fn list_nodes(list: &ListSnap, label: &str, base: u64, nodes: &mut Vec<(NodeId, 
             o.set_description(d.clone());
         }
         o.set_selected(list.selected == Some(i));
+        if let Some(b) = list.frames.get(i).copied().flatten() {
+            o.set_bounds(b);
+        }
         o.set_position_in_set(i + 1);
         o.set_size_of_set(list.rows_total);
         o.add_action(Action::Click);
@@ -370,7 +429,17 @@ fn list_nodes(list: &ListSnap, label: &str, base: u64, nodes: &mut Vec<(NodeId, 
         nodes.push((oid, o));
     }
     node.set_children(ids);
+    if let Some(b) = list.bounds {
+        node.set_bounds(b);
+    }
     node
+}
+
+/// The editor's suggestions, with where they were painted (at `scale`) in the editor's last frame.
+fn completion_snap(e: &crate::editor::EditorView, scale: f32) -> Option<ListSnap> {
+    let (rows, selected) = e.a11y_completion(MAX_OPTIONS)?;
+    let (bounds, frames) = e.a11y_completion_frames(rows.len(), scale);
+    Some(ListSnap { rows_total: rows.len(), selected: Some(selected), rows, frames, bounds })
 }
 
 /// Id of the selected option of a list (if it is among the exposed rows).
@@ -388,7 +457,22 @@ impl Snapshot {
         let mut root = Node::new(Role::Window);
         self.geometry.apply(ROOT, &mut root);
         root.set_label(self.title.clone());
+        root.set_description(self.layout.clone());
         let mut kids = Vec::new();
+        self.chrome.append_tree(&mut nodes, &mut kids, &self.geometry);
+        // Painted controls by surface; the status bar's join its items below. Their groups come after the views and the
+        // editor, before the status bar and the overlays: they are drawn on top of what they sit in (a gutter mark over
+        // the editor, a link at the end of a line), and hit testing takes the last sibling as the one on top.
+        let (mut status_controls, mut tab_controls, mut control_groups) = (Vec::new(), Vec::new(), Vec::new());
+        for (surface, ids) in crate::a11y_controls::append_nodes(&self.controls, &mut nodes) {
+            if surface == t("Status bar") {
+                status_controls = ids;
+            } else if surface == t("Editor tabs") {
+                tab_controls = ids;
+            } else {
+                control_groups.push(crate::a11y_controls::group(surface, ids, &mut nodes));
+            }
+        }
         if let Some(view) = &self.services {
             services_access::append_tree(view, &mut nodes);
             kids.push(SERVICES);
@@ -401,20 +485,36 @@ impl Snapshot {
             tree.set_label(if self.explorers.len() > 1 { format!("{}: {}", t("Explorer"), ex.name) } else { t("Explorer").to_string() });
             tree.set_size_of_set(ex.rows_total);
             tree.set_multiselectable();
+            set_scroll(&mut tree, ex.first, ex.rows.len(), ex.rows_total);
             let mut row_ids = Vec::new();
             for (i, r) in ex.rows.iter().enumerate() {
                 let mut n = Node::new(Role::TreeItem);
                 n.set_label(r.name.clone());
                 n.set_level(r.depth + 1);
                 n.set_selected(r.selected);
-                n.set_position_in_set(i + 1);
+                n.set_position_in_set(ex.first + i + 1);
                 n.set_size_of_set(ex.rows_total);
+                if let Some(bounds) = r.frame {
+                    n.set_bounds(bounds);
+                }
                 if r.is_dir {
                     n.set_expanded(r.expanded);
                     n.set_description(t("folder"));
                 }
                 n.add_action(Action::Click);
                 n.add_action(Action::Focus);
+                // Its menu, as Shift+F10 opens it: the action, and a button for the adapters that do not forward it.
+                n.add_action(Action::ShowContextMenu);
+                if i < EXPLORER_WINDOW {
+                    let id = NodeId(EXPLORER_MENU + (k * EXPLORER_WINDOW + i) as u64);
+                    let mut more = Node::new(Role::Button);
+                    more.set_label(t("More Actions…"));
+                    more.set_description(r.name.clone());
+                    more.set_has_popup(accesskit::HasPopup::Menu);
+                    more.add_action(Action::Click);
+                    nodes.push((id, more));
+                    n.set_children(vec![id]);
+                }
                 row_ids.push(NodeId(r.id));
                 nodes.push((NodeId(r.id), n));
             }
@@ -428,9 +528,27 @@ impl Snapshot {
             scm.append_tree(&mut nodes);
             kids.push(SCM);
         }
+        self.views.append_tree(&mut nodes, &mut kids, &self.geometry);
+
+        if let Some(view) = &self.exts {
+            ext_access::append_tree(view, &mut nodes);
+            kids.push(EXT);
+        }
+        if let Some(page) = &self.ext_page {
+            ext_access::append_page(page, &mut nodes);
+            kids.push(EXT_PAGE);
+        }
+        if let Some(snap) = &self.inspector {
+            inspector_access::append_tree(snap, &mut nodes);
+            kids.push(INSPECTOR);
+        }
+        for (slot, view) in self.ext_views.iter().enumerate() {
+            kids.push(view.append(slot, &mut nodes));
+        }
 
         // Tabs
-        if !self.tabs.is_empty() || self.about.is_some() {
+        if !self.tabs.is_empty() || self.about.is_some() || !self.search_tabs.is_empty() || !self.term_tabs.is_empty() || !tab_controls.is_empty() {
+            let total = self.tabs.len() + usize::from(self.about.is_some()) + self.search_tabs.len() + self.term_tabs.len();
             let mut list = Node::new(Role::TabList);
             list.set_label(t("Editor tabs"));
             let mut tab_ids = Vec::new();
@@ -440,7 +558,10 @@ impl Snapshot {
                 n.set_label(if tab.dirty { tf("{} (modified)", &[&tab.name]) } else { tab.name.clone() });
                 n.set_selected(self.active_tab == Some(i));
                 n.set_position_in_set(i + 1);
-                n.set_size_of_set(self.tabs.len() + usize::from(self.about.is_some()));
+                n.set_size_of_set(total);
+                if let Some(bounds) = self.geometry.part(Part::EditorTab(i)) {
+                    n.set_bounds(bounds);
+                }
                 n.add_action(Action::Click);
                 n.add_action(Action::Focus);
                 tab_ids.push(id);
@@ -451,12 +572,29 @@ impl Snapshot {
                 tab.set_label(t("About Codeyard"));
                 tab.set_selected(about.active);
                 tab.set_position_in_set(self.tabs.len() + 1);
-                tab.set_size_of_set(self.tabs.len() + 1);
+                tab.set_size_of_set(total);
                 tab.add_action(Action::Click);
                 tab.add_action(Action::Focus);
                 tab_ids.push(ABOUT_TAB);
                 nodes.push((ABOUT_TAB, tab));
             }
+            let before = self.tabs.len() + usize::from(self.about.is_some());
+            for (i, s) in self.search_tabs.iter().enumerate() {
+                let id = NodeId(SEARCH_ED_TAB + i as u64);
+                let mut tab = Node::new(Role::Tab);
+                tab.set_label(s.title.clone());
+                tab.set_selected(s.active);
+                tab.set_position_in_set(before + i + 1);
+                tab.set_size_of_set(total);
+                tab.add_action(Action::Click);
+                tab.add_action(Action::Focus);
+                self.geometry.apply_part(Part::SearchTab(i), &mut tab);
+                tab_ids.push(id);
+                nodes.push((id, tab));
+            }
+            term_tab_access::append_tabs(&self.term_tabs, before + self.search_tabs.len(), total, &mut tab_ids, &mut nodes, &self.geometry);
+            // The large-file, diff and page tabs, as painted.
+            tab_ids.extend(tab_controls);
             list.set_children(tab_ids);
             nodes.push((TABS, list));
             kids.push(TABS);
@@ -486,47 +624,9 @@ impl Snapshot {
             kids.push(ABOUT);
         }
 
-        // Find bar (above the editor, as on screen)
-        if let Some(f) = &self.find {
-            let mut bar = Node::new(Role::Group);
-            bar.set_label(t("Find"));
-            let mut children = Vec::new();
-            let mut query = Node::new(Role::SearchInput);
-            query.set_label(t("Find"));
-            query.set_value(f.query.clone());
-            query.add_action(Action::Focus);
-            children.push(FIND_QUERY);
-            nodes.push((FIND_QUERY, query));
-            if let Some(rep) = &f.replacement {
-                let mut field = Node::new(Role::TextInput);
-                field.set_label(t("Replace"));
-                field.set_value(rep.clone());
-                field.add_action(Action::Focus);
-                children.push(FIND_REPLACE);
-                nodes.push((FIND_REPLACE, field));
-            }
-            if let Some(st) = &f.status {
-                // A live region: "3 of 12" is spoken while typing and moving between matches.
-                let mut label = Node::new(Role::Status);
-                label.set_label(st.clone());
-                label.set_live(Live::Polite);
-                children.push(FIND_STATUS);
-                nodes.push((FIND_STATUS, label));
-            }
-            for (i, (name, on)) in f.controls.iter().enumerate() {
-                let id = NodeId(FIND_CONTROL + i as u64);
-                let mut b = Node::new(if on.is_some() { Role::CheckBox } else { Role::Button });
-                b.set_label(name.clone());
-                if let Some(on) = on {
-                    b.set_toggled(Toggled::from(*on));
-                }
-                b.add_action(Action::Click);
-                children.push(id);
-                nodes.push((id, b));
-            }
-            bar.set_children(children);
-            nodes.push((FIND, bar));
-            kids.push(FIND);
+        if let Some(se) = &self.search_editor {
+            se.append_tree(&mut nodes);
+            kids.push(SearchEdSnap::id());
         }
 
         // Editor
@@ -534,15 +634,24 @@ impl Snapshot {
             let mut ed = Node::new(Role::MultilineTextInput);
             self.geometry.apply(EDITOR, &mut ed);
             ed.set_label(if e.dirty { tf("{} (modified)", &[&e.name]) } else { e.name.clone() });
-            ed.set_description(tf("{0} lines, showing from line {1}", &[&e.total_lines, &(e.first_line + 1)]));
+            let last = e.total_lines.min(e.first_line + EDITOR_WINDOW).max(e.first_line + 1);
+            ed.set_description(tf("{0} lines, showing lines {1}–{2}", &[&e.total_lines, &(e.first_line + 1), &last]));
+            set_scroll(&mut ed, e.first_line, last - e.first_line, e.total_lines);
             ed.add_action(Action::Focus);
             ed.add_action(Action::SetTextSelection);
+            ed.add_action(Action::ShowTooltip);
+            if self.popups.as_ref().is_some_and(|p| p.hover.is_some() || p.signature.is_some()) {
+                ed.add_action(Action::HideTooltip);
+            }
             let mut children = run_nodes(&e.runs, RUN_BASE, &mut nodes);
             if let (Some(a), Some(f)) = (position_of(&e.runs, RUN_BASE, e.selection.0), position_of(&e.runs, RUN_BASE, e.selection.1)) {
                 ed.set_text_selection(TextSelection { anchor: a, focus: f });
             }
             // For clients that ask for AXValue (text range queries are still resolved from the runs).
             ed.set_value(e.runs.iter().map(|r| r.text.as_str()).collect::<String>());
+            if let Some(popups) = &self.popups {
+                popups_access::append(popups, &mut nodes, &mut children);
+            }
             // Suggestions: the editor keeps the keyboard focus, the selected suggestion is its active descendant.
             if let Some(list) = &self.completion {
                 let node = list_nodes(list, t("Suggestions"), COMPLETION_OPTION, &mut nodes);
@@ -558,6 +667,54 @@ impl Snapshot {
             kids.push(EDITOR);
         }
 
+        // Find bar: drawn over the top of the editor, so it comes after it (hit testing takes the last sibling as the
+        // one on top); the screen reader reaches it from the editor or through its focus.
+        if let Some(f) = &self.find {
+            let mut bar = Node::new(Role::Group);
+            bar.set_label(t("Find"));
+            let mut children = Vec::new();
+            let mut query = Node::new(Role::SearchInput);
+            query.set_label(t("Find"));
+            query.set_value(f.query.clone());
+            query.add_action(Action::Focus);
+            f.place(crate::find::FindFrame::Query, &mut query);
+            children.push(FIND_QUERY);
+            nodes.push((FIND_QUERY, query));
+            if let Some(rep) = &f.replacement {
+                let mut field = Node::new(Role::TextInput);
+                field.set_label(t("Replace"));
+                field.set_value(rep.clone());
+                field.add_action(Action::Focus);
+                f.place(crate::find::FindFrame::Replace, &mut field);
+                children.push(FIND_REPLACE);
+                nodes.push((FIND_REPLACE, field));
+            }
+            if let Some(st) = &f.status {
+                // A live region: "3 of 12" is spoken while typing and moving between matches.
+                let mut label = Node::new(Role::Status);
+                label.set_label(st.clone());
+                label.set_live(Live::Polite);
+                f.place(crate::find::FindFrame::Status, &mut label);
+                children.push(FIND_STATUS);
+                nodes.push((FIND_STATUS, label));
+            }
+            for (i, (name, on)) in f.controls.iter().enumerate() {
+                let id = NodeId(FIND_CONTROL + i as u64);
+                let mut b = Node::new(if on.is_some() { Role::CheckBox } else { Role::Button });
+                b.set_label(name.clone());
+                if let Some(on) = on {
+                    b.set_toggled(Toggled::from(*on));
+                }
+                b.add_action(Action::Click);
+                f.place(crate::find::FindFrame::Control(i), &mut b);
+                children.push(id);
+                nodes.push((id, b));
+            }
+            bar.set_children(children);
+            nodes.push((FIND, bar));
+            kids.push(FIND);
+        }
+
         // Terminal: the rows on screen, read-only, with the cursor as the caret.
         if let Some(term) = &self.terminal {
             let mut node = Node::new(Role::Terminal);
@@ -569,6 +726,7 @@ impl Snapshot {
                 node.set_text_selection(TextSelection { anchor: p, focus: p });
             }
             node.set_value(term.runs.iter().map(|r| r.text.as_str()).collect::<String>());
+            term_tab_access::history_scroll(term.scroll, &mut node);
             nodes.push((TERMINAL, node));
             kids.push(TERMINAL);
         }
@@ -580,13 +738,24 @@ impl Snapshot {
         let mut items = Vec::new();
         for (i, t) in self.status.iter().enumerate() {
             let id = NodeId(STATUS_ITEM + i as u64);
-            let mut l = Node::new(Role::Label);
+            // Every item but the encoding opens something when clicked: a button that does the same.
+            let pressable = self.status_parts.get(i).is_some_and(|p| *p != StatusPart::Encoding);
+            let mut l = Node::new(if pressable { Role::Button } else { Role::Label });
             l.set_value(t.clone());
+            if pressable {
+                l.set_label(t.clone());
+                l.add_action(Action::Click);
+            }
+            if let Some(bounds) = self.geometry.status_item(i) {
+                l.set_bounds(bounds);
+            }
             items.push(id);
             nodes.push((id, l));
         }
+        items.extend(status_controls);
         status.set_children(items);
         nodes.push((STATUS, status));
+        kids.extend(control_groups);
         kids.push(STATUS);
 
         // Notice: a live region, so a screen reader speaks it when it appears or changes.
@@ -606,7 +775,13 @@ impl Snapshot {
                 dialog.set_description(m.clone());
             }
             dialog.set_modal();
+            if let Some(b) = pk.bounds {
+                dialog.set_bounds(b);
+            }
             let mut input = Node::new(Role::EditableComboBox);
+            if let Some(b) = pk.input {
+                input.set_bounds(b);
+            }
             input.set_label(pk.label.clone());
             input.set_value(pk.query.clone());
             input.set_expanded(true);
@@ -632,6 +807,7 @@ impl Snapshot {
             dialog.set_label(d.title.clone());
             dialog.set_description(d.description.clone());
             dialog.set_modal();
+            self.geometry.apply_part(Part::UpdateDialog, &mut dialog);
             let mut children = Vec::new();
             if let Some(progress) = d.progress {
                 let mut bar = Node::new(Role::ProgressIndicator);
@@ -650,6 +826,7 @@ impl Snapshot {
                 b.set_label(label.clone());
                 b.add_action(Action::Click);
                 b.add_action(Action::Focus);
+                self.geometry.apply_part(Part::DialogButton(i), &mut b);
                 children.push(id);
                 nodes.push((id, b));
             }
@@ -664,13 +841,25 @@ impl Snapshot {
         let focus = match self.focus {
             _ if self.dialog.is_some() => self.dialog.as_ref().and_then(|d| d.focused).map_or(UPDATE_DIALOG, |i| NodeId(UPDATE_BUTTON + i as u64)),
             _ if self.services.as_ref().is_some_and(|view| view.focused) => services_access::focus_node(self.services.as_ref().expect("focused page")),
+            _ if self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).is_some() => {
+                self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).expect("focused search editor")
+            }
+            _ if self.views.focus_node().is_some() => self.views.focus_node().expect("focused view"),
+            _ if crate::a11y_controls::focus_node(&self.controls).is_some() => crate::a11y_controls::focus_node(&self.controls).expect("focused control"),
+            _ if self.scm.as_ref().and_then(ScmSnap::history_focus).is_some() => self.scm.as_ref().and_then(ScmSnap::history_focus).expect("graph search"),
             FocusSnap::Picker if self.picker.is_some() => PICKER_INPUT,
             FocusSnap::Find(0) if self.find.is_some() => FIND_QUERY,
             FocusSnap::Find(_) if self.find.as_ref().is_some_and(|f| f.replacement.is_some()) => FIND_REPLACE,
             FocusSnap::Editor if self.editor.is_some() => EDITOR,
             FocusSnap::Terminal if self.terminal.is_some() => TERMINAL,
             FocusSnap::ScmMessage if self.scm.as_ref().is_some_and(|s| s.view.root.is_some()) => SCM_MESSAGE,
+            FocusSnap::ScmChanges => self.scm.as_ref().map_or(ROOT, ScmSnap::focus_node),
+            FocusSnap::ScmRepos => match self.scm.as_ref().map(|s| &s.view.repos).filter(|r| !r.is_empty()) {
+                Some(repos) => repos.iter().position(|r| r.selected).map_or(SCM_REPOS, |i| NodeId(SCM_REPO + i as u64)),
+                None => ROOT,
+            },
             FocusSnap::AboutCopy if self.about.as_ref().is_some_and(|a| a.active) => ABOUT_COPY,
+            FocusSnap::ExtSearch if self.exts.is_some() => EXT_SEARCH,
             FocusSnap::Explorer(k) if k < self.explorers.len() => self.explorers[k].focused.map_or(explorer_id(k), NodeId),
             _ => ROOT,
         };
@@ -681,20 +870,24 @@ impl Snapshot {
 impl Workbench {
     /// Flat summary of the current view (the tree is only built while AT is active).
     pub(crate) fn a11y_snapshot(&self, window: &Window, cx: &App) -> Snapshot {
-        let trees = if self.chrome.panel == Some(Panel::Explorer) { self.all_trees() } else { Vec::new() };
+        let trees = if self.view_shown(Panel::Explorer) { self.all_trees() } else { Vec::new() };
         let explorers = trees
             .iter()
             .map(|tree| {
                 let tree = tree.read(cx);
                 let (rows, selected) = tree.a11y_rows();
                 let rows_total = rows.len();
-                let focused = selected.filter(|i| *i < MAX_ROWS).and_then(|i| rows.get(i)).map(|r| row_id(&r.0).0);
+                let first = window_start(rows_total, EXPLORER_WINDOW, selected, tree.visible_rows());
+                let shown = first..first + EXPLORER_WINDOW;
+                let focused = selected.filter(|i| shown.contains(i)).and_then(|i| rows.get(i)).map(|r| row_id(&r.0).0);
                 let rows = rows
                     .into_iter()
-                    .take(MAX_ROWS)
+                    .skip(first)
+                    .take(EXPLORER_WINDOW)
                     .map(|(path, name, depth, is_dir, expanded)| RowSnap {
                         id: row_id(&path).0,
                         selected: tree.path_is_selected(&path),
+                        frame: tree.a11y_row_frame(&path, window),
                         path,
                         name,
                         depth,
@@ -702,7 +895,7 @@ impl Workbench {
                         expanded,
                     })
                     .collect();
-                ExplorerSnap { name: tree.root().map_or(String::new(), |r| crate::ui::file_name(r).to_string()), rows, rows_total, focused }
+                ExplorerSnap { name: tree.root().map_or(String::new(), |r| crate::ui::file_name(r).to_string()), rows, rows_total, first, focused }
             })
             .collect();
         let tree = self.roots.primary.read(cx);
@@ -714,16 +907,11 @@ impl Workbench {
 
         let editor_visible = !self.tabs.diff_active && !self.tabs.large_active && !self.tabs.page_active;
         let ed = self.active_editor().filter(|_| editor_visible);
-        let editor = ed.map(|e| {
-            let e = e.read(cx);
-            let line = e.cursor_position().0.saturating_sub(1);
-            let first = line.saturating_sub(WINDOW_BEFORE);
-            let (selection, total_lines, lines) = e.a11y_view(first, line + WINDOW_AFTER);
-            EditorSnap { name: e.name.to_string(), dirty: e.is_dirty(), runs: runs_for(lines, total_lines, first), selection, total_lines, first_line: first }
-        });
+        let mut editor = ed.map(|e| EditorSnap::of(e.read(cx), window.scale_factor()));
 
         // Same texts as the status bar (status_bar() elements; should move into a shared function later).
         let mut status = Vec::new();
+        let mut status_parts = vec![StatusPart::Remote];
         status.push(match &self.remote.conn {
             Conn::Local => t("Local").to_string(),
             Conn::Connecting { alias, .. } => tf("Connecting to {}", &[alias]),
@@ -733,9 +921,11 @@ impl Workbench {
         });
         if let Some(b) = &self.vcs.branch {
             status.push(tf("Branch {}", &[b]));
+            status_parts.push(StatusPart::Branch);
         }
         let (errors, warnings) = self.problem_counts();
         status.push(tf("{0} errors, {1} warnings", &[&errors, &warnings]));
+        status_parts.push(StatusPart::Problems);
         if let Some(e) = ed {
             let e = e.read(cx);
             let (l, col) = e.cursor_position();
@@ -748,9 +938,17 @@ impl Workbench {
             status.push(e.line_ending().to_string());
             status.push(e.language_label().to_string());
             status.push(e.encoding().label().to_string());
+            status_parts.extend([StatusPart::Position, StatusPart::Indent, StatusPart::LineEnding, StatusPart::Language, StatusPart::Encoding]);
         }
         if let Some(item) = self.update_status_item() {
             status.push(item.tip.to_string());
+            status_parts.push(StatusPart::Update);
+        }
+        let mut geometry = Geometry::new(&self.chrome.a11y_bounds, window);
+        geometry.set_status_items(&status_parts);
+        // Character positions are those of the editor's last paint: only while it is drawn in this window's frame.
+        if !geometry.editor_painted() {
+            editor.iter_mut().flat_map(|e| e.runs.iter_mut()).for_each(|r| r.frame = None);
         }
         let notice = match (&self.notice, &self.tabs.open_error) {
             (Some(Notice::Error(m)), _) => Some(NoticeSnap { text: m.to_string(), error: true }),
@@ -785,49 +983,41 @@ impl Workbench {
                 replacement: b.show_replace.then(|| b.replacement(cx)),
                 status: b.status_text().map(str::to_string),
                 controls: b.a11y_controls().into_iter().map(|(l, on)| (l.to_string(), on)).collect(),
+                frames: b.a11y_frames(window),
             }
         });
-        let completion = ed.and_then(|e| e.read(cx).a11y_completion(MAX_OPTIONS)).map(|(rows, selected)| ListSnap {
-            rows_total: rows.len(),
-            selected: Some(selected),
-            rows,
-        });
-        let term = self.active_terminal().filter(|_| self.chrome.panel_open && self.chrome.bottom == Bottom::Terminal);
-        let terminal = term.as_ref().map(|term| {
-            let (rows, cursor) = term.read(cx).a11y_view();
-            let mut starts = Vec::with_capacity(rows.len());
-            let mut at = 0;
-            for row in &rows {
-                starts.push(at);
-                at += row.chars().count() + 1;
+        let mut completion = ed.and_then(|e| completion_snap(e.read(cx), window.scale_factor()));
+        let mut popups = ed.map(|e| e.read(cx).a11y_popups(window.scale_factor()));
+        // Painted positions only while the editor was drawn in this window's last frame.
+        if !geometry.editor_painted() {
+            if let Some(list) = completion.as_mut() {
+                (list.frames, list.bounds) = (Vec::new(), None);
             }
-            let total = rows.len();
-            let cursor = cursor.and_then(|(row, col)| starts.get(row).map(|s| s + col.min(rows[row].chars().count())));
-            TerminalSnap {
-                label: tf("Terminal {0} of {1}", &[&(self.active_terminal + 1), &self.terminals.len()]),
-                runs: runs_for(starts.into_iter().zip(rows).collect(), total, 0),
-                cursor,
+            if let Some(p) = popups.as_mut() {
+                p.forget_frames();
             }
-        });
+        }
+        let shown = self.a11y_terminal(window, cx);
+        let term = shown.as_ref().map(|(t, _, _)| t.clone());
+        let terminal = shown.as_ref().map(|(term, ix, count)| term_tab_access::terminal_snap(term, *ix, *count, window.scale_factor(), cx));
         let picker_entity = self.overlay.as_ref().map(|o| o.picker.clone());
-        let picker = picker_entity.as_ref().map(|p| {
-            let v = p.read(cx).a11y_view(MAX_OPTIONS);
-            PickerSnap {
-                label: v.placeholder,
-                message: v.message,
-                query: v.query,
-                list: ListSnap { rows: v.rows, rows_total: v.rows_total, selected: v.selected },
-                empty: v.empty,
-            }
-        });
+        let picker = picker_entity.as_ref().map(|p| PickerSnap::of(p.read(cx), window));
 
-        let scm = (self.chrome.panel == Some(Panel::Scm)).then(|| ScmSnap { generation: self.lsp.generation, view: self.scm.read(cx).a11y_view(window, cx) });
+        let (search_editor, search_tabs) = self.a11y_search_snap(window, cx);
+        let scm = (self.view_shown(Panel::Scm)).then(|| ScmSnap { generation: self.lsp.generation, view: self.scm.read(cx).a11y_view(window, cx) });
+        let exts = self.a11y_extensions(window, cx);
         let focus = if self.tabs.page_active && about_view.is_some_and(|view| view.focus_handle(cx).is_focused(window)) {
             FocusSnap::AboutCopy
         } else if let Some(k) = trees.iter().position(|t| t.read(cx).focus_handle(cx).is_focused(window)) {
             FocusSnap::Explorer(k)
         } else if scm.as_ref().is_some_and(|s| s.view.message_focused) {
             FocusSnap::ScmMessage
+        } else if scm.as_ref().is_some_and(|s| s.view.list_focused && s.view.root.is_some()) {
+            FocusSnap::ScmChanges
+        } else if exts.as_ref().is_some_and(|e| e.search_focused) {
+            FocusSnap::ExtSearch
+        } else if scm.as_ref().is_some_and(|s| s.view.repos_focused) {
+            FocusSnap::ScmRepos
         } else if picker_entity.as_ref().is_some_and(|p| p.focus_handle(cx).is_focused(window)) {
             FocusSnap::Picker
         } else if let Some(field) = find_bar.as_ref().and_then(|b| b.read(cx).a11y_focus(window, cx)) {
@@ -845,8 +1035,9 @@ impl Workbench {
                 Page::LanguageServices(page) => Some(page.read(cx).access_view(window, cx)),
                 _ => None,
             }),
-            geometry: Geometry::new(&self.chrome.a11y_bounds, window),
+            geometry,
             title,
+            layout: self.a11y_layout(),
             explorers,
             tabs,
             active_tab,
@@ -854,11 +1045,23 @@ impl Workbench {
             editor,
             find,
             completion,
+            popups,
+            chrome: self.a11y_chrome(window, cx),
+            controls: crate::a11y_controls::snapshot(window, cx),
             terminal,
             scm,
+            views: self.a11y_views(window, cx),
+            exts,
+            ext_page: self.a11y_extension_page(),
+            inspector: self.a11y_inspector(),
+            ext_views: self.a11y_ext_views(window),
+            search_editor,
+            search_tabs,
+            term_tabs: self.a11y_term_tabs(cx),
             picker,
             notice,
             status,
+            status_parts,
             dialog,
             focus,
         }
@@ -869,14 +1072,51 @@ impl Workbench {
         if last.generation != self.lsp.generation {
             return;
         }
+        match crate::a11y_controls::fold_as_click(req, || last.to_tree()) {
+            Some(Some(click)) => return self.a11y_action(&click, last, window, cx),
+            None => return,
+            Some(None) => {}
+        }
         if self.a11y_services_action(req, last, window, cx) {
+            return;
+        }
+        if self.a11y_chrome_action(req, &last.chrome, window, cx) || self.a11y_control_action(req, &last.controls, window, cx) {
             return;
         }
         if self.a11y_scm_action(req, last, window, cx) {
             cx.notify();
             return;
         }
+        if self.a11y_views_action(req, last, window, cx) {
+            cx.notify();
+            return;
+        }
+        if self.a11y_ext_action(req, last, window, cx) || self.a11y_ext_view_action(req, last, window, cx) || self.a11y_inspector_action(req, last, cx) {
+            cx.notify();
+            return;
+        }
+        if self.a11y_search_action(req, last, window, cx) || self.a11y_term_tab_action(req, last, window, cx) || self.a11y_popup_action(req, last, window, cx) {
+            return;
+        }
         match (req.action, req.target_node) {
+            (Action::Click, NodeId(n)) if (STATUS_ITEM..STATUS_ITEM + 32).contains(&n) => {
+                // The same item, still in the status bar: what a click on it does.
+                let Some(part) = last.status_parts.get((n - STATUS_ITEM) as usize).copied() else { return };
+                if !self.a11y_snapshot(window, cx).status_parts.contains(&part) {
+                    return;
+                }
+                match part {
+                    StatusPart::Remote => self.show_remote(&ShowRemote, window, cx),
+                    StatusPart::Branch => self.show_branch_picker(window, cx),
+                    StatusPart::Problems => self.show_problems(&ShowProblems, window, cx),
+                    StatusPart::Position => self.go_to_line(&GoToLine, window, cx),
+                    StatusPart::Indent => self.show_indent_picker(window, cx),
+                    StatusPart::LineEnding => self.show_eol_picker(window, cx),
+                    StatusPart::Language => self.show_language_picker(window, cx),
+                    StatusPart::Update => self.open_update_dialog(window, cx),
+                    StatusPart::Encoding => {}
+                }
+            }
             (Action::Focus | Action::Click, ABOUT_TAB) if last.about.is_some() => {
                 if let Some(Page::About(view)) = self.tabs.page.clone() {
                     self.tabs.page_active = true;
@@ -900,7 +1140,7 @@ impl Workbench {
                 }
             }
             (Action::Focus, id) if id == EXPLORER || (id.0 >= EXTRA_TREE && id.0 < EXTRA_TREE + BLOCK) => {
-                if self.chrome.panel != Some(Panel::Explorer) {
+                if !self.view_shown(Panel::Explorer) {
                     return;
                 }
                 let k = if id == EXPLORER { 0 } else { (id.0 - EXTRA_TREE) as usize };
@@ -908,17 +1148,29 @@ impl Workbench {
                     window.focus(&tree.read(cx).focus_handle(cx));
                 }
             }
-            (Action::Focus | Action::Click, id) if id.0 & !0xffff_ffff == ROW_BASE => {
-                if self.chrome.panel != Some(Panel::Explorer) {
+            (Action::Focus | Action::Click | Action::ShowContextMenu, id)
+                if id.0 & !0xffff_ffff == ROW_BASE || (EXPLORER_MENU..EXPLORER_MENU + BLOCK).contains(&id.0) =>
+            {
+                if !self.view_shown(Panel::Explorer) {
                     return;
                 }
-                let Some((k, ix)) = last.explorers.iter().enumerate().find_map(|(k, ex)| ex.rows.iter().position(|r| r.id == id.0).map(|ix| (k, ix))) else {
-                    return;
+                let menu = (EXPLORER_MENU..EXPLORER_MENU + BLOCK).contains(&id.0);
+                let found = if menu {
+                    let n = (id.0 - EXPLORER_MENU) as usize;
+                    Some((n / EXPLORER_WINDOW, n % EXPLORER_WINDOW)).filter(|(k, ix)| last.explorers.get(*k).is_some_and(|ex| *ix < ex.rows.len()))
+                } else {
+                    last.explorers.iter().enumerate().find_map(|(k, ex)| ex.rows.iter().position(|r| r.id == id.0).map(|ix| (k, ix)))
                 };
+                let Some((k, ix)) = found else { return };
                 let Some(tree) = self.all_trees().get(k).cloned() else { return };
                 window.focus(&tree.read(cx).focus_handle(cx));
                 let path = &last.explorers[k].rows[ix].path;
-                tree.update(cx, |t, cx| t.a11y_select(path, req.action == Action::Click, cx));
+                if menu || req.action == Action::ShowContextMenu {
+                    // Under the row, with the keyboard; closing it gives the keyboard back to the tree on that row.
+                    tree.update(cx, |t, cx| t.a11y_context_menu(path, window, cx));
+                } else {
+                    tree.update(cx, |t, cx| t.a11y_select(path, req.action == Action::Click, cx));
+                }
             }
             (Action::Focus, PICKER_INPUT) => {
                 if let Some(o) = &self.overlay {
@@ -930,7 +1182,7 @@ impl Workbench {
                 let Some(picker) = self.overlay.as_ref().map(|o| o.picker.clone()) else { return };
                 // The tree may be a quarter of a second old: act only if the row still has the same label.
                 let label = last.picker.as_ref().and_then(|p| p.list.rows.get(index)).map(|(l, _)| l.clone());
-                if label.is_none() || picker.read(cx).a11y_view(index + 1).rows.get(index).map(|(l, _)| l) != label.as_ref() {
+                if label.is_none() || picker.read(cx).a11y_view(index + 1, window).rows.get(index).map(|(l, _)| l) != label.as_ref() {
                     return;
                 }
                 window.focus(&picker.focus_handle(cx));
@@ -961,8 +1213,13 @@ impl Workbench {
                 window.focus(&e.read(cx).focus_handle(cx));
                 e.update(cx, |e, cx| e.a11y_choose_completion(index, req.action == Action::Click, window, cx));
             }
+            (Action::ScrollUp | Action::ScrollDown, TERMINAL) => {
+                if let Some(term) = self.a11y_terminal(window, cx).map(|(t, _, _)| t).or_else(|| self.active_terminal()) {
+                    term.update(cx, |t, cx| t.a11y_scroll_page(req.action == Action::ScrollUp, cx));
+                }
+            }
             (Action::Focus, TERMINAL) => {
-                if let Some(term) = self.active_terminal() {
+                if let Some(term) = self.a11y_terminal(window, cx).map(|(t, _, _)| t).or_else(|| self.active_terminal()) {
                     window.focus(&term.focus_handle(cx));
                 }
             }
@@ -986,6 +1243,19 @@ impl Workbench {
                             window.focus(handle);
                         }
                     }
+                }
+            }
+            (Action::ScrollUp | Action::ScrollDown, EDITOR) => {
+                let pages = if req.action == Action::ScrollUp { -1 } else { 1 };
+                if let Some(e) = self.active_editor().cloned() {
+                    e.update(cx, |e, cx| e.a11y_scroll(pages, cx));
+                }
+            }
+            (Action::ScrollUp | Action::ScrollDown, id) if id == EXPLORER || (id.0 >= EXTRA_TREE && id.0 < EXTRA_TREE + BLOCK) => {
+                let k = if id == EXPLORER { 0 } else { (id.0 - EXTRA_TREE) as usize };
+                let pages = if req.action == Action::ScrollUp { -1 } else { 1 };
+                if let Some(tree) = self.all_trees().get(k).filter(|_| self.view_shown(Panel::Explorer)) {
+                    tree.update(cx, |t, cx| t.a11y_scroll(pages, cx));
                 }
             }
             (Action::SetTextSelection, EDITOR) => {
@@ -1013,7 +1283,7 @@ pub use platform::attach;
 /// The AccessKit adapter: `accesskit_macos` (NSAccessibility, VoiceOver) or `accesskit_windows` (UI Automation: NVDA,
 /// JAWS, Narrator). Both subclass the native view or window; the tree and the actions are the same.
 #[cfg(any(target_os = "macos", windows))]
-mod platform {
+pub(in crate::workbench) mod platform {
     use super::*;
     use accesskit::{ActionHandler, ActivationHandler};
     #[cfg(target_os = "macos")]
@@ -1022,7 +1292,7 @@ mod platform {
     use accesskit_windows::SubclassingAdapter;
     use futures::StreamExt as _;
     use futures::channel::mpsc::{UnboundedSender, unbounded};
-    use gpui::{AsyncApp, WindowHandle};
+    use gpui::{AnyWindowHandle, AsyncApp, WindowHandle};
     use std::cell::RefCell;
     use std::rc::Rc;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -1037,7 +1307,8 @@ mod platform {
 
     struct Activate {
         cx: AsyncApp,
-        handle: WindowHandle<Workbench>,
+        handle: AnyWindowHandle,
+        hooks: windows_access::Hooks,
         ctl: Rc<RefCell<Ctl>>,
         started: Rc<AtomicBool>,
     }
@@ -1047,8 +1318,8 @@ mod platform {
             // The assistive technology asked for the first time: start the loop once. We can't build the tree here
             // (no GPUI context); the first TreeUpdate goes out on the next turn, without waiting for the timer.
             if !self.started.swap(true, Ordering::SeqCst) {
-                let (cx, handle, ctl) = (self.cx.clone(), self.handle, self.ctl.clone());
-                self.cx.spawn(async move |_| pump(cx, handle, ctl).await).detach();
+                let (cx, handle, hooks, ctl) = (self.cx.clone(), self.handle, self.hooks, self.ctl.clone());
+                self.cx.spawn(async move |_| pump(cx, handle, hooks, ctl).await).detach();
             }
             None
         }
@@ -1064,13 +1335,10 @@ mod platform {
     }
 
     /// While active: take a snapshot, send it if changed, report window focus (Windows' adapter follows focus itself).
-    async fn pump(mut cx: AsyncApp, handle: WindowHandle<Workbench>, ctl: Rc<RefCell<Ctl>>) {
+    async fn pump(mut cx: AsyncApp, handle: AnyWindowHandle, hooks: windows_access::Hooks, ctl: Rc<RefCell<Ctl>>) {
         let mut first = true;
         loop {
-            let got = cx.update_window(handle.into(), |root, window, cx| {
-                let wb = root.downcast::<Workbench>().ok()?;
-                Some((wb.read(cx).a11y_snapshot(window, cx), window.is_window_active()))
-            });
+            let got = cx.update_window(handle, |root, window, cx| Some(((hooks.snapshot)(root, window, cx)?, window.is_window_active())));
             let Ok(Some((snap, active))) = got else { return };
             // Don't hold the borrow across the await (the action task reads `ctl`).
             let events: Vec<_> = {
@@ -1111,6 +1379,11 @@ mod platform {
     /// just a few hundred bytes and the subclass; the tree and loop start then. On Windows the window must not be
     /// visible yet (open it with `show: false` and activate it after this).
     pub fn attach(handle: WindowHandle<Workbench>, cx: &mut App) {
+        attach_with(handle.into(), windows_access::WORKBENCH, cx);
+    }
+
+    /// Attach the adapter to any window whose tree `hooks` builds (an editor's or a terminal's own window).
+    pub(in crate::workbench) fn attach_with(handle: AnyWindowHandle, hooks: windows_access::Hooks, cx: &mut App) {
         // The GPUI test window has `unimplemented!()` for `window_handle()`; no real native window.
         if cfg!(test) || std::env::var_os("CODEYARD_NO_A11Y").is_some() {
             return;
@@ -1123,7 +1396,7 @@ mod platform {
             focused: false,
         }));
         let started = Rc::new(AtomicBool::new(false));
-        let raw = handle.update(cx, |_, window, _| {
+        let raw = cx.update_window(handle, |_, window, _| {
             use raw_window_handle::{HasWindowHandle, RawWindowHandle};
             match HasWindowHandle::window_handle(window).ok()?.as_raw() {
                 #[cfg(target_os = "macos")]
@@ -1154,7 +1427,7 @@ mod platform {
             let _ = unsafe { RemovePropW(hwnd, name) };
         }
         let (tx, mut rx) = unbounded::<ActionRequest>();
-        let activate = Activate { cx: async_cx.clone(), handle, ctl: ctl.clone(), started };
+        let activate = Activate { cx: async_cx.clone(), handle, hooks, ctl: ctl.clone(), started };
         // SAFETY: `raw` is the live NSView / HWND GPUI holds; the adapter drops with the window
         // (ctl is released with the task and closures when the window closes).
         #[cfg(target_os = "macos")]
@@ -1167,11 +1440,7 @@ mod platform {
             .spawn(async move |_| {
                 while let Some(request) = rx.next().await {
                     let last = ctl.borrow().last.clone();
-                    let window = action_cx.update_window(handle.into(), |root, window, cx| {
-                        if let Ok(wb) = root.downcast::<Workbench>() {
-                            wb.update(cx, |wb, cx| wb.a11y_action(&request, &last, window, cx));
-                        }
-                    });
+                    let window = action_cx.update_window(handle, |root, window, cx| (hooks.action)(root, &request, &last, window, cx));
                     if window.is_err() {
                         return;
                     }
@@ -1182,217 +1451,57 @@ mod platform {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn snap() -> Snapshot {
-        let lines = vec![(0, "fn main() {".to_string()), (12, "    println!(\"hé\");".to_string()), (31, "}".to_string())];
-        let runs = runs_for(lines, 3, 0);
-        Snapshot {
-            generation: 0,
-            services: None,
-            geometry: Geometry::default(),
-            title: "Codeyard \u{2014} demo".into(),
-            explorers: vec![ExplorerSnap {
-                name: "d".into(),
-                rows: vec![
-                    RowSnap { id: row_id("/d/src").0, path: "/d/src".into(), name: "src".into(), depth: 0, is_dir: true, expanded: true, selected: false },
-                    RowSnap {
-                        id: row_id("/d/src/main.rs").0,
-                        path: "/d/src/main.rs".into(),
-                        name: "main.rs".into(),
-                        depth: 1,
-                        is_dir: false,
-                        expanded: false,
-                        selected: true,
-                    },
-                ],
-                rows_total: 2,
-                focused: Some(row_id("/d/src/main.rs").0),
-            }],
-            tabs: vec![TabSnap { name: "lib.rs".into(), dirty: true }, TabSnap { name: "main.rs".into(), dirty: false }],
-            active_tab: Some(1),
-            about: None,
-            notice: None,
-            editor: Some(EditorSnap { name: "main.rs".into(), dirty: false, runs, selection: (3, 7), total_lines: 3, first_line: 0 }),
-            find: None,
-            completion: None,
-            terminal: None,
-            scm: None,
-            picker: None,
-            status: vec!["Local".into(), "Ln 1, Col 4 (4 selected)".into()],
-            dialog: None,
-            focus: FocusSnap::Editor,
-        }
-    }
-
-    /// AccessKit's own consumer accepts the tree (ids, parent-child, text selection valid).
-    #[test]
-    fn tree_is_valid_for_accesskit_consumer() {
-        let s = snap();
-        let update = s.to_tree();
-        // Tree::new panics: no root, missing child node, focus not in the tree, etc.
-        let tree = accesskit_consumer::Tree::new(update, true);
-        let state = tree.state();
-        assert_eq!(state.root().role(), Role::Window);
-        assert_eq!(state.focus().unwrap().role(), Role::MultilineTextInput);
-        let focus = state.focus().unwrap();
-        let sel = focus.text_selection().unwrap();
-        assert_eq!(sel.start().to_global_utf16_index(), 3);
-        assert_eq!(sel.end().to_global_utf16_index(), 7);
-        assert_eq!(sel.text(), "main");
-    }
-
-    #[test]
-    fn about_tree_has_a_valid_focused_copy_button() {
-        let mut snapshot = snap();
-        snapshot.editor = None;
-        snapshot.active_tab = None;
-        snapshot.about = Some(AboutSnap { active: true, details: vec![("Version".into(), "0.5.0".into())] });
-        snapshot.focus = FocusSnap::AboutCopy;
-        let tree = accesskit_consumer::Tree::new(snapshot.to_tree(), true);
-        let focused = tree.state().focus().unwrap();
-        assert_eq!(focused.role(), Role::Button);
-        assert_eq!(focused.label().as_deref(), Some("Copy Version"));
-    }
-
-    #[test]
-    fn selection_round_trips_through_runs() {
-        let s = snap();
-        let runs = &s.editor.as_ref().unwrap().runs;
-        for ix in [0, 3, 11, 12, 20, 31, 32] {
-            let p = position_of(runs, RUN_BASE, ix).unwrap();
-            assert_eq!(char_of(runs, p), Some(ix), "ix {ix}");
-        }
-    }
-
-    #[test]
-    fn long_lines_split_and_words_fit_u8() {
-        let line = "abc ".repeat(200); // 800 characters
-        let runs = runs_for(vec![(0, line)], 2, 0);
-        assert!(runs.len() >= 4);
-        assert!(runs.iter().all(|r| r.text.chars().count() <= RUN_CHARS + 1));
-        assert!(runs.last().unwrap().text.ends_with('\n'));
-        assert_eq!(runs.iter().map(|r| r.chars).sum::<usize>(), 801);
-    }
-
-    #[test]
-    fn tabs_are_a_tab_list_with_the_front_tab_selected() {
-        let tree = accesskit_consumer::Tree::new(snap().to_tree(), true);
-        let state = tree.state();
-        let list = state.root().children().find(|n| n.role() == Role::TabList).unwrap();
-        assert_eq!(list.role(), Role::TabList);
-        let tabs: Vec<_> = list.children().collect();
-        assert_eq!(tabs.len(), 2);
-        assert!(tabs.iter().all(|t| t.role() == Role::Tab));
-        assert_eq!(tabs[0].label().as_deref(), Some("lib.rs (modified)"));
-        assert_eq!(tabs.iter().map(|t| t.is_selected()).collect::<Vec<_>>(), [Some(false), Some(true)]);
-    }
-
-    #[test]
-    fn notices_are_live_regions_and_errors_interrupt() {
-        let mut s = snap();
-        assert!(s.to_tree().nodes.iter().all(|(id, _)| *id != NOTICE));
-        s.notice = Some(NoticeSnap { text: "Saved".into(), error: false });
-        let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
-        let n = tree.state().root().children().last().unwrap();
-        assert_eq!((n.role(), n.live(), n.label().as_deref()), (Role::Status, Live::Polite, Some("Saved")));
-        s.notice = Some(NoticeSnap { text: "Could not save".into(), error: true });
-        let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
-        let n = tree.state().root().children().last().unwrap();
-        assert_eq!((n.role(), n.live()), (Role::Alert, Live::Assertive));
-    }
-
-    fn list(rows: &[&str], selected: usize) -> ListSnap {
-        ListSnap { rows: rows.iter().map(|r| (r.to_string(), None)).collect(), rows_total: rows.len(), selected: Some(selected) }
-    }
-
-    #[test]
-    fn picker_is_a_combo_box_whose_active_descendant_is_the_selected_row() {
-        let mut s = snap();
-        s.picker = Some(PickerSnap {
-            label: "Type a command".into(),
-            message: None,
-            query: ">sav".into(),
-            list: list(&["File: Save", "File: Save As…"], 1),
-            empty: None,
-        });
-        s.focus = FocusSnap::Picker;
-        let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
-        let state = tree.state();
-        // The focus lands on the selected option through the combo box's active descendant.
-        let focus = state.focus().unwrap();
-        assert_eq!((focus.role(), focus.label().as_deref(), focus.is_selected()), (Role::ListBoxOption, Some("File: Save As…"), Some(true)));
-        let dialog = state.root().children().find(|n| n.role() == Role::Dialog).unwrap();
-        let input = dialog.children().next().unwrap();
-        assert_eq!((input.role(), input.value().as_deref()), (Role::EditableComboBox, Some(">sav")));
-    }
-
-    #[test]
-    fn find_bar_has_fields_live_status_and_option_states() {
-        let mut s = snap();
-        s.find = Some(FindSnap {
-            query: "main".into(),
-            replacement: Some("start".into()),
-            status: Some("1 of 1".into()),
-            controls: vec![("Match case (⌥C)".into(), Some(true)), ("Next match (↵)".into(), None)],
-        });
-        s.focus = FocusSnap::Find(1);
-        let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
-        let state = tree.state();
-        let focus = state.focus().unwrap();
-        assert_eq!((focus.role(), focus.value().as_deref()), (Role::TextInput, Some("start")));
-        let bar = state.root().children().find(|n| n.role() == Role::Group).unwrap();
-        let kids: Vec<_> = bar.children().collect();
-        assert_eq!(kids.iter().map(|k| k.role()).collect::<Vec<_>>(), [Role::SearchInput, Role::TextInput, Role::Status, Role::CheckBox, Role::Button]);
-        assert_eq!((kids[2].live(), kids[2].label().as_deref()), (Live::Polite, Some("1 of 1")));
-        assert_eq!(kids[3].toggled(), Some(Toggled::True));
-    }
-
-    #[test]
-    fn selected_suggestion_is_the_editors_active_descendant() {
-        let mut s = snap();
-        s.completion = Some(list(&["println!", "print!"], 0));
-        let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
-        let focus = tree.state().focus().unwrap();
-        assert_eq!((focus.role(), focus.label().as_deref()), (Role::ListBoxOption, Some("println!")));
-        assert_eq!(focus.parent().unwrap().role(), Role::ListBox);
-    }
-
-    #[test]
-    fn terminal_rows_are_text_with_the_cursor_as_caret() {
-        let mut s = snap();
-        let rows = ["$ ls".to_string(), "a  b".to_string(), "$ ".to_string()];
-        s.terminal = Some(TerminalSnap {
-            label: "Terminal 1 of 1".into(),
-            runs: runs_for(vec![(0, rows[0].clone()), (5, rows[1].clone()), (10, rows[2].clone())], 3, 0),
-            cursor: Some(12),
-        });
-        s.focus = FocusSnap::Terminal;
-        let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
-        let focus = tree.state().focus().unwrap();
-        assert_eq!(focus.role(), Role::Terminal);
-        assert!(focus.is_read_only());
-        let sel = focus.text_selection().unwrap();
-        assert!(sel.is_degenerate());
-        assert_eq!(sel.start().to_global_utf16_index(), 12);
-    }
-
-    #[test]
-    fn every_folder_of_the_workspace_has_its_own_tree() {
-        let mut s = snap();
-        let row = RowSnap { id: row_id("/e/x.rs").0, path: "/e/x.rs".into(), name: "x.rs".into(), depth: 0, is_dir: false, expanded: false, selected: true };
-        s.explorers.push(ExplorerSnap { name: "e".into(), focused: Some(row.id), rows: vec![row], rows_total: 1 });
-        s.focus = FocusSnap::Explorer(1);
-        let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
-        let state = tree.state();
-        let trees: Vec<_> = state.root().children().filter(|n| n.role() == Role::Tree).collect();
-        assert_eq!(trees.len(), 2);
-        assert_eq!(trees[1].label().as_deref(), Some("Explorer: e"));
-        assert_eq!(state.focus().unwrap().label().as_deref(), Some("x.rs"));
-    }
-}
+#[path = "a11y_tests.rs"]
+mod tests;
 
 #[cfg(test)]
 #[path = "a11y_geometry_tests.rs"]
 mod geometry_tests;
+
+#[cfg(test)]
+#[path = "a11y_frames_tests.rs"]
+mod frames_tests;
+
+#[cfg(test)]
+#[path = "a11y_row_frames_tests.rs"]
+mod row_frames_tests;
+
+#[cfg(test)]
+#[path = "a11y_list_frames_tests.rs"]
+mod list_frames_tests;
+
+#[cfg(test)]
+#[path = "a11y_views_tests.rs"]
+mod views_tests;
+
+#[cfg(test)]
+#[path = "a11y_chrome_tests.rs"]
+mod chrome_tests;
+
+#[cfg(test)]
+#[path = "a11y_side_controls_tests.rs"]
+mod side_controls_tests;
+
+#[cfg(test)]
+#[path = "a11y_page_controls_tests.rs"]
+mod page_controls_tests;
+
+#[cfg(test)]
+#[path = "a11y_editor_controls_tests.rs"]
+mod editor_controls_tests;
+
+#[cfg(test)]
+#[path = "a11y_confirm_tests.rs"]
+mod confirm_tests;
+
+#[cfg(test)]
+#[path = "a11y_range_tests.rs"]
+mod range_tests;
+
+#[cfg(test)]
+#[path = "a11y_scm_tests.rs"]
+mod scm_tests;
+
+#[cfg(test)]
+#[path = "a11y_visibility_tests.rs"]
+mod visibility_tests;

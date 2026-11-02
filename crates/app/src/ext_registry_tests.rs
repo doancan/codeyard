@@ -120,7 +120,7 @@ fn a_new_publisher_and_a_stale_index_are_called_out(cx: &mut TestAppContext) {
     assert_eq!(wb.update_in(cx, |wb, window, _| wb.consent_for_test(window)).unwrap().3, "cancel", "Enter does not install");
     // The command line refuses what needs that look.
     let regs = crate::ext_registry::registries(&settings_of(&cfg));
-    let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.night").unwrap_err();
+    let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.night", false).unwrap_err();
     assert!(e.contains("is now published by"), "{e}");
 }
 
@@ -131,17 +131,44 @@ fn the_command_line_installs_from_a_registry_and_explains_refusals() {
     let (mut r, _fetch) = registry(&root, "cli", now);
     let cfg = root.join("cfg");
     let regs = crate::ext_registry::registries(&settings_of(&cfg));
-    let m = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.night@1.0.0").unwrap();
+    let m = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.night@1.0.0", false).unwrap();
     assert_eq!((m.id.as_str(), m.version.to_string().as_str()), ("you.night", "1.0.0"));
-    let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.none").unwrap_err();
+    let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.none", false).unwrap_err();
     assert!(e.contains("not in any of your registries"), "{e}");
-    let e = crate::ext_registry::install_from_command_line(&cfg, &[], "you.night").unwrap_err();
+    let e = crate::ext_registry::install_from_command_line(&cfg, &[], "you.night", false).unwrap_err();
     assert!(e.contains("No extension registry is set up yet"), "{e}");
     // Stale: refused here, the Extensions view asks instead.
     r.publish(&package("you.day", "1.0.0"), &github(7, 42), now);
     r.sign(now - 4 * 86400);
-    let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.day").unwrap_err();
+    let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.day", false).unwrap_err();
     assert!(e.contains("more than 3 days old"), "{e}");
+}
+
+/// #2 of the outside-author trials: installing from a registry on the command line is not consent to what the version
+/// asks for. Its sheet is printed and only `--accept-permissions` installs it, as for a package file.
+#[test]
+fn the_command_line_needs_accept_permissions_for_what_a_version_asks() {
+    let root = dir("cli-perms");
+    let now = crate::ext_registry::now();
+    let (mut r, _fetch) = registry(&root, "cliperms", now);
+    let manifest = "[extension]\nid = \"you.wide\"\nversion = \"1.0.0\"\nname = \"Wide\"\nlicense = \"MIT\"\n[[themes]]\nlabel = \"W\"\npath = \"t.json\"\n\
+                    [permissions]\nread = [\"**\"]\nnet = [\"api.example.com\"]\nwhy = \"Uploads the workspace.\"\n";
+    let entries = vec![
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.as_bytes().to_vec(), executable: false },
+        ext_pkg::Entry { path: "t.json".into(), data: THEME.as_bytes().to_vec(), executable: false },
+    ];
+    r.publish(&ext_pkg::write(entries).unwrap().0, &github(7, 42), now);
+    let cfg = root.join("cfg");
+    let regs = crate::ext_registry::registries(&settings_of(&cfg));
+    let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.wide", false).unwrap_err();
+    assert!(e.starts_with("you.wide 1.0.0 (From the cliperms registry, published by "), "{e}");
+    for line in ["  - Read all files in the workspace", "  - Connect to api.example.com (any port)", "  Why: Uploads the workspace.", "  High risk: "] {
+        assert!(e.contains(line), "{line}: {e}");
+    }
+    assert!(e.contains("--accept-permissions"), "{e}");
+    assert!(crate::ext::store(&cfg).locked().unwrap().is_empty(), "nothing installed");
+    let m = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.wide", true).unwrap();
+    assert_eq!(m.id.as_str(), "you.wide");
 }
 
 /// Exit criterion 2 and #67 AC1: with registries configured but nothing installed from them, starting and reloading
@@ -158,7 +185,7 @@ fn no_request_without_an_extension_from_a_registry(cx: &mut TestAppContext) {
     }
     assert_eq!(fetch.count(), 0, "{:?}", fetch.requests.lock().unwrap());
     let regs = crate::ext_registry::registries(&settings_of(&cfg));
-    crate::ext_registry::install_from_command_line(&cfg, &regs, "you.night").unwrap();
+    crate::ext_registry::install_from_command_line(&cfg, &regs, "you.night", false).unwrap();
     let after_install = fetch.count();
     // The cached index is less than a day old: reloads ask nothing more.
     for _ in 0..3 {
@@ -167,6 +194,66 @@ fn no_request_without_an_extension_from_a_registry(cx: &mut TestAppContext) {
     }
     assert_eq!(fetch.count(), after_install);
     // A day later, one conditional request for the index, and nothing else since it did not change.
-    crate::ext_registry::refresh_installed(&cfg, &regs, crate::ext_registry::now() + ext_core::registry::REFRESH_SECS);
+    let auto = ext_core::update::AutoUpdate::Install;
+    crate::ext_updates::check(&cfg, &regs, auto, crate::ext_registry::now() + ext_core::registry::REFRESH_SECS);
     assert_eq!(fetch.count(), after_install + 1);
+}
+
+/// The public registry the app ships: once set, it is a valid `extensions.registries` entry over https with the
+/// ceremony's three root keys, two of which must sign, so a typo fails here and not on users' machines.
+#[test]
+fn the_public_registry_entry_is_valid() {
+    let Some((name, url, keys, threshold)) = crate::ext_registry::PUBLIC else { return };
+    let setting = serde_json::json!({ "name": name, "url": url, "root-keys": keys, "threshold": threshold });
+    let r = ext_core::registry::Registry::from_setting(&setting).unwrap();
+    assert!(r.url.starts_with("https://"), "{}", r.url);
+    assert_eq!((r.keys.keys.len(), r.keys.threshold), (3, 2));
+}
+
+/// #146 AC2: an extension with native programs installs only once its id is typed on the consent sheet; the package
+/// for the workspace host's platform is installed, with every platform's digest in the lock, and another platform's
+/// package is fetched later only if it matches the lock.
+#[gpui::test]
+fn native_programs_need_the_id_typed(cx: &mut TestAppContext) {
+    let Some(here) = ext_manifest::this_target() else { return };
+    let other = if here == "x86_64-unknown-linux-musl" { "aarch64-unknown-linux-musl" } else { "x86_64-unknown-linux-musl" };
+    let root = dir("native");
+    let now = crate::ext_registry::now();
+    let (mut r, _fetch) = registry(&root, "native", now);
+    r.publish(&ext_core::testing::native_package("you.hello", "1.0.0", here), &github(7, 42), now);
+    r.publish(&ext_core::testing::native_package("you.hello", "1.0.0", other), &github(7, 42), now);
+    let cfg = root.join("cfg");
+    let (wb, cx) = setup(cx, &cfg);
+    wb.update_in(cx, |wb, window, cx| wb.review_registry_extension_for_test("you.hello", window, cx));
+    cx.run_until_parked();
+    assert!(wb.read_with(cx, |wb, _| wb.consent_source_for_test()).is_some(), "no sheet: {}", notice(&wb, cx));
+    assert!(wb.update_in(cx, |wb, window, cx| wb.consent_typing_focused_for_test(window, cx)), "the id field takes the keyboard");
+    // Install without the id, or with another one, installs nothing and says what to type.
+    for typed in ["", "you.hell", "YOU.HELLO"] {
+        assert!(!wb.update_in(cx, |wb, _, cx| wb.type_consent_id_for_test(typed, cx)));
+        wb.update_in(cx, |wb, window, cx| wb.answer_consent_for_test(true, window, cx));
+        cx.run_until_parked();
+        assert!(crate::ext::store(&cfg).locked().unwrap().is_empty(), "installed with {typed:?}");
+        assert!(notice(&wb, cx).contains("Type you.hello"), "{}", notice(&wb, cx));
+        assert!(wb.read_with(cx, |wb, _| wb.consent_source_for_test()).is_some(), "the sheet stays");
+    }
+    assert!(wb.update_in(cx, |wb, _, cx| wb.type_consent_id_for_test(" you.hello ", cx)));
+    wb.update_in(cx, |wb, window, cx| wb.answer_consent_for_test(true, window, cx));
+    cx.run_until_parked();
+    let id = ext_manifest::ExtId::parse("you.hello").unwrap();
+    let store = crate::ext::store(&cfg);
+    let l = store.locked().unwrap()[&id].clone();
+    assert_eq!(l.targets.len(), 2, "every platform's digest: {:?}", l.targets);
+    assert_eq!(l.targets[here], l.digest, "the workspace host's platform is the one installed");
+    assert!(std::fs::read_to_string(cfg.join(crate::ext::LOCK_FILE)).unwrap().contains("\"format\": 4"));
+    // A workspace on the other platform: its package is fetched from the registry and checked against the lock.
+    assert!(store.target_dir(&id, other).is_none());
+    let registries = crate::ext_registry::registries(&settings_of(&cfg));
+    let dir = crate::ext_programs::package_dir(Some(&cfg), &registries, &id, &store.store_dir(&l.digest), other).unwrap();
+    assert_eq!(std::fs::read_to_string(dir.join(ext_pkg::TARGET)).unwrap(), format!("{other}\n"));
+    assert_eq!(crate::ext_programs::read_program(&dir, other, "./bin/hello").unwrap().name, "hello");
+    // A declarative theme needs no typing.
+    wb.update_in(cx, |wb, window, cx| wb.review_registry_extension_for_test("you.night", window, cx));
+    cx.run_until_parked();
+    assert!(wb.update_in(cx, |wb, _, cx| wb.type_consent_id_for_test("", cx)));
 }

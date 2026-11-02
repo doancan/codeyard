@@ -224,7 +224,6 @@ fn project_files_survive_hostile_text() {
             let _ = crate::debug_config::parse_launch_json(&text, "/w", Some("/w/a.rs"), &[]);
             let _ = crate::debug_config::parse_compounds(&text, "/w", None, &[]);
             let tasks = crate::workbench::tasks::parse_task_file(&text, "tasks.jsonc");
-            let _ = crate::workbench::tasks::expand_variables_for_shell(&text, "/w", Some("/w/it's.rs"));
             let _ = tasks.len();
         }
         for text in framed(t, &["{\"scripts\":{", "all:\n\t", ".PHONY: "]) {

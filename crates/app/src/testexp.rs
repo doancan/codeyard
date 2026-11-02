@@ -450,6 +450,7 @@ pub fn debug_configs(file: &TestFile, test: &TestItem, root: &str, rust_binaries
         request: "launch".into(),
         args,
         pre_launch: None,
+        pre_launch_task: None,
         cargo_target: None,
         post_debug: None,
         no_debug: false,

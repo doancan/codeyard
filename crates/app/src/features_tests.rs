@@ -35,7 +35,7 @@ fn following_a_growing_log_shows_new_lines_and_survives_rotation(cx: &mut TestAp
     std::fs::write(&file, (0..50).map(line).collect::<String>()).unwrap();
     let (_wb, cx) = setup(cx);
     let host: Arc<dyn host::Host> = Arc::new(host::local());
-    let path = file.to_string_lossy().into_owned();
+    let path = crate::ui::local_path(&file);
     let view = cx.update(|_, cx| cx.new(|cx| LargeFileView::new(host, path, cx)));
     view.update(cx, |v, cx| {
         v.watch(cx);
@@ -533,7 +533,7 @@ fn files_from_the_system_open_as_tabs_without_changing_the_project(cx: &mut Test
     // `open_urls` looks for real `Workbench` windows (the test helper `setup` wraps the view in a root view).
     let win = cx.add_window(|window, cx| crate::workbench::Workbench::with_state(state::State::in_memory().ok(), None, window, cx));
     let wb = win.root(cx).unwrap();
-    let canon = |p: &std::path::Path| crate::ui::local_path(&std::fs::canonicalize(p).unwrap());
+    let canon = |p: &std::path::Path| crate::ui::local_path(&crate::ui::canonical_for_test(p));
     let url = |p: &std::path::Path| crate::lsp::path_to_uri(&canon(p));
     let root = |cx: &mut TestAppContext| wb.read_with(cx, |wb, cx| wb.local_folder(cx));
     let tabs = |cx: &mut TestAppContext| wb.read_with(cx, |wb, cx| wb.open_paths(cx));
@@ -574,9 +574,7 @@ fn windows_terminal_links_open_absolute_files_without_a_project(cx: &mut TestApp
     let file = dir.join("şablon.txt");
     std::fs::write(&file, "outside a project").unwrap();
     let (wb, cx) = setup(cx);
-    wb.update_in(cx, |wb, window, cx| {
-        wb.open_link(crate::links::Link::File { path: file.to_string_lossy().into_owned(), line: Some(1), col: None }, window, cx)
-    });
+    wb.update_in(cx, |wb, window, cx| wb.open_link(crate::links::Link::File { path: crate::ui::local_path(&file), line: Some(1), col: None }, window, cx));
     wait_ticking(cx, "absolute terminal link", |cx| wb.read_with(cx, |wb, cx| wb.open_paths(cx).iter().any(|p| p.ends_with("şablon.txt"))));
 }
 
@@ -870,7 +868,7 @@ fn sensitive_http_requests_ask_before_sending(cx: &mut TestAppContext) {
     ed.update(cx, |e, cx| e.set_cursor_line_col_for_test(0, 0, cx));
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("HTTP: Send Request", window, cx));
     assert!(cx.has_pending_prompt(), "environment access needs a yes");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert!(!crate::qa_integration_tests::notice(&wb, cx).contains("Sending"), "cancelled: nothing was sent");
 
@@ -913,7 +911,7 @@ fn http_confirm_always_asks_for_every_request(cx: &mut TestAppContext) {
     let (wb, cx) = crate::qa_workbench_tests::setup_with_config(cx, &config_with("http-confirm-always-cfg", r#"{ "http.confirmRequests": "always" }"#));
     send_at(&wb, &file, 0, cx);
     assert!(cx.has_pending_prompt(), "always asks, even for 127.0.0.1");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert!(!crate::qa_integration_tests::notice(&wb, cx).contains("Sending"), "cancelled: nothing was sent");
     send_at(&wb, &file, 0, cx);
@@ -923,7 +921,7 @@ fn http_confirm_always_asks_for_every_request(cx: &mut TestAppContext) {
     wait_ticking(cx, "idle", |cx| !wb.read_with(cx, |wb, _| wb.http_busy_for_test()));
     send_at(&wb, &file, 0, cx);
     assert!(cx.has_pending_prompt(), "approving once does not silence `always`");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     stop.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
@@ -944,14 +942,14 @@ fn http_confirm_remote_asks_once_per_new_host(cx: &mut TestAppContext) {
         assert!(cx.has_pending_prompt(), "{host}: a host that is not this computer is asked about first");
         let shown = cx.pending_prompt().map(|(msg, detail)| format!("{msg} {detail}")).unwrap_or_default();
         assert!(shown.contains(host), "the prompt names the real host {host}: {shown}");
-        cx.simulate_prompt_answer("Cancel");
+        crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
         cx.run_until_parked();
         assert!(!crate::qa_integration_tests::notice(&wb, cx).contains("Sending"), "{host}: cancelled, nothing was sent");
     }
     // Declining approves nothing: the same host asks again.
     send_at(&wb, &file, 2, cx);
     assert!(cx.has_pending_prompt());
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     // An unreadable host (a backslash hides where curl would connect) is asked about as well.
     let odd = dir.join("odd.http");
     std::fs::write(&odd, "GET http://good.example.test\\@bad.example.test/x\n").unwrap();
@@ -959,7 +957,7 @@ fn http_confirm_remote_asks_once_per_new_host(cx: &mut TestAppContext) {
     assert!(cx.has_pending_prompt(), "an address whose host cannot be read reliably asks");
     let shown = cx.pending_prompt().map(|(m, d)| format!("{m} {d}")).unwrap_or_default();
     assert!(shown.contains("cannot be read reliably"), "{shown}");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
 }
 
 /// Approving a remote host lets later requests to it go out without asking; `never` restores the old behaviour. Uses this
@@ -1016,7 +1014,7 @@ fn schema_download_hosts_are_asked_once(cx: &mut TestAppContext) {
     gate.request("declined.example.test");
     wb.update(cx, |wb, cx| wb.ask_schema_hosts_for_test(cx));
     cx.run_until_parked();
-    cx.simulate_prompt_answer("Not Now");
+    crate::question::cancel_keeps_focus(&wb, cx, "Not Now");
     cx.run_until_parked();
     assert!(gate.is_refused("declined.example.test"));
     gate.request("declined.example.test");
@@ -1030,6 +1028,9 @@ fn schema_download_hosts_are_asked_once(cx: &mut TestAppContext) {
 #[gpui::test]
 #[cfg_attr(windows, ignore = "log filtering runs sh, tail and grep, which Windows has only with Git Bash or WSL")]
 fn logs_follow_automatically_and_can_be_filtered(cx: &mut TestAppContext) {
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
     let dir = fresh("log-filter");
     let log = dir.join("app.log");
     let plain = dir.join("data.txt");
@@ -1225,7 +1226,7 @@ fn following_a_file_that_vanishes_reports_it_and_recovers(cx: &mut TestAppContex
     std::fs::write(&file, "one\ntwo\n").unwrap();
     let (_wb, cx) = setup(cx);
     let host: Arc<dyn host::Host> = Arc::new(host::local());
-    let view = cx.update(|_, cx| cx.new(|cx| LargeFileView::new(host, file.to_string_lossy().into_owned(), cx)));
+    let view = cx.update(|_, cx| cx.new(|cx| LargeFileView::new(host, crate::ui::local_path(&file), cx)));
     view.update(cx, |v, cx| {
         v.watch(cx);
         v.set_follow(true, cx);
@@ -1253,6 +1254,9 @@ fn following_a_file_that_vanishes_reports_it_and_recovers(cx: &mut TestAppContex
 #[gpui::test]
 #[cfg_attr(windows, ignore = "log filtering runs sh, tail and grep, which Windows has only with Git Bash or WSL")]
 fn the_log_filter_is_safe_against_shell_metacharacters(cx: &mut TestAppContext) {
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
     let dir = fresh("log-filter-safe");
     let canary = dir.join("INJECTED");
     let log = dir.join("it's a \"log\" $HOME file.log");

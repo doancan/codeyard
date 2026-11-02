@@ -57,8 +57,8 @@ pub(super) struct DebugState {
     pub watch_values: Vec<String>,
     /// The program's threads and the (selected) thread `thread` reported by the stop.
     pub threads: Vec<(i64, String)>,
-    /// Data breakpoints (bound to the session): (dataId, description).
-    pub data_breakpoints: Vec<(String, String)>,
+    /// Data breakpoints (bound to the session).
+    pub data_breakpoints: Vec<crate::debug_model::DataBp>,
     /// Depth of the selected thread's stack when the adapter says (more frames load on demand).
     pub total_frames: Option<usize>,
     /// Values whose elements load a page at a time: reference → (elements loaded, elements in all).
@@ -156,6 +156,18 @@ fn console_append(console: &mut ConsoleLines, partial: &mut Option<(String, Stri
 }
 
 /// Display form of the adapter's stop reason (DAP `reason`); unknown reasons pass through (code compares the raw `reason`).
+/// The reason a stop is shown with and its console line. `entry_expected`: the configuration asked for
+/// `stopOnEntry` and nothing stopped yet. Some adapters (lldb-dap) report that first stop as an exception
+/// "signal SIGSTOP"; it is the stop the user asked for, so it reads as one. A SIGSTOP later on stays an exception.
+fn stop_message(reason: String, text: Option<String>, entry_expected: bool) -> (String, Option<(&'static str, String)>) {
+    let sigstop = reason == "exception" && text.as_deref().is_none_or(|t| t.contains("SIGSTOP"));
+    if reason == "entry" || (entry_expected && sigstop) {
+        return ("entry".into(), Some(("console", crate::i18n::t("Paused on entry").into())));
+    }
+    let line = text.filter(|_| reason == "exception").map(|t| ("stderr", crate::i18n::tf("Paused on exception: {}", &[&t])));
+    (reason, line)
+}
+
 fn stop_reason(reason: &str) -> String {
     use crate::i18n::{t, tr};
     let known = [
@@ -209,6 +221,7 @@ mod testing;
 mod view;
 pub use launch::PendingLaunch;
 pub use view::DebugMenuCmd;
+pub(super) use view::{StackRow, VarRow, stack_rows, status_text, variable_rows};
 
 /// Stack frames requested at a time.
 const STACK_PAGE: usize = 20;
@@ -522,11 +535,17 @@ impl Workbench {
                 if self.overlay.is_some() {
                     self.close_overlay(window, cx);
                 }
+                // Detected Cargo targets also say how they will be built (features, profile, output folder).
+                let build = cx.global::<crate::settings::Settings>().rust_build.summary();
                 let items = configs
                     .iter()
                     .map(|c| PickItem {
                         label: c.name.clone().into(),
-                        detail: Some(c.adapter.as_ref().map(|a| a.id.clone()).unwrap_or_else(|e| e.chars().take(60).collect()).into()),
+                        detail: Some(match (c.adapter.as_ref(), build.as_ref().filter(|_| c.cargo_target.is_some())) {
+                            (Ok(a), Some(build)) => format!("{} · {build}", a.id).into(),
+                            (Ok(a), None) => a.id.clone().into(),
+                            (Err(e), _) => e.chars().take(60).collect::<String>().into(),
+                        }),
                         keys: None,
                     })
                     .collect();
@@ -537,8 +556,14 @@ impl Workbench {
         }
     }
 
-    pub(super) fn start_debug(&mut self, config: LaunchConfig, cx: &mut Context<Self>) {
+    pub(super) fn start_debug(&mut self, mut config: LaunchConfig, cx: &mut Context<Self>) {
         let Some(root) = self.active_root(cx) else { return };
+        // A preLaunchTask from a task file runs as a planned task; the adapter starts when it succeeds or becomes ready.
+        if let Some(label) = config.pre_launch_task.take() {
+            let after = super::task_run_glue::After::Debug(Box::new(config));
+            cx.spawn(async move |this, cx| with_window(&this, cx, move |this, window, cx| this.run_task_named(label, None, after, window, cx))).detach();
+            return;
+        }
         if self.dbg.save_task.is_some() {
             return;
         }
@@ -549,6 +574,9 @@ impl Workbench {
         // Starting a configuration again replaces its session (restart); other sessions keep running.
         self.retire_sessions(&config.name, cx);
         self.dbg.last = Some(config.name.clone());
+        if let Some(target) = &mut config.cargo_target {
+            target.build = cx.global::<crate::settings::Settings>().rust_build.clone();
+        }
         self.dbg.next_id += 1;
         let sid = self.dbg.next_id;
         let (tx, rx) = mpsc::channel();
@@ -712,11 +740,13 @@ impl Workbench {
                 if matches!(d.status, DebugStatus::Ended(_)) {
                     return;
                 }
+                let stop_on_entry = d.config.args.get("stopOnEntry").and_then(serde_json::Value::as_bool) == Some(true);
+                let (reason, line) = stop_message(reason, text, !d.stopped_once && stop_on_entry);
                 d.stopped_once = true;
-                d.status = DebugStatus::Stopped(reason.clone());
+                d.status = DebugStatus::Stopped(reason);
                 d.thread = thread_id;
-                if let Some(t) = text.filter(|_| reason == "exception") {
-                    d.push_console("stderr", crate::i18n::tf("Paused on exception: {}", &[&t]));
+                if let Some((category, line)) = line {
+                    d.push_console(category, line);
                 }
                 // The session that stopped is the one the controls and the editors follow.
                 self.dbg.focused = Some(sid);
@@ -1107,7 +1137,7 @@ impl Workbench {
         .detach();
     }
 
-    fn debug_evaluate(&mut self, expression: String, cx: &mut Context<Self>) {
+    pub(super) fn debug_evaluate(&mut self, expression: String, cx: &mut Context<Self>) {
         let expression = expression.trim().to_string();
         let sid = self.dbg.cur_id();
         let Some(d) = self.dbg.cur_mut() else { return };
@@ -1359,7 +1389,18 @@ impl Workbench {
             .size_full()
             .flex()
             .flex_col()
-            .child(div().id("dbg-console-rows").flex_1().min_h_0().overflow_y_scroll().children(lines))
+            .relative()
+            .child(super::a11y::part_frame(super::a11y::Part::Console, cx))
+            .child(
+                div()
+                    .id("dbg-console-rows")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .relative()
+                    .child(super::a11y::part_frame(super::a11y::Part::ConsoleLog, cx))
+                    .children(lines),
+            )
             .child(
                 div()
                     .h(px(26.))
@@ -1374,6 +1415,8 @@ impl Workbench {
                     .on_action(cx.listener(|this, _: &ConsoleHistoryPrev, _, cx| this.console_history(true, cx)))
                     .on_action(cx.listener(|this, _: &ConsoleHistoryNext, _, cx| this.console_history(false, cx)))
                     .on_action(cx.listener(|this, _: &ConsoleComplete, _, cx| this.console_complete(cx)))
+                    .relative()
+                    .child(super::a11y::part_frame(super::a11y::Part::ConsoleInput, cx))
                     .child(icon("chevron-right", 12., p.accent))
                     .child(d.input.clone()),
             )
@@ -1410,12 +1453,14 @@ pub(super) fn inline_values(lines: &[String], stop: usize, locals: &[(String, St
 }
 
 /// Scopes of a frame and the first scope's variables (in the background).
-/// The compiler may report the logical path (`/tmp/x`) while the editor holds the canonical one (`/private/tmp/x`).
+/// The compiler may report the logical path (`/tmp/x`) while the editor holds the canonical one (`/private/tmp/x`). The
+/// canonical path is kept in the editor's form (`ui::local_path`): on Windows `canonicalize` adds `\\?\` and backslashes,
+/// and such a frame matched no open file, so the paused line was never shown.
 fn normalize_frames(frames: &mut [Frame], local: bool) {
     if local {
         for f in frames {
             if let Some(c) = f.path.as_deref().and_then(|p| std::fs::canonicalize(p).ok()) {
-                f.path = Some(crate::ui::local_path(&c));
+                f.path = Some(ui::local_path(&c));
             }
         }
     }
@@ -1431,43 +1476,5 @@ fn load_scopes(session: &dap::Session, frame_id: i64) -> (Vec<Scope>, HashMap<i6
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn inline_values_cover_the_function_up_to_the_stop_line() {
-        let src: Vec<String> =
-            ["int helper(void);", "", "int add(int a, int b) {", "    int sum = a + b;", "    // sum is unused here", "    return sum;", "}"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect();
-        let locals = vec![("a".to_string(), "3".to_string()), ("b".to_string(), "4".to_string()), ("sum".to_string(), "7".to_string())];
-        let v = inline_values(&src, 5, &locals);
-        assert_eq!(v.get(&2).map(String::as_str), Some("a = 3  b = 4"), "signature line");
-        assert_eq!(v.get(&3).map(String::as_str), Some("a = 3  b = 4  sum = 7"));
-        assert_eq!(v.get(&4), None, "a name in a comment does not count");
-        assert_eq!(v.get(&5).map(String::as_str), Some("sum = 7"));
-        assert_eq!(v.get(&0), None, "other function");
-        assert!(inline_values(&src, 5, &[]).is_empty() && inline_values(&src, 99, &locals).is_empty());
-        let long = inline_values(&src, 3, &[("sum".into(), "x".repeat(50))]);
-        assert!(long[&3].ends_with('…') && long[&3].chars().count() < 45);
-    }
-
-    #[test]
-    fn console_lines_are_cut_and_capped_whatever_the_adapter_sends() {
-        let (mut console, mut partial) = (ConsoleLines::new(), None);
-        // 300 chunks of 64 KB without a newline: the unfinished line never grows past PARTIAL_LIMIT.
-        let chunk = "x".repeat(64 * 1024);
-        for _ in 0..300 {
-            console_append(&mut console, &mut partial, "stdout", &chunk);
-            assert!(partial.as_ref().is_none_or(|(_, p): &(String, String)| p.len() <= PARTIAL_LIMIT));
-        }
-        assert!(!console.is_empty() && console.iter().all(|(_, l)| l.chars().count() <= LINE_LIMIT + 1), "every line is cut");
-        // Many short lines: the console keeps CONSOLE_LIMIT.
-        console_append(&mut console, &mut partial, "stdout", &"a\n".repeat(CONSOLE_LIMIT * 2));
-        assert_eq!(console.len(), CONSOLE_LIMIT);
-        console_push(&mut console, "stderr", &"y".repeat(LINE_LIMIT * 3));
-        assert_eq!(console.len(), CONSOLE_LIMIT);
-        assert!(console.last().unwrap().1.chars().count() <= LINE_LIMIT + 1);
-    }
-}
+#[path = "workbench_debug_tests.rs"]
+mod tests;

@@ -3,7 +3,7 @@
 | | macOS (Apple silicon) | Linux | Windows |
 | --- | --- | --- | --- |
 | App | released, daily use, all gates run | builds; the full workspace is tested by blocking Linux CI; no released installer | builds natively (MSVC) and is checked by `scripts/check-windows.ps1` (library tests, path, terminal and resize regressions); ConPTY terminal, menu bar; SSH needs a key or ssh-agent |
-| Agent (target of SSH) | `aarch64-apple-darwin` bundled | `x86_64` and `aarch64` musl bundled, ≤ 1600 KB | not a target |
+| Agent (target of SSH) | `aarch64-apple-darwin` bundled | `x86_64` and `aarch64` musl bundled, ≤ 1664 KB | not a target |
 | Installer | `.app` + DMG; Developer ID signing/notarization verified in release CI | none yet | portable ZIP and Inno Setup installer (`scripts/bundle-windows.ps1`), unsigned |
 | CI | `macos-latest` job runs the gates; all gates also run locally with `scripts/check.sh` | `linux` job (GPUI-free crates, musl agent size) is blocking; `linux-app` (whole workspace/GPUI) is blocking after four consecutive successful runs | blocking `windows-2022` job running `scripts/check-windows.ps1` |
 
@@ -23,7 +23,7 @@
 - **Apple silicon only.** Intel Macs are not a target: there is no universal build and no Intel CI. `LSMinimumSystemVersion` and
   `MACOSX_DEPLOYMENT_TARGET` are 11.0 (the first macOS release for Apple silicon).
 
-- Codeyard asks for no file access at start, like VS Code. macOS asks, in its own dialog, the first time a folder on Desktop, Documents,
+- Codeyard asks for no file access at start. macOS asks, in its own dialog, the first time a folder on Desktop, Documents,
   Downloads, iCloud Drive, a removable or a network volume is opened; the bundle carries the usage descriptions for them. Full Disk Access
   is optional and cannot be requested by an app: *Help: Grant Full Disk Access…* opens the page and shows the app in Finder to drag in.
 - Metal toolchain (Xcode) is needed to build GPUI.
@@ -50,6 +50,23 @@ Windows x64 is built and released as a ZIP and a setup EXE (unsigned, so SmartSc
   opens hidden and is shown once the adapter is attached. Not yet tried with a screen reader (see `accessibility.md`).
 - `scripts/check-windows.ps1` runs the library tests, selected UI, path and keyboard regressions and the release build.
   GPUI needs `fxc.exe` from the Windows SDK.
+- Terminals of a local folder run in the terminal daemon, as on macOS and Linux. They are taken back after Codeyard
+  quits, crashes or is killed (`terminal.persistentSessionTimeout`). The daemon listens on a named pipe that only the
+  current user can open (a protected DACL with the user's SID alone; remote clients rejected) and owns the ConPTY
+  sessions. CI checks it with real processes (`agent/src/daemon_windows_tests.rs`): the same shell is taken back with
+  its token, a wrong token is refused, a kept session ends with its shell after its timeout, and the pipe's DACL is
+  checked.
+- Tasks: each task runs in a kill-on-close job object. CI runs these checks with real processes
+  (`agent/src/proc_windows_tests.rs`):
+  - Stop ends the task's leader and a grandchild that holds the output pipe, also after the leader has exited.
+  - Killing the process that owns the task ends both, because the system closes the job handle.
+
+  The task runner's quoting (`app/src/task_run_tests.rs`, the `windows_task_arguments_*` tests) is checked by running
+  Python as the program through a process task, cmd.exe and PowerShell. The values include spaces, quotes, `%VAR%`, `^`,
+  `&`, `|`, `<`, `>`, Unicode, trailing backslashes and an empty argument, and the test compares the argument list the
+  program received. cmd.exe words keep `%` out of the quotes so a `%NAME%` value is not expanded.
+  Windows PowerShell 5.1 cannot pass an empty argument, an embedded quote or a trailing backslash to a program
+  unchanged; PowerShell 7 (`pwsh`) can.
 - `./scripts/build-windows.ps1` builds a standalone EXE with Linux x64 and ARM64 SSH agents embedded; use
   `-Profile Release` for an optimized build. No separate `agents/` folder is needed. The packaging check moves only
   the EXE to an empty directory and verifies both embedded agents. Release CI also embeds its supplied macOS agents.
@@ -60,6 +77,13 @@ Windows x64 is built and released as a ZIP and a setup EXE (unsigned, so SmartSc
   The `*-pc-windows-gnu` toolchains get them as on other systems.
 - Extensions: declarative extensions, the Extensions view and `cyx` work as on macOS, and the installer puts `cyx.exe` beside
   Codeyard. *Extensions: Install cyx Command in PATH* names that folder instead of linking (the PATH is the user's to edit).
+  Installed extensions **with code** do not run on Windows in 0.7.0: the AppContainer sandbox they need is off until it
+  passes on physical hardware (`ext_proto::appcontainer::VERIFIED`, checked by `scripts/check-exthost-sandbox-windows.ps1`).
+  Such an extension cannot be installed: its Market page (and an install from a file) says "*id* contains code, which
+  needs a sandbox this system does not provide: AppContainer has not passed the hardware check yet
+  (scripts/check-exthost-sandbox-windows.ps1)". Extensions without code (themes, languages, snippets, keymaps, schemas,
+  language servers) work. Authors can still run `cyx dev` and `cyx test` there: the extension in development runs without
+  the OS sandbox, behind WebAssembly and the app's permission checks, as on every system.
   The extension performance rows only warn on Windows until there is a Windows reference machine (`plugin-architecture.md` §15).
 - Not verified: real SSH authentication, mixed-DPI displays, physical keyboard and IME behaviour.
 - `scripts/check-windows.sh` is the quick cross-compile check from macOS or Linux (`x86_64-pc-windows-gnu`); it runs nothing.

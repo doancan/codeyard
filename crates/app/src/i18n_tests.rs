@@ -424,7 +424,7 @@ fn welcome_status_and_git_dialogs_are_translated(cx: &mut TestAppContext) {
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Discard All Changes", window, cx));
     cx.run_until_parked();
     assert_eq!(cx.pending_prompt().unwrap().0, "Discard changes in “README.md”?");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
 }
 
 /// Sample keys per surface and their expected Turkish equivalents (the table really covers these surfaces).
@@ -826,7 +826,8 @@ fn i18n_template_is_up_to_date(cx: &mut TestAppContext) {
     if std::env::var_os("UPDATE_I18N").is_some() {
         std::fs::write(&path, &want).unwrap();
     }
-    let have = std::fs::read_to_string(&path).unwrap_or_default();
+    // A Windows checkout may have turned the file's `\n` into `\r\n`.
+    let have = std::fs::read_to_string(&path).unwrap_or_default().replace("\r\n", "\n");
     assert!(have == want, "locales/template.tsv is out of date: run `UPDATE_I18N=1 cargo test -p app --bin codeyard i18n_template`");
 }
 

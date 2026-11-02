@@ -22,6 +22,17 @@ runs:
     - name: Install cyx (the version of this action)
       shell: bash
       run: cargo install --locked --quiet --path "$GITHUB_ACTION_PATH/../../crates/cyx"
+    # What cyx package builds the extension with, as setup-cyx installs it: the WebAssembly target for a Rust
+    # extension (it has a Cargo.toml), Node.js for a TypeScript one (it has a package.json).
+    - name: Add the wasm32-wasip2 target (Rust extensions)
+      if: hashFiles(format('{0}/Cargo.toml', inputs.folder)) != ''
+      shell: bash
+      run: rustup target add wasm32-wasip2
+    - name: Set up Node.js (TypeScript extensions)
+      if: hashFiles(format('{0}/package.json', inputs.folder)) != ''
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: "24"
     - name: Publish
       shell: bash
       env:

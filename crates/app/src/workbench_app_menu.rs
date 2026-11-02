@@ -27,6 +27,24 @@ impl Workbench {
                 div()
                     .id(("application-menu", index))
                     .debug_selector(move || format!("application-menu-{index}"))
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::new(
+                            crate::i18n::t("Menu bar"),
+                            format!("menu-{index}"),
+                            accesskit::Role::MenuItem,
+                            menu.name.to_string(),
+                        )
+                        .expanded(active == Some(index))
+                        .on_entity(cx.entity().downgrade(), move |this, window, cx| {
+                            let same = this.menu.as_ref().and_then(|m| m.app_path.as_ref()).is_some_and(|p| p.first() == Some(&index));
+                            this.close_menu(window, cx);
+                            if !same {
+                                let at = crate::a11y_controls::bounds_of(cx, window, "Menu bar", &format!("menu-{index}")).map_or(px(0.), |b| b.left());
+                                this.open_application_menu(vec![index], gpui::point(at, px(this.application_menu_bottom(window))), window, cx);
+                            }
+                        }),
+                    ))
                     .h_full()
                     .px(px(theme::SPACE[4]))
                     .flex()

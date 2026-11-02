@@ -1,0 +1,12 @@
+{
+  "http": [
+    {
+      "method": "GET",
+      "url": "https://forge.example.com/api/v1/repos/example/repo/pulls?state=open&sort=recentupdate&limit=50",
+      "status": 200,
+      "body": [
+        { "number": 3, "title": "Fix the parser", "state": "open", "user": { "login": "ada" }, "head": { "ref": "fix" }, "base": { "ref": "main" } }
+      ]
+    }
+  ]
+}

@@ -15,14 +15,14 @@ fn qa_root() -> PathBuf {
     let base = std::env::var_os("CODEYARD_QA_TMP").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
     let d = base.join(format!("codeyard-qa-wb-{}", std::process::id()));
     std::fs::create_dir_all(&d).unwrap();
-    std::fs::canonicalize(d).unwrap()
+    crate::ui::canonical_for_test(d)
 }
 
 pub(crate) fn fresh(name: &str) -> PathBuf {
     let d = qa_root().join(name);
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
-    d
+    crate::ui::canonical_for_test(&d)
 }
 
 pub(crate) fn project(name: &str) -> PathBuf {
@@ -78,6 +78,15 @@ fn restart(wb: Entity<Workbench>, cx: &mut VisualTestContext, home: &std::path::
 /// Quit and reopen the window with the given `window.startup` setting.
 pub(crate) fn restart_with(wb: Entity<Workbench>, cx: &mut VisualTestContext, home: &std::path::Path, startup: crate::settings::Startup) -> Entity<Workbench> {
     assert!(wb.update(cx, |wb, cx| wb.prepare_quit(cx)));
+    reopen(wb, cx, home, startup)
+}
+
+/// `restart_with` after a crash or a kill: nothing is saved on the way out, the next start finds what was last saved.
+pub(crate) fn restart_after_kill(wb: Entity<Workbench>, cx: &mut VisualTestContext, home: &std::path::Path) -> Entity<Workbench> {
+    reopen(wb, cx, home, crate::settings::Startup::Continue)
+}
+
+fn reopen(wb: Entity<Workbench>, cx: &mut VisualTestContext, home: &std::path::Path, startup: crate::settings::Startup) -> Entity<Workbench> {
     drop(wb);
     let db = home.join("state.db");
     let data = home.to_path_buf();
@@ -104,7 +113,8 @@ pub(crate) fn open(wb: &Entity<Workbench>, path: &std::path::Path, cx: &mut Visu
 }
 
 pub(crate) fn open_in(wb: &Entity<Workbench>, path: &std::path::Path, cx: &mut VisualTestContext) {
-    let p = path.to_string_lossy().into_owned();
+    // A file path as the explorer and the tabs give it (`ui::local_path`).
+    let p = ui::local_path(path);
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
     cx.run_until_parked();
 }
@@ -126,6 +136,17 @@ fn wait_for(cx: &mut VisualTestContext, what: &str, mut done: impl FnMut(&mut Vi
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
+}
+
+/// Generic fixtures test editing and workbench behaviour; they must never launch an installed language server
+/// (rust-analyzer would build the scratch project). LSP integration tests turn `lsp_enabled` on explicitly.
+#[gpui::test]
+fn generic_fixtures_start_no_language_server(cx: &mut TestAppContext) {
+    let dir = project("no-lsp-in-fixtures");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("src/main.rs"), cx);
+    assert_eq!(wb.read_with(cx, |wb, _| wb.lsp_server_keys_for_test()), Vec::<String>::new(), "no language server was attempted");
+    assert!(!cx.update(|_, cx| cx.global::<crate::settings::Settings>().lsp_enabled), "LSP is off by default under test");
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +281,7 @@ fn qa_delete_file_with_unsaved_changes_keeps_the_text(cx: &mut TestAppContext) {
     assert!(wb.read_with(cx, |wb, cx| wb.any_dirty(cx)));
     wb.update_in(cx, |wb, window, cx| wb.focus_tree(window, cx));
     cx.simulate_keystrokes("down cmd-backspace");
-    cx.simulate_prompt_answer("Move to Trash");
+    cx.simulate_prompt_answer("Delete");
     cx.run_until_parked();
     assert!(!dir.join("a.txt").exists());
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity());
@@ -633,10 +654,10 @@ fn legacy_project_settings_folder_still_applies(cx: &mut TestAppContext) {
 fn save_local_copy_resolves_the_typed_path() {
     use crate::workbench::local_copy_target;
     let home = std::path::Path::new("/home/ada");
+    // An absolute path of this system (Windows: with a drive).
+    let abs = if cfg!(windows) { "C:/tmp/a.txt" } else { "/tmp/a.txt" };
     assert_eq!(local_copy_target("~/Downloads/a.rs", Some(home)).unwrap(), "/home/ada/Downloads/a.rs");
     assert_eq!(local_copy_target("  notes/a.txt ", Some(home)).unwrap(), "/home/ada/notes/a.txt");
-    // An absolute path as the system spells it (on Windows `/tmp` has no drive and is not one).
-    let abs = if cfg!(windows) { "C:/tmp/a.txt" } else { "/tmp/a.txt" };
     assert_eq!(local_copy_target(abs, Some(home)).unwrap(), abs);
     assert_eq!(local_copy_target("~", Some(home)).unwrap(), "/home/ada");
     assert!(local_copy_target("", Some(home)).is_err());
@@ -771,8 +792,8 @@ fn qa_startup_setting_parses_and_is_in_the_settings_page() {
 }
 
 fn drag(wb: &Entity<Workbench>, cx: &mut VisualTestContext, from: &std::path::Path, to_dir: &std::path::Path) {
-    // The tree names its entries in the app's form (`C:/dir` on Windows).
-    let ev = crate::tree::TreeEvent::Move { from: from.app(), to_dir: to_dir.app() };
+    // Paths as the explorer gives them (`ui::local_path`).
+    let ev = crate::tree::TreeEvent::Move { from: ui::local_path(from), to_dir: ui::local_path(to_dir) };
     wb.update_in(cx, |wb, window, cx| wb.tree_event_for_test(ev, window, cx));
     cx.run_until_parked();
 }
@@ -786,7 +807,7 @@ fn qa_drag_and_drop_asks_and_cancel_keeps_the_file(cx: &mut TestAppContext) {
     open(&wb, &dir, cx);
     drag(&wb, cx, &dir.join("README.md"), &dir.join("dest"));
     assert!(cx.has_pending_prompt(), "must ask before moving by drag");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert!(dir.join("README.md").exists() && !dir.join("dest/README.md").exists());
 }
@@ -896,7 +917,7 @@ fn qa_opening_a_missing_recent_asks_to_remove_it(cx: &mut TestAppContext) {
     open_gone(&wb, cx);
     assert!(cx.has_pending_prompt(), "must ask before touching the list");
     assert_eq!(wb.read_with(cx, |w, cx| w.root_for_test(cx)), None, "nothing was opened");
-    cx.simulate_prompt_answer("Keep");
+    crate::question::cancel_keeps_focus(&wb, cx, "Keep");
     cx.run_until_parked();
     assert!(recent_paths(&wb, cx).iter().any(|(p, _)| *p == gone), "Keep keeps it");
     open_gone(&wb, cx);

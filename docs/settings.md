@@ -82,6 +82,7 @@ status bar reports it.
 
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
+| `extensions.autoUpdate` | `install`, `notify`, `off` | `install` | Newer versions of extensions from a registry: install (by themselves; versions that run code 48 hours after they are published; a version that asks for more permissions waits for your OK), notify (shown in the Extensions view; you install them) or off (nothing is downloaded until you ask). A withdrawn version is still replaced and a revoked one still stopped. Your own settings only; a folder cannot change it |
 | `extensions.enabled` | `true` / `false` | `true` | Load installed extensions (off: Codeyard starts as if none were installed) |
 
 ## `files`
@@ -90,7 +91,7 @@ status bar reports it.
 | --- | --- | --- | --- |
 | `files.autoSave` | `off`, `afterDelay`, `onFocusChange` | `off` | Save files automatically |
 | `files.autoSaveDelay` | number 100–600000 | `1000` | Delay for afterDelay (ms) |
-| `files.enableTrash` | `true` / `false` | `true` | Move deleted local files to the Trash |
+| `files.enableTrash` | `true` / `false` | `false` | Move deleted local files to the Trash |
 | `files.fallbackEncoding` | `windows1254`, `iso88599`, `iso88591`, `utf8` | `windows1254` | Encoding for files that are not UTF-8 |
 | `files.hotExit` | `true` / `false` | `true` | Keep unsaved changes across restarts |
 | `files.insertFinalNewline` | `true` / `false` | `false` | End files with a newline when saving |
@@ -100,7 +101,7 @@ status bar reports it.
 
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
-| `git.autofetch` | `true` / `false` | `false` | Fetch from the remote in the background while the window is in front |
+| `git.autofetch` | `true` / `false` | `true` | Fetch from the remote in the background while the window is in front |
 | `git.autofetchPeriod` | number 30–86400 | `180` | Seconds between background fetches |
 | `git.confirmSync` | `true` / `false` | `false` | Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it |
 | `git.enableSmartCommit` | `true` / `false` | `true` | Commit all tracked changes when nothing is staged |
@@ -185,12 +186,14 @@ status bar reports it.
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
 | `terminal.allowClipboardWrite` | `true` / `false` | `false` | Let programs in the terminal write to the clipboard |
-| `terminal.confirmOnClose` | `running`, `always`, `never` | `running` | Ask before closing a terminal |
+| `terminal.confirmOnClose` | `running`, `always`, `never` | `never` | Ask before closing a terminal |
 | `terminal.copyOnSelection` | `agents`, `always`, `off` | `agents` | Copy text selected with the mouse: while Claude Code or Codex runs, always, or never |
 | `terminal.defaultProfile` | text | empty | Profile new terminals use |
 | `terminal.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the terminal |
 | `terminal.lineHeight` | number 1–2 | `1.2` | Terminal row height, as a multiple of the font size |
 | `terminal.notifications` | `true` / `false` | `true` | Flag a terminal and the taskbar when its program rings the bell or asks for you |
+| `terminal.persistentScrollback` | number 0–10000 | `0` | Lines of each terminal's history kept for the next start, as plain text on this computer (0: none) |
+| `terminal.persistentSessionTimeout` | number 0–1440 | `5` | Minutes the terminals keep running for the next start after Codeyard quits, crashes or is killed (0: not kept) |
 | `terminal.sanitizePaste` | `auto`, `always`, `off` | `auto` | Remove control characters from pasted text |
 | `terminal.scrollSensitivity` | number 0.1–10 | `2.0` | Mouse wheel and trackpad scroll speed multiplier |
 | `terminal.scrollback` | number 0–50000 | `2000` | Lines kept in terminal history |
@@ -203,6 +206,7 @@ status bar reports it.
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
 | `ui.language` | `auto`, `en`, `tr` | `auto` | Language of the menus, command palette, Welcome screen, status bar, Source Control, Explorer, Settings page chrome, file operations and Git prompts (the user guide lists exactly what is translated; the rest stays English): auto (the system language) or a language code, en or tr. Your own settings only; a folder cannot change it |
+| `ui.scale` | number 0.75–2 | `1.0` | Interface scale of every window, from 0.75 (75%) to 2 (200%); View: Zoom In and Zoom Out step through 75%, 80% and every 10% from 90% to 200%. Editor and terminal font sizes are scaled with it. Your own settings only; a folder cannot change it |
 
 ## `update`
 
@@ -253,9 +257,10 @@ status bar reports it.
 | `search.exclude` | list of globs | `[]` | Skip matching paths in Find in Files. |
 | `compare.folders.ignore` | list of globs | `[".git", "node_modules", "target"]` | Names and paths *Compare: Folders…* leaves out on both sides (gitignore syntax). |
 | `compare.folders.maxFiles` | number 100–5000000 | `50000` | Entries per side *Compare: Folders…* reads before it stops and reports that the result is partial. |
-| `workbench.startupEditor` | string | `welcome` | VS Code compatible alias of `window.startup`. |
+| `workbench.startupEditor` | string | `welcome` | Alias of `window.startup`, kept for settings imported from another editor. |
 | `editor.codeActionsOnSave` | object | `{}` | Code actions to run on save before formatting, e.g. `{ "source.organizeImports": "explicit" }`; each gives up after 2 s. |
 | `files.associations` | object of glob → language | `{}` | Force a language mode for matching files, e.g. `{ "*.tpl": "html" }`. |
+| `editor.formatters` | object of language → formatter | `{}` | Who formats a language: `"lsp"` or the id of an extension that formats it, e.g. `{ "toml": "you.taplo" }`. Without an entry the language server formats, or else the only extension that formats the language. |
 | `terminal.profiles.macos` | object of name → profile | `{}` | Profiles for terminals on macOS: `{ "zsh": { "path": "/bin/zsh", "args": ["-l"], "env": { … }, "color": "info" } }`; `args` replace the login flag, `color` is accent, success, warning, danger, info or muted. Needs a trusted folder in a project file. |
 | `terminal.profiles.linux` | object of name → profile | `{}` | Profiles for terminals on Linux (also SSH hosts), like `terminal.profiles.macos`. |
 | `terminal.profiles.windows` | object of name → profile | `{}` | Profiles for terminals on Windows, like `terminal.profiles.macos`. |
@@ -265,4 +270,8 @@ status bar reports it.
 | `lsp.servers` | object of language → `{ command, args, settings, initializationOptions }` or `null` | built-in servers | Replace, configure or turn off (`null`) the language server of a language. `settings` is what the server reads as its configuration (dotted keys are nested objects; a change reaches a running server without a restart), `initializationOptions` is sent when it starts; without `command` the default server is used. Keys: `rust`, `c`, `go`, `python`, `typescript`, `java`, `csharp`, `php`, `ruby`, `kotlin`, `swift`, `lua`, `bash`, `html`, `css`; `json`, `yaml` and `toml` have no default and are opt-in. Ignored in untrusted folders. |
 | `extensions.registries` | list of `{ name, url, root-keys, threshold }` | `[]` | Extension registries besides the public one, e.g. a company's own `yard`: a short `name`, its `https://` address, the hex public keys that sign its `root.json` and how many of them must (default: all). User settings only. |
 | `spelling.languages` | list of dictionary ids | `["en"]` | Dictionaries used together; install more with *Spelling: Install Dictionary…*. |
+| `rust.features` | list of feature names | `[]` | Cargo features Run and Debug build with, besides a target's required features. |
+| `rust.noDefaultFeatures` | boolean | `false` | Build Run and Debug targets without the package's default features. |
+| `rust.profile` | string | Cargo's default (`dev`) | Cargo profile Run and Debug build with, e.g. `release` or a custom `[profile.*]`. |
+| `rust.targetDir` | path | Cargo's own | Output folder for Run and Debug builds (`--target-dir`); a relative path is resolved against the workspace folder on the machine that builds, also over SSH. |
 | `workbench.colorCustomizations` | object | `{}` | Override single colour roles; an entry in `[Theme Name]` applies to that theme only. |

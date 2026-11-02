@@ -187,6 +187,9 @@ pub use data_glue::DataSource;
 mod display_glue;
 #[path = "editor_edit.rs"]
 mod edit_glue;
+#[path = "editor_ext.rs"]
+mod ext_glue;
+pub use ext_glue::{ExtEvent, ExtHint, ExtLens, FormatJob, LineDecoration, SaveFormatter, lang as ext_lang, tone_color};
 #[path = "editor_find.rs"]
 mod find_glue;
 #[path = "editor_git.rs"]
@@ -207,12 +210,15 @@ mod moves_glue;
 mod popups_glue;
 #[cfg(test)]
 pub use popups_glue::HoverRow;
+pub use popups_glue::PopupsA11y;
 #[path = "editor_render.rs"]
 mod render_glue;
 #[path = "editor_schema.rs"]
 mod schema_glue;
 #[path = "editor_spell.rs"]
 mod spell_glue;
+#[path = "editor_syntax.rs"]
+mod syntax_glue;
 pub use schema_glue::SchemaBinding;
 
 pub enum EditorEvent {
@@ -246,6 +252,8 @@ pub enum EditorEvent {
     OpenMergeEditor,
     /// The "Send Request" link of a request in an `.http` file (request line, 0-based).
     SendRequest(usize),
+    /// Code lenses and inlay hints of extensions (workbench_ext_lenses.rs).
+    Extension(ExtEvent),
 }
 
 /// Open completion list.
@@ -268,6 +276,8 @@ struct Hover {
     diagnostics: Vec<crate::lsp::Diagnostic>,
     text: Option<String>,
     position: Point<Pixels>,
+    /// What extensions said about it: (extension, text) (editor_ext_lang.rs).
+    ext: Vec<(String, String)>,
 }
 
 /// "Peek Definition": a few lines around the target, shown as a card under the cursor.
@@ -301,6 +311,8 @@ impl std::fmt::Display for OpenError {
 /// Syntax highlighting is off above this size. The tree takes ~30x the source's size
 /// (1 MB -> ~30 MB), so it is cut off at 1 MB to meet the low-RAM target.
 const SYNTAX_MAX_BYTES: usize = 1024 * 1024;
+/// How long a keystroke may spend reparsing on the UI thread; a longer reparse finishes in the background.
+const SYNTAX_BUDGET: std::time::Duration = std::time::Duration::from_millis(4);
 
 pub struct Loaded {
     pub buffer: Buffer,
@@ -419,6 +431,20 @@ struct VisibleLine {
     text_left: Pixels,
 }
 
+/// A new buffer epoch (never repeats in this process).
+pub(crate) fn next_epoch() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// One exact state of an open document: which buffer object, which undo step, which text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DocIdentity {
+    pub epoch: u64,
+    pub version: u64,
+    pub hash: u64,
+}
+
 pub struct EditorView {
     host: Arc<dyn Host>,
     pub path: String,
@@ -485,6 +511,9 @@ pub struct EditorView {
     conflict_at: Option<std::time::Instant>,
     /// File was deleted from disk (re-created on save).
     deleted_on_disk: bool,
+    /// Identity of the buffer object: a new one is taken whenever the buffer is replaced (reload, revert), whose undo ids
+    /// start over. With the version and a content hash it names one exact document state (see `doc_identity`).
+    pub(crate) epoch: u64,
     /// Preview tab (italic; replaced by the next preview).
     pub preview: bool,
     /// Pinned tab (on the left, "close others" skips it).
@@ -504,11 +533,15 @@ pub struct EditorView {
     git_base: Option<buffer::Rope>,
     git_marks: Vec<Option<crate::git::LineMark>>,
     git_task: Option<gpui::Task<()>>,
+    /// A source control provider of an extension gives `git_base` (#144); git leaves the file alone.
+    scm_owned: bool,
     /// Language server (if any), language id, document version and latest diagnostics.
     lsp: Option<Arc<crate::lsp::Client>>,
     lsp_lang: &'static str,
     lsp_version: i64,
     diagnostics: Vec<crate::lsp::Diagnostic>,
+    /// Decorations of code extensions and the formatter that runs on save (editor_ext.rs).
+    ext: ext_glue::ExtMarks,
     /// Workspace root of the language server; related locations under it are shown relative to it.
     lsp_root: Option<String>,
     /// JSON/YAML schema (completion and hover come from here when there is no language server); bound by the Workbench.
@@ -527,6 +560,8 @@ pub struct EditorView {
     signature: Option<(String, Option<Range<usize>>)>,
     signature_task: Option<gpui::Task<()>>,
     hover: Option<Hover>,
+    /// Where each view's popups were painted in its last frame (accessibility), by view slot.
+    a11y_popups: crate::painted::RowBounds<(usize, popups_glue::PopupFrame)>,
     peek: Option<Peek>,
     /// Peek request counter: when the cursor moves, the result of an in-flight request is discarded.
     peek_seq: u64,
@@ -559,6 +594,8 @@ pub struct EditorView {
     /// Selection when the find bar opened (candidate scope for find in selection).
     find_origin: Option<Range<usize>>,
     word_cache: Option<(u64, usize, std::sync::Arc<[crate::lsp::CompletionItem]>)>,
+    /// Background reparses and the frames they ask for (`sync_syntax`).
+    parse: syntax_glue::ParseState,
     conflicts_pending: u64,
     /// Line layout the popups are positioned on, and whether there are positioned items.
     popup_basis: ((usize, usize, Pixels), bool),
@@ -584,6 +621,8 @@ pub struct EditorView {
     display_key: Option<DisplayKey>,
     /// Hidden line ranges (folds) computed along with the mapping.
     hidden: Vec<Range<usize>>,
+    /// `fold_headers`, kept for the text and fold marks it was computed for.
+    fold_lines: std::cell::RefCell<Option<((usize, u64, usize, usize, u64), Vec<usize>)>>,
     /// Width of the text area at the last paint (the wrap column comes from here).
     text_width: Pixels,
     /// Settings at the last paint: (wrap enabled, tab width, width of one column).
@@ -921,6 +960,7 @@ impl EditorView {
             conflict: false,
             conflict_at: None,
             deleted_on_disk: false,
+            epoch: next_epoch(),
             preview: false,
             pinned: false,
             error: None,
@@ -933,16 +973,19 @@ impl EditorView {
             git_base: None,
             git_marks: Vec::new(),
             git_task: None,
+            scm_owned: false,
             lsp: None,
             lsp_lang: "",
             lsp_version: 0,
             diagnostics: Vec::new(),
+            ext: ext_glue::ExtMarks::default(),
             lsp_root: None,
             completion: None,
             completion_task: None,
             signature: None,
             signature_task: None,
             hover: None,
+            a11y_popups: Default::default(),
             peek: None,
             peek_seq: 0,
             hover_task: None,
@@ -966,6 +1009,7 @@ impl EditorView {
             conflicts_version,
             conflicts_task: None,
             word_cache: None,
+            parse: Default::default(),
             find_origin: None,
             conflicts_pending: u64::MAX,
             popup_basis: ((usize::MAX, 0, px(0.)), false),
@@ -981,6 +1025,7 @@ impl EditorView {
             display: DisplayMap::identity(0),
             display_key: None,
             hidden: Vec::new(),
+            fold_lines: Default::default(),
             text_width: px(0.),
             layout_params: (false, 4, px(8.)),
         }
@@ -1052,9 +1097,14 @@ impl EditorView {
         self.slot == slot || self.parked.get(slot).is_some_and(Option::is_some)
     }
 
-    /// Opened in another group: that group's view (cursor and scroll same as the current one).
+    /// The keyboard focus of the `slot` view (a window of its own focuses its view, not the group's).
+    pub fn slot_focus(&self, slot: usize) -> Option<FocusHandle> {
+        if slot == self.slot { Some(self.focus_handle.clone()) } else { self.parked.get(slot)?.as_ref()?.focus_handle.clone() }
+    }
+
+    /// Opened in another group or a window of its own: that view (cursor and scroll same as the current one).
     pub fn open_slot(&mut self, slot: usize, cx: &mut Context<Self>) {
-        if self.has_slot(slot) || slot >= crate::editor_layout::MAX_GROUPS {
+        if self.has_slot(slot) || slot >= crate::editor_layout::MAX_VIEW_SLOTS {
             return;
         }
         self.parked.resize_with(self.parked.len().max(slot + 1), || None);
@@ -1115,6 +1165,13 @@ impl EditorView {
     pub fn scrollbar_point(&self, frac: f32) -> Option<Point<Pixels>> {
         let right = self.visible.first()?.bounds.right();
         Some(point(right - px(6.), self.surface_origin.y + self.surface_h * frac))
+    }
+
+    /// Logical distance between the first two painted lines and the font size they were shaped at (tests).
+    #[cfg(test)]
+    pub fn painted_line_metrics(&self) -> Option<(Pixels, Pixels)> {
+        let (a, b) = (self.visible.first()?, self.visible.get(1)?);
+        Some((b.bounds.origin.y - a.bounds.origin.y, a.layout.font_size))
     }
 
     /// First visible screen line (tests).
@@ -1233,7 +1290,7 @@ impl EditorView {
     /// For the accessibility tree (a11y.rs): the shown suggestions (label, detail), at most `limit`, and the selected one.
     pub fn a11y_completion(&self, limit: usize) -> Option<(Vec<(String, Option<String>)>, usize)> {
         let c = self.completion.as_ref()?;
-        let rows = c.shown.iter().take(limit).map(|&i| (c.items[i].label.clone(), c.items[i].detail.clone())).collect();
+        let rows = c.shown.iter().take(limit).map(|&i| (c.items[i].label.clone(), c.items[i].shown_detail())).collect();
         Some((rows, c.selected))
     }
 
@@ -1313,27 +1370,6 @@ impl EditorView {
     /// The language name for display (language names are proper names; only "Plain Text" is translated).
     pub fn language_label(&self) -> &'static str {
         self.syntax.as_ref().map_or(crate::i18n::t("Plain Text"), |s| s.language_name())
-    }
-
-    /// Apply the buffer's edits to the syntax tree, reparse the changed part.
-    fn sync_syntax(&mut self) {
-        self.sync_lsp();
-        let Some(syntax) = &mut self.syntax else { return };
-        let edits = self.buffer.take_edits();
-        if edits.is_empty() {
-            return;
-        }
-        for e in &edits {
-            syntax.edit(&syntax::Edit {
-                start_byte: e.start_byte,
-                old_end_byte: e.old_end_byte,
-                new_end_byte: e.new_end_byte,
-                start: e.start_point,
-                old_end: e.old_end_point,
-                new_end: e.new_end_point,
-            });
-        }
-        syntax.reparse(self.buffer.rope());
     }
 
     pub fn cursor_count(&self) -> usize {
@@ -1573,7 +1609,7 @@ impl EntityInputHandler for EditorView {
             };
             self.buffer.set_selection(start + to_chars(sel.start)..start + to_chars(sel.end), false);
         }
-        self.sync_syntax();
+        self.sync_syntax(cx);
         let row = self.row_of_char(self.buffer.cursor());
         self.scroll.scroll_to_item(row, ScrollStrategy::Top);
         cx.emit(EditorEvent::Changed);

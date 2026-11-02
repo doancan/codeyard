@@ -1,0 +1,8 @@
+# Started by OnFailure= of the registry's units: tells the owner which unit failed, with its last log lines
+# (deploy/yard/alert; the channel is set in /etc/yard/yard.env).
+[Unit]
+Description=Alert the owner: %i failed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/yard-alert %i

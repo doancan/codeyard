@@ -12,7 +12,7 @@ use crate::workbench::Workbench;
 
 /// `settings` over the defaults, with the confirmation off unless a test is about it.
 fn quiet() -> Settings {
-    Settings { git_confirm_sync: false, ..Settings::default() }
+    Settings { git_confirm_sync: false, git_autofetch: false, ..Settings::default() }
 }
 
 struct Fixture {
@@ -24,7 +24,7 @@ struct Fixture {
 impl Fixture {
     fn new(name: &str) -> Fixture {
         let (dir, bare, other) = repo_with_remote(name);
-        let dir = std::fs::canonicalize(dir).unwrap();
+        let dir = crate::ui::canonical_for_test(dir);
         Fixture { dir, bare, other }
     }
 
@@ -126,7 +126,7 @@ fn sync_asks_first_when_it_moves_commits_and_skips_the_question_when_off(cx: &mu
     let (title, detail) = cx.pending_prompt().unwrap();
     assert_eq!(title, "Sync changes?");
     assert!(detail.contains("origin/main"), "{detail}");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert!(!f.dir.join("b.txt").exists(), "cancelled: nothing pulled");
 

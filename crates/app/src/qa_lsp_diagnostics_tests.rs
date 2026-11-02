@@ -11,7 +11,6 @@ use crate::qa_integration_tests::{notice, setup_with, wait_ticking};
 use crate::qa_lsp_settings_tests::{cargo_project, dir, open_project, rust_analyzer_installed, wait_checked};
 use crate::settings::Settings;
 use crate::test_lsp::FakeServer;
-use crate::test_paths::AppPath;
 use crate::workbench::{ProblemRow, Workbench};
 
 const A: &str = "pub fn f() {\n    let t = s;\n    println!(\"{s}\");\n    let n = 1;\n    let m = 2;\n}\n";
@@ -35,7 +34,7 @@ fn project<'a>(cx: &'a mut TestAppContext, name: &str) -> Option<(Entity<Workben
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/a.rs"), A).unwrap();
     std::fs::write(root.join("src/b.rs"), format!("{}ğ😀 s\n", "// x\n".repeat(11))).unwrap();
-    let (a, b) = (root.join("src/a.rs").app(), root.join("src/b.rs").app());
+    let (a, b) = (crate::ui::local_path(&root.join("src/a.rs")), crate::ui::local_path(&root.join("src/b.rs")));
     let (ua, ub) = (path_to_uri(&a), path_to_uri(&b));
     let many: Vec<Value> = (0..22).map(|_| related(&ua, 3, 8, "also here")).collect();
     let publish = json!({ "method": "textDocument/publishDiagnostics", "params": { "uri": ua, "diagnostics": [
@@ -46,7 +45,7 @@ fn project<'a>(cx: &'a mut TestAppContext, name: &str) -> Option<(Entity<Workben
     ] } });
     let clear = json!({ "method": "textDocument/publishDiagnostics", "params": { "uri": ua, "diagnostics": [] } });
     let fake = FakeServer::new(&d.join("server"), &json!({ "on_open": [publish], "after": { "textDocument/didChange": [clear] } }))?;
-    let (wb, cx) = setup_with(cx, Settings { lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Settings::default() });
+    let (wb, cx) = setup_with(cx, Settings { lsp_enabled: true, lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Settings::default() });
     open_project(&wb, cx, &root);
     let file = a.clone();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(file, window, cx));
@@ -92,6 +91,35 @@ fn qa_diag_hover_shows_related_locations_and_a_click_opens_them(cx: &mut TestApp
         ]
     );
     active(&wb, cx).update(cx, |e, cx| e.click_hover_row_for_test(2, cx));
+    wait_ticking(cx, "b.rs at the related position", |cx| {
+        let ed = active(&wb, cx);
+        ed.read_with(cx, |e, _| e.path == b && e.cursor_position() == (12, 4))
+    });
+}
+
+/// The same hover from the accessibility tree: `ShowTooltip` on the editor shows it, the diagnostic is a label
+/// ("Error: …"), each related location a link, and `Click` on a link opens it as a click on the line does.
+#[gpui::test]
+fn qa_diag_hover_links_open_from_the_accessibility_tree(cx: &mut TestAppContext) {
+    use accesskit::{Action, ActionRequest, Role, TreeId};
+    let _en = crate::i18n::LangGuard::set("en");
+    let Some((wb, cx, _, b, _fake)) = project(cx, "hover-a11y") else { return };
+    active(&wb, cx).update(cx, |e, cx| e.set_cursor_line_col_for_test(2, 15, cx));
+    let snap = wb.update_in(cx, |wb, window, cx| wb.a11y_snapshot(window, cx));
+    let req = |action, node| ActionRequest { action, target_tree: TreeId::ROOT, target_node: node, data: None };
+    let editor = snap.to_tree().nodes.into_iter().find(|(_, n)| n.role() == Role::MultilineTextInput).unwrap().0;
+    wb.update_in(cx, |wb, window, cx| wb.a11y_action_for_test(&req(Action::ShowTooltip, editor), &snap, window, cx));
+    wait_ticking(cx, "the hover", |cx| active(&wb, cx).read_with(cx, |e, _| !e.hover_rows_for_test().is_empty()));
+    let snap = wb.update_in(cx, |wb, window, cx| wb.a11y_snapshot(window, cx));
+    let nodes = snap.to_tree().nodes;
+    let labels: Vec<(Role, String)> = nodes
+        .iter()
+        .filter(|(_, n)| matches!(n.role(), Role::Link | Role::Label) && (n.label().is_some()))
+        .map(|(_, n)| (n.role(), n.label().unwrap().to_string()))
+        .collect();
+    assert!(labels.contains(&(Role::Label, "Error: E0382: borrow of moved value: `s`".into())), "{labels:?}");
+    let link = nodes.iter().find(|(_, n)| n.role() == Role::Link && n.label() == Some("src/b.rs:12: borrow later used here")).expect("the related location").0;
+    wb.update_in(cx, |wb, window, cx| wb.a11y_action_for_test(&req(Action::Click, link), &snap, window, cx));
     wait_ticking(cx, "b.rs at the related position", |cx| {
         let ed = active(&wb, cx);
         ed.read_with(cx, |e, _| e.path == b && e.cursor_position() == (12, 4))
@@ -179,7 +207,7 @@ fn qa_diag_real_rust_analyzer_explains_a_use_after_move(cx: &mut TestAppContext)
     }
     let lib = "pub fn f() {\n    let s = String::new();\n    let t = s;\n    println!(\"{s}\");\n    drop(t);\n}\n";
     let (project, cfg) = cargo_project("cy_moved", lib, "");
-    std::fs::write(cfg.join("settings.jsonc"), "{}").unwrap();
+    std::fs::write(cfg.join("settings.jsonc"), r#"{ "lsp.enabled": true }"#).unwrap();
     let (wb, cx) = crate::qa_workbench_tests::setup_with_config(cx, &cfg);
     let file = open_project(&wb, cx, &project);
     let e0382 = |d: &crate::lsp::Diagnostic| d.code.as_deref() == Some("E0382") && d.severity == 1;
@@ -205,19 +233,19 @@ fn qa_diag_related_locations_over_ssh(cx: &mut TestAppContext) {
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/a.rs"), A).unwrap();
     std::fs::write(root.join("src/b.rs"), format!("{}ğ😀 s\n", "// x\n".repeat(11))).unwrap();
-    let (a, b) = (root.join("src/a.rs").app(), root.join("src/b.rs").app());
+    let (a, b) = (crate::ui::local_path(&root.join("src/a.rs")), crate::ui::local_path(&root.join("src/b.rs")));
     let publish = json!({ "method": "textDocument/publishDiagnostics", "params": { "uri": path_to_uri(&a), "diagnostics": [
         { "range": range(2, 15, 16), "severity": 1, "code": "E0382", "message": "borrow of moved value: `s`",
           "relatedInformation": [related(&path_to_uri(&b), 11, 4, "borrow later used here")] },
     ] } });
     let Some(fake) = FakeServer::new(&d.join("server"), &json!({ "on_open": [publish] })) else { return };
-    let (wb, cx) = setup_with(cx, Settings { lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Settings::default() });
+    let (wb, cx) = setup_with(cx, Settings { lsp_enabled: true, lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Settings::default() });
     wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
     crate::qa_integration_tests::wait_secs(cx, 30, "connected", |cx| {
         cx.executor().advance_clock(std::time::Duration::from_secs(1));
         wb.read_with(cx, |wb, _| wb.ports_ready())
     });
-    let r = root.app();
+    let r = crate::ui::local_path(&root);
     wb.update_in(cx, |wb, window, cx| wb.open_path(&r, window, cx));
     cx.run_until_parked();
     crate::qa_integration_tests::ssh_open_file(&wb, cx, &root.join("src/a.rs"));

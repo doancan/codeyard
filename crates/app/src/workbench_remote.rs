@@ -11,7 +11,7 @@ use super::projects::ConnSummary;
 use super::*;
 
 #[path = "remote_tree.rs"]
-mod tree;
+pub(super) mod tree;
 use tree::{Group, HostStatus, RemoteRow, RemoteTreeInput, Targets};
 
 gpui::actions!(workbench, [ShowRemoteExplorer]);
@@ -26,7 +26,7 @@ pub(super) struct RemoteView {
     pub(super) probes: HashMap<String, Result<(), String>>,
     containers: Option<Targets>,
     wsl: Option<Targets>,
-    scroll: gpui::UniformListScrollHandle,
+    pub(super) scroll: gpui::UniformListScrollHandle,
 }
 
 /// A command from a host row's menu.
@@ -126,7 +126,7 @@ impl Workbench {
         .detach();
     }
 
-    fn toggle_remote(&mut self, key: String, cx: &mut Context<Self>) {
+    pub(super) fn toggle_remote(&mut self, key: String, cx: &mut Context<Self>) {
         if !self.remote.view.toggled.remove(&key) {
             self.remote.view.toggled.insert(key.clone());
         }
@@ -140,7 +140,7 @@ impl Workbench {
         cx.notify();
     }
 
-    fn remote_rows(&self, cx: &App) -> Vec<RemoteRow> {
+    pub(super) fn remote_rows(&self, cx: &App) -> Vec<RemoteRow> {
         let hosts = self.ssh_host_rows();
         let root = self.root(cx);
         let ports = self.ssh_alias().map(|alias| ports_glue::port_rows(&self.ports.set, &self.ports.listening, &alias));
@@ -171,7 +171,7 @@ impl Workbench {
         .ok();
     }
 
-    fn connected_to(&self, alias: &str) -> bool {
+    pub(super) fn connected_to(&self, alias: &str) -> bool {
         matches!(&self.remote.conn, Conn::Connected { alias: a } if a == alias) && self.remote.host.is_remote()
     }
 
@@ -188,7 +188,7 @@ impl Workbench {
         }
     }
 
-    fn open_host_menu(&mut self, alias: &str, group: Group, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_host_menu(&mut self, alias: &str, group: Group, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
         let connected = self.connected_to(alias);
         let mut items = vec![
             MenuItem::new(if connected { crate::i18n::t("Open Folder…") } else { crate::i18n::t("Connect in Current Window") }),
@@ -234,14 +234,20 @@ impl Workbench {
                     .gap(px(theme::SPACE[1]))
                     .child(
                         ui::icon_button("remote-add", "plus", crate::i18n::t("Add SSH Host…"), p)
+                            .relative()
+                            .child(a11y::part_frame(a11y::Part::Control("remote-add"), cx))
                             .on_click(cx.listener(|this, _, w, cx| this.add_ssh_host(&AddSshHost, w, cx))),
                     )
                     .child(
                         ui::icon_button("remote-config", "settings", crate::i18n::t("Open SSH Config File"), p)
+                            .relative()
+                            .child(a11y::part_frame(a11y::Part::Control("remote-config"), cx))
                             .on_click(cx.listener(|this, _, w, cx| this.edit_ssh_config(&EditSshConfig, w, cx))),
                     )
                     .child(
                         ui::icon_button("remote-refresh", "refresh-cw", crate::i18n::t("Refresh"), p)
+                            .relative()
+                            .child(a11y::part_frame(a11y::Part::Control("remote-refresh"), cx))
                             .on_click(cx.listener(|this, _, _, cx| this.refresh_remote_view(cx))),
                     ),
             );
@@ -256,15 +262,24 @@ impl Workbench {
             .child(
                 // The list fills the view, so rows are as wide as the sidebar.
                 div().flex_1().min_h_0().child(
-                    gpui::uniform_list(
-                        "remote-rows",
-                        rows.len(),
-                        cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
-                            range.filter_map(|ix| Some(this.remote_row(ix, rows.get(ix)?, &p, cx))).collect()
-                        }),
-                    )
-                    .track_scroll(self.remote.view.scroll.clone())
-                    .size_full(),
+                    self.row_list(
+                        a11y::RowFrame::Remote,
+                        gpui::uniform_list(
+                            "remote-rows",
+                            rows.len(),
+                            cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
+                                range
+                                    .filter_map(|ix| {
+                                        let row = this.remote_row(ix, rows.get(ix)?, &p, cx);
+                                        Some(this.nav_row(a11y::RowFrame::Remote, ix, row, window, cx))
+                                    })
+                                    .collect()
+                            }),
+                        )
+                        .track_scroll(self.remote.view.scroll.clone())
+                        .size_full(),
+                        cx,
+                    ),
                 ),
             )
             .into_any_element()
@@ -328,12 +343,24 @@ impl Workbench {
                     .when(*count > 0, |d| d.child(muted(count.to_string().into())))
                     .when(*group != Group::Ssh, |d| {
                         let g = *group;
-                        d.child(hover_actions().child(ui::icon_button(("remote-relist", ix), "refresh-cw", crate::i18n::t("Refresh"), p).on_click(
-                            cx.listener(move |this, _, _, cx| {
-                                cx.stop_propagation();
-                                this.list_targets(g, cx);
-                            }),
-                        )))
+                        let tree = crate::a11y_controls::control(
+                            crate::a11y_controls::Control::button(
+                                crate::i18n::t("Remote Explorer"),
+                                format!("relist:{name}"),
+                                crate::i18n::t("Refresh"),
+                                |_, _| {},
+                            )
+                            .description(name.to_string())
+                            .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| this.list_targets(g, cx)),
+                        );
+                        d.child(hover_actions().child(
+                            ui::icon_button(("remote-relist", ix), "refresh-cw", crate::i18n::t("Refresh"), p).relative().child(tree).on_click(cx.listener(
+                                move |this, _, _, cx| {
+                                    cx.stop_propagation();
+                                    this.list_targets(g, cx);
+                                },
+                            )),
+                        ))
                     })
                     .on_click(cx.listener(move |this, _, _, cx| this.toggle_remote(key.clone(), cx)))
                     .into_any_element()
@@ -373,7 +400,7 @@ impl Workbench {
                     )
                     .child(
                         hover_actions()
-                            .child(
+                            .child(a11y::row_button(
                                 ui::icon_button(
                                     ("remote-connect", ix),
                                     if connected { "folder-open" } else { "plug" },
@@ -384,19 +411,35 @@ impl Workbench {
                                     cx.stop_propagation();
                                     this.run_remote_menu(RemoteMenuCmd::Connect, a1.clone(), w, cx);
                                 })),
-                            )
-                            .child(ui::icon_button(("remote-window", ix), "external-link", crate::i18n::t("Connect in New Window"), p).on_click(cx.listener(
-                                move |this, _, _, cx| {
-                                    cx.stop_propagation();
-                                    this.connect_in_new_window(a2.clone(), None, cx);
-                                },
-                            )))
-                            .child(ui::icon_button(("remote-more", ix), "ellipsis", crate::i18n::t("More Actions…"), p).on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
-                                    cx.stop_propagation();
-                                    this.open_host_menu(&a3, g, ev.position, w, cx);
-                                }),
+                                a11y::RowFrame::Remote,
+                                ix,
+                                1,
+                                cx,
+                            ))
+                            .child(a11y::row_button(
+                                ui::icon_button(("remote-window", ix), "external-link", crate::i18n::t("Connect in New Window"), p).on_click(cx.listener(
+                                    move |this, _, _, cx| {
+                                        cx.stop_propagation();
+                                        this.connect_in_new_window(a2.clone(), None, cx);
+                                    },
+                                )),
+                                a11y::RowFrame::Remote,
+                                ix,
+                                2,
+                                cx,
+                            ))
+                            .child(a11y::row_button(
+                                ui::icon_button(("remote-more", ix), "ellipsis", crate::i18n::t("More Actions…"), p).on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
+                                        cx.stop_propagation();
+                                        this.open_host_menu(&a3, g, ev.position, w, cx);
+                                    }),
+                                ),
+                                a11y::RowFrame::Remote,
+                                ix,
+                                a11y::MENU_BUTTON,
+                                cx,
                             )),
                     )
                     .on_click(cx.listener(move |this, _, _, cx| this.toggle_remote(key.clone(), cx)))
@@ -405,6 +448,29 @@ impl Workbench {
             RemoteRow::Folder { alias, path, current, pinned, last_opened } => {
                 let recent = state::RecentWorkspace { host: Some(alias.clone()), path: path.clone(), last_opened_at: *last_opened };
                 let (open_here, open_new, forget) = (recent.clone(), (alias.clone(), path.clone()), recent);
+                let (tree_new, tree_forget) = (open_new.clone(), forget.clone());
+                let window_ctl = crate::a11y_controls::control(
+                    crate::a11y_controls::Control::button(
+                        crate::i18n::t("Remote Explorer"),
+                        format!("folder-window:{alias}:{path}"),
+                        crate::i18n::t("Open in New Window"),
+                        |_, _| {},
+                    )
+                    .description(path.clone())
+                    .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| {
+                        this.connect_in_new_window(tree_new.0.clone(), Some(tree_new.1.clone()), cx)
+                    }),
+                );
+                let forget_ctl = crate::a11y_controls::control(
+                    crate::a11y_controls::Control::button(
+                        crate::i18n::t("Remote Explorer"),
+                        format!("folder-forget:{alias}:{path}"),
+                        crate::i18n::t("Remove from Recent"),
+                        |_, _| {},
+                    )
+                    .description(path.clone())
+                    .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| this.forget_recent(tree_forget.clone(), cx)),
+                );
                 base(2.)
                     .cursor_pointer()
                     .when(*current, |d| d.bg(c(p.surface_active)))
@@ -414,18 +480,24 @@ impl Workbench {
                     .child(spacer())
                     .child(
                         hover_actions()
-                            .child(ui::icon_button(("remote-folder-window", ix), "external-link", crate::i18n::t("Open in New Window"), p).on_click(
-                                cx.listener(move |this, _, _, cx| {
-                                    cx.stop_propagation();
-                                    this.connect_in_new_window(open_new.0.clone(), Some(open_new.1.clone()), cx);
-                                }),
-                            ))
-                            .child(ui::icon_button(("remote-folder-forget", ix), "x", crate::i18n::t("Remove from Recent"), p).on_click(cx.listener(
-                                move |this, _, _, cx| {
-                                    cx.stop_propagation();
-                                    this.forget_recent(forget.clone(), cx);
-                                },
-                            ))),
+                            .child(
+                                ui::icon_button(("remote-folder-window", ix), "external-link", crate::i18n::t("Open in New Window"), p)
+                                    .relative()
+                                    .child(window_ctl)
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        cx.stop_propagation();
+                                        this.connect_in_new_window(open_new.0.clone(), Some(open_new.1.clone()), cx);
+                                    })),
+                            )
+                            .child(
+                                ui::icon_button(("remote-folder-forget", ix), "x", crate::i18n::t("Remove from Recent"), p)
+                                    .relative()
+                                    .child(forget_ctl)
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        cx.stop_propagation();
+                                        this.forget_recent(forget.clone(), cx);
+                                    })),
+                            ),
                     )
                     .on_click(cx.listener(move |this, _, w, cx| this.open_recent(open_here.clone(), w, cx)))
                     .into_any_element()
@@ -459,6 +531,7 @@ impl Workbench {
                 let port = r.port;
                 let active = r.state == ports_glue::RowState::Active;
                 let url = r.url();
+                let name = crate::i18n::tf("Port {}", &[&port]);
                 base(1.)
                     .child(icon(if active { "plug" } else { "server" }, layout::ICON - 2., if active { p.success } else { p.text_muted }))
                     .child(div().flex_none().font_family(ui::MONO_FONT).child(port.to_string()))
@@ -468,14 +541,48 @@ impl Workbench {
                     .child(
                         hover_actions()
                             .children(url.map(|url| {
+                                let open = url.clone();
                                 ui::icon_button(("remote-port-open", ix), "external-link", crate::i18n::t("Open in Browser"), p)
+                                    .relative()
+                                    .child(crate::a11y_controls::control(
+                                        crate::a11y_controls::Control::button(
+                                            crate::i18n::t("Remote Explorer"),
+                                            format!("port-open:{port}"),
+                                            crate::i18n::t("Open in Browser"),
+                                            |_, _| {},
+                                        )
+                                        .description(name.clone())
+                                        .on_entity(cx.entity().downgrade(), move |_: &mut Self, _, cx| cx.open_url(&open)),
+                                    ))
                                     .on_click(cx.listener(move |_, _, _, cx| cx.open_url(&url)))
                             }))
                             .child(if r.state == ports_glue::RowState::Listening {
                                 ui::icon_button(("remote-port-fwd", ix), "plug", crate::i18n::t("Forward Port"), p)
+                                    .relative()
+                                    .child(crate::a11y_controls::control(
+                                        crate::a11y_controls::Control::button(
+                                            crate::i18n::t("Remote Explorer"),
+                                            format!("port-fwd:{port}"),
+                                            crate::i18n::t("Forward Port"),
+                                            |_, _| {},
+                                        )
+                                        .description(name.clone())
+                                        .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| this.forward_port(port, cx)),
+                                    ))
                                     .on_click(cx.listener(move |this, _, _, cx| this.forward_port(port, cx)))
                             } else {
                                 ui::icon_button(("remote-port-stop", ix), "x", crate::i18n::t("Stop Forwarding"), p)
+                                    .relative()
+                                    .child(crate::a11y_controls::control(
+                                        crate::a11y_controls::Control::button(
+                                            crate::i18n::t("Remote Explorer"),
+                                            format!("port-stop:{port}"),
+                                            crate::i18n::t("Stop Forwarding"),
+                                            |_, _| {},
+                                        )
+                                        .description(name.clone())
+                                        .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| this.stop_forward(port, cx)),
+                                    ))
                                     .on_click(cx.listener(move |this, _, _, cx| this.stop_forward(port, cx)))
                             }),
                     )

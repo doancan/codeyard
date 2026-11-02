@@ -6,7 +6,7 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 
 | Variable | Effect |
 | --- | --- |
-| `CODEYARD_STATE_DIR` | Folder for the local state database, crash reports and backups (default: `~/Library/Application Support/codeyard` on macOS, `~/.local/state/codeyard` elsewhere). Local managed language services also use this profile’s `language-services` subdirectory. |
+| `CODEYARD_STATE_DIR` | Folder for the local state database, crash reports and backups (default: `~/Library/Application Support/codeyard` on macOS, `~/.local/state/codeyard` elsewhere). Local managed language services also use this profile’s `language-services` subdirectory. Extension accounts and `secrets` stay in the system keychain, but under keys of this profile’s own, so a test profile neither reads nor replaces the user’s. |
 | `CODEYARD_CONFIG_DIR` | Folder for `settings.jsonc`, `keybindings.jsonc`, `themes/`, `snippets/`, `projects.jsonc` (default `~/.config/codeyard`). |
 | `CODEYARD_SSH_CONFIG` | Use this file instead of `~/.ssh/config` for host lists and connections. |
 | `CODEYARD_AGENT_DIR` | Optional developer override for `codeyard-agent-<triple>` binaries. Windows uses embedded agents by default; Unix packages use `agents/` next to the executable (or the macOS bundle's Resources directory). |
@@ -29,9 +29,21 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_REGISTRY` | The registry `cyx publish`, `yank`, `restore` and `deprecate` talk to (default: the public registry); `--registry` wins. |
 | `CODEYARD_FULCIO_URL`, `CODEYARD_REKOR_URL`, `CODEYARD_OIDC_URL` | Where `cyx publish` gets its certificate, logs its signature and signs in (default: public-good Sigstore). For a private Sigstore; the registry must pin the same roots. |
 | `CODEYARD_BIN` | The Codeyard binary `cyx dev` starts (default: `codeyard` on `PATH`, then the one beside `cyx`, then `/Applications/Codeyard.app` on macOS). |
+| `CODEYARD_EXTHOST` | The `codeyard-exthost` binary that runs code extensions: Codeyard's (default: the one beside Codeyard) and `cyx test`'s (default: the one beside `cyx`, then on `PATH`). |
+| `CODEYARD_CYX_CACHE` | Where `cyx` keeps what it installs and reuses: the TypeScript build tools (esbuild, ComponentizeJS, installed with `npm ci`), the TypeScript SDK it bundles, and the extension host's incremental compile cache (default: `~/Library/Caches/codeyard/cyx` on macOS, `$XDG_CACHE_HOME/codeyard/cyx` or `~/.cache/codeyard/cyx` on Linux, `%LOCALAPPDATA%\codeyard\cyx` on Windows). |
+| `CODEYARD_BUILD_ID` | Build time: the id the app and `codeyard-exthost` compare when one starts the other (default: the crate version). A release build sets one per build so an app updated in place restarts its extension hosts. |
 | `CODEYARD_PERF` | Append performance samples (one JSON line each) to this file; used by `scripts/perf/run.sh`. |
 | `CODEYARD_PERF_TYPING` | With `CODEYARD_PERF`: after startup, type this many characters into the focused editor, record key press to drawn frame for each, then save. |
+| `CODEYARD_PERF_MARKET` | With `CODEYARD_PERF`: after startup, open the Market, wait for its list, then press this many keys in its search (a word typed and erased), recording key press to the results in the view and to the frame that shows them. |
+| `CODEYARD_PERF_DECORATIONS` | With `CODEYARD_PERF`: after startup, run `decorate` in every installed extension that decorates the open file's language, wait for the decorations, then type this many characters and record key press to drawn frame for each, then save. |
+| `CODEYARD_PERF_PROVIDERS` | With `CODEYARD_PERF`: after startup (and the decorations scenario), ask the extensions' task providers for their tasks this many times, recording each request to a running extension to its answer. |
+| `CODEYARD_PERF_COMPLETION` | With `CODEYARD_PERF`: after startup, wait until an installed extension completes the open file's language, then type this many keys (a new word every third key) and record key press to drawn frame for each, then save. |
+| `CODEYARD_PERF_WORDS` | With `CODEYARD_PERF`: after startup, type this many keys of the completion scenario (a new word every third key) with no extension asked, record key press to drawn frame for each, then save. |
+| `CODEYARD_PERF_LENSES` | With `CODEYARD_PERF`: after startup, wait for the code lenses and inlay hints of the installed extension that gives them for the open file's language, then type this many characters and record key press to drawn frame for each, then save. |
+| `CODEYARD_PERF_VIEWS` | With `CODEYARD_PERF`: after startup, open the first installed extension view, wait until it is drawn and has the keyboard, then press PageDown this many times, recording key press to drawn frame for each. |
+| `CODEYARD_PERF_RELOAD` | With `CODEYARD_PERF` and `--extension-dev <folder>`: after startup, run the extension's first command, then put the other of two builds in place (`a.wasm` and `b.wasm` beside the folder) and run it again: once unrecorded (it fills the compile cache), then, after a pause, this many times, recording each new build's time to its first answer. |
 | `CODEYARD_PERF_EXIT` | With `CODEYARD_PERF`: quit when the scripted scenario is done. |
+| `CODEYARD_PERF_ON_TOP` | macOS: keep the first window above normal windows and on every Space, without activating the app, so a measured run is drawn while other windows would cover it; set by `scripts/perf/run.sh`. |
 | `CODEYARD_DO_DELAY_MS` | Delay before `--do "Command;Command"` runs its commands. |
 | `CODEYARD_DUMP_DOCK` | Print the Dock menu to stderr a few seconds after start; with a number, click that row. |
 | `CODEYARD_DAEMON_GRACE`, `CODEYARD_DAEMON_IDLE` | Seconds the server-side agent daemon waits for a lost client and before exiting with no sessions (defaults 300 and 600). |
@@ -40,9 +52,16 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_QA_DIR`, `CODEYARD_QA_TMP` | Base folders for test scratch files. |
 | `CODEYARD_QA_SEEDS`, `CODEYARD_QA_SEED_BASE` | Number of random sessions and the first seed of `qa_random_new_commands_many_seeds`. |
 | `CODEYARD_REQUIRE_SSHD` | Set to `1` to make the SSH integration tests fail instead of skipping when no usable `sshd` or agent binary is found. Without it a skipped test prints a `SKIPPED` line and passes. CI sets it on the jobs that ship `sshd`. |
+| `CODEYARD_REQUIRE_WASM` | Set to `1` to make the tests that build code extensions (`cyx` tests of `examples/extensions/`, and the app's test that draws views made by `cyx new view`) fail instead of skipping when the `wasm32-wasip2` target, Node.js 22 or newer, a built `cyx` or a built `codeyard-exthost` is missing. CI sets it on the Linux job, the only one with that target and Node.js, and for the app's template view test on the Linux app job. |
+| `CODEYARD_CYX` | Path of the `cyx` the app's template view test runs (`ext_template_views_tests.rs`); by default the one beside `codeyard-exthost` in `target/`. |
+| `CODEYARD_UPDATE_VIEW_SCHEMA` | Set to `1` for `cargo test -p ext-ui` to rewrite the TypeScript SDK's copy of the view format (`sdk/typescript/src/view-schema.ts`) and its shared test cases (`sdk/typescript/test/view-cases.json`) instead of failing when they are out of date. |
+| `CODEYARD_RELOAD_BENCH` | A folder for the ignored hot-reload measurement `cargo test -p app ext_dev_tests::reload_time -- --ignored`: `ext/` (an extension whose first command answers `ctx.state` "tally" + 1) and two builds of it, `a.wasm` and `b.wasm` (`crates/ext-host/testdata/reload-a.wasm` and `reload-b.wasm` are two such builds). `CODEYARD_RELOAD_BENCH_LOG=1` prints the extension's log after the runs. |
 | `CODEYARD_REQUIRE_TOOLS` | Same for tests that need an external tool (python3, node, clang, lldb-dap, debugpy, go, dlv, clangd): `1` for all of them, or a comma-separated list such as `python3,clang`. |
 | `CODEYARD_FISH` | Path of a fish binary that is not on `PATH`, so the quoting and login-shell tests also run against fish. |
 | `CODEYARD_FUZZ_SECS` | Make the hostile-input (`fuzz_tests.rs`) tests of the extension crates keep going for this many seconds instead of a fixed number of rounds; set by `.github/workflows/fuzz.yml`. |
+| `CODEYARD_EXTHOST_SELFTEST` | Test hook: `1` lets `codeyard-exthost --sandbox-selftest` run, which enters the OS sandbox and tries to escape it (`crates/ext-host/tests/sandbox.rs`, `scripts/check-exthost-sandbox-windows.ps1`). |
+| `CODEYARD_GUARD_TEST_OWNER` | Test hook: set by `crates/agent/tests/guard.rs` when it runs its own binary again as the owner that is killed; names that owner's scratch folder. Ordinary runs do not read it. |
+| `CODEYARD_TEST_LEADER_EXITS` | Test hook (Windows): set by `crates/agent/src/proc_windows_tests.rs` for its task-leader fixture, which then exits right after starting the grandchild. Ordinary runs do not read it. |
 | `CODEYARD_FUZZ_SEED` | Change the seed of those tests to explore other inputs; a failure prints the seed and round to rerun. |
 | `CODEYARD_TEST_TIMEOUT_SCALE` | Multiplier for the tests' wait timeouts (default 1). `scripts/coverage.sh` sets 4 because instrumented builds are slow. |
 | `CODEYARD_TR_DICT_DIR` | Folder with a Turkish Hunspell dictionary for the manual `cargo test -p spell -- --ignored turkish` check. |

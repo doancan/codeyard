@@ -589,6 +589,8 @@ pub struct App {
     #[cfg(any(test, feature = "test-support", debug_assertions))]
     pub(crate) name: Option<&'static str>,
     quitting: bool,
+    /// Logical interface scale shared by every window (Codeyard patch, see `ui_scale.rs`).
+    pub(crate) ui_scale: f32,
 }
 
 impl App {
@@ -639,6 +641,7 @@ impl App {
                 pending_effects: VecDeque::new(),
                 pending_notifications: FxHashSet::default(),
                 pending_global_notifications: FxHashSet::default(),
+                ui_scale: 1.0,
                 observers: SubscriberSet::new(),
                 tracked_entities: FxHashMap::default(),
                 window_invalidators_by_entity: FxHashMap::default(),
@@ -754,6 +757,24 @@ impl App {
     /// multiple times in an update cycle and still result in a single redraw.
     pub fn refresh_windows(&mut self) {
         self.pending_effects.push_back(Effect::RefreshWindows);
+    }
+
+    /// The logical interface scale every window renders with, on top of its display's scale factor.
+    pub fn ui_scale(&self) -> f32 {
+        self.ui_scale
+    }
+
+    /// Scale the whole interface of every window, the open ones and those opened later. The value is passed through
+    /// [`normalize_ui_scale`](crate::normalize_ui_scale). Each window applies it at the start of its next frame, so
+    /// input that arrives before that frame is still hit-tested against what is on screen. Setting the current value
+    /// again does nothing (no refresh), so repeated settings reloads cannot loop.
+    pub fn set_ui_scale(&mut self, scale: f32) {
+        let scale = crate::normalize_ui_scale(scale);
+        if scale == self.ui_scale {
+            return;
+        }
+        self.ui_scale = scale;
+        self.refresh_windows();
     }
 
     pub(crate) fn update<R>(&mut self, update: impl FnOnce(&mut Self) -> R) -> R {

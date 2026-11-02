@@ -1,0 +1,247 @@
+alt-backspace
+alt-c
+alt-cmd-down
+alt-cmd-f
+alt-cmd-h
+alt-cmd-up
+alt-delete
+alt-down
+alt-e
+alt-enter
+alt-f
+alt-f12
+alt-f3
+alt-f5
+alt-g
+alt-h
+alt-left
+alt-p
+alt-r
+alt-right
+alt-s
+alt-secondary-[
+alt-secondary-]
+alt-secondary-enter
+alt-secondary-j
+alt-secondary-k
+alt-secondary-l
+alt-secondary-left
+alt-secondary-right
+alt-secondary-s
+alt-shift-d
+alt-shift-left
+alt-shift-right
+alt-t
+alt-up
+alt-v
+alt-w
+alt-z
+backspace
+cmd-\
+cmd-a
+cmd-backspace
+cmd-c
+cmd-down
+cmd-end
+cmd-f
+cmd-g
+cmd-h
+cmd-home
+cmd-k
+cmd-left
+cmd-m
+cmd-right
+cmd-shift-down
+cmd-shift-g
+cmd-shift-left
+cmd-shift-right
+cmd-shift-up
+cmd-up
+cmd-v
+cmd-w
+ctrl--
+ctrl-`
+ctrl-alt--
+ctrl-alt-down
+ctrl-alt-up
+ctrl-backspace
+ctrl-cmd-f
+ctrl-delete
+ctrl-end
+ctrl-f11
+ctrl-f5
+ctrl-g
+ctrl-h
+ctrl-home
+ctrl-j
+ctrl-left
+ctrl-pagedown
+ctrl-pageup
+ctrl-r
+ctrl-right
+ctrl-secondary-left
+ctrl-secondary-right
+ctrl-shift--
+ctrl-shift-5
+ctrl-shift-`
+ctrl-shift-a
+ctrl-shift-alt-down
+ctrl-shift-alt-left
+ctrl-shift-alt-right
+ctrl-shift-alt-up
+ctrl-shift-c
+ctrl-shift-d
+ctrl-shift-down
+ctrl-shift-end
+ctrl-shift-f
+ctrl-shift-g
+ctrl-shift-home
+ctrl-shift-k
+ctrl-shift-left
+ctrl-shift-right
+ctrl-shift-secondary-left
+ctrl-shift-secondary-right
+ctrl-shift-tab
+ctrl-shift-up
+ctrl-shift-v
+ctrl-space
+ctrl-t
+ctrl-tab
+ctrl-y
+delete
+down
+end
+enter
+escape
+f10
+f11
+f12
+f2
+f3
+f4
+f5
+f6
+f7
+f8
+f9
+home
+left
+menu
+pagedown
+pageup
+right
+secondary-+
+secondary-,
+secondary--
+secondary-.
+secondary-/
+secondary-0
+secondary-1
+secondary-2
+secondary-=
+secondary-[
+secondary-\
+secondary-]
+secondary-a
+secondary-alt-r
+secondary-alt-shift-f
+secondary-b
+secondary-backspace
+secondary-c
+secondary-d
+secondary-down
+secondary-e
+secondary-enter
+secondary-f
+secondary-f12
+secondary-j
+secondary-k f
+secondary-k secondary-0
+secondary-k secondary-1
+secondary-k secondary-2
+secondary-k secondary-3
+secondary-k secondary-4
+secondary-k secondary-5
+secondary-k secondary-6
+secondary-k secondary-7
+secondary-k secondary-[
+secondary-k secondary-]
+secondary-k secondary-c
+secondary-k secondary-d
+secondary-k secondary-enter
+secondary-k secondary-f
+secondary-k secondary-i
+secondary-k secondary-j
+secondary-k secondary-k
+secondary-k secondary-q
+secondary-k secondary-t
+secondary-k secondary-u
+secondary-k secondary-w
+secondary-k u
+secondary-k z
+secondary-l
+secondary-n
+secondary-o
+secondary-p
+secondary-q
+secondary-s
+secondary-shift-[
+secondary-shift-\
+secondary-shift-]
+secondary-shift-b
+secondary-shift-d
+secondary-shift-e
+secondary-shift-enter
+secondary-shift-f
+secondary-shift-f5
+secondary-shift-k
+secondary-shift-l
+secondary-shift-m
+secondary-shift-n
+secondary-shift-o
+secondary-shift-p
+secondary-shift-r
+secondary-shift-s
+secondary-shift-t
+secondary-shift-v
+secondary-shift-z
+secondary-space
+secondary-t
+secondary-u
+secondary-v
+secondary-w
+secondary-x
+secondary-z
+shift-alt-a
+shift-alt-cmd-down
+shift-alt-cmd-left
+shift-alt-cmd-right
+shift-alt-cmd-up
+shift-alt-down
+shift-alt-f
+shift-alt-f3
+shift-alt-h
+shift-alt-i
+shift-alt-up
+shift-backspace
+shift-down
+shift-end
+shift-enter
+shift-f10
+shift-f11
+shift-f12
+shift-f3
+shift-f4
+shift-f5
+shift-f7
+shift-f8
+shift-home
+shift-left
+shift-pagedown
+shift-pageup
+shift-right
+shift-tab
+shift-up
+space
+tab
+up

@@ -75,12 +75,18 @@ warnings in `shaders` and `agents`; all release jobs also had zero such warnings
 2. Bump the version: `version` in the root `Cargo.toml` and every path dependency's `version = "x.y.z"` in
    `crates/*/Cargo.toml` (`cargo-deny` rejects wildcard dependencies):
    `sed -i '' 's/version = "OLD", path/version = "NEW", path/' crates/*/Cargo.toml` (macOS `sed`; GNU `sed` takes `-i` without
-   the `''`).
+   the `''`). The SDK's version is also in the lock files of the Rust examples and of the test guest: run
+   `cargo metadata --offline --format-version 1 >/dev/null` in each `examples/extensions/*/` with a `Cargo.lock` (and change
+   `codeyard-extension`'s version in `crates/ext-host/tests/guests/reload/Cargo.lock` by hand), or the first build rewrites
+   them. Rebuild `codeyard-exthost` (`cargo build -p ext-host`) before running the `cyx` tests locally: `cyx` refuses an
+   extension host of another version.
 3. Add a `## [x.y.z] - date` section to `CHANGELOG.md` (move the "Unreleased" entries into it).
 4. Commit, tag `vX.Y.Z` (annotated), push `main` and the tag. Then pin the publish action that new extensions get to the
-   release: in `PUBLISH_WORKFLOW` (`crates/cyx/src/scaffold.rs`), replace the commit after
-   `doancan/codeyard/actions/publish@` with the tag's commit (`git rev-parse vX.Y.Z^{commit}`) and its comment with
-   `# vX.Y.Z`. Extensions that already exist keep their pin until their authors move it.
+   release: in `PUBLISH_WORKFLOW` (`crates/cyx/src/scaffold.rs`) and in every `examples/extensions/*/.github/workflows/publish.yml`,
+   replace the commit after `doancan/codeyard/actions/publish@` (the previous release's; `main` before 0.7.0) with the tag's
+   commit (`git rev-parse vX.Y.Z^{commit}`) and a `# vX.Y.Z` comment. The `cyx` of the release itself still writes the
+   previous pin, since the tag's commit is not known when it is built. Extensions that already exist keep their pin until
+   their authors move it.
 5. Build the agents: `rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl`, then for each of the two targets
    `CARGO_TARGET_<TRIPLE>_LINKER="$(dirname "$(rustc --print target-libdir)")/bin/rust-lld" cargo build --locked --profile release-agent -p agent --target <triple>`
    (the variable name is the triple in capitals with `_` for `-`; no zig needed), plus

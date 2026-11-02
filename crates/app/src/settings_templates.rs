@@ -138,8 +138,9 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "files.exclude": [".git", ".DS_Store"],
   // Unsaved changes survive quitting and crashes.
   "files.hotExit": true,
-  // Deleted local files go to the Trash (SSH hosts have none: deletes are permanent).
-  "files.enableTrash": true,
+  // Deleted local files go to the Trash instead of being deleted for good (SSH hosts have none: deletes there are
+  // always permanent). Off by default: a delete is permanent and asks first.
+  "files.enableTrash": false,
   // Files that are not UTF-8 (and have no BOM) are read as: "windows1254"
   // (Turkish), "iso88599" or "iso88591". They are saved back the same way.
   "files.fallbackEncoding": "windows1254",
@@ -147,7 +148,7 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "search.maxResults": 2000,
   // --- git-sync ---
   // Fetch in the background while the window is in front, every this many seconds (30 or more). Not in folders you have not trusted.
-  "git.autofetch": false,
+  "git.autofetch": true,
   "git.autofetchPeriod": 180,
   // Ask before Sync pulls or pushes (your own settings only: a folder cannot change it).
   "git.confirmSync": false,
@@ -175,6 +176,12 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Row height as a multiple of the font size (1 to 2).
   "terminal.lineHeight": 1.2,
   "terminal.scrollback": 2000,
+  // Lines of each terminal's history kept for the next start, as plain text (0: none). Terminals always come back as
+  // new shells: nothing is run again.
+  // "terminal.persistentScrollback": 0,
+  // Minutes the terminals of a window keep running after Codeyard quits, crashes or is killed, so the next start takes
+  // them back (0: they end with the app; at most 1440).
+  // "terminal.persistentSessionTimeout": 5,
   "terminal.scrollSensitivity": 2,
   // Let programs in the terminal write to the clipboard (OSC 52). Off by default: a program you run, or a file you cat, could replace
   // what you copied.
@@ -182,8 +189,8 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Pasting: "auto" removes control characters unless the shell reads the paste as text (bracketed paste), "always" or
   // "off"; bracketed-paste markers inside pasted text are always removed. A paste of several lines asks first
   // ("unbracketed": when the shell would run each line at once, "always" or "never").
-  // Closing a terminal asks first: "running" (a program other than the shell is in the foreground), "always", "never".
-  // "terminal.confirmOnClose": "running",
+  // Closing a terminal never asks by default; "running" asks when a program other than the shell is in the foreground, "always" asks every time.
+  // "terminal.confirmOnClose": "never",
   // Profiles for new terminals, per operating system of the machine they run on; "args" replace the login flag.
   // "terminal.profiles.macos": { "zsh": { "path": "/bin/zsh" }, "bash": { "path": "/bin/bash", "args": ["-l"], "env": { "LANG": "en_US.UTF-8" }, "color": "info" } },
   // "terminal.defaultProfile": "zsh",
@@ -210,9 +217,27 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Keys: rust c go python typescript java csharp php ruby kotlin swift lua bash html css (opt-in: json yaml toml).
   // "lsp.servers": { "python": { "command": "pylsp", "args": [] }, "go": null },
   // Server settings, without replacing the server: "lsp.servers": { "rust": { "settings": { "rust-analyzer.check.command": "clippy" } } },
+  // "Preferences: Apply Rust Setup…" writes a common Rust setup here after showing the exact changes; "Preferences:
+  // Reset Rust Setup…" removes it again.
   "lsp.enabled": true,
 }
 "##;
+
+/// The optional Rust setup: (path into settings.jsonc, value). Clippy for checks, checks with the Cargo features Run and
+/// Debug build with (`rust.features`), rustfmt (through rust-analyzer) on save, and an output folder of its own for
+/// checks (inside the target directory, `rust.targetDir` or Cargo's) so they do not wait for builds. Reset removes these.
+pub fn rust_setup(s: &crate::settings::Settings) -> Vec<(Vec<&'static str>, serde_json::Value)> {
+    use serde_json::json;
+    let ra = |key| vec!["lsp.servers", "rust", "settings", key];
+    vec![
+        (ra("rust-analyzer.check.command"), json!("clippy")),
+        (ra("rust-analyzer.cargo.features"), json!(s.rust_build.features)),
+        (ra("rust-analyzer.cargo.noDefaultFeatures"), json!(s.rust_build.no_default_features)),
+        (ra("rust-analyzer.cargo.targetDir"), json!(true)),
+        (vec!["editor.formatters", "rust"], json!("lsp")),
+        (vec!["editor.formatOnSave"], json!(true)),
+    ]
+}
 
 pub const KEYBINDINGS_TEMPLATE: &str = r#"// codeyard keyboard shortcuts. These are added on top of the defaults.
 // "when" is optional: Editor, FileTree, Terminal, Picker, Workbench...

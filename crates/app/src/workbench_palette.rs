@@ -2,6 +2,17 @@
 
 use super::*;
 
+/// The Pull Requests view's command: forge-neutral, since extensions add GitLab, Gitea and others next to GitHub.
+pub(super) const PULL_REQUESTS_COMMAND: &str = "Pull Requests: Show…";
+
+/// Extra words the palette finds a command by: a former name, or another forge's word for the same thing.
+pub(super) fn search_keywords(label: &str) -> &'static str {
+    match label {
+        PULL_REQUESTS_COMMAND => "GitHub: Pull Requests… Merge Requests", // i18n-keep: search words, not shown
+        _ => "",
+    }
+}
+
 impl Workbench {
     pub(super) fn quick_open(&mut self, _: &QuickOpen, window: &mut Window, cx: &mut Context<Self>) {
         self.open_palette("", window, cx);
@@ -33,7 +44,8 @@ impl Workbench {
             Command::action("Go: File…", QuickOpen),
             Command::action("Go: Line…", GoToLine),
             Command::action("Search: Find in Files", FindInFiles),
-            Command::action("Search: Open Results in Editor", OpenSearchInEditor),
+            Command::action("Search: Open Search Editor", OpenSearchInEditor),
+            Command::action("Search: Undo Last Replace", UndoSearchReplace),
             Command::action("File: Follow (Tail) Active File", FollowFile),
             Command::action("File: Filter Log Lines…", FilterLog),
             Command::action("File: Open Active File as Hex", OpenAsHex),
@@ -148,6 +160,10 @@ impl Workbench {
             Command::action("File: New File…", NewFile),
             Command::action("File: New Window", NewWindow),
             Command::action("File: Open Workspace from File…", OpenWorkspaceFile),
+            Command::action("File: Save Workspace", SaveWorkspace),
+            Command::action("File: Save Workspace As…", SaveWorkspaceAs),
+            Command::action("File: Reload Workspace", ReloadWorkspace),
+            Command::action("File: Open Active File as Workspace", OpenActiveWorkspaceFile),
             Command::action("File: Add Folder in New Window…", AddFolderInNewWindow),
             Command::action("File: Add Folder to Workspace…", AddFolderToWorkspace),
             Command::action("File: Remove Folder from Workspace…", RemoveFolderFromWorkspace),
@@ -162,6 +178,8 @@ impl Workbench {
             Command::action("Tasks: Run Task…", RunTask),
             Command::action("Tasks: Run Build Task", RunBuildTask),
             Command::action("Tasks: Rerun Last Task", RerunLastTask),
+            Command::action("Tasks: Terminate Task", TerminateTask),
+            Command::action("Tasks: Restart Running Task", RestartRunningTask),
             Command::action("Debug: Start Debugging", StartDebugging),
             Command::action("Debug: Continue", DebugContinue),
             Command::action("Debug: Pause", DebugPause),
@@ -194,7 +212,8 @@ impl Workbench {
             Command::action("Test: Debug Test at Cursor", DebugTestAtCursor),
             Command::action("Tasks: Configure Tasks", ConfigureTasks),
             Command::action("Merge Conflict: Open Merge Editor", OpenMergeEditor),
-            Command::action("GitHub: Pull Requests…", ShowPullRequests),
+            // GitHub's and every extension provider's (#186); found by its old name and "Merge Requests" too.
+            Command::action(PULL_REQUESTS_COMMAND, ShowPullRequests),
             Command::action("HTTP: Send Request", SendRequest),
             Command::action("HTTP: Show Last Response Headers", ShowResponseHeaders),
             Command::action("Merge Conflict: Accept Current", editor::AcceptCurrentChange),
@@ -285,7 +304,10 @@ impl Workbench {
             Command::action("Go: Last Edit Location", GoToLastEdit),
             Command::action("Git: Clone Repository…", CloneRepository),
             Command::action("Preferences: Open Keyboard Shortcuts", OpenKeybindings),
-            Command::action("Preferences: Import VS Code Settings and Shortcuts", ImportVsCode),
+            Command::action("Preferences: Import Settings and Shortcuts from Another Editor", ImportVsCode),
+            Command::action("Preferences: Apply Rust Setup…", settings_ui::ApplyRustSetup),
+            Command::action("Preferences: Reset Rust Setup…", settings_ui::ResetRustSetup),
+            Command::action("Preferences: Reset Settings to Defaults…", settings_ui::ResetSettings),
             Command::action("View: Problems", ShowProblems),
             Command::action("Problems: Copy Full Diagnostic", CopyFullDiagnostic),
             Command::action("Rust: Expand Macro Recursively", RustExpandMacro),
@@ -310,7 +332,9 @@ impl Workbench {
             Command::action("Extensions: Show Extensions", ShowExtensions),
             Command::action("Extensions: Install from File…", InstallExtensionFromFile),
             Command::action("Extensions: Install from Registry…", InstallExtensionFromRegistry),
+            Command::action("Extensions: Open Market", ShowMarket),
             Command::action("Extensions: Install from Folder…", InstallExtensionFromFolder),
+            Command::action("Developer: Extension Inspector", ShowExtensionInspector),
             Command::action("Terminal: New Terminal with Profile…", NewTerminalWithProfile),
             Command::action("Terminal: Select Default Profile…", SelectDefaultTerminalProfile),
             Command::action("Terminal: Rename…", RenameTerminal),
@@ -409,6 +433,22 @@ impl Workbench {
             Command::action("View: Toggle Panel", TogglePanel),
             Command::action("View: Resources", crate::resource_monitor::ToggleResources),
             Command::action("View: Move Panel (bottom ⇄ right)", TogglePanelPosition),
+            Command::action("View: Move Panel Left", MovePanelLeft),
+            Command::action("View: Move Panel Right", MovePanelRight),
+            Command::action("View: Move Panel to Bottom", MovePanelToBottom),
+            Command::action("View: Move View to Secondary Side Bar", MoveViewToSecondarySideBar),
+            Command::action("View: Move View to Primary Side Bar", MoveViewToPrimarySideBar),
+            Command::action("View: Toggle Secondary Side Bar", ToggleSecondarySideBar),
+            Command::action("View: Move View into New Window", MoveViewIntoNewWindow),
+            Command::action("View: Move View Back to Side Bar", MoveViewBackToSideBar),
+            Command::action("View: Move Editor into New Window", MoveEditorIntoNewWindow),
+            Command::action("View: Copy Editor into New Window", CopyEditorIntoNewWindow),
+            Command::action("View: Move Editors Back to Main Window", MoveEditorsBackToMainWindow),
+            Command::action("Terminal: Move Terminal into New Window", MoveTerminalIntoNewWindow),
+            Command::action("Terminal: Move Terminals Back to Panel", MoveTerminalsBackToPanel),
+            Command::action("Terminal: Move Terminal into Editor Area", MoveTerminalIntoEditorArea),
+            Command::action("Terminal: Move Terminal Back to Panel", MoveTerminalBackToPanelFromEditor),
+            Command::action("Terminal: Clear Saved Terminal History", ClearSavedTerminalHistory),
             Command::action("View: Toggle Maximized Panel", ToggleMaximizedPanel),
         ];
         for h in self.remote.ssh_hosts.iter().filter(|h| h.alias != "github.com" && h.alias != "gitlab.com") {
@@ -417,6 +457,7 @@ impl Workbench {
         if matches!(self.remote.conn, Conn::Connected { .. }) {
             cmds.push(Command { label: "Remote: Disconnect".into(), run: Run::Disconnect });
         }
+        cmds.extend(self.extension_commands());
         cmds.push(Command::action("App: Quit", Quit));
         cmds
     }
@@ -441,8 +482,14 @@ impl Workbench {
         commands.sort_by_key(|c| rank(&c.label));
         // Labels are shown in the UI language; search also matches the English name, identifiers (recents, tests) stay English.
         let shown: Vec<String> = commands.iter().map(Self::command_title).collect();
-        let aliases: Vec<SharedString> =
-            commands.iter().zip(&shown).map(|(c, s)| if *s == c.label { SharedString::default() } else { c.label.clone().into() }).collect();
+        let aliases: Vec<SharedString> = commands
+            .iter()
+            .zip(&shown)
+            .map(|(c, s)| {
+                let english = if *s == c.label { "" } else { c.label.as_str() };
+                format!("{english} {}", search_keywords(&c.label)).trim().to_string().into()
+            })
+            .collect();
         let items = commands
             .iter()
             .zip(shown)
@@ -473,6 +520,8 @@ impl Workbench {
         match &root {
             None => picker.update(cx, |p, cx| p.set_paths(0, Vec::new(), false, cx)),
             Some(root) => {
+                let first = (!self.roots.extra_roots.is_empty()).then(|| ui::file_name(root).to_string());
+                picker.update(cx, |p, _| p.set_first_folder(first));
                 // Cached list first (instant), then a fresh one in the background.
                 if let Some(ix) = self.roots.file_index.as_ref().filter(|ix| ix.root == *root) {
                     let (ordered, recent) = self.mru_first(root, &ix.paths, cx);
@@ -645,6 +694,11 @@ impl Workbench {
                     ed.update(cx, |e, cx| e.reveal_lsp(line, col, window, cx));
                 }
             }
+            (OverlayKind::QuickFixes(fixes), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let fix = fixes[*index].clone();
+                self.close_overlay(window, cx);
+                self.run_quick_fix(fix, window, cx);
+            }
             (OverlayKind::CodeActions { actions, client }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let (action, client) = (actions[*index].clone(), client.clone());
                 self.close_overlay(window, cx);
@@ -699,20 +753,25 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.bind_shortcut(index, window, cx);
             }
-            (OverlayKind::Stashes { refs, op }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
-                let (stash, op) = (refs[*index].clone(), *op);
+            (OverlayKind::Stashes { refs, msgs, op, repo }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (stash, msg, op, repo) = (refs[*index].clone(), msgs.get(*index).cloned(), *op, repo.clone());
                 self.close_overlay(window, cx);
                 // --- git-refs ---
                 if matches!(op, git_glue::StashOp::Show) {
-                    self.show_stash_files(stash, window, cx);
+                    if self.repo_unchanged(&repo, cx) {
+                        self.show_stash_files(stash, window, cx);
+                    }
                     return;
                 }
-                self.with_scm(cx, |s, cx| match op {
-                    git_glue::StashOp::Pop => s.stash_apply(stash, true, cx),
-                    git_glue::StashOp::Apply => s.stash_apply(stash, false, cx),
-                    git_glue::StashOp::Drop => s.stash_drop(stash, cx),
-                    git_glue::StashOp::Show => {}
-                });
+                // Pinned to the repository the list was read from, and to the entry picked (position and message).
+                let Some(repo) = repo else { return };
+                let action = match op {
+                    git_glue::StashOp::Pop => crate::scm::StashAction::Pop,
+                    git_glue::StashOp::Apply => crate::scm::StashAction::Apply,
+                    git_glue::StashOp::Drop => crate::scm::StashAction::Drop,
+                    git_glue::StashOp::Show => return,
+                };
+                self.with_scm(cx, |s, cx| s.stash_action_in(Some(repo), stash, msg, action, cx));
             }
             (OverlayKind::Tasks(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let task = list[*index].clone();
@@ -738,6 +797,11 @@ impl Workbench {
                 let value = options[*index].clone();
                 self.close_overlay(window, cx);
                 self.answer_launch_input(value, window, cx);
+            }
+            (OverlayKind::TaskInput(options), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let value = options[*index].clone();
+                self.close_overlay(window, cx);
+                self.answer_task_input(value, window, cx);
             }
             (OverlayKind::TerminalLaunch { context, launches }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 if !context.matches(self, cx) {
@@ -799,15 +863,21 @@ impl Workbench {
                     });
                 }
             }
-            (OverlayKind::Branches { host, root, choices }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
-                if !self.git_context_matches(host, root) {
+            (OverlayKind::Branches { host, root, choices, repo }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                // Another connection: the list belongs to none of its repositories. Another repository on this one is
+                // reported below (`repo_unchanged`).
+                if !Arc::ptr_eq(host, &self.remote.host) {
                     self.close_overlay(window, cx);
                     return;
                 }
-                let (root, choice) = (root.clone(), choices[*index].clone());
+                let (root, choice, repo) = (root.clone(), choices[*index].clone(), repo.clone());
                 self.close_overlay(window, cx);
-                self.pick_branch(root, choice, window, cx);
+                // The branches listed are this repository's: picked after another one was selected, nothing runs.
+                if self.repo_unchanged(&repo, cx) {
+                    self.pick_branch(root, choice, window, cx);
+                }
             }
+
             (OverlayKind::RemoteTargets(aliases), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let alias = aliases[*index].clone();
                 self.close_overlay(window, cx);
@@ -840,14 +910,27 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.apply_spell_choice(editor, range, word, choice, cx);
             }
-            (OverlayKind::PullRequests { host, root, remote, pulls }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+            (OverlayKind::PullRequests { host, root, rows }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 if !self.git_context_matches(host, root) {
                     self.close_overlay(window, cx);
                     return;
                 }
-                let (host, root, remote, pull) = (host.clone(), root.clone(), remote.clone(), pulls[*index].clone());
+                let (host, root, row) = (host.clone(), root.clone(), rows[*index].clone());
                 self.close_overlay(window, cx);
-                self.pick_pull_request(host, root, remote, pull, window, cx);
+                match row {
+                    pulls_glue::PullRow::GitHub { remote, pull } => self.pick_pull_request(host, root, remote, pull, window, cx),
+                    pulls_glue::PullRow::Extension(pull) => self.pick_ext_pull(pull, window, cx),
+                }
+            }
+            (OverlayKind::ExtPullActions { pull, choices }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (pull, action) = (pull.clone(), choices[*index]);
+                self.close_overlay(window, cx);
+                self.run_ext_pull_action(*pull, action, window, cx);
+            }
+            (OverlayKind::ExtPullFiles { pull, files }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (pull, file) = (pull.clone(), files[*index].clone());
+                self.close_overlay(window, cx);
+                self.open_ext_pull_file(*pull, file, window, cx);
             }
             (OverlayKind::PullRequestActions { host, root, remote, pull, choices }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 if !self.git_context_matches(host, root) {
@@ -901,6 +984,7 @@ impl Workbench {
                 OverlayKind::Locations(_)
                 | OverlayKind::Symbols(_)
                 | OverlayKind::CodeActions { .. }
+                | OverlayKind::QuickFixes(_)
                 | OverlayKind::Branches { .. }
                 | OverlayKind::BranchOp { .. }
                 | OverlayKind::SyncTarget { .. }
@@ -916,6 +1000,8 @@ impl Workbench {
                 | OverlayKind::Dictionaries
                 | OverlayKind::PullRequests { .. }
                 | OverlayKind::PullRequestActions { .. }
+                | OverlayKind::ExtPullActions { .. }
+                | OverlayKind::ExtPullFiles { .. }
                 | OverlayKind::EditorOption(_)
                 | OverlayKind::Projects(_)
                 | OverlayKind::ForgetRecent(_)
@@ -923,6 +1009,7 @@ impl Workbench {
                 | OverlayKind::Tasks(_)
                 | OverlayKind::DebugConfigs(_)
                 | OverlayKind::LaunchInput(_)
+                | OverlayKind::TaskInput(_)
                 | OverlayKind::LaunchTemplates(_)
                 | OverlayKind::TerminalLaunch { .. }
                 | OverlayKind::TerminalDefaultProfile { .. }
@@ -941,6 +1028,9 @@ impl Workbench {
                 PickerEvent::Dismiss,
             ) => {
                 self.close_overlay(window, cx);
+            }
+            (OverlayKind::ExtPick { .. } | OverlayKind::Input { purpose: InputPurpose::ExtInput { .. }, .. }, _) => {
+                self.on_extension_overlay_event(event, window, cx);
             }
             (OverlayKind::Palette { .. } | OverlayKind::Input { .. }, PickerEvent::Dismiss) => {
                 self.close_overlay(window, cx);

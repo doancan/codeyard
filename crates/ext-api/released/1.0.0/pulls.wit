@@ -1,0 +1,157 @@
+package codeyard:api@1.0.0;
+
+/// Pull (merge) request providers: `[[pull-requests]]` in the manifest. The host asks with `request.pull-requests`
+/// and the extension answers with `response.pull-requests`. The provider calls its forge with `auth.fetch`, so it never
+/// sees the account's token.
+@since(version = 1.0.0)
+interface pull-requests {
+  /// A repository remote whose host the provider claims.
+  @since(version = 1.0.0)
+  record remote {
+    /// The provider's local id from the manifest.
+    provider: string,
+    /// The remote's name in the repository, such as `origin`.
+    name: string,
+    /// The URL as git has it: `git@gitlab.com:group/app.git`, `https://gitlab.com/group/app.git`.
+    url: string,
+    /// The host, lowercase: `gitlab.com`.
+    host: string,
+    /// The repository's path on the host, without slashes around it and without `.git`: `group/sub/app`.
+    path: string,
+    /// The account to pass to `auth.fetch`: the contribution's `auth` provider, or `<id>@<host>` for a self-managed
+    /// instance the user added. Opaque: pass it on as it is. None when the contribution declares no `auth`.
+    account: option<string>,
+  }
+
+  @since(version = 1.0.0)
+  enum state {
+    open,
+    draft,
+    merged,
+    closed,
+  }
+
+  @since(version = 1.0.0)
+  record summary {
+    /// The provider's id for the request, passed back in later queries: `42`, or anything else.
+    id: string,
+    /// Shown before the title, such as `#42` or `!42`.
+    reference: string,
+    title: string,
+    author: string,
+    state: state,
+    /// The branch with the changes.
+    source-branch: string,
+    /// The branch it merges into.
+    target-branch: string,
+    /// Last change, in Unix milliseconds; 0 when unknown.
+    updated: u64,
+    /// The request's web page (`https:` only).
+    url: option<string>,
+  }
+
+  @since(version = 1.0.0)
+  enum check-state {
+    pending,
+    success,
+    failure,
+    neutral,
+  }
+
+  @since(version = 1.0.0)
+  record check {
+    name: string,
+    state: check-state,
+    /// `https:` only.
+    url: option<string>,
+  }
+
+  @since(version = 1.0.0)
+  record details {
+    summary: summary,
+    /// Markdown.
+    description: string,
+    /// CI results; empty when the forge has none or the provider does not offer them.
+    checks: list<check>,
+    labels: list<string>,
+  }
+
+  @since(version = 1.0.0)
+  enum file-status {
+    added,
+    modified,
+    deleted,
+    renamed,
+  }
+
+  @since(version = 1.0.0)
+  record changed-file {
+    /// The path in the source branch (in the target branch for a deleted file).
+    path: string,
+    /// The path in the target branch, for a renamed file.
+    old-path: option<string>,
+    status: file-status,
+  }
+
+  /// One changed file's text on both sides, for a diff.
+  @since(version = 1.0.0)
+  record file-contents {
+    /// In the target branch: none for an added or binary file.
+    base: option<string>,
+    /// In the source branch: none for a deleted or binary file.
+    head: option<string>,
+  }
+
+  @since(version = 1.0.0)
+  record comment {
+    author: string,
+    /// Markdown.
+    body: string,
+    /// Unix milliseconds; 0 when unknown.
+    created: u64,
+    /// For a comment on the diff: the file, and the line (1-based) in the source branch.
+    path: option<string>,
+    line: option<u32>,
+  }
+
+  /// How to check a request out. The host runs `git fetch <from> <ref>` and creates or resets `branch` on what it
+  /// fetched, on the machine the repository is on.
+  @since(version = 1.0.0)
+  record checkout {
+    /// A clone URL to fetch from (a fork), or none for the remote itself.
+    fetch-url: option<string>,
+    /// What to fetch: `refs/merge-requests/42/head`, `refs/pull/42/head`, or a branch name.
+    ref: string,
+    /// The local branch, such as `mr-42`.
+    branch: string,
+  }
+
+  @since(version = 1.0.0)
+  variant query {
+    /// Open requests of the remote's repository, newest first: answer with `answer.list`.
+    %list(remote),
+    /// One request (by `summary.id`): answer with `answer.details`.
+    details(tuple<remote, string>),
+    /// Its changed files: answer with `answer.files`.
+    files(tuple<remote, string>),
+    /// One changed file's text on both sides: answer with `answer.contents`.
+    contents(tuple<remote, string, changed-file>),
+    /// Its comments, oldest first: answer with `answer.comments`.
+    comments(tuple<remote, string>),
+    /// The user wrote a comment (Markdown) on the request: answer with `answer.done`. A user action.
+    add-comment(tuple<remote, string, string>),
+    /// The user wants the request checked out: answer with `answer.checkout`. A user action.
+    checkout(tuple<remote, string>),
+  }
+
+  @since(version = 1.0.0)
+  variant answer {
+    %list(list<summary>),
+    details(details),
+    files(list<changed-file>),
+    contents(file-contents),
+    comments(list<comment>),
+    checkout(checkout),
+    done,
+  }
+}

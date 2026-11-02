@@ -1,0 +1,29 @@
+# Installs cyx, and the extension host `cyx test` runs extensions in, for CI (docs/extensions/testing.md, "In CI").
+# Both are built from this action's own commit, so pin it as the publish action is pinned:
+#   - uses: doancan/codeyard/actions/setup-cyx@<commit> # vX.Y.Z
+name: Set up cyx
+description: Install cyx and codeyard-exthost, to check, test and package a Codeyard extension.
+branding:
+  icon: package
+  color: blue
+inputs:
+  exthost:
+    description: "true to also install codeyard-exthost, which `cyx test` needs."
+    default: "true"
+  wasm:
+    description: "true to also add the wasm32-wasip2 Rust target, which building a Rust extension needs."
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - name: Install cyx (the version of this action)
+      shell: bash
+      run: cargo install --locked --quiet --path "$GITHUB_ACTION_PATH/../../crates/cyx"
+    - name: Install codeyard-exthost (beside cyx, where cyx test finds it)
+      if: inputs.exthost == 'true'
+      shell: bash
+      run: cargo install --locked --quiet --path "$GITHUB_ACTION_PATH/../../crates/ext-host"
+    - name: Add the wasm32-wasip2 target
+      if: inputs.wasm == 'true'
+      shell: bash
+      run: rustup target add wasm32-wasip2

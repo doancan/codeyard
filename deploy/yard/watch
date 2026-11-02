@@ -1,0 +1,19 @@
+#!/bin/sh
+# The hourly check on the server (yard-watch.timer): the service answers, the index does not expire within 24 h, the
+# online key not within 14 days, and the database is being copied to R2. A failure is alerted by yard-alert (the
+# unit's OnFailure); the GitHub workflow yard-monitor checks the same from outside, through Cloudflare.
+set -u
+problems=0
+fail() {
+	echo "yard-watch: $*" >&2
+	problems=$((problems + 1))
+}
+curl -fsS --max-time 10 http://127.0.0.1:8080/healthz >/dev/null || fail "yard does not answer on 127.0.0.1:8080 (systemctl status yard)"
+if ! out=$(runuser -u yard -- /usr/local/bin/yard status /srv/yard/yard.json --hours 24 --key-days 14 2>&1); then
+	fail "$out"
+else
+	echo "$out"
+fi
+systemctl is-active --quiet litestream || fail "litestream is not running: the database is not being copied to R2"
+systemctl is-active --quiet caddy || fail "caddy is not running: nothing reaches yard from outside"
+[ "$problems" = 0 ]

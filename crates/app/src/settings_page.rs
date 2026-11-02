@@ -19,6 +19,70 @@ pub enum SettingsEvent {
     PickIconTheme,
     OpenJson,
     OpenKeybindings,
+    ResetAll,
+}
+
+/// The page as assistive technology reads it ([`SettingsPage::access_view`]).
+#[derive(Clone, PartialEq, Debug)]
+pub struct AccessPage {
+    pub query: String,
+    /// (label, count, selected) in `CATEGORIES` order.
+    pub categories: Vec<(&'static str, usize, bool)>,
+    pub heading: String,
+    /// Where the search field, each category, and the "Open settings.jsonc", "Keyboard Shortcuts" and "File icon
+    /// theme…" buttons were painted.
+    pub search_bounds: Option<accesskit::Rect>,
+    pub category_bounds: Vec<Option<accesskit::Rect>>,
+    pub button_bounds: [Option<accesskit::Rect>; 4],
+    pub rows: Vec<AccessSetting>,
+    /// Visible settings (`rows` holds the first ones).
+    pub total: usize,
+    /// Why there are no rows.
+    pub empty: Option<&'static str>,
+    /// `Some(None)`: the search field; `Some(Some(key))`: that setting's field.
+    pub focused: Option<Option<&'static str>>,
+}
+
+/// A setting's row: its title, description, value and error.
+#[derive(Clone, PartialEq, Debug)]
+pub struct AccessSetting {
+    pub key: &'static str,
+    pub title: String,
+    pub about: String,
+    pub control: AccessControl,
+    pub modified: bool,
+    pub error: Option<String>,
+    pub source: Option<&'static str>,
+    /// The row's painted, visible bounds (physical pixels); `None` while it is scrolled out of view.
+    pub bounds: Option<accesskit::Rect>,
+    /// Where its Reset button and each of its options were painted.
+    pub reset_bounds: Option<accesskit::Rect>,
+    pub option_bounds: Vec<Option<accesskit::Rect>>,
+}
+
+/// A part of the page whose painted bounds the accessibility tree reports.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum SetFrame {
+    Row(&'static str),
+    Reset(&'static str),
+    Option(&'static str, usize),
+    Search,
+    Category(usize),
+    Json,
+    Keys,
+    Icons,
+    ResetAll,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum AccessControl {
+    /// The theme button and the theme it shows.
+    Theme(String),
+    Toggle(bool),
+    /// The options and the one chosen.
+    Choice(&'static [&'static str], Option<String>),
+    /// The text in a number or text field.
+    Field(String),
 }
 
 pub const CATEGORIES: &[&str] =
@@ -42,6 +106,7 @@ const COMMON: &[&str] = &[
     "window.restoreSession",
     "terminal.fontSize",
     "terminal.lineHeight",
+    "ui.scale",
 ];
 
 /// The category of a setting (from the key prefix).
@@ -108,6 +173,8 @@ pub struct SettingsPage {
     /// Fields for number and text settings.
     fields: HashMap<&'static str, Entity<TextField>>,
     errors: HashMap<&'static str, String>,
+    /// Where each setting's row was painted in the last frame (accessibility).
+    bounds: crate::painted::RowBounds<SetFrame>,
     focus_handle: FocusHandle,
     _subs: Vec<Subscription>,
 }
@@ -148,6 +215,24 @@ fn theme_label(id: &str) -> String {
     theme::themes::builtin().into_iter().find(|t| t.id == id).map_or_else(|| id.to_string(), |t| t.name)
 }
 
+/// Where the value in effect comes from, when it is not the user's own settings file: the workspace file or the folder.
+pub fn source_note(key: &str, cx: &App) -> Option<&'static str> {
+    match cx.try_global::<crate::settings::Sources>()?.of(key) {
+        crate::settings::Scope::User => None,
+        crate::settings::Scope::Workspace => Some(crate::i18n::t("Set by the workspace file")),
+        crate::settings::Scope::Folder => Some(crate::i18n::t("Set by this folder's settings")),
+    }
+}
+
+/// The title a setting's row shows.
+fn row_title(key: &str) -> String {
+    match key {
+        "modules.containers.enabled" => crate::i18n::t("Container Environments").to_string(),
+        "modules.webPreview.enabled" => crate::i18n::t("Web Preview").to_string(),
+        _ => title_of(key),
+    }
+}
+
 fn shown(v: &Value) -> String {
     match v {
         Value::Null => String::new(),
@@ -183,7 +268,8 @@ impl SettingsPage {
             }));
             fields.insert(e.key, field);
         }
-        let mut page = SettingsPage { query, category: 0, fields, errors: HashMap::new(), focus_handle: cx.focus_handle(), _subs: subs };
+        let mut page =
+            SettingsPage { query, category: 0, fields, errors: HashMap::new(), bounds: Default::default(), focus_handle: cx.focus_handle(), _subs: subs };
         page.sync_fields(cx);
         page
     }
@@ -208,8 +294,22 @@ impl SettingsPage {
         self.query.update(cx, |f, cx| f.set_text(q, cx));
     }
 
-    #[cfg(test)]
-    pub fn submit_field_for_test(&mut self, key: &'static str, text: &str, cx: &mut Context<Self>) {
+    /// Shows a category (the search is cleared), as clicking it does.
+    pub fn select_category(&mut self, i: usize, cx: &mut Context<Self>) {
+        self.category = i.min(CATEGORIES.len() - 1);
+        self.query.update(cx, |q, cx| q.set_text("", cx));
+        cx.notify();
+    }
+
+    /// Focuses a number or text setting's field.
+    pub fn focus_field(&self, key: &str, window: &mut Window, cx: &App) {
+        if let Some(f) = self.fields.get(key) {
+            window.focus(&f.focus_handle(cx));
+        }
+    }
+
+    /// Puts `text` into a number or text setting's field and submits it as Enter does (checked, then written).
+    pub fn submit_field(&mut self, key: &str, text: &str, cx: &mut Context<Self>) {
         if let Some(f) = self.fields.get(key).cloned() {
             f.update(cx, |f, cx| {
                 f.set_text(text, cx);
@@ -276,6 +376,80 @@ impl SettingsPage {
         keys
     }
 
+    /// What assistive technology is told about the page: the same categories, rows, values and errors as on screen,
+    /// at most `max` rows.
+    pub fn access_view(&self, max: usize, window: &Window, cx: &App) -> AccessPage {
+        let s = cx.global::<Settings>();
+        let query = self.query.read(cx).text().to_string();
+        let searching = !query.is_empty();
+        let keys = self.visible_keys(cx);
+        let rows = keys
+            .iter()
+            .take(max)
+            .map(|&key| {
+                let entry = CATALOG.iter().find(|e| e.key == key);
+                let about = entry.map_or("Color theme of the whole window and the editor", |e| e.about);
+                let now = if key == "theme" { Value::String(s.theme.clone()) } else { current(s, key) };
+                let control = match entry.map(|e| e.kind) {
+                    None => AccessControl::Theme(theme_label(&shown(&now))),
+                    Some(Kind::Bool) => AccessControl::Toggle(now.as_bool().unwrap_or(false)),
+                    Some(Kind::Choice(opts)) => AccessControl::Choice(opts, now.as_str().map(str::to_string)),
+                    Some(Kind::Number { .. } | Kind::Text) => {
+                        AccessControl::Field(self.fields.get(key).map(|f| f.read(cx).text().to_string()).unwrap_or_default())
+                    }
+                };
+                AccessSetting {
+                    key,
+                    title: row_title(key),
+                    about: crate::i18n::t(about).to_string(),
+                    control,
+                    modified: Self::is_modified(s, key),
+                    error: self.errors.get(key).cloned(),
+                    source: source_note(key, cx),
+                    bounds: crate::painted::physical(&self.bounds, &SetFrame::Row(key), window),
+                    reset_bounds: crate::painted::physical(&self.bounds, &SetFrame::Reset(key), window),
+                    option_bounds: match entry.map(|e| e.kind) {
+                        Some(Kind::Choice(opts)) => {
+                            (0..opts.len()).map(|k| crate::painted::physical(&self.bounds, &SetFrame::Option(key, k), window)).collect()
+                        }
+                        _ => Vec::new(),
+                    },
+                }
+            })
+            .collect();
+        let focused = if self.query.focus_handle(cx).is_focused(window) {
+            Some(None)
+        } else {
+            self.fields.iter().find(|(_, f)| f.focus_handle(cx).is_focused(window)).map(|(key, _)| Some(*key))
+        };
+        AccessPage {
+            categories: CATEGORIES
+                .iter()
+                .enumerate()
+                .map(|(i, name)| (category_label(name), Self::category_count(name, s), i == self.category && !searching))
+                .collect(),
+            heading: if searching {
+                crate::i18n::tn("{} result", "{} results", keys.len(), &[])
+            } else {
+                category_label(CATEGORIES[self.category]).to_string()
+            },
+            empty: keys.is_empty().then(|| {
+                if CATEGORIES[self.category] == "Modified" && !searching {
+                    crate::i18n::t("Nothing changed: every setting has its default value.")
+                } else {
+                    crate::i18n::t("No setting matches.")
+                }
+            }),
+            query,
+            rows,
+            total: keys.len(),
+            focused,
+            search_bounds: crate::painted::physical(&self.bounds, &SetFrame::Search, window),
+            category_bounds: (0..CATEGORIES.len()).map(|i| crate::painted::physical(&self.bounds, &SetFrame::Category(i), window)).collect(),
+            button_bounds: [SetFrame::Json, SetFrame::Keys, SetFrame::Icons, SetFrame::ResetAll].map(|f| crate::painted::physical(&self.bounds, &f, window)),
+        }
+    }
+
     fn entry_view(&self, key: &'static str, ix: usize, s: &Settings, cx: &mut Context<Self>) -> gpui::AnyElement {
         let p = *palette(cx);
         let entry: Option<&Entry> = CATALOG.iter().find(|e| e.key == key);
@@ -333,6 +507,8 @@ impl SettingsPage {
                     let value = (*o).to_string();
                     div()
                         .id((SharedString::from(format!("opt-{key}")), oi))
+                        .relative()
+                        .child(crate::painted::probe(&self.bounds, SetFrame::Option(key, oi)))
                         .h(px(24.))
                         .px(px(theme::SPACE[4]))
                         .flex()
@@ -364,6 +540,8 @@ impl SettingsPage {
         let reset = modified.then(|| {
             div()
                 .id(("reset", ix))
+                .relative()
+                .child(crate::painted::probe(&self.bounds, SetFrame::Reset(key)))
                 .flex_none()
                 .cursor_pointer()
                 .text_size(px(text::XXS.0))
@@ -377,6 +555,8 @@ impl SettingsPage {
         });
         div()
             .id(("setting", ix))
+            .relative()
+            .child(crate::painted::probe(&self.bounds, SetFrame::Row(key)))
             .w_full()
             .flex()
             .flex_col()
@@ -402,19 +582,14 @@ impl SettingsPage {
                                     .items_center()
                                     .gap(px(theme::SPACE[3]))
                                     .children(modified.then(|| div().flex_none().size(px(6.)).rounded_full().bg(c(p.accent))))
-                                    .child(div().font_weight(gpui::FontWeight::SEMIBOLD).text_size(px(text::SM.0)).child(
-                                        if key == "modules.containers.enabled" {
-                                            crate::i18n::t("Container Environments").to_string()
-                                        } else if key == "modules.webPreview.enabled" {
-                                            crate::i18n::t("Web Preview").to_string()
-                                        } else {
-                                            title_of(key)
-                                        },
-                                    ))
+                                    .child(div().font_weight(gpui::FontWeight::SEMIBOLD).text_size(px(text::SM.0)).child(row_title(key)))
                                     .children(reset),
                             )
                             .child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(crate::i18n::t(about).to_string()))
-                            .child(div().font_family(ui::MONO_FONT).text_size(px(text::XXS.0)).text_color(c(p.line_number)).child(key.to_string())),
+                            .child(div().font_family(ui::MONO_FONT).text_size(px(text::XXS.0)).text_color(c(p.line_number)).child(key.to_string()))
+                            .children(source_note(key, cx).map(|note| {
+                                div().debug_selector(move || format!("setting-source-{key}")).text_size(px(text::XS.0)).text_color(c(p.accent)).child(note)
+                            })),
                     )
                     .child(div().w(px(240.)).flex_none().flex().justify_end().child(control)),
             )
@@ -429,6 +604,8 @@ impl Render for SettingsPage {
         let s = cx.global::<Settings>().clone();
         let keys = self.visible_keys(cx);
         let searching = !self.query.read(cx).text().is_empty();
+        // Rows record where they are painted in this frame.
+        self.bounds.borrow_mut().clear();
         let rows: Vec<gpui::AnyElement> = keys.iter().enumerate().map(|(i, k)| self.entry_view(k, i, &s, cx)).collect();
         let nav = CATEGORIES.iter().enumerate().map(|(i, name)| {
             let active = i == self.category && !searching;
@@ -436,6 +613,8 @@ impl Render for SettingsPage {
             let hot = *name == "Modified" && count > 0;
             div()
                 .id(("set-cat", i))
+                .relative()
+                .child(crate::painted::probe(&self.bounds, SetFrame::Category(i)))
                 .h(px(28.))
                 .px(px(theme::SPACE[5]))
                 .flex()
@@ -448,11 +627,7 @@ impl Render for SettingsPage {
                 .when(!active, |d| d.text_color(c(p.text_muted)).hover(|d| d.bg(c(p.surface_hover))))
                 .child(div().flex_1().child(category_label(name)))
                 .child(div().flex_none().text_size(px(text::XXS.0)).text_color(c(if hot { p.accent } else { p.line_number })).child(count.to_string()))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.category = i;
-                    this.query.update(cx, |q, cx| q.set_text("", cx));
-                    cx.notify();
-                }))
+                .on_click(cx.listener(move |this, _, _, cx| this.select_category(i, cx)))
         });
         let heading =
             if searching { crate::i18n::tn("{} result", "{} results", rows.len(), &[]) } else { category_label(CATEGORIES[self.category]).to_string() };
@@ -478,6 +653,8 @@ impl Render for SettingsPage {
                     .child(div().text_size(px(text::LG.0)).font_weight(gpui::FontWeight::SEMIBOLD).child(crate::i18n::t("Settings")))
                     .child(
                         crate::ui::input_box("settings-search-box", &p, p.surface, self.query.focus_handle(cx).is_focused(window))
+                            .relative()
+                            .child(crate::painted::probe(&self.bounds, SetFrame::Search))
                             .flex_1()
                             .max_w(px(520.))
                             .child(crate::ui::search_icon(&p))
@@ -487,6 +664,8 @@ impl Render for SettingsPage {
                     .child(
                         div()
                             .id("set-open-json")
+                            .relative()
+                            .child(crate::painted::probe(&self.bounds, SetFrame::Json))
                             .h(px(26.))
                             .px(px(theme::SPACE[4]))
                             .flex()
@@ -502,6 +681,8 @@ impl Render for SettingsPage {
                     .child(
                         div()
                             .id("set-open-keys")
+                            .relative()
+                            .child(crate::painted::probe(&self.bounds, SetFrame::Keys))
                             .h(px(26.))
                             .px(px(theme::SPACE[4]))
                             .flex()
@@ -513,6 +694,23 @@ impl Render for SettingsPage {
                             .text_size(px(text::XS.0))
                             .child(crate::i18n::t("Keyboard Shortcuts"))
                             .on_click(cx.listener(|_, _, _, cx| cx.emit(SettingsEvent::OpenKeybindings))),
+                    )
+                    .child(
+                        div()
+                            .id("set-reset-all")
+                            .relative()
+                            .child(crate::painted::probe(&self.bounds, SetFrame::ResetAll))
+                            .h(px(26.))
+                            .px(px(theme::SPACE[4]))
+                            .flex()
+                            .items_center()
+                            .rounded(px(theme::radius::SM))
+                            .bg(c(p.surface_hover))
+                            .cursor_pointer()
+                            .hover(|d| d.bg(c(p.surface_active)))
+                            .text_size(px(text::XS.0))
+                            .child(crate::i18n::t("Reset All Settings…"))
+                            .on_click(cx.listener(|_, _, _, cx| cx.emit(SettingsEvent::ResetAll))),
                     ),
             )
             .child(
@@ -535,6 +733,8 @@ impl Render for SettingsPage {
                             .child(
                                 div()
                                     .id("set-icon-theme")
+                                    .relative()
+                                    .child(crate::painted::probe(&self.bounds, SetFrame::Icons))
                                     .h(px(28.))
                                     .px(px(theme::SPACE[5]))
                                     .flex()

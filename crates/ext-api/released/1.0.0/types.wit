@@ -1,0 +1,180 @@
+package codeyard:api@1.0.0;
+
+/// Types shared by every interface. Importing it needs no permission.
+@since(version = 1.0.0)
+interface types {
+  /// Why a call was refused.
+  @since(version = 1.0.0)
+  enum why {
+    /// The manifest does not declare the permission.
+    not-declared,
+    /// The user turned the permission off on the extension page.
+    revoked-by-user,
+    /// The folder is not trusted: code may read what it declared and show UI, but not send, write or run.
+    untrusted-workspace,
+    /// The registry revoked this version.
+    revoked-extension,
+  }
+
+  @since(version = 1.0.0)
+  record denied {
+    /// What would allow the call, as a manifest line: `net = ["api.example.com"]`, or for a host outside an
+    /// `[[oauth]]` account `[[oauth]] gitlab hosts = ["git.example.com"]`. When the host knows only the permission, it
+    /// sends its bare name (`net`, `auth`) and the SDK fills in the line from the call.
+    permission: string,
+    why: why,
+  }
+
+  @since(version = 1.0.0)
+  variant error {
+    denied(denied),
+    not-found(string),
+    /// The user moved on, or the extension cancelled the call.
+    cancelled,
+    timeout,
+    /// The call's arguments are wrong; the message says which.
+    invalid(string),
+    other(string),
+  }
+
+  /// A host call that finishes later. Its result arrives at `guest.complete`, streamed data before that at
+  /// `guest.event`.
+  @since(version = 1.0.0)
+  type ticket = u64;
+
+  /// Zero-based line and UTF-16 column, as in JavaScript strings and the Language Server Protocol.
+  @since(version = 1.0.0)
+  record position {
+    line: u32,
+    character: u32,
+  }
+
+  @since(version = 1.0.0)
+  record range {
+    start: position,
+    end: position,
+  }
+
+  @since(version = 1.0.0)
+  record text-edit {
+    range: range,
+    new-text: string,
+  }
+
+  /// A file or folder. Opaque to extensions: the same code works on local and SSH folders.
+  @since(version = 1.0.0)
+  type uri = string;
+
+  @since(version = 1.0.0)
+  enum tone {
+    neutral,
+    accent,
+    success,
+    warning,
+    danger,
+    muted,
+  }
+
+  /// An HTTPS request (`net.fetch`, `auth.fetch`). The body is sent in one piece, up to the call limit.
+  @since(version = 1.0.0)
+  record http-request {
+    method: string,
+    url: string,
+    headers: list<tuple<string, string>>,
+    body: list<u8>,
+    timeout-ms: option<u32>,
+  }
+
+  /// Arrives as `stream-event.http-head` before the body's `data` events.
+  @since(version = 1.0.0)
+  record http-head {
+    status: u16,
+    headers: list<tuple<string, string>>,
+  }
+
+  @since(version = 1.0.0)
+  enum diagnostic-severity {
+    error,
+    warning,
+    information,
+    hint,
+  }
+
+  @since(version = 1.0.0)
+  record diagnostic {
+    range: range,
+    severity: diagnostic-severity,
+    message: string,
+    code: option<string>,
+  }
+
+  @since(version = 1.0.0)
+  record document {
+    uri: uri,
+    language: string,
+    /// Increases with every change; edits made against an older version are refused.
+    version: u32,
+    text: string,
+  }
+
+  @since(version = 1.0.0)
+  record file-stat {
+    is-dir: bool,
+    size: u64,
+    /// Unix milliseconds.
+    modified: u64,
+  }
+
+  @since(version = 1.0.0)
+  record search-match {
+    uri: uri,
+    range: range,
+    /// The matching line, for display.
+    line: string,
+  }
+
+  /// A file read by `workspace.read-many`: its bytes, or why it could not be read.
+  @since(version = 1.0.0)
+  record file-result {
+    uri: uri,
+    contents: result<list<u8>, error>,
+  }
+
+  @since(version = 1.0.0)
+  record account {
+    provider: string,
+    /// What the user sees, such as the account name.
+    label: string,
+  }
+
+  /// The result of a ticket.
+  @since(version = 1.0.0)
+  variant completion {
+    /// Finished with nothing to return.
+    done,
+    failed(error),
+    bytes(list<u8>),
+    text(option<string>),
+    json(string),
+    /// A choice from a notice or a pick: indices into the offered list (empty when dismissed).
+    chosen(list<u32>),
+    files(list<file-result>),
+    uris(list<uri>),
+    stat(file-stat),
+    document(option<document>),
+    ranges(list<range>),
+    /// A process ended with this exit code (none when killed by a signal).
+    exit(option<s32>),
+    account(account),
+  }
+
+  /// Streamed data for a ticket, before its completion.
+  @since(version = 1.0.0)
+  variant stream-event {
+    http-head(http-head),
+    data(list<u8>),
+    stdout(list<u8>),
+    stderr(list<u8>),
+    search-match(search-match),
+  }
+}

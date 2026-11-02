@@ -25,6 +25,10 @@ on:
 permissions:
   contents: read
 
+# The app and codeyard-exthost of one build must recognise each other (crates/ext-proto: BUILD).
+env:
+  CODEYARD_BUILD_ID: ${{ github.sha }}
+
 jobs:
   # Cheap checks first: a bad tag or a stale doc fails in a minute, not after the macOS build.
   verify:

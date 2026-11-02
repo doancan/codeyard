@@ -1,0 +1,38 @@
+# The public extension registry, checked hourly the way clients see it (docs/registry.md, "Monitoring"): the root and
+# index verify with the root keys, the index does not expire within a day, and the online key not within 14 days.
+# A failed run is the alert: GitHub emails the repository's owner. Does nothing until the YARD_URL variable is set.
+name: yard-monitor
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yard-monitor
+
+jobs:
+  check:
+    if: vars.YARD_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: yard-tools
+      - run: cargo build --release --locked -p cyx
+      - name: Check the registry
+        env:
+          YARD_URL: ${{ vars.YARD_URL }}
+          YARD_ROOT_KEYS: ${{ vars.YARD_ROOT_KEYS }}
+          YARD_THRESHOLD: ${{ vars.YARD_THRESHOLD }}
+        run: |
+          set -- 
+          for k in $(echo "$YARD_ROOT_KEYS" | tr ',' ' '); do set -- "$@" --root-key "$k"; done
+          target/release/cyx yard check "$YARD_URL" "$@" --threshold "${YARD_THRESHOLD:-2}" | tee -a "$GITHUB_STEP_SUMMARY"

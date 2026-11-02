@@ -200,6 +200,63 @@ impl EditorView {
         cx.notify();
     }
 
+    /// One channel set from the tree (0 hue in degrees, 1 saturation, 2 brightness, 3 opacity, in percent), written
+    /// as a release of the mouse writes it.
+    fn set_channel(&mut self, channel: u8, value: f64, cx: &mut Context<Self>) {
+        let Some(pk) = &mut self.color_picker else { return };
+        let (mut h, mut s, mut v) = pk.hsv;
+        let mut a = pk.color.a;
+        let x = value as f32;
+        match channel {
+            0 => h = x.clamp(0., 359.99),
+            1 => s = (x / 100.).clamp(0., 1.),
+            2 => v = (x / 100.).clamp(0., 1.),
+            _ => a = (x / 100.).clamp(0., 1.),
+        }
+        pk.hsv = (h, s, v);
+        pk.color = Color::from_hsv(h, s, v, a);
+        self.commit_color(cx);
+        cx.notify();
+    }
+
+    /// The picker's planes for the tree: a slider per channel over the region a drag sets it in, and the value.
+    fn picker_sliders(&self, h: f32, s: f32, v: f32, a: f32, value: &str, cx: &Context<Self>) -> impl IntoElement + use<> {
+        let weak = cx.entity().downgrade();
+        let slider = |channel: u8, key: &'static str, label: &'static str, now: f32, max: f64, step: f64| {
+            let weak = weak.clone();
+            let zone = match channel {
+                0 => Zone::Hue,
+                3 => Zone::Alpha,
+                _ => Zone::Sv,
+            };
+            let (x, y, w, hh) = Self::zone_rect(zone);
+            div().absolute().left(px(x)).top(px(y)).w(px(w)).h(px(hh)).child(crate::a11y_controls::control(
+                crate::a11y_controls::Control::new(crate::i18n::t("Color picker"), key, accesskit::Role::Slider, label).slider(
+                    crate::a11y_controls::Range { value: now as f64, min: 0., max, step },
+                    move |to, _, cx| {
+                        weak.update(cx, |e, cx| e.set_channel(channel, to, cx)).ok();
+                    },
+                ),
+            ))
+        };
+        div()
+            .absolute()
+            .size_full()
+            .child(slider(0, "hue", crate::i18n::t("Hue"), h.round(), 359., 5.))
+            .child(slider(1, "saturation", crate::i18n::t("Saturation"), (s * 100.).round(), 100., 5.))
+            .child(slider(2, "brightness", crate::i18n::t("Brightness"), (v * 100.).round(), 100., 5.))
+            .child(slider(3, "opacity", crate::i18n::t("Opacity"), (a * 100.).round(), 100., 5.))
+            .child(
+                div()
+                    .absolute()
+                    .left(px(PAD))
+                    .top(px(PAD + SV_H + GAP + STRIP_H + GAP + STRIP_H + GAP))
+                    .w(px(SV_W))
+                    .h(px(FOOT_H / 2.))
+                    .child(crate::a11y_controls::said(crate::i18n::t("Color picker"), "value", accesskit::Role::Label, value.to_string())),
+            )
+    }
+
     fn set_notation(&mut self, notation: Notation, cx: &mut Context<Self>) {
         if let Some(pk) = &mut self.color_picker {
             pk.notation = notation;
@@ -279,6 +336,7 @@ impl EditorView {
             .child(div().absolute().size_full().bg(linear_gradient(90., linear_color_stop(ui::ca(rgb, 0.), 0.), linear_color_stop(ui::ca(rgb, 1.), 1.))))
             .on_mouse_down(MouseButton::Left, on(Zone::Alpha));
         let value = color::format(col, pk.notation);
+        let sliders = self.picker_sliders(h, s, v, col.a, &value, cx);
         let active = |n: &Notation| {
             std::mem::discriminant(&pk.notation) == std::mem::discriminant(n) || (matches!(pk.notation, Notation::Named) && matches!(n, Notation::Hex { .. }))
         };
@@ -286,6 +344,12 @@ impl EditorView {
             let is = active(&n);
             div()
                 .id(id)
+                .relative()
+                .child(crate::a11y_controls::control(
+                    crate::a11y_controls::Control::new(crate::i18n::t("Color picker"), id, accesskit::Role::RadioButton, label)
+                        .selected(is)
+                        .on_entity(cx.entity().downgrade(), move |e: &mut Self, _, cx| e.set_notation(n, cx)),
+                ))
                 .px(px(theme::SPACE[3]))
                 .h(px(20.))
                 .flex()
@@ -363,6 +427,7 @@ impl EditorView {
                 .child(sv)
                 .child(hue_strip)
                 .child(alpha_strip)
+                .child(sliders)
                 .child(thumb(Zone::Sv, s, 1. - v).on_mouse_down(MouseButton::Left, on(Zone::Sv)))
                 .child(thumb(Zone::Hue, h / 360., 0.5).on_mouse_down(MouseButton::Left, on(Zone::Hue)))
                 .child(thumb(Zone::Alpha, col.a, 0.5).on_mouse_down(MouseButton::Left, on(Zone::Alpha)))

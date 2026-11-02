@@ -1,0 +1,413 @@
+// The guest's exports (`interface guest`), shared by the component and the mock host: activation, and each request
+// routed to what the extension registered. `cyx` generates the component's entry module, which imports the extension
+// and the interfaces its manifest grants and exports `guest = start(extension, bindings)`. Authors never call this.
+
+import { Context } from "./context.ts";
+import { CodeyardError, describe, toWit } from "./errors.ts";
+import { fetch, FetchHeaders, FetchResponse } from "./fetch.ts";
+import { handlers, resetHandlers } from "./handlers.ts";
+import { CALL_BYTES, resultTooLarge } from "./limits.ts";
+import { answerPullRequests } from "./pulls.ts";
+import { background, complete, event, host, install } from "./runtime.ts";
+import { toWitScmState, type ScmState } from "./scm.ts";
+import {
+  fromWitCodeLens,
+  fromWitDiagnostic,
+  toWitCodeLens,
+  toWitDiagnostic,
+  toWitInlayHint,
+  type CodeAction,
+  type CodeLens,
+  type CompletionItem,
+  type CompletionList,
+  type DocumentEvent,
+  type Hover,
+  type InlayHint,
+} from "./types.ts";
+import type { Bindings, Events, Guest, Request, Response, WitCodeAction, WitCompletionItem, WitDocumentEvent } from "./wit.ts";
+
+/** An extension module: `export function activate(ctx) { … }`, optionally `export function deactivate(ctx) { … }`. */
+export interface ExtensionModule {
+  activate(ctx: Context): unknown;
+  deactivate?(ctx: Context): unknown;
+}
+
+const ctx = new Context();
+
+/** The storage key under which `ctx.state` waits for the next activation during a hot reload. Reserved. */
+export const RELOAD_STATE_KEY = "codeyard.reload-state";
+
+/** The activation reason of a hot reload (`cyx dev` swapped in a new build). */
+export const RELOAD = "reload";
+
+/** The snapshot is for the activation right after a reload; any other start forgets it. */
+function restoreState(reason: string): void {
+  const storage = host().storage;
+  const saved = storage?.get(RELOAD_STATE_KEY);
+  if (saved === undefined) return;
+  storage.delete(RELOAD_STATE_KEY);
+  if (reason !== RELOAD) return;
+  try {
+    const obj = JSON.parse(new TextDecoder().decode(saved)) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(obj)) handlers.state.set(k, v);
+  } catch {
+    // A snapshot that does not parse is dropped.
+  }
+}
+
+function saveState(): void {
+  if (handlers.state.size === 0) return;
+  try {
+    host().storage.set(RELOAD_STATE_KEY, new TextEncoder().encode(JSON.stringify(Object.fromEntries(handlers.state))));
+  } catch (e) {
+    host().log.log("warn", `the state was not kept for the reload: ${describe(e)}`);
+  }
+  handlers.state.clear();
+}
+
+/** Make `fetch` (and `Headers`, `Response` where the engine has none) the SDK's, mapped to the host's `net`. */
+export function installGlobals(): () => void {
+  const g = globalThis as Record<string, unknown>;
+  const before = { fetch: g.fetch, Headers: g.Headers, Response: g.Response };
+  const set = (name: string, value: unknown) => Object.defineProperty(g, name, { value, writable: true, configurable: true, enumerable: false });
+  set("fetch", fetch);
+  if (typeof g.Headers === "undefined") set("Headers", FetchHeaders);
+  if (typeof g.Response === "undefined") set("Response", FetchResponse);
+  return () => {
+    for (const [k, v] of Object.entries(before)) set(k, v);
+  };
+}
+
+/** The message of the timers the engine has but never runs: nothing drives its event loop between calls. */
+const NO_TIMERS = "is not available in a Codeyard extension: it has no event loop of its own, so a timer would never fire. Await a Codeyard call, or run work on a schedule with ctx.every(seconds, f) (at least 30 seconds)";
+
+/**
+ * Replace the engine's `setTimeout` and `setInterval`, which return and never fire (an `await new Promise(r =>
+ * setTimeout(r, 50))` would hang forever), with functions that throw, saying what to use. Only the component installs
+ * them: the mock host runs in Node, whose own timers its test runner needs.
+ */
+export function refuseTimers(): () => void {
+  const g = globalThis as Record<string, unknown>;
+  const names = ["setTimeout", "setInterval"] as const;
+  const before = names.map((n) => g[n]);
+  names.forEach((name) => {
+    const refuse = () => {
+      throw new Error(`${name} ${NO_TIMERS}`);
+    };
+    Object.defineProperty(g, name, { value: refuse, writable: true, configurable: true, enumerable: false });
+  });
+  return () => names.forEach((n, i) => Object.defineProperty(g, n, { value: before[i], writable: true, configurable: true, enumerable: false }));
+}
+
+/**
+ * An `async activate`: settles with its error, or undefined once it finished. The export cannot wait for it (an export
+ * never waits on I/O), so requests wait instead, and fail with its error if it rejects.
+ */
+let activation: Promise<string | undefined> | undefined;
+/** What `activation` settled to: `{ error }` when it rejected. */
+let activated: { error: string | undefined } | undefined;
+
+/** How the last `activate` ended: pending (`undefined`), done, or failed with `error`. The mock host waits on it. */
+export function activationOutcome(): { error: string | undefined } | undefined {
+  return activation ? activated : { error: undefined };
+}
+
+/** The guest exports for `extension`, calling the host through `bindings`. */
+export function start(extension: ExtensionModule, bindings: Bindings): Guest {
+  if (typeof extension.activate !== "function") {
+    throw new Error("the extension's entry module must export `function activate(ctx: Context)`");
+  }
+  install(bindings);
+  resetHandlers();
+  activation = undefined;
+  activated = undefined;
+  return {
+    activate({ reason }) {
+      handlers.reason = reason;
+      restoreState(reason);
+      activation = undefined;
+      activated = undefined;
+      let r: unknown;
+      try {
+        r = extension.activate(ctx);
+      } catch (e) {
+        // `result<_, string>`: a thrown string is the error.
+        throw describe(e);
+      }
+      // `activate` may be async. Its rejection fails the activation: logged as `activate failed: …` (which `cyx test`
+      // reports), and every request answers with it.
+      if (r && typeof (r as Promise<unknown>).then === "function") {
+        activation = Promise.resolve(r).then(
+          () => {
+            activated = { error: undefined };
+            return undefined;
+          },
+          (e) => {
+            const error = describe(e);
+            activated = { error };
+            host().log.log("error", `activate failed: ${error}`);
+            return error;
+          },
+        );
+      }
+    },
+    deactivate() {
+      try {
+        const r = extension.deactivate?.(ctx);
+        if (r && typeof (r as Promise<unknown>).then === "function") background(r as Promise<unknown>);
+      } catch (e) {
+        host().log.log("error", `deactivate failed: ${describe(e)}`);
+      }
+      saveState();
+    },
+    handle(id, request) {
+      // Requests that arrive while an `async activate` runs wait for it, so what it registers after an `await` is there.
+      if (!activation) return handle(id, request);
+      void activation.then((error) => {
+        if (error === undefined) handle(id, request);
+        else respond(id, { tag: "err", val: toWit(CodeyardError.other(`activate failed: ${error.split("\n")[0]}`)) });
+      });
+    },
+    cancel(id) {
+      handlers.cancelledRequests.add(id);
+    },
+    complete(ticket, result) {
+      complete(ticket, result);
+    },
+    event(ticket, e) {
+      event(ticket, e);
+    },
+  };
+}
+
+function documentEvent(e: WitDocumentEvent): DocumentEvent {
+  const out: DocumentEvent = { change: e.change, uri: e.uri, language: e.language, version: e.version };
+  if (e.text !== undefined) out.text = e.text;
+  return out;
+}
+
+/**
+ * The `events` export (API 1.1): each watch's events to its handler. A document watch's handler runs once per event, in
+ * order; a file watch's once per batch. `cyx` exports it from the component's entry next to `guest`.
+ */
+export const events: Events = {
+  documents(watch, list) {
+    const f = handlers.documentWatches.get(watch);
+    if (!f) return;
+    background(async () => {
+      for (const e of list) await f(ctx, documentEvent(e));
+    });
+  },
+  files(watch, list) {
+    const f = handlers.fileWatches.get(watch);
+    if (f) background(() => f(ctx, list.map((e) => ({ change: e.change, uri: e.uri }))));
+  },
+};
+
+function respond(id: bigint, result: { tag: "ok"; val: Response } | { tag: "err"; val: ReturnType<typeof toWit> }): void {
+  if (handlers.cancelledRequests.delete(id)) return;
+  host().requests.respond(id, result);
+}
+
+const none: Response = { tag: "none" };
+
+/** Answer request `id` with what `work` returns, mapped to a response; a throw or rejection answers with the error. */
+function answer<T>(id: bigint, work: () => T | Promise<T>, map: (v: T) => Response): void {
+  Promise.resolve()
+    .then(work)
+    .then(
+      (v) => respond(id, { tag: "ok", val: map(v) }),
+      (e) => respond(id, { tag: "err", val: toWit(e) }),
+    )
+    .catch((e) => respond(id, { tag: "err", val: toWit(e) }));
+}
+
+function json(v: unknown): string {
+  const text = JSON.stringify(v === undefined ? null : v);
+  // An answer over the call limit never reaches Codeyard; fail it here with the same words the host uses. Counted only
+  // when it can be over (a character is at most 3 bytes): moving a huge string out of the engine would run out of time.
+  if (text.length * 3 > CALL_BYTES) {
+    const tooBig = resultTooLarge(new TextEncoder().encode(text).length);
+    if (tooBig) throw CodeyardError.invalid(tooBig);
+  }
+  return text;
+}
+
+function codeAction(a: CodeAction): WitCodeAction {
+  return {
+    id: a.id,
+    title: a.title,
+    edits: Object.entries(a.edits ?? {}),
+    command: a.command,
+    preferred: a.preferred ?? false,
+    fixes: (a.fixes ?? []).map(toWitDiagnostic),
+  };
+}
+
+function completionItem(i: CompletionItem): WitCompletionItem {
+  return {
+    label: i.label,
+    kind: i.kind ?? "text",
+    detail: i.detail,
+    documentation: i.documentation,
+    insertText: i.insertText,
+    snippet: i.snippet ?? false,
+    range: i.range,
+    additionalEdits: i.additionalEdits ?? [],
+    filterText: i.filterText,
+    sortText: i.sortText,
+  };
+}
+
+function completions(r: CompletionItem[] | CompletionList | undefined): Response {
+  const list = Array.isArray(r) ? { items: r } : (r ?? { items: [] });
+  return { tag: "completions", val: { items: list.items.map(completionItem), incomplete: list.incomplete ?? false } };
+}
+
+function handle(id: bigint, request: Request): void {
+  const missing = (what: string) => respond(id, { tag: "err", val: toWit(CodeyardError.notFound(what)) });
+  switch (request.tag) {
+    case "command": {
+      const [command, argsJson] = request.val;
+      const f = handlers.commands.get(command);
+      if (!f) return missing(`no command '${command}' is registered; call ctx.command("${command}", …) in activate`);
+      let args: unknown;
+      try {
+        args = argsJson.trim() ? JSON.parse(argsJson) : null;
+      } catch (e) {
+        return respond(id, { tag: "err", val: toWit(CodeyardError.invalid(`the arguments of ${command} are not JSON: ${(e as Error).message}`)) });
+      }
+      return answer(id, () => f(ctx, args), (v) => ({ tag: "json", val: json(v) }));
+    }
+    case "render": {
+      const f = handlers.views.get(request.val);
+      if (!f) return missing(`no view '${request.val}' is registered; call ctx.view("${request.val}", …) in activate`);
+      return answer(id, () => f(ctx), (tree) => ({ tag: "view", val: json(tree) }));
+    }
+    case "ui-event": {
+      const [view, eventJson] = request.val;
+      const f = handlers.viewEvents.get(view);
+      if (!f) return respond(id, { tag: "ok", val: none });
+      let e: unknown;
+      try {
+        e = JSON.parse(eventJson);
+      } catch (err) {
+        return respond(id, { tag: "err", val: toWit(CodeyardError.invalid(`the event is not JSON: ${(err as Error).message}`)) });
+      }
+      return answer(id, () => f(ctx, e), () => none);
+    }
+    case "format": {
+      const f = handlers.formatter;
+      if (!f) return missing("no formatter is registered; call ctx.formatter(…) in activate");
+      const [document, range, options] = request.val;
+      return answer(id, () => f(ctx, document, range, options) as never, (edits: unknown) => ({ tag: "edits", val: edits as [] }));
+    }
+    case "code-actions": {
+      const f = handlers.codeActions;
+      if (!f) return respond(id, { tag: "ok", val: { tag: "code-actions", val: [] } });
+      const [document, range, diagnostics] = request.val;
+      return answer(
+        id,
+        () => f(ctx, document, range, diagnostics.map(fromWitDiagnostic)) as CodeAction[],
+        (actions) => ({ tag: "code-actions", val: (actions ?? []).map(codeAction) }),
+      );
+    }
+    case "run-code-action": {
+      const f = handlers.runCodeAction;
+      if (!f) return missing("no code action handler is registered; call ctx.onCodeAction(…) in activate");
+      return answer(id, () => f(ctx, request.val), () => none);
+    }
+    case "open-uri": {
+      const f = handlers.openUri;
+      if (!f) return respond(id, { tag: "ok", val: none });
+      return answer(id, () => f(ctx, request.val), () => none);
+    }
+    case "pull-requests":
+      return answer(id, () => answerPullRequests(ctx, request.val), (val) => ({ tag: "pull-requests", val }));
+    case "settings-changed": {
+      // Answered at once; the handlers run in the background.
+      respond(id, { tag: "ok", val: none });
+      for (const f of handlers.settingsChanged) background(() => f(ctx, request.val));
+      return;
+    }
+    case "timer": {
+      respond(id, { tag: "ok", val: none });
+      const f = handlers.timers.get(request.val);
+      if (f) background(() => f(ctx));
+      return;
+    }
+    case "cancel-progress": {
+      handlers.cancelledProgress.add(request.val);
+      return respond(id, { tag: "ok", val: none });
+    }
+    // Without a provider, nothing to add: the language server's answer shows alone.
+    case "hover": {
+      const f = handlers.hover;
+      if (!f) return respond(id, { tag: "ok", val: { tag: "hover", val: undefined } });
+      const [document, position] = request.val;
+      return answer(
+        id,
+        () => f(ctx, document, position) as Hover | undefined,
+        (h) => ({ tag: "hover", val: h ? { contents: h.contents, range: h.range } : undefined }),
+      );
+    }
+    case "completion": {
+      const f = handlers.completion;
+      if (!f) return respond(id, { tag: "ok", val: completions(undefined) });
+      const [document, position, trigger] = request.val;
+      return answer(id, () => f(ctx, document, position, trigger) as CompletionItem[] | CompletionList, completions);
+    }
+    case "code-lens": {
+      const f = handlers.codeLenses;
+      if (!f) return respond(id, { tag: "ok", val: { tag: "code-lenses", val: [] } });
+      const [document, range] = request.val;
+      return answer(
+        id,
+        () => f(ctx, document, range) as CodeLens[],
+        (lenses) => ({ tag: "code-lenses", val: (lenses ?? []).map(toWitCodeLens) }),
+      );
+    }
+    case "resolve-code-lens": {
+      const [document, lens] = request.val;
+      const f = handlers.resolveCodeLens;
+      // Without a resolver, the lens comes back as it was (and stays hidden).
+      if (!f) return respond(id, { tag: "ok", val: { tag: "code-lenses", val: [lens] } });
+      return answer(
+        id,
+        () => f(ctx, document, fromWitCodeLens(lens)) as CodeLens,
+        (resolved) => ({ tag: "code-lenses", val: [toWitCodeLens(resolved ?? fromWitCodeLens(lens))] }),
+      );
+    }
+    case "inlay-hints": {
+      const f = handlers.inlayHints;
+      if (!f) return respond(id, { tag: "ok", val: { tag: "inlay-hints", val: [] } });
+      const [document, range] = request.val;
+      return answer(
+        id,
+        () => f(ctx, document, range) as InlayHint[],
+        (hints) => ({ tag: "inlay-hints", val: (hints ?? []).map(toWitInlayHint) }),
+      );
+    }
+    case "provide-tasks":
+    case "run-task":
+      return respond(id, { tag: "err", val: toWit(CodeyardError.invalid("this SDK does not provide tasks yet")) });
+    case "scm-status": {
+      const [provider, root] = request.val;
+      const f = handlers.scmStatus.get(provider);
+      if (!f) return missing(`no source control state for '${provider}' is registered; call ctx.scmStatus("${provider}", …) in activate`);
+      return answer(id, () => f(ctx, root) as ScmState, (s) => ({ tag: "scm", val: toWitScmState(s) }));
+    }
+    case "scm-original": {
+      const [provider, uri] = request.val;
+      const f = handlers.scmOriginal.get(provider);
+      if (!f) return respond(id, { tag: "ok", val: { tag: "text", val: undefined } });
+      return answer(id, () => f(ctx, uri) as string | undefined, (t) => ({ tag: "text", val: t ?? undefined }));
+    }
+    case "scm-validate": {
+      const [provider, root, text] = request.val;
+      const f = handlers.scmValidate.get(provider);
+      if (!f) return respond(id, { tag: "ok", val: { tag: "text", val: undefined } });
+      return answer(id, () => f(ctx, root, text) as string | undefined, (t) => ({ tag: "text", val: t ?? undefined }));
+    }
+  }
+}

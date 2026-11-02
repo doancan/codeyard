@@ -1,10 +1,12 @@
 //! Daemon mode: sessions (terminals, watching) outlive the ssh connection.
 //! Each ssh connection is an `--attach` bridge: stdio <-> a per-user unix socket.
 //! A dropped session waits `GRACE`; with no sessions left the daemon exits after `IDLE_EXIT`.
+//! On Windows the same daemon listens on a named pipe only the current user can open (`daemon_windows.rs`); it keeps
+//! the app's local terminals for the next start.
 
 use std::collections::HashMap;
 use std::io::{self, BufReader, Read, Write};
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -55,6 +57,11 @@ impl Registry {
         let (sess, resumed) = {
             let mut map = self.sessions.locked();
             match map.get_mut(&key) {
+                // An exclusive session is not taken from a connection that is still there.
+                Some(e) if key.starts_with(proto::EXCLUSIVE_SESSION) && e.session.out.is_attached() => {
+                    let refused = Response::Error(Error::PermissionDenied("the session is in use by another connection".into()));
+                    return proto::write_frame(&mut output, &Frame { id, body: &refused });
+                }
                 Some(e) => {
                     e.detached_since = None;
                     (e.session.clone(), true)
@@ -73,20 +80,27 @@ impl Registry {
             self.sessions.locked().remove(&key);
             return result;
         }
-        // Connection ended: if no other connection took over, the session is disconnected.
-        if !sess.out.is_attached()
-            && let Some(e) = self.sessions.locked().get_mut(&key)
-        {
-            e.detached_since.get_or_insert_with(Instant::now);
+        // Connection ended: if no other connection took over, the session is disconnected (or ends now, if its client
+        // asked not to keep it).
+        if !sess.out.is_attached() {
+            let mut map = self.sessions.locked();
+            if sess.keep_for.load(Ordering::Relaxed) == 0 {
+                if let Some(e) = map.remove(&key) {
+                    e.session.shutdown();
+                }
+            } else if let Some(e) = map.get_mut(&key) {
+                e.detached_since.get_or_insert_with(Instant::now);
+            }
         }
         result
     }
 
-    /// Close disconnected sessions whose grace has expired. Returns whether any session is left.
+    /// Close disconnected sessions whose grace (their own `KeepFor`, else `grace`) has expired. Returns whether any
+    /// session is left.
     pub fn reap(&self, grace: Duration) -> bool {
         let mut map = self.sessions.locked();
         map.retain(|_, e| match e.detached_since {
-            Some(t) if t.elapsed() >= grace => {
+            Some(t) if t.elapsed() >= Some(e.session.keep_for.load(Ordering::Relaxed)).filter(|s| *s != u64::MAX).map_or(grace, Duration::from_secs) => {
                 e.session.shutdown();
                 false
             }
@@ -94,6 +108,27 @@ impl Registry {
         });
         !map.is_empty()
     }
+}
+
+/// End sessions whose grace has expired, and the daemon itself once it has had no sessions for `IDLE_EXIT` (`at_exit`
+/// runs first). Tests can shorten the durations (seconds): CODEYARD_DAEMON_GRACE / CODEYARD_DAEMON_IDLE.
+#[cfg(any(unix, windows))]
+fn start_reaper(registry: Arc<Registry>, at_exit: impl FnOnce() + Send + 'static) {
+    let secs = |name: &str, default: Duration| std::env::var(name).ok().and_then(|v| v.parse().ok()).map_or(default, Duration::from_secs);
+    let (grace, idle) = (secs("CODEYARD_DAEMON_GRACE", GRACE), secs("CODEYARD_DAEMON_IDLE", IDLE_EXIT));
+    let tick = Duration::from_secs(10).min(grace.max(Duration::from_secs(1)));
+    std::thread::spawn(move || {
+        let mut empty_since: Option<Instant> = None;
+        loop {
+            std::thread::sleep(tick);
+            if registry.reap(grace) {
+                empty_since = None;
+            } else if empty_since.get_or_insert_with(Instant::now).elapsed() >= idle {
+                at_exit();
+                std::process::exit(0);
+            }
+        }
+    });
 }
 
 #[cfg(unix)]
@@ -142,24 +177,9 @@ mod unix {
         let listener = short(socket, |p| UnixListener::bind(p))?;
         std::fs::set_permissions(socket, std::fs::Permissions::from_mode(0o600))?;
         let registry = Arc::new(Registry::default());
-
-        let reaper = registry.clone();
         let sock = socket.to_path_buf();
-        // Tests can shorten the durations (seconds): CODEYARD_DAEMON_GRACE / CODEYARD_DAEMON_IDLE.
-        let secs = |name: &str, default: Duration| std::env::var(name).ok().and_then(|v| v.parse().ok()).map_or(default, Duration::from_secs);
-        let (grace, idle) = (secs("CODEYARD_DAEMON_GRACE", GRACE), secs("CODEYARD_DAEMON_IDLE", IDLE_EXIT));
-        let tick = Duration::from_secs(10).min(grace.max(Duration::from_secs(1)));
-        std::thread::spawn(move || {
-            let mut empty_since: Option<Instant> = None;
-            loop {
-                std::thread::sleep(tick);
-                if reaper.reap(grace) {
-                    empty_since = None;
-                } else if empty_since.get_or_insert_with(Instant::now).elapsed() >= idle {
-                    let _ = std::fs::remove_file(&sock);
-                    std::process::exit(0);
-                }
-            }
+        start_reaper(registry.clone(), move || {
+            let _ = std::fs::remove_file(&sock);
         });
 
         for stream in listener.incoming() {
@@ -204,27 +224,27 @@ mod unix {
         }
     }
 
+    /// A connection to the daemon on `socket`, started first (this executable with `--daemon`, a detached process) if
+    /// none answers.
+    pub fn connect_or_start(socket: &Path) -> io::Result<UnixStream> {
+        if let Ok(s) = connect(socket) {
+            return Ok(s);
+        }
+        spawn_daemon(socket)?;
+        let mut last = None;
+        for _ in 0..100 {
+            match connect(socket) {
+                Ok(s) => return Ok(s),
+                Err(e) => last = Some(e),
+            }
+            std::thread::sleep(Duration::from_millis(30));
+        }
+        Err(last.unwrap_or_else(|| io::Error::other("daemon did not start")))
+    }
+
     /// Bridge: stdio <-> socket. Starts the daemon if missing (detached process, doesn't die with ssh).
     pub fn attach(socket: &Path) -> io::Result<()> {
-        let stream = match connect(socket) {
-            Ok(s) => s,
-            Err(_) => {
-                spawn_daemon(socket)?;
-                let mut last = None;
-                let mut found = None;
-                for _ in 0..100 {
-                    match connect(socket) {
-                        Ok(s) => {
-                            found = Some(s);
-                            break;
-                        }
-                        Err(e) => last = Some(e),
-                    }
-                    std::thread::sleep(Duration::from_millis(30));
-                }
-                found.ok_or_else(|| last.unwrap_or_else(|| io::Error::other("daemon did not start")))?
-            }
-        };
+        let stream = connect_or_start(socket)?;
         let mut from_daemon = stream.try_clone()?;
         std::thread::spawn(move || {
             // stdout is line-buffered: flush after every chunk for binary frames.
@@ -255,7 +275,7 @@ mod unix {
         let mut cmd = Command::new(exe);
         cmd.arg("--daemon").arg(socket).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
         // SAFETY: the closure runs between fork and exec, where only async-signal-safe calls are allowed. It makes just
-        // setsid and signal, captures nothing, and allocates nothing.
+        // setsid, signal, sigemptyset and sigprocmask, captures nothing, and allocates nothing (the set is on the stack).
         unsafe {
             cmd.pre_exec(|| {
                 libc::setsid();
@@ -263,6 +283,12 @@ mod unix {
                 // from a background job ignored SIGTERM and `kill` didn't stop it.
                 libc::signal(libc::SIGTERM, libc::SIG_DFL);
                 libc::signal(libc::SIGINT, libc::SIG_DFL);
+                // So is the signal mask of the thread that starts it. The app starts the terminal daemon from a
+                // background thread, and on macOS those are dispatch threads with SIGTERM and SIGINT blocked: the daemon
+                // then never saw a SIGTERM, and only SIGKILL stopped it.
+                let mut none: libc::sigset_t = std::mem::zeroed();
+                libc::sigemptyset(&mut none);
+                libc::sigprocmask(libc::SIG_SETMASK, &none, std::ptr::null_mut());
                 Ok(())
             });
         }
@@ -271,7 +297,13 @@ mod unix {
 }
 
 #[cfg(unix)]
-pub use unix::{attach, run};
+pub use unix::{attach, connect_or_start, run};
+
+#[cfg(windows)]
+#[path = "daemon_windows.rs"]
+mod windows;
+#[cfg(windows)]
+pub use windows::{Pipe, connect, connect_or_start, pipe_name, run};
 
 #[cfg(test)]
 mod tests {

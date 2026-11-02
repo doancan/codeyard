@@ -60,7 +60,11 @@ fn a_pull_list_keeps_its_resolved_url_when_an_instead_of_rule_changes(cx: &mut T
         });
         wb.show_overlay(
             picker,
-            OverlayKind::PullRequests { host: wb.remote.host.clone(), root, remote: wb.pull_remote_for_test("origin".into()), pulls: vec![pull_fixture()] },
+            OverlayKind::PullRequests {
+                host: wb.remote.host.clone(),
+                root,
+                rows: vec![crate::workbench::pulls_glue::PullRow::GitHub { remote: wb.pull_remote_for_test("origin".into()), pull: pull_fixture() }],
+            },
             window,
             cx,
         );
@@ -286,7 +290,11 @@ fn the_current_pull_request_picker_carries_its_context_through_checkout(cx: &mut
         });
         wb.show_overlay(
             picker,
-            OverlayKind::PullRequests { host: source_host.clone(), root, remote: wb.pull_remote_for_test("origin".into()), pulls: vec![pull_fixture()] },
+            OverlayKind::PullRequests {
+                host: source_host.clone(),
+                root,
+                rows: vec![crate::workbench::pulls_glue::PullRow::GitHub { remote: wb.pull_remote_for_test("origin".into()), pull: pull_fixture() }],
+            },
             window,
             cx,
         );
@@ -340,8 +348,7 @@ fn a_stale_pull_request_row_cannot_open_its_action_menu(cx: &mut TestAppContext)
             OverlayKind::PullRequests {
                 host: wb.remote.host.clone(),
                 root: crate::ui::local_path(&root),
-                remote: wb.pull_remote_for_test("origin".into()),
-                pulls: vec![pull_fixture()],
+                rows: vec![crate::workbench::pulls_glue::PullRow::GitHub { remote: wb.pull_remote_for_test("origin".into()), pull: pull_fixture() }],
             },
             window,
             cx,
@@ -634,7 +641,7 @@ fn current_git_name_forms_still_create_branches_and_tags(cx: &mut TestAppContext
             let purpose = match form {
                 "branch" => InputPurpose::CreateBranch { root: path },
                 "branch-from" => InputPurpose::CreateBranchFrom { root: path, start: "HEAD".into() },
-                _ => InputPurpose::CommitTag { hash: "HEAD".into() },
+                _ => InputPurpose::CommitTag { hash: "HEAD".into(), repo: wb.scm.read(cx).target(None).ok() },
             };
             wb.show_input(purpose, "Create", "Name", "", window, cx);
             wb.set_overlay_query_for_test("current-input".into(), cx);
@@ -697,7 +704,7 @@ fn an_old_tag_name_form_cannot_use_the_new_source_control_context(cx: &mut TestA
         let status = Arc::new(git::Status { root: crate::ui::local_path(&root), ..Default::default() });
         wb.vcs.status = Some(status.clone());
         wb.scm.update(cx, |scm, cx| scm.set_status(wb.remote.host.clone(), Some(status), cx));
-        wb.show_input(InputPurpose::CommitTag { hash: "HEAD".into() }, "Create", "Tag name", "", window, cx);
+        wb.show_input(InputPurpose::CommitTag { hash: "HEAD".into(), repo: None }, "Create", "Tag name", "", window, cx);
         wb.set_overlay_query_for_test("old-input-tag".into(), cx);
         let status = Arc::new(git::Status { root: crate::ui::local_path(&other), ..Default::default() });
         wb.vcs.status = Some(status.clone());
@@ -794,7 +801,10 @@ fn a_current_checkout_picker_switches_the_branch_and_reports_success(cx: &mut Te
     git_in(&root, &["branch", "feature/context"]);
     let (wb, cx) = crate::qa_workbench_tests::setup(cx);
     wb.update_in(cx, |wb, window, cx| {
-        wb.vcs.status = Some(Arc::new(git::Status { root: crate::ui::local_path(&root), ..Default::default() }));
+        let status = Arc::new(git::Status { root: crate::ui::local_path(&root), ..Default::default() });
+        wb.vcs.status = Some(status.clone());
+        // The picker pins the Source Control repository it lists (`repo`), as the panel would have it selected.
+        wb.scm.update(cx, |scm, cx| scm.set_status(wb.remote.host.clone(), Some(status), cx));
         wb.show_branch_picker(window, cx);
     });
     cx.run_until_parked();

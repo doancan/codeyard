@@ -111,11 +111,99 @@ fn executable_bits_survive() {
     let mut files = theme_files();
     files[1] = file(ext_manifest::FILE_NAME, &manifest);
     files.push(Entry { path: "bin/server".into(), data: b"\x7fELF".to_vec(), executable: true });
+    files.push(file(TARGET, "x86_64-unknown-linux-musl\n"));
     let p = read(&write(files.clone()).unwrap().0).unwrap();
     assert!(p.files["bin/server"].executable);
     assert!(!p.files["README.md"].executable);
-    files.last_mut().unwrap().executable = false;
+    files.iter_mut().find(|f| f.path == "bin/server").unwrap().executable = false;
     assert!(write(files).unwrap_err().to_string().contains("not executable"));
+}
+
+const NATIVE: &str = r#"[extension]
+id = "you.lsp"
+version = "1.0.0"
+name = "Lsp"
+license = "MIT"
+
+[permissions]
+run = ["./bin/server"]
+why = "Starts its own language server."
+
+[[language-servers]]
+command = "./bin/server"
+languages = ["rust"]
+"#;
+
+fn native(target: Option<&str>, program: Option<(&str, bool)>) -> Vec<Entry> {
+    let mut files = vec![file(ext_manifest::FILE_NAME, NATIVE)];
+    if let Some(t) = target {
+        files.push(file(TARGET, &format!("{t}\n")));
+    }
+    if let Some((path, executable)) = program {
+        files.push(Entry { path: path.into(), data: b"\x7fELF program".to_vec(), executable });
+    }
+    files
+}
+
+/// #146: a program inside the package makes a per-platform package, which names its platform in `TARGET`.
+#[test]
+fn native_programs_need_a_platform_package() {
+    let linux = "x86_64-unknown-linux-musl";
+    let p = read(&write(native(Some(linux), Some(("bin/server", true)))).unwrap().0).unwrap();
+    assert_eq!(p.target.as_deref(), Some(linux));
+    assert_eq!(p.program("./bin/server").unwrap().data, b"\x7fELF program");
+    assert!(p.manifest.has_native_programs());
+    // Without a platform, with an unknown one, or with a TARGET but no program, it is refused.
+    let e = write(native(None, Some(("bin/server", true)))).unwrap_err().to_string();
+    assert!(e.contains("--target"), "{e}");
+    assert!(write(native(Some("x86_64-unknown-plan9"), Some(("bin/server", true)))).unwrap_err().to_string().contains("target triple"));
+    assert!(write(native(Some(linux), None)).unwrap_err().to_string().contains("bin/server"));
+    let mut theme = theme_files();
+    theme.push(file(TARGET, &format!("{linux}\n")));
+    assert!(write(theme).unwrap_err().to_string().contains("lists no program"));
+    // Windows programs end in .exe and have no executable bit to check.
+    let win = "x86_64-pc-windows-msvc";
+    let p = read(&write(native(Some(win), Some(("bin/server.exe", false)))).unwrap().0).unwrap();
+    assert_eq!(p.program("./bin/server").unwrap().path, "bin/server.exe");
+    // Two platforms of one version differ in content, so each has its own digest.
+    let mac = write(native(Some("aarch64-apple-darwin"), Some(("bin/server", true)))).unwrap().1;
+    assert_ne!(mac, write(native(Some(linux), Some(("bin/server", true)))).unwrap().1);
+}
+
+/// The registry policy's size limits: 64 MiB for a package, 128 MiB for one platform's package.
+#[test]
+fn a_platform_package_may_be_larger() {
+    assert_eq!(ext_manifest::limits::TARGET_PACKAGE_BYTES, 128 << 20);
+    // Over the platform limit: refused before anything is decompressed.
+    let huge = vec![0x1f; ext_manifest::limits::TARGET_PACKAGE_BYTES as usize + 1];
+    assert!(read(&huge).unwrap_err().to_string().contains("128 MiB"));
+}
+
+#[test]
+fn a_folder_is_packaged_per_platform_from_native() {
+    let dir = std::env::temp_dir().join(format!("ext-pkg-native-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let linux = "x86_64-unknown-linux-musl";
+    std::fs::create_dir_all(dir.join("native").join(linux).join("bin")).unwrap();
+    std::fs::create_dir_all(dir.join("native/notes")).unwrap();
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), NATIVE).unwrap();
+    let server = dir.join("native").join(linux).join("bin/server");
+    std::fs::write(&server, b"\x7fELF program").unwrap();
+    #[cfg(unix)]
+    std::fs::set_permissions(&server, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    assert_eq!(native_targets(&dir), vec![linux.to_string()], "only known triples count");
+    // Without a platform, native/ is left out and the program is missing.
+    assert!(!collect_dir(&dir).unwrap().iter().any(|e| e.path.starts_with("native")));
+    let files = collect_dir_for(&dir, Some(linux)).unwrap();
+    assert!(files.iter().any(|e| e.path == "bin/server") && files.iter().any(|e| e.path == TARGET));
+    assert!(!files.iter().any(|e| e.path.starts_with("native")));
+    if cfg!(unix) {
+        let (bytes, _) = write(files).unwrap();
+        let p = read(&bytes).unwrap();
+        assert_eq!(file_name(&p.manifest, p.target.as_deref()), format!("you.lsp-1.0.0-{linux}.cyx"));
+    }
+    assert!(collect_dir_for(&dir, Some("aarch64-apple-darwin")).is_err(), "no folder for that platform");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -293,9 +381,18 @@ fn folders_are_collected_without_litter_or_links() {
     std::fs::write(dir.join(".git/objects/a"), "x").unwrap();
     std::fs::write(dir.join("node_modules/x/i.js"), "x").unwrap();
     std::fs::write(dir.join(".DS_Store"), "x").unwrap();
+    // The package `cyx package` wrote last time is not packaged again.
+    std::fs::write(dir.join("you.theme-0.1.0.cyx"), "x").unwrap();
+    // Tests stay out (#187), at the top only: a theme folder named `test` is the extension's.
+    std::fs::create_dir_all(dir.join("test")).unwrap();
+    std::fs::create_dir_all(dir.join("tests")).unwrap();
+    std::fs::create_dir_all(dir.join("themes/test")).unwrap();
+    std::fs::write(dir.join("test/fixtures.json"), "{}").unwrap();
+    std::fs::write(dir.join("tests/it.rs"), "").unwrap();
+    std::fs::write(dir.join("themes/test/t.json"), "{}").unwrap();
     let files = collect_dir(&dir).unwrap();
     let paths: Vec<_> = files.iter().map(|e| e.path.as_str()).collect();
-    assert_eq!(paths, vec![ext_manifest::FILE_NAME, "themes/midnight.json"]);
+    assert_eq!(paths, vec![ext_manifest::FILE_NAME, "themes/midnight.json", "themes/test/t.json"]);
     assert!(read(&write(files).unwrap().0).is_ok());
     #[cfg(unix)]
     {
@@ -317,4 +414,91 @@ fn an_executable_contents_list_is_refused() {
     // The same files, canonical, are accepted with the digest `write` gives.
     let (bytes, digest) = write(theme_files()).unwrap();
     assert_eq!(read(&bytes).unwrap().digest, digest);
+}
+
+/// A package holds what Codeyard reads, never the author's secrets or build input (e2e trial: `.env`, `signing.key`,
+/// `Cargo.lock` and a `package.json` with a local path were all published).
+#[test]
+fn secrets_and_build_input_stay_out_of_the_package() {
+    let dir = std::env::temp_dir().join(format!("ext-pkg-secrets-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("themes")).unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::create_dir_all(dir.join("drafts")).unwrap();
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), MANIFEST).unwrap();
+    std::fs::write(dir.join("themes/midnight.json"), "{}").unwrap();
+    for (name, text) in [
+        ("README.md", "# Midnight"),
+        ("LICENSE", "MIT"),
+        (".env", "TOKEN=x"),
+        (".env.production", "TOKEN=y"),
+        ("signing.key", "k"),
+        ("themes/id_ed25519", "k"),
+        ("src/tests.rs", ""),
+        ("Cargo.toml", "[package]"),
+        ("Cargo.lock", ""),
+        ("package.json", r#"{"dependencies":{"@codeyard/extension":"file:/Users/me/codeyard/sdk/typescript"}}"#),
+        ("package-lock.json", "{}"),
+        (".gitignore", "target"),
+        ("drafts/idea.json", "{}"),
+        ("notes.psd", "x"),
+        (IGNORE_FILE, "drafts/\n*.psd\n"),
+    ] {
+        std::fs::write(dir.join(name), text).unwrap();
+    }
+    let c = collect(&dir, None).unwrap();
+    let paths: Vec<_> = c.files.iter().map(|e| e.path.as_str()).collect();
+    assert_eq!(paths, vec!["LICENSE", "README.md", ext_manifest::FILE_NAME, "themes/midnight.json"]);
+    assert_eq!(c.secrets, vec![".env", ".env.production", "signing.key", "themes/id_ed25519"]);
+    assert!(read(&write(c.files).unwrap().0).is_ok());
+    // A private key under any name is refused, not quietly packaged.
+    std::fs::write(dir.join("themes/backup.txt"), "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZWQyNTUxOQ\n-----END OPENSSH PRIVATE KEY-----\n").unwrap();
+    let e = collect_dir(&dir).unwrap_err().to_string();
+    assert!(e.contains("themes/backup.txt") && e.contains("private key"), "{e}");
+    // So is an obvious token, and the error names the waiver.
+    std::fs::write(dir.join("themes/backup.txt"), "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n").unwrap();
+    let e = collect_dir(&dir).unwrap_err().to_string();
+    assert!(e.contains("themes/backup.txt") && e.contains("AWS access token") && e.contains(".cyxignore"), "{e}");
+    // A build output or a README that only mentions a key is packaged.
+    std::fs::write(dir.join("themes/backup.txt"), "ok").unwrap();
+    std::fs::write(dir.join("README.md"), "Never commit -----BEGIN RSA PRIVATE KEY----- files.").unwrap();
+    assert!(collect_dir(&dir).is_ok());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A file the manifest names but a rule leaves out says which rule.
+#[test]
+fn a_named_file_that_is_left_out_says_why() {
+    let e = Error::MissingFile { field: "themes.path".into(), path: "src/midnight.json".into() };
+    assert!(e.to_string().contains("src/, test/ and tests/"), "{e}");
+}
+
+/// A folder with the midnight theme and the given `.cyxignore`; the error `collect_dir` gives.
+fn ignore_error(name: &str, ignore: &str) -> String {
+    let dir = std::env::temp_dir().join(format!("ext-pkg-ignore-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("themes")).unwrap();
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), MANIFEST).unwrap();
+    std::fs::write(dir.join("themes/midnight.json"), "{}").unwrap();
+    std::fs::write(dir.join(IGNORE_FILE), ignore).unwrap();
+    let e = collect_dir(&dir).unwrap_err().to_string();
+    std::fs::remove_dir_all(&dir).unwrap();
+    e
+}
+
+/// e2e trial 2: a `.cyxignore` line that took out a file the package needs gave "not in the package" with no rule
+/// named, or "the package has no codeyard-extension.toml" with an unrelated fix.
+#[test]
+fn a_cyxignore_that_takes_out_a_needed_file_names_its_line() {
+    let e = ignore_error("named", "# art\n*.psd\nthemes/\n");
+    assert!(e.contains("themes.path points to 'themes/midnight.json'") && e.contains(".cyxignore line 3 ('themes/')"), "{e}");
+    let e = ignore_error("all", "*\n");
+    assert!(e.contains("codeyard-extension.toml") && e.contains(".cyxignore line 1 ('*')") && !e.contains("kebab"), "{e}");
+    assert!(!e.contains("has no codeyard-extension.toml"), "{e}");
+}
+
+#[test]
+fn a_negation_in_cyxignore_is_an_error() {
+    let e = ignore_error("negation", "themes/*\n!themes/midnight.json\n");
+    assert!(e.contains(".cyxignore line 2") && e.contains("negation"), "{e}");
 }

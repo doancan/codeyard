@@ -183,6 +183,12 @@ impl Workbench {
                     div()
                         .id("web-preview-open")
                         .debug_selector(|| "web-preview-open".into())
+                        .relative()
+                        .child(crate::a11y_controls::control(
+                            crate::a11y_controls::Control::button(crate::i18n::t("Status bar"), "web-preview-open", label.to_string(), |_, _| {})
+                                .description(crate::i18n::t("Preview HTML in your browser"))
+                                .on_entity(cx.entity().downgrade(), |this, w, cx| this.open_web_preview(w, cx)),
+                        ))
                         .cursor_pointer()
                         .text_color(c(if state.server.is_some() { p.accent } else { p.text_muted }))
                         .child(label)
@@ -192,6 +198,16 @@ impl Workbench {
                 .when(state.server.is_some() || state.starting, |d| {
                     d.child(
                         ui::icon_button("web-preview-stop", "square", crate::i18n::t("Stop Web Preview"), p)
+                            .relative()
+                            .child(crate::a11y_controls::control(
+                                crate::a11y_controls::Control::button(
+                                    crate::i18n::t("Status bar"),
+                                    "web-preview-stop",
+                                    crate::i18n::t("Stop Web Preview"),
+                                    |_, _| {},
+                                )
+                                .on_entity(cx.entity().downgrade(), |this, _, cx| this.stop_web_preview(cx)),
+                            ))
                             .on_click(cx.listener(|this, _, _, cx| this.stop_web_preview(cx))),
                     )
                 })

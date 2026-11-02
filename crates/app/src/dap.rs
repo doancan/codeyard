@@ -1100,13 +1100,6 @@ pub(crate) mod tests {
         assert!(parse_frames(&json!({})).is_empty() && parse_variables(&Value::Null).is_empty());
     }
 
-    /// The launch configuration's `debugAdapter` object that runs the fake adapter, logging to `log`.
-    pub(crate) fn fake_adapter_json(script: &std::path::Path, log: &std::path::Path) -> String {
-        use crate::test_paths::AppPath;
-        let (command, args) = crate::qa_integration_tests::script_command(script, vec![log.app()]);
-        json!({ "command": command, "args": args }).to_string()
-    }
-
     /// Deterministic fake adapter (tests): the `launch` response comes after `configurationDone`;
     /// stops at the first breakpoint (line 3 if none), `next` advances one line, `continue`
     /// goes to the next breakpoint or ends the program. `argv[1]` is the log every command is written to.
@@ -1192,8 +1185,13 @@ while True:
             event('output', {'category': 'stdout', 'output': 'hello from the program\n'})
             src = launch['arguments'].get('source')
             lines = bps.get(src, [])
-            cur = lines[0] if lines else 3
-            stop('breakpoint')
+            if launch['arguments'].get('stopOnEntry'):
+                # As lldb-dap does: the stop on entry is reported as an exception "signal SIGSTOP".
+                cur = 1
+                event('stopped', {'reason': 'exception', 'description': 'signal SIGSTOP', 'threadId': 1, 'allThreadsStopped': True})
+            else:
+                cur = lines[0] if lines else 3
+                stop('breakpoint')
     elif cmd == 'setExceptionBreakpoints':
         ok(m, {})
     elif cmd == 'dataBreakpointInfo':
@@ -1287,8 +1285,7 @@ while True:
 
     #[test]
     fn session_runs_to_a_breakpoint_steps_and_finishes() {
-        if std::process::Command::new("python3").arg("-V").output().is_err() {
-            crate::test_sshd::skip_missing("python3");
+        if !crate::test_lsp::have_python() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("codeyard-dap-{}", std::process::id()));
@@ -1298,8 +1295,8 @@ while True:
         let script = write_fake_adapter(&dir);
         let (tx, rx) = mpsc::channel();
         let host: Arc<dyn Host> = Arc::new(host::local());
-        let (command, args) = crate::qa_integration_tests::script_command(&script, vec![log.to_string_lossy().into_owned()]);
-        let session = Session::start(host, &command, args, None, tx).unwrap();
+        let session =
+            Session::start(host, crate::test_lsp::python(), vec![script.to_string_lossy().into_owned(), log.to_string_lossy().into_owned()], None, tx).unwrap();
         let src = "/p/main.c".to_string();
         let mut bps = BTreeMap::new();
         bps.insert(src.clone(), vec![Breakpoint::at(5), Breakpoint::at(9)]);
@@ -1338,8 +1335,7 @@ while True:
 
     #[test]
     fn launch_failure_is_reported_with_the_adapters_message() {
-        if std::process::Command::new("python3").arg("-V").output().is_err() {
-            crate::test_sshd::skip_missing("python3");
+        if !crate::test_lsp::have_python() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("codeyard-dap-fail-{}", std::process::id()));
@@ -1347,8 +1343,14 @@ while True:
         let script = write_fake_adapter(&dir);
         let (tx, _rx) = mpsc::channel();
         let host: Arc<dyn Host> = Arc::new(host::local());
-        let (command, args) = crate::qa_integration_tests::script_command(&script, vec![dir.join("log.txt").to_string_lossy().into_owned()]);
-        let session = Session::start(host, &command, args, None, tx).unwrap();
+        let session = Session::start(
+            host,
+            crate::test_lsp::python(),
+            vec![script.to_string_lossy().into_owned(), dir.join("log.txt").to_string_lossy().into_owned()],
+            None,
+            tx,
+        )
+        .unwrap();
         let err = session.begin("fake", "launch", json!({ "program": "/nope", "fail": true }), &BTreeMap::new(), &[]).unwrap_err();
         assert!(err.contains("cannot run /nope"), "{err}");
         session.stop();

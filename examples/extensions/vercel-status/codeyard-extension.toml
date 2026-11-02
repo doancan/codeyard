@@ -1,0 +1,64 @@
+[extension]
+id          = "codeyard.vercel-status"
+version     = "0.1.0"
+name        = "Vercel Status"
+license     = "MIT"
+description = "The state of the latest Vercel deployment in the status bar, and recent deployments in a sidebar view."
+repository  = "https://github.com/doancan/codeyard"
+categories  = ["other"]
+
+[code]
+entry = "src/extension.ts"
+
+# The token is kept in the keychain (secrets) and sent only to api.vercel.com.
+[permissions]
+read    = [".vercel/project.json"]
+net     = ["api.vercel.com"]
+secrets = true
+why     = "Keeps your Vercel token in the keychain and sends it only to api.vercel.com to list your project's deployments."
+
+# Start when the folder has a Vercel project file. `vercel link` writes .vercel/ and adds it to .gitignore, which
+# this check honours, so vercel.json is listed too; otherwise the extension starts on its first command or view.
+[activation]
+workspace-contains = ["vercel.json", ".vercel/project.json"]
+
+[[commands]]
+id    = "refresh"
+title = "Vercel: Refresh Deployments"
+
+[[commands]]
+id    = "set-token"
+title = "Vercel: Set Access Token"
+
+[[commands]]
+id    = "forget-token"
+title = "Vercel: Forget Access Token"
+
+[[status-bar]]
+id      = "deployment"
+command = "refresh"
+
+[[views]]
+id       = "deployments"
+title    = "Vercel Deployments"
+location = "sidebar"
+
+[[menus]]
+command  = "refresh"
+location = "view-title"
+view     = "deployments"
+
+[settings.project]
+type        = "string"
+default     = ""
+description = "The Vercel project id or name. Empty: the projectId in .vercel/project.json (written by `vercel link`)."
+
+[settings.team]
+type        = "string"
+default     = ""
+description = "The Vercel team id (team_…). Empty: the orgId in .vercel/project.json when it is a team."
+
+[settings.interval]
+type        = "number"
+default     = 60
+description = "Seconds between refreshes (at least 30). Refreshing pauses while Codeyard is in the background."

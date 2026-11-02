@@ -3,7 +3,9 @@
 
 use gpui::{AnyElement, Context, Focusable as _, Render, SharedString, Window, div, prelude::*, px, uniform_list};
 
-use super::{GraphData, ScmEvent, ScmPanel, avatar, commit_matches};
+use std::sync::Arc;
+
+use super::{AccessFrame, GraphData, HistoryFrame, ScmEvent, ScmPanel, avatar, commit_matches};
 use crate::graph::{self, GraphCommit, GraphItem, GraphView, RefKind, RefLabel};
 use crate::sections;
 use crate::ui::{self, Palette, c, icon, palette, text};
@@ -220,12 +222,47 @@ impl ScmPanel {
         cx.notify();
     }
 
+    /// The graph's rows as the section draws them (filters, search and view mode applied), the history they index and
+    /// whether lanes are left out; or why there are none (and whether that is an error).
+    pub(super) fn graph_items(&self, cx: &gpui::App) -> Result<(Arc<GraphData>, Vec<GraphItem>, bool), (SharedString, bool)> {
+        let Some(g) = self.graph.clone() else {
+            return Err(match &self.graph_error {
+                Some(e) => (crate::i18n::tf("Could not read the history: {}", &[&e]).into(), true),
+                None => (crate::i18n::t("Loading…").into(), false),
+            });
+        };
+        if g.commits.is_empty() {
+            return Err((crate::i18n::t("No commits yet.").into(), false));
+        }
+        let query = self.query.read(cx).text().to_string();
+        let searching = !query.trim().is_empty();
+        let (only_mine, hide_merges, mode) = (self.only_mine, self.hide_merges, self.current_graph_view(cx));
+        let mine = |k: &GraphCommit| {
+            let Some((name, email)) = &self.identity else { return false };
+            email.as_deref().is_some_and(|e| !e.is_empty() && e.eq_ignore_ascii_case(&k.email))
+                || name.as_deref().is_some_and(|n| !n.is_empty() && n == k.author)
+        };
+        let keep = |k: &GraphCommit| (!searching || commit_matches(k, &query)) && (!only_mine || mine(k)) && (!hide_merges || k.parents.len() < 2);
+        // Lanes only make sense in the unfiltered graph view (lines break when rows are skipped).
+        let flat = mode != GraphView::Graph || searching || only_mine || hide_merges;
+        let items = graph::build_items(&g.commits, keep, mode);
+        if items.is_empty() {
+            let why = if searching {
+                crate::i18n::t("No commit matches.")
+            } else if only_mine {
+                crate::i18n::t("None of these commits is yours.")
+            } else {
+                crate::i18n::t("No commits to show.")
+            };
+            return Err((why.into(), false));
+        }
+        Ok((g, items, flat))
+    }
+
     /// `fill`: nothing else needs the room, so the graph grows to the bottom of the panel instead of its fixed height.
     pub(super) fn graph_section(&self, query_focused: bool, fill: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let p = *palette(cx);
         let open = self.sections.is_open("graph", true);
-        let query = self.query.read(cx).text().to_string();
-        let searching = !query.trim().is_empty();
         let count = self.graph.as_ref().map(|g| g.commits.len());
         let scope = self.scope;
         let mode = self.current_graph_view(cx);
@@ -240,9 +277,14 @@ impl ScmPanel {
             }
         };
         // The remote round-trip (fetch, pull, push) first, then refresh and the "…" menu.
+        let probe = |part: HistoryFrame| crate::painted::probe(&self.a11y_frames, AccessFrame::History(part));
         let header = sections::header("scm-graph-header", crate::i18n::t("Graph"), count, open, &p)
+            .relative()
+            .child(probe(HistoryFrame::Header("graph")))
             .child(
                 ui::icon_button("scm-graph-search", "search", crate::i18n::t("Search commits"), &p)
+                    .relative()
+                    .child(probe(HistoryFrame::Button("search")))
                     .when(self.search_open, |d| d.bg(c(p.surface_active)))
                     .on_click(cx.listener(|this, _, window, cx| {
                         cx.stop_propagation();
@@ -252,30 +294,53 @@ impl ScmPanel {
             .when(has_remote, |d| {
                 d.child(
                     ui::icon_button("scm-graph-fetch", "cloud-download", crate::i18n::t("Fetch from all remotes"), &p)
+                        .relative()
+                        .child(probe(HistoryFrame::Button("fetch")))
                         .on_click(dispatch(Box::new(crate::workbench::GitFetchAll))),
                 )
-                .child(count_button("scm-graph-pull", "arrow-down", behind, "Pull", &p).on_click(dispatch(Box::new(crate::workbench::GitPull))))
-                .child(count_button("scm-graph-push", "arrow-up", ahead, "Push", &p).on_click(dispatch(Box::new(crate::workbench::GitPush))))
+                .child(
+                    count_button("scm-graph-pull", "arrow-down", behind, "Pull", &p)
+                        .relative()
+                        .child(probe(HistoryFrame::Button("pull")))
+                        .on_click(dispatch(Box::new(crate::workbench::GitPull))),
+                )
+                .child(
+                    count_button("scm-graph-push", "arrow-up", ahead, "Push", &p)
+                        .relative()
+                        .child(probe(HistoryFrame::Button("push")))
+                        .on_click(dispatch(Box::new(crate::workbench::GitPush))),
+                )
             })
             // While history loads or a sync runs, the refresh button turns into the spinner (no extra icon squeezing the title).
             .child(if self.graph_loading || syncing {
-                div().id("scm-graph-busy").size(px(22.)).flex_none().flex().items_center().justify_center().child(ui::spinner(
-                    "scm-graph-spin",
-                    14.,
-                    p.text_muted,
-                ))
+                div()
+                    .id("scm-graph-busy")
+                    .relative()
+                    .child(probe(HistoryFrame::Button("refresh")))
+                    .size(px(22.))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(ui::spinner("scm-graph-spin", 14., p.text_muted))
             } else {
-                ui::icon_button("scm-graph-refresh", "refresh-cw", crate::i18n::t("Reload history"), &p).on_click(cx.listener(|this, _, _, cx| {
-                    cx.stop_propagation();
-                    this.load_graph(cx);
-                }))
+                ui::icon_button("scm-graph-refresh", "refresh-cw", crate::i18n::t("Reload history"), &p)
+                    .relative()
+                    .child(probe(HistoryFrame::Button("refresh")))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.load_graph(cx);
+                    }))
             })
-            .child(ui::icon_button("scm-graph-more", "ellipsis", crate::i18n::t("More Actions…"), &p).on_click(cx.listener(
-                |_, ev: &gpui::ClickEvent, _, cx| {
-                    cx.stop_propagation();
-                    cx.emit(ScmEvent::GraphMenu(ev.position()));
-                },
-            )))
+            .child(
+                ui::icon_button("scm-graph-more", "ellipsis", crate::i18n::t("More Actions…"), &p)
+                    .relative()
+                    .child(probe(HistoryFrame::Button("more")))
+                    .on_click(cx.listener(|_, ev: &gpui::ClickEvent, _, cx| {
+                        cx.stop_propagation();
+                        cx.emit(ScmEvent::GraphMenu(ev.position()));
+                    })),
+            )
             .on_click(cx.listener(|this, _, _, cx| this.toggle_section("graph", cx)));
 
         // Filters that hide commits stay visible as chips, so an emptier graph never looks like lost history.
@@ -288,61 +353,39 @@ impl ScmPanel {
             .px(px(theme::SPACE[4]))
             .py(px(theme::SPACE[2]))
             .when(scope == graph::Scope::Current, |d| {
-                d.child(filter_chip("scm-graph-f-current", crate::i18n::t("Current branch"), &p).on_click(cx.listener(|this, _, _, cx| {
-                    this.set_scope(graph::Scope::All, cx);
-                })))
+                d.child(filter_chip("scm-graph-f-current", crate::i18n::t("Current branch"), &p).relative().child(probe(HistoryFrame::Filter(0))).on_click(
+                    cx.listener(|this, _, _, cx| {
+                        this.set_scope(graph::Scope::All, cx);
+                    }),
+                ))
             })
             .when(only_mine, |d| {
-                d.child(filter_chip("scm-graph-f-mine", crate::i18n::t("Mine"), &p).on_click(cx.listener(|this, _, _, cx| {
-                    this.only_mine = false;
-                    cx.notify();
-                })))
+                d.child(filter_chip("scm-graph-f-mine", crate::i18n::t("Mine"), &p).relative().child(probe(HistoryFrame::Filter(1))).on_click(cx.listener(
+                    |this, _, _, cx| {
+                        this.only_mine = false;
+                        cx.notify();
+                    },
+                )))
             })
             .when(hide_merges, |d| {
-                d.child(filter_chip("scm-graph-f-merges", crate::i18n::t("No merges"), &p).on_click(cx.listener(|this, _, _, cx| {
-                    this.hide_merges = false;
-                    cx.notify();
-                })))
+                d.child(filter_chip("scm-graph-f-merges", crate::i18n::t("No merges"), &p).relative().child(probe(HistoryFrame::Filter(2))).on_click(
+                    cx.listener(|this, _, _, cx| {
+                        this.hide_merges = false;
+                        cx.notify();
+                    }),
+                ))
             });
 
         let height = self.section_height("graph", 260.);
         let selected = self.selected.as_ref().map(|c| c.hash.clone());
-        let mine_identity = self.identity.clone();
         let body = open.then(|| {
-            let Some(g) = self.graph.clone() else {
-                let msg: SharedString = match &self.graph_error {
-                    Some(e) => crate::i18n::tf("Could not read the history: {}", &[&e]).into(),
-                    None => crate::i18n::t("Loading…").into(),
-                };
-                return div().px(px(theme::SPACE[6])).py(px(theme::SPACE[2])).text_color(c(p.text_muted)).child(msg).into_any_element();
+            let (g, items, flat) = match self.graph_items(cx) {
+                Ok(shown) => shown,
+                Err((why, _)) => {
+                    return div().px(px(theme::SPACE[6])).py(px(theme::SPACE[2])).text_color(c(p.text_muted)).child(why).into_any_element();
+                }
             };
-            if g.commits.is_empty() {
-                return div()
-                    .px(px(theme::SPACE[6]))
-                    .py(px(theme::SPACE[2]))
-                    .text_color(c(p.text_muted))
-                    .child(crate::i18n::t("No commits yet."))
-                    .into_any_element();
-            }
-            let mine = |k: &GraphCommit| {
-                let Some((name, email)) = &mine_identity else { return false };
-                email.as_deref().is_some_and(|e| !e.is_empty() && e.eq_ignore_ascii_case(&k.email))
-                    || name.as_deref().is_some_and(|n| !n.is_empty() && n == k.author)
-            };
-            let keep = |k: &GraphCommit| (!searching || commit_matches(k, &query)) && (!only_mine || mine(k)) && (!hide_merges || k.parents.len() < 2);
-            // Lanes only make sense in the unfiltered graph view (lines break when rows are skipped).
-            let flat = mode != GraphView::Graph || searching || only_mine || hide_merges;
-            let items = graph::build_items(&g.commits, keep, mode);
-            if items.is_empty() {
-                let why = if searching {
-                    crate::i18n::t("No commit matches.")
-                } else if only_mine {
-                    crate::i18n::t("None of these commits is yours.")
-                } else {
-                    crate::i18n::t("No commits to show.")
-                };
-                return div().px(px(theme::SPACE[6])).py(px(theme::SPACE[2])).text_color(c(p.text_muted)).child(why).into_any_element();
-            }
+            let frames = self.a11y_frames.clone();
             let n = items.len();
             uniform_list(
                 "scm-graph-rows",
@@ -353,16 +396,25 @@ impl ScmPanel {
                         (st.graph_show_author, st.graph_show_hash)
                     };
                     range
-                        .map(|i| match &items[i] {
-                            GraphItem::Day(label, count) => day_header(label, *count, mode.row_height(), &p),
-                            GraphItem::Commit(ix) => {
-                                let is_sel = selected.as_deref() == Some(g.commits[*ix].hash.as_str());
-                                if mode == GraphView::Graph {
-                                    graph_row(&g, *ix, flat, is_sel, show_author, show_hash, !this.menu_open, &p, cx)
-                                } else {
-                                    compact_row(&g, *ix, is_sel, !this.menu_open, &p, cx)
+                        .map(|i| {
+                            let (row, key) = match &items[i] {
+                                GraphItem::Day(label, count) => (day_header(label, *count, mode.row_height(), &p), format!("day:{label}")),
+                                GraphItem::Commit(ix) => {
+                                    let is_sel = selected.as_deref() == Some(g.commits[*ix].hash.as_str());
+                                    let row = if mode == GraphView::Graph {
+                                        graph_row(&g, *ix, flat, is_sel, show_author, show_hash, !this.menu_open, &p, cx)
+                                    } else {
+                                        compact_row(&g, *ix, is_sel, !this.menu_open, &p, cx)
+                                    };
+                                    (row, g.commits[*ix].hash.clone())
                                 }
-                            }
+                            };
+                            div()
+                                .w_full()
+                                .relative()
+                                .child(row)
+                                .child(crate::painted::probe(&frames, AccessFrame::History(HistoryFrame::Row(key))))
+                                .into_any_element()
                         })
                         .collect::<Vec<_>>()
                 }),
@@ -377,6 +429,8 @@ impl ScmPanel {
             .flex_shrink()
             .when(fill, |d| d.flex_1())
             .min_h(px(super::layout::ROW_H + 4.))
+            .relative()
+            .child(probe(HistoryFrame::Section("graph")))
             .child(self.top_sash("graph", &p, cx))
             .child(header)
             .when(open && filtered, |d| d.child(filters))
@@ -384,12 +438,25 @@ impl ScmPanel {
                 d.child(
                     div().px(px(theme::SPACE[4])).py(px(theme::SPACE[2])).child(
                         ui::input_box("scm-query-box", &p, p.bg, query_focused)
+                            .relative()
+                            .child(probe(HistoryFrame::Query))
                             .child(ui::search_icon(&p))
                             .child(div().flex_1().min_w_0().child(self.query.clone())),
                     ),
                 )
             })
-            .when_some(body, |d, body| d.child(div().when(fill, |d| d.flex_1()).when(!fill, |d| d.h(px(height))).flex_shrink().min_h(px(60.)).child(body)))
+            .when_some(body, |d, body| {
+                d.child(
+                    div()
+                        .when(fill, |d| d.flex_1())
+                        .when(!fill, |d| d.h(px(height)))
+                        .flex_shrink()
+                        .min_h(px(60.))
+                        .relative()
+                        .child(probe(HistoryFrame::List("graph")))
+                        .child(body),
+                )
+            })
     }
 }
 

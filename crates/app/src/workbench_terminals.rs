@@ -145,7 +145,7 @@ impl Workbench {
     }
 
     /// What a new terminal runs: the default profile, else `terminal.shell`, else the user's shell.
-    fn default_launch(&self, cx: &App) -> Launch {
+    pub(super) fn default_launch(&self, cx: &App) -> Launch {
         let settings = cx.global::<Settings>();
         if let Some(p) = settings.terminal_default_profile.as_deref().and_then(|name| self.terminal_profiles(cx).into_iter().find(|p| p.name == name)) {
             return launch_of(&p);
@@ -186,6 +186,15 @@ impl Workbench {
     }
 
     pub(super) fn new_terminal(&mut self, _: &NewTerminal, window: &mut Window, cx: &mut Context<Self>) {
+        // Asked for while the window's terminals are being restored (`--terminal`, or quickly by hand): it opens once they
+        // are back, on the window's session; opening it now would make the restore give up and run it outside the session.
+        let restore_ahead = self.persist.pending_restore.is_some() && cx.global::<Settings>().restore_session;
+        if self.persist.panel_restoring || restore_ahead {
+            self.persist.terminal_wanted = true;
+            self.chrome.panel_open = true;
+            self.chrome.bottom = Bottom::Terminal;
+            return cx.notify();
+        }
         let cwd = self.active_root(cx);
         self.new_terminal_in(cwd, window, cx);
     }
@@ -198,25 +207,48 @@ impl Workbench {
 
     /// New terminal in the given folder running `launch`.
     pub(super) fn new_terminal_launch(&mut self, cwd: Option<String>, launch: Launch, window: &mut Window, cx: &mut Context<Self>) {
-        // The number of processes is limited: after eight terminals no new one is opened.
-        if self.terminals.len() >= MAX_TERMINALS {
+        let Some(term) = self.spawn_terminal(cwd, launch, window, cx) else { return };
+        self.terminals.push(term);
+        // Saved right away: a crash or a killed app must not lose a terminal opened since the last save.
+        self.persist_terminals(cx);
+        self.active_terminal = self.terminals.len() - 1;
+        self.chrome.panel_open = true;
+        self.focus_terminal(window, cx);
+    }
+
+    /// Start a shell running `launch` in `cwd`, listened to by this workbench; the caller gives it a place. `None` (and a
+    /// notice) when as many terminals as allowed are open.
+    pub(super) fn spawn_terminal(&mut self, cwd: Option<String>, launch: Launch, window: &mut Window, cx: &mut Context<Self>) -> Option<Entity<TerminalView>> {
+        // The number of processes is limited: after eight terminals (wherever they are shown) no new one is opened.
+        if self.terminals.len() + self.chrome.detached.len() + self.editor_terminal_count() >= MAX_TERMINALS {
             self.notice = Some(Notice::Info(crate::i18n::tf("Close a terminal first: at most {} can be open.", &[&MAX_TERMINALS]).into()));
             cx.notify();
-            return;
+            return None;
         }
-        let host = self.remote.host.clone();
-        let term = cx.new(|cx| TerminalView::new_with(host, cwd, launch, cx));
+        // On the terminal daemon when the window has a session there (it outlives the app), else on the folder's host.
+        let term = match self.terminal_host() {
+            (host, true) => cx.new(|cx| TerminalView::kept(host, cwd, launch, cx)),
+            (host, false) => cx.new(|cx| TerminalView::new_with(host, cwd, launch, cx)),
+        };
+        self.adopt_terminal(&term, window, cx);
+        Some(term)
+    }
+
+    /// Listen to a terminal of this window (closing, titles, links, paste questions, its menu, its saved token).
+    pub(super) fn adopt_terminal(&mut self, term: &Entity<TerminalView>, window: &mut Window, cx: &mut Context<Self>) {
         let weak = term.downgrade();
-        self._subs.push(cx.subscribe_in(&term, window, move |this, source, event: &TerminalEvent, window, cx| match event {
+        self._subs.push(cx.subscribe_in(term, window, move |this, source, event: &TerminalEvent, window, cx| match event {
             TerminalEvent::CloseRequested => {
                 // The shell has exited: nothing runs any more, close without asking.
-                if let Some(ix) = this.terminals.iter().position(|t| t.downgrade() == weak) {
-                    this.close_terminal(ix, window, cx);
+                match this.terminals.iter().position(|t| t.downgrade() == weak) {
+                    Some(ix) => this.close_terminal(ix, window, cx),
+                    None => this.close_editor_terminal(source, cx),
                 }
             }
             TerminalEvent::TitleChanged | TerminalEvent::Exited | TerminalEvent::ActivityChanged => cx.notify(),
             TerminalEvent::Attention(message) => this.terminal_wants_attention(source, message.clone(), window, cx),
             TerminalEvent::LongCommandFinished { command, code } => this.long_command_finished(source, command, *code, window, cx),
+            TerminalEvent::Kept => this.persist_terminals(cx),
             TerminalEvent::ImagePasteFailed(error) => {
                 this.notice = Some(Notice::Error(crate::i18n::tf("Could not paste: {}", &[error]).into()));
                 cx.notify();
@@ -229,18 +261,14 @@ impl Workbench {
             }
             TerminalEvent::OpenLink(link) => this.open_link(link.clone(), window, cx),
             TerminalEvent::ContextMenu(position) => {
-                if let Some(ix) = this.terminals.iter().position(|t| t.downgrade() == weak)
-                    && ix != this.active_terminal
-                {
+                // The menu acts on the panel's active terminal: a terminal elsewhere has none.
+                let Some(ix) = this.terminals.iter().position(|t| t.downgrade() == weak) else { return };
+                if ix != this.active_terminal {
                     this.select_terminal(ix, window, cx);
                 }
                 this.open_terminal_menu(*position, window, cx);
             }
         }));
-        self.terminals.push(term);
-        self.active_terminal = self.terminals.len() - 1;
-        self.chrome.panel_open = true;
-        self.focus_terminal(window, cx);
     }
 
     /// Split the active terminal: a new terminal in the folder its shell is in now goes next to it.
@@ -307,15 +335,9 @@ impl Workbench {
                 if busy.is_empty() && mode != "always" {
                     return close(this, window, cx);
                 }
-                let title = match busy.as_slice() {
-                    [] => crate::i18n::t("Close the terminal?").to_string(),
-                    [one] => crate::i18n::tf("“{}” is still running in this terminal. Close it anyway?", &[one]),
-                    many => crate::i18n::tf("{} terminals have programs running. Close them anyway?", &[&many.len()]),
-                };
-                let detail = crate::i18n::t("Closing a terminal ends the programs running in it.");
-                let answer = window.prompt(gpui::PromptLevel::Warning, &title, Some(detail), &[crate::i18n::t("Close"), crate::i18n::t("Cancel")], cx);
+                let answer = crate::questions::close_terminals(&busy).ask(window, cx);
                 cx.spawn_in(window, async move |this, cx| {
-                    if answer.await == Ok(0) {
+                    if answer.await == Some(0) {
                         this.update_in(cx, |this, window, cx| close(this, window, cx)).ok();
                     }
                 })
@@ -396,6 +418,7 @@ impl Workbench {
                 cx.notify();
             });
         }
+        self.persist_terminals(cx);
     }
 
     /// "Terminal: Change Color…".
@@ -443,6 +466,17 @@ impl Workbench {
                 .id(("term-tab", i))
                 .group(group.clone())
                 .relative()
+                .child(crate::a11y_controls::control(
+                    crate::a11y_controls::Control::new(
+                        crate::i18n::t("Terminals"),
+                        format!("term:{}", term.entity_id()),
+                        accesskit::Role::Tab,
+                        row.label.to_string(),
+                    )
+                    .description(tip.to_string())
+                    .selected(active)
+                    .on_entity(cx.entity().downgrade(), move |this, window, cx| this.select_terminal(i, window, cx)),
+                ))
                 .w_full()
                 .h(px(TERM_ROW_H))
                 .flex()
@@ -459,10 +493,24 @@ impl Workbench {
                 .when(active, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(px(2.)).bg(c(p.accent))))
                 .child(icon(if paired { "tb-split" } else { "terminal" }, layout::ICON, glyph_color))
                 .children(row.indicator(i, p))
-                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().when(row.exited, |d| d.italic()).child(row.label))
+                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().when(row.exited, |d| d.italic()).child(row.label.clone()))
                 .child(
                     div()
                         .id(("term-close", i))
+                        .relative()
+                        .child(crate::a11y_controls::control(
+                            crate::a11y_controls::Control::button(
+                                crate::i18n::t("Terminals"),
+                                format!("kill:{}", term.entity_id()),
+                                crate::i18n::t("Kill Terminal"),
+                                |_, _| {},
+                            )
+                            .description(row.label.to_string())
+                            .on_entity(cx.entity().downgrade(), {
+                                let term = term.clone();
+                                move |this, window, cx| this.request_close(vec![term.clone()], window, cx)
+                            }),
+                        ))
                         .size(px(20.))
                         .flex_none()
                         .flex()
@@ -655,6 +703,8 @@ impl Workbench {
     pub(super) fn close_terminal(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         let term = self.terminals.remove(ix);
         term.read(cx).kill();
+        self.task_terminal_closed(&term, cx);
+        self.persist_terminals(cx);
         if self.term_split.as_ref().is_some_and(|(l, r)| *l == term || *r == term) {
             self.term_split = None;
         }
@@ -677,10 +727,15 @@ impl Workbench {
 
     /// Connection changed: the terminals belong to the old machine, close them.
     pub(super) fn close_all_terminals(&mut self, cx: &mut Context<Self>) {
+        self.stop_all_task_runs(cx);
+        self.close_detached_terminals(cx);
+        self.close_editor_terminals(cx);
         self.term_split = None;
         for t in self.terminals.drain(..) {
             t.read(cx).kill();
         }
+        // The folder or connection is left on purpose: its terminal daemon session ends now too.
+        self.persist.term_daemon = None;
         self.chrome.panel_open = false;
     }
 
@@ -851,3 +906,9 @@ mod tests {
         assert_eq!(row(Activity::Failed(2), None).tooltip(), "zsh\n/srv/app\nThe last command exited with code 2");
     }
 }
+
+#[cfg(all(test, unix))]
+use super::term_daemon_glue::saved_terminals_key;
+#[cfg(all(test, unix))]
+#[path = "workbench_terminal_restore_tests.rs"]
+mod restore_tests;

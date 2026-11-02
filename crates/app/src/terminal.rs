@@ -43,6 +43,8 @@ actions!(
     ]
 );
 
+#[path = "terminal_attach.rs"]
+mod attach;
 #[path = "terminal_colors.rs"]
 mod colors;
 #[path = "terminal_find.rs"]
@@ -52,6 +54,10 @@ mod marks;
 
 pub use marks::{Activity, Finished};
 
+#[path = "terminal_restore.rs"]
+mod restore;
+#[path = "terminal_revival.rs"]
+mod revival;
 #[path = "terminal_scroll.rs"]
 mod scroll;
 #[path = "terminal_selection.rs"]
@@ -86,6 +92,8 @@ pub enum TerminalEvent {
     OpenLink(crate::links::Link),
     /// Right click (window coordinates): copy, paste, select all, find, clear.
     ContextMenu(Point<Pixels>),
+    /// The terminal daemon gave the token to take this terminal back after a restart: save it.
+    Kept,
 }
 
 /// Most scrollback lines (`terminal.scrollback`): 50,000 lines of 200 columns already take about 200 MB, times up to
@@ -196,6 +204,12 @@ pub struct TerminalView {
     pending_input: Vec<u8>,
     /// Fixed title (task name): the shell's title updates don't change it.
     title_locked: bool,
+    /// Program and arguments it was started with (`None`: the user's shell), kept so a restart can start the same.
+    launched: (Option<String>, Option<Vec<String>>),
+    /// Started with a shell (not an output-only terminal): saved for the next start from the moment it opens.
+    has_shell: bool,
+    /// The token to take this terminal back after a restart (a terminal kept by the terminal daemon).
+    token: Option<crate::terminal_session::SavedPty>,
     term: Term<Listener>,
     parser: Processor<StdSyncHandler>,
     events: Listener,
@@ -251,101 +265,7 @@ impl TerminalView {
 
     /// A terminal running `launch` (a profile or a picked shell).
     pub fn new_with(host: Arc<dyn Host>, cwd: Option<String>, launch: Launch, cx: &mut Context<Self>) -> Self {
-        let Launch { shell, args, env, color } = launch;
-        let mut view = Self::blank(host.clone(), cwd.clone(), color, cx);
-        view.starting = true;
-        let cleanup_host = host.clone();
-        let (cols, rows) = (view.size.cols as u16, view.size.rows as u16);
-        let integration = cx.global::<crate::settings::Settings>().terminal_shell_integration;
-        let spawn = cx.background_executor().spawn(async move {
-            match (&args, env.is_empty(), integration) {
-                (None, true, false) => host.pty_spawn(cols, rows, cwd, shell),
-                _ => host.pty_spawn_ex(host::PtySpec { cols, rows, cwd, shell, args, env, integration }),
-            }
-        });
-        cx.spawn(async move |this, cx| {
-            let pty = match spawn.await {
-                Ok(p) => p,
-                Err(e) => {
-                    this.update(cx, |t, cx| {
-                        t.starting = false;
-                        t.error = Some(crate::i18n::tf("Could not start a shell: {}", &[&e]).into());
-                        cx.notify();
-                    })
-                    .ok();
-                    return;
-                }
-            };
-            let id = pty.id;
-            let ok = this
-                .update(cx, |t, cx| {
-                    if t.closed.get() {
-                        return false;
-                    }
-                    t.pty = Some(id);
-                    t.starting = false;
-                    // Report it if the view got its size in the meantime.
-                    t.host.pty_resize(id, t.size.cols as u16, t.size.rows as u16);
-                    let pending = std::mem::take(&mut t.pending_input);
-                    if !pending.is_empty() {
-                        t.host.pty_input(id, pending);
-                    }
-                    cx.notify();
-                    true
-                })
-                .unwrap_or(false);
-            if !ok {
-                cleanup_host.pty_kill(id);
-                return;
-            }
-            // Output pump: wait, then parse whatever piled up in one go (no frame per chunk).
-            use futures::StreamExt;
-            // If the UI lags (e.g. `yes` output), pending output must not grow without bound: whatever exceeds 32 MB is dropped and a note
-            // is left (the terminal's scrollback is only 2,000 lines anyway). The exit event is never dropped.
-            let backlog = Arc::new(OutputBacklog::default());
-            let gate = backlog.clone();
-            let mut events = crate::ui::bridge_with(pty.events, move |ev| match ev {
-                PtyEvent::Output(d) => gate.admit(d.len()),
-                PtyEvent::Exit(_) => true,
-            });
-            while let Some(first) = events.next().await {
-                let mut batch = vec![first];
-                while let Ok(more) = events.try_recv() {
-                    batch.push(more);
-                    if batch.len() > 256 {
-                        break;
-                    }
-                }
-                let mut exited = false;
-                let alive = this
-                    .update(cx, |t, cx| {
-                        for ev in batch {
-                            match ev {
-                                PtyEvent::Output(data) => {
-                                    backlog.consumed(data.len());
-                                    t.feed(&data);
-                                    if backlog.take_dropped() {
-                                        t.feed(b"\r\n\x1b[2m[output was dropped: the terminal could not keep up]\x1b[0m\r\n");
-                                    }
-                                }
-                                PtyEvent::Exit(code) => {
-                                    t.on_exit(code, cx);
-                                    exited = true;
-                                }
-                            }
-                        }
-                        t.drain_events(cx);
-                        cx.notify();
-                    })
-                    .is_ok();
-                if !alive || exited {
-                    return;
-                }
-            }
-            this.update(cx, |t, cx| t.on_exit(None, cx)).ok();
-        })
-        .detach();
-        view
+        Self::start(host, cwd, launch, false, cx)
     }
 
     /// A terminal that only shows output given to it (test runs): no shell, keys go nowhere.
@@ -392,6 +312,9 @@ impl TerminalView {
             starting: false,
             pending_input: Vec::new(),
             title_locked: false,
+            launched: (None, None),
+            has_shell: false,
+            token: None,
             term,
             parser: Processor::new(),
             events,
@@ -584,6 +507,18 @@ impl TerminalView {
 
     /// For the accessibility tree (a11y.rs): the rows on screen (trailing blanks trimmed) and the cursor (row, column),
     /// if it is on screen.
+    /// For the accessibility tree: how far the view is scrolled back and how many lines of history there are.
+    pub fn a11y_scroll(&self) -> (usize, usize) {
+        let grid = self.term.grid();
+        (grid.display_offset(), grid.history_size())
+    }
+
+    /// A page through the history from the accessibility tree (up: older lines), as Shift+Page Up/Down do.
+    pub fn a11y_scroll_page(&mut self, up: bool, cx: &mut Context<Self>) {
+        self.term.scroll_display(if up { Scroll::PageUp } else { Scroll::PageDown });
+        cx.notify();
+    }
+
     pub fn a11y_view(&self) -> (Vec<String>, Option<(usize, usize)>) {
         let content = self.term.renderable_content();
         let offset = content.display_offset as i32;
@@ -597,6 +532,39 @@ impl TerminalView {
         let cur_row = content.cursor.point.line.0 + offset;
         let cursor = (cur_row >= 0 && (cur_row as usize) < rows.len()).then_some((cur_row as usize, content.cursor.point.column.0));
         (rows.into_iter().map(|r| r.trim_end().to_string()).collect(), cursor)
+    }
+
+    /// For the accessibility tree: where the characters of `rows` (as `a11y_view` returns them) were drawn in the last
+    /// paint, one cell each (two for a wide character); `starts` is each row's first character in the exposed text.
+    /// Empty before the first paint.
+    pub fn a11y_layout(&self, rows: &[String], starts: &[usize]) -> Vec<crate::painted::TextLine> {
+        let (origin, cell_w) = self.grid;
+        if cell_w <= px(0.) {
+            return Vec::new();
+        }
+        let line_h = self.line_h();
+        let content = self.term.renderable_content();
+        let offset = content.display_offset as i32;
+        let mut cells: Vec<Vec<(usize, usize)>> = vec![Vec::new(); rows.len()];
+        for cell in content.display_iter {
+            let row = (cell.point.line.0 + offset) as usize;
+            if row < cells.len() && !cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
+                cells[row].push((cell.point.column.0, if cell.flags.contains(Flags::WIDE_CHAR) { 2 } else { 1 }));
+            }
+        }
+        rows.iter()
+            .zip(starts)
+            .zip(cells)
+            .enumerate()
+            .map(|(r, ((text, start), cells))| {
+                let n = text.chars().count().min(cells.len());
+                let x = |col: usize| origin.x + cell_w * col as f32;
+                let end = x(cells[..n].last().map_or(0, |(col, w)| col + w));
+                let cells = cells[..n].iter().map(|&(col, w)| (x(col), x(col + w))).collect();
+                let top = origin.y + line_h * r as f32;
+                crate::painted::TextLine { start: *start, cells, end, top, bottom: top + line_h, line_break: px(0.) }
+            })
+            .collect()
     }
 
     fn on_key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {

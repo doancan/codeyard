@@ -7,15 +7,19 @@ pub const MANIFEST_BYTES: usize = 64 * 1024;
 pub const ID_LEN: usize = 64;
 /// One part of an id (publisher, name, or a contribution's local id).
 pub const ID_PART_LEN: usize = 40;
+/// `extension.name`, the display name.
 pub const NAME_LEN: usize = 64;
+/// `extension.description`.
 pub const DESCRIPTION_LEN: usize = 300;
 /// The author's `why`, quoted on the consent sheet.
 pub const WHY_LEN: usize = 200;
+/// Entries of `extension.categories`.
 pub const CATEGORIES: usize = 5;
 /// Entries of one contribution kind (`[[commands]]`, `[[themes]]`, …).
 pub const CONTRIBUTIONS_PER_KIND: usize = 256;
 /// Entries of one permission list (`read`, `net`, `run`, …).
 pub const PERMISSION_ENTRIES: usize = 64;
+/// Entries of `[dependencies]`.
 pub const DEPENDENCIES: usize = 32;
 /// Length of a glob, host, program, path or title.
 pub const ITEM_LEN: usize = 256;
@@ -26,10 +30,105 @@ pub const WHEN_DEPTH: usize = 16;
 
 /// A `.cyx` package, compressed.
 pub const PACKAGE_BYTES: u64 = 64 * 1024 * 1024;
+/// A per-platform package (`<id>-<version>-<triple>.cyx`, one that carries native programs), compressed.
+pub const TARGET_PACKAGE_BYTES: u64 = 128 * 1024 * 1024;
 /// A `.cyx` package, unpacked.
 pub const PACKAGE_UNPACKED_BYTES: u64 = 256 * 1024 * 1024;
+/// Files in a `.cyx` package.
 pub const PACKAGE_FILES: usize = 10_000;
 /// One file inside a package.
 pub const PACKAGE_FILE_BYTES: u64 = 64 * 1024 * 1024;
 /// An extension's own data directory (`storage`).
 pub const DATA_DIR_BYTES: u64 = 50 * 1024 * 1024;
+
+/// The arguments or result of one API call (a file read, a fetch's request body, a view's tree). A larger result fails
+/// its request with `invalid` ("the result is 20 MiB; at most 8 MiB").
+pub const CALL_BYTES: usize = 8 * 1024 * 1024;
+/// One frame between the app and an exthost: a call plus room for its envelope. A larger frame kills the exthost.
+pub const FRAME_BYTES: usize = CALL_BYTES + 64 * 1024;
+/// Sustained bytes per second an exthost may send the app; going over kills it.
+pub const IPC_BYTES_PER_SECOND: u64 = 32 * 1024 * 1024;
+/// Bytes an exthost may send in a burst above the sustained rate.
+pub const IPC_BURST_BYTES: u64 = 64 * 1024 * 1024;
+/// The shortest interval of `timers.every`.
+pub const TIMER_MIN_SECONDS: u32 = 30;
+/// Watches (`watch.documents`, `watch.files`) one extension may have at once.
+pub const WATCHES: usize = 16;
+/// How long a document must stay unchanged before its `changed` event goes out: typing sends one event per pause.
+pub const DOCUMENT_EVENT_DEBOUNCE_MILLIS: u64 = 500;
+/// File events are coalesced, one per file, and delivered at most this often.
+pub const FILE_EVENT_INTERVAL_MILLIS: u64 = 1_000;
+/// Events in one delivery to `events.documents` or `events.files`; more arrive in the next ones.
+pub const WATCH_EVENTS: usize = 1_000;
+/// Files and folders a window follows for the file watches of all its extensions; Codeyard's own watching keeps the
+/// rest of its budget. Past it, more files are still reported when their folder changes, but not when only they change.
+pub const WATCHED_PATHS: usize = 1_024;
+/// Linear memory of one extension instance; growing past it traps.
+pub const GUEST_MEMORY_BYTES: usize = 256 * 1024 * 1024;
+/// The whole exthost process: the guest's linear memory plus the engine and compiled code. A Job Object commit limit
+/// on Windows; elsewhere the app checks the process's resident size.
+pub const EXTHOST_MEMORY_BYTES: u64 = 512 * 1024 * 1024;
+/// CPU time one call into an extension may take (exports must return quickly; long work waits on tickets).
+pub const GUEST_CALL_MILLIS: u64 = 2_000;
+/// `activate` may take longer: language runtimes start there.
+pub const ACTIVATE_MILLIS: u64 = 10_000;
+/// How long the app waits for a provider (formatter, code actions, tasks) to answer a request. A later answer is dropped
+/// and noted in the extension's log; the user's typing never waits for it.
+pub const PROVIDER_DEADLINE_MILLIS: u64 = 1_000;
+/// How long the Pull Requests view waits for a `[[pull-requests]]` provider, whose answers come from the network. A
+/// later answer is dropped like any provider's.
+pub const PULL_REQUEST_DEADLINE_MILLIS: u64 = 20_000;
+/// Text of a status bar item, in visible characters once trimmed. `set-status-item` refuses a longer or empty text, one
+/// with control, bidirectional or zero-width characters, and an id not declared in `[[status-bar]]`.
+pub const STATUS_TEXT_LEN: usize = 64;
+/// Diagnostics or decorations one extension may set on one file; the rest are dropped.
+pub const MARKS_PER_FILE: usize = 1_000;
+/// Files one extension may have diagnostics on at once; diagnostics for another file are dropped until it clears some.
+pub const DIAGNOSTIC_FILES: usize = 1_000;
+/// Characters of one diagnostic's message; a longer one is cut short.
+pub const DIAGNOSTIC_MESSAGE_LEN: usize = 4_096;
+/// One `net` request, from the first connection to the last byte of the response, redirects included.
+pub const NET_TIMEOUT_SECS: u64 = 60;
+/// Redirects one `net` request follows; each is checked against `net` and the peer address rules again.
+pub const NET_REDIRECTS: usize = 5;
+/// The body one `net` request sends.
+pub const NET_REQUEST_BYTES: u64 = 16 * 1024 * 1024;
+/// The body one `net` request receives.
+pub const NET_RESPONSE_BYTES: u64 = 64 * 1024 * 1024;
+
+/// An encoded view (`ext-ui`), refused before it is decoded.
+pub const UI_VIEW_BYTES: usize = 8 * 1024 * 1024;
+/// Elements in one view, counting every row and cell.
+pub const UI_NODES: usize = 50_000;
+/// Nesting depth of a view; the root is depth 1.
+pub const UI_DEPTH: usize = 32;
+/// Rows of a list or table, and items in one page of a tree level.
+pub const UI_ROWS_PER_PAGE: usize = 10_000;
+/// A label, heading, badge, option or column header.
+pub const UI_LABEL_LEN: usize = 256;
+/// Body text: `text`, `banner`, a key-value value, an input's value or placeholder.
+pub const UI_TEXT_LEN: usize = 4096;
+/// The source of one `markdown` or `code` element, in bytes.
+pub const UI_DOCUMENT_BYTES: usize = 64 * 1024;
+/// An element key or a tree page token.
+pub const UI_KEY_LEN: usize = 128;
+/// An `image` given as bytes.
+pub const UI_IMAGE_BYTES: usize = 1024 * 1024;
+/// Different `image` URLs one open view fetches; the rest show their alt text.
+pub const UI_IMAGE_URLS: usize = 64;
+/// Options of a `select`, pairs of a `key-value`.
+pub const UI_CHOICES: usize = 256;
+/// Columns of a `table`.
+pub const UI_COLUMNS: usize = 32;
+/// An `https:` URL of an image or link.
+pub const UI_URL_LEN: usize = 2048;
+
+/// Markers of one `[[scm]]` provider.
+pub const SCM_MARKERS: usize = 8;
+/// Files one source control provider may list for one folder, over all its groups; the rest are dropped.
+pub const SCM_RESOURCES: usize = 10_000;
+/// The text of a file a source control provider returns for the gutter's change marks; a longer one shows no marks.
+pub const SCM_ORIGINAL_BYTES: usize = 8 * 1024 * 1024;
+/// How long the app waits for a source control provider's state, a file's original text or a check of the input box.
+/// Longer than other providers: they usually run a program. A later answer is dropped and noted in the log.
+pub const SCM_DEADLINE_MILLIS: u64 = 10_000;
