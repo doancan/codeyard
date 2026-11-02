@@ -14,14 +14,19 @@ use std::process::{Command, Stdio};
 use ext_core::publisher::Pin;
 use ext_core::registry::{self, Download, Fetch, Got, Registry};
 
-/// The public registry: (name, URL, root public keys, threshold). The keys come from the root key ceremony
-/// (docs/registry.md, "Root key ceremony"); until it has run, only registries in `extensions.registries` are used.
-/// After the ceremony it reads, with the three public keys from `yard-ceremony-record.txt`:
-///
-/// ```text
-/// pub const PUBLIC: Option<(&str, &str, &[&str], usize)> = Some(("yard.<domain>", "https://yard.<domain>", &["<A>", "<B>", "<C>"], 2));
-/// ```
-pub const PUBLIC: Option<(&str, &str, &[&str], usize)> = None;
+/// The public registry: (local label, URL, root public keys, threshold). The label is what extension locks record
+/// (a-z, 0-9 and -); the registry's own name, `market.yardcode.app`, is inside its signed files. The keys are the three
+/// public keys of the root key ceremony (docs/registry.md, "Root key ceremony"; SECURITY.md lists them).
+pub const PUBLIC: Option<(&str, &str, &[&str], usize)> = Some((
+    "yard",
+    "https://market.yardcode.app",
+    &[
+        "75882c0a012688f3909420a09374e14becb0c1fb8296486c21152e578d22bfa4",
+        "02932296930e75cb0c76f0ad91ea813434dee60335ab37c8aef304674c441ee7",
+        "6ef574e7c2ae61c5e2f8bbeaa3f51e021ff6f2e75784e5ab22c7ede380e9abbc",
+    ],
+    2,
+));
 
 // No build, release or not, ships a public registry with placeholder or malformed keys.
 const _: () = if let Some(problem) = public_problem(PUBLIC) {
@@ -107,7 +112,8 @@ const fn equal(a: &[u8], b: &[u8]) -> bool {
 /// Every registry this user installs from: the public one first, then their own, in settings order.
 pub fn registries(settings: &crate::settings::Settings) -> Vec<Registry> {
     let mut out = Vec::new();
-    if let Some((name, url, keys, threshold)) = PUBLIC {
+    // The tests describe a user's own registries: the public one would add a network fetch to each of them.
+    if let Some((name, url, keys, threshold)) = PUBLIC.filter(|_| !cfg!(test)) {
         let keys = keys.iter().filter_map(|k| ext_core::yard::PublicKey::parse(k)).collect();
         out.push(Registry { name: name.into(), url: url.into(), keys: ext_core::yard::RootKeys { keys, threshold } });
     }

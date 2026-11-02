@@ -436,14 +436,13 @@ server$  docker compose up -d
 ### Root key ceremony
 
 Three Ed25519 root keys, any two of which sign `root.json`. The owner holds all three until a second maintainer takes
-one: **A** on an encrypted USB stick at home, **B** on another one kept somewhere else, **C** in the owner's Bitwarden
-vault (a secure note, with two-step login on). Losing one key loses nothing; one stolen key cannot sign anything.
-SECURITY.md lists who holds what.
+one, each key file in a different place (a password manager, an encrypted disk or folder, an offline copy). Losing one
+key loses nothing; one stolen key cannot sign anything. SECURITY.md lists who holds what.
 
-1. Erase two USB sticks in Disk Utility as "APFS (Encrypted)", each with its own password, and insert both.
-2. `CYX=target/release/cyx scripts/yard-root-ceremony.sh /Volumes/YARD-A /Volumes/YARD-B`, with the network off.
-   It shows key C once for the Bitwarden note, checks that the note holds it by reading it back from the clipboard,
-   writes A and B to the sticks and `yard-ceremony-record.txt` (public keys only).
+1. Make a folder for each of A and B (any encrypted or offline place), with the network off.
+2. `CYX=target/release/cyx scripts/yard-root-ceremony.sh /path/to/A /path/to/B`. It shows key C once, to be saved in a
+   place of your choice and read back from the clipboard, writes A and B to their folders and
+   `yard-ceremony-record.txt` (public keys only). `cyx yard keygen FILE` alone makes one key file.
 3. The record has every line to copy: the `yard init` command for the server, the `PUBLIC` constant for the app and
    the `YARD_ROOT_KEYS` variable for GitHub. The owner fills in its checks and signs it; it is kept with the release
    that ships the keys, and its public keys go into SECURITY.md.

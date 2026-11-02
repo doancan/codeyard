@@ -21,7 +21,7 @@ Never paste a secret (a token, a password, a private key) into a chat, an issue 
 | Cloudflare | A free account with the domain as a zone (nameservers changed at the registrar until the zone is *Active*). | free |
 | Cloudflare R2 | Turn R2 on (it asks for a card; the free tier covers this). Create a bucket `codeyard-yard-backup`, location hint *Europe*. | free up to 10 GB |
 | Alerts | One of: a Slack, Discord or Mattermost incoming webhook, an ntfy.sh topic URL, or an SMTP account that can send mail (host, port, user, password, from and to addresses). | free |
-| Root keys | Two USB sticks (any size), and your Bitwarden account with two-step login on. | about 15 € once |
+| Root keys | Three places to keep one key file each (a password manager, an encrypted disk or folder, an offline copy). | free |
 
 Total: about 6 € a month and the domain.
 
@@ -43,8 +43,8 @@ Who holds what after the ceremony (also in [SECURITY.md](../SECURITY.md#extensio
 
 | Key | Held by | Kept |
 |---|---|---|
-| Root A | the owner | encrypted USB stick A, at home |
-| Root B | the owner, until a second maintainer takes it | encrypted USB stick B, somewhere else |
+| Root A | the owner | key file A, kept offline by the owner |
+| Root B | the owner, until a second maintainer takes it | key file B, in another place |
 | Root C | the owner | Bitwarden secure note "Codeyard Yard root key C" |
 | Online key | the server | `/srv/yard/keys/online.key`; never backed up, replaced by a rotation |
 | Canary and deploy SSH keys | GitHub environment `yard` | secrets; each can run one command on the server |

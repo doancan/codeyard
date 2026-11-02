@@ -13,7 +13,7 @@ use ext_manifest::{ExtId, Manifest, Version};
 use crate::net;
 use crate::sigstore::{self, Endpoints};
 
-pub const DEFAULT_REGISTRY: &str = "https://yard.codeyard.dev";
+pub const DEFAULT_REGISTRY: &str = "https://market.yardcode.app";
 
 /// `--registry`, else `CODEYARD_REGISTRY`, else the public registry.
 pub fn registry_url(flag: Option<&str>) -> String {

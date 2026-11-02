@@ -7,10 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.7.1] - 2026-11-02
+## [0.7.2] - 2026-11-02
 
 ### Added
 
+- The public extension registry, `market.yardcode.app`, is on: the app trusts it through three root public keys (any two
+  of them sign its `root.json`; listed in SECURITY.md), and `cyx publish` uses it by default. The Extensions view and
+  `https://yardcode.app/extensions` list what it holds.
 - Terminal notifications: the bell and OSC 9 / OSC 777 messages (Claude Code and Codex waiting for an answer) flag the
   terminal in the list and on the Terminal tab, show the message as a notice, and flash the taskbar button on Windows
   while the window is in the background (`terminal.notifications`). A command that ran for ten seconds or more and
@@ -1561,8 +1564,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.1...HEAD
-[0.7.1]: https://github.com/doancan/codeyard/compare/v0.7.0...v0.7.1
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/doancan/codeyard/compare/v0.7.0...v0.7.2
 [0.7.0]: https://github.com/doancan/codeyard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/doancan/codeyard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/doancan/codeyard/compare/v0.4.1...v0.5.0

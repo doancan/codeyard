@@ -57,14 +57,22 @@ matter most are:
 
 The public extension registry ([docs/registry.md](docs/registry.md#running-the-public-registry)) is trusted through
 three Ed25519 root keys compiled into the app; any two of them sign its `root.json`, which names the online key that
-signs the index daily and expires after 90 days. Until the root key ceremony has run, the app trusts no public
-registry (`PUBLIC` in `crates/app/src/ext_registry.rs` is `None`), and no build compiles with placeholder keys there.
+signs the index daily and expires after 90 days. The public registry is `market.yardcode.app`; its keys are `PUBLIC` in
+`crates/app/src/ext_registry.rs`, and no build compiles with placeholder keys there.
+
+Root public keys (threshold 2 of 3, generated 2026-11-02):
+
+| Key | Public key (hex) |
+|---|---|
+| A | `75882c0a012688f3909420a09374e14becb0c1fb8296486c21152e578d22bfa4` |
+| B | `02932296930e75cb0c76f0ad91ea813434dee60335ab37c8aef304674c441ee7` |
+| C | `6ef574e7c2ae61c5e2f8bbeaa3f51e021ff6f2e75784e5ab22c7ede380e9abbc` |
 
 | Key | Held by | Kept |
 |---|---|---|
-| Root A | the owner (Doğancan) | an encrypted USB stick, at home: one of the two shares the owner signs with |
-| Root B | the owner, until a second maintainer takes it | an encrypted USB stick in another place: the offline backup share |
-| Root C | the owner | a Bitwarden secure note, with two-step login: the other share the owner signs with |
+| Root A | the owner (Doğancan) | a private key file kept offline by the owner, apart from B and C |
+| Root B | the owner, until a second maintainer takes it | a private key file kept offline in another place: the backup share |
+| Root C | the owner | a private key file kept by the owner in a third place |
 | Online | the registry's server | `/srv/yard/keys/online.key`, readable by the service only; never backed up (a restore rotates it) |
 | Canary, deploy | GitHub Actions (environment `yard`, approved by the owner) | SSH keys that can each run one command on the server: revoke the canary extension, or install a `yard` binary that runs |
 | Backups | the server and the owner's Bitwarden | an R2 token for the backup bucket only, in `/etc/yard/yard.env` (root only) |

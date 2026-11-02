@@ -4,8 +4,8 @@
 #   scripts/yard-root-ceremony.sh /Volumes/YARD-A /Volumes/YARD-B
 # It makes three root keys, any two of which sign the registry's root.json:
 #   C  shown once, for a secure note in your password manager (Bitwarden); never left on disk
-#   A  on the first encrypted USB stick
-#   B  on the second encrypted USB stick, kept somewhere else
+#   A  in the first folder (any encrypted or offline place you choose)
+#   B  in the second folder, kept somewhere else
 # and writes yard-ceremony-record.txt here: the date, the public keys and where each private key is kept (no secret),
 # the line for the server and the app, and the sign-off lines the owner fills in.
 #
@@ -13,7 +13,7 @@
 #   scripts/yard-root-ceremony.sh --rehearsal DIR
 # CYX names the cyx binary when it is not on PATH.
 set -eu
-usage="usage: yard-root-ceremony.sh USB-A USB-B   or   yard-root-ceremony.sh --rehearsal DIR"
+usage="usage: yard-root-ceremony.sh DIR-A DIR-B   or   yard-root-ceremony.sh --rehearsal DIR"
 cyx=${CYX:-cyx}
 command -v "$cyx" >/dev/null || { echo "cyx not found: install it, or set CYX=/path/to/cyx" >&2; exit 1; }
 public() { sed -n 's/^public key //p'; }
@@ -43,9 +43,9 @@ fi
 a=${1:?$usage}
 b=${2:?$usage}
 for d in "$a" "$b"; do
-	[ -d "$d" ] || { echo "$d is not a folder: insert and mount the USB stick" >&2; exit 1; }
+	[ -d "$d" ] || { echo "$d is not a folder: create it or mount the disk" >&2; exit 1; }
 done
-[ "$(cd "$a" && pwd -P)" != "$(cd "$b" && pwd -P)" ] || { echo "A and B must be two different sticks" >&2; exit 1; }
+[ "$(cd "$a" && pwd -P)" != "$(cd "$b" && pwd -P)" ] || { echo "A and B must be two different folders" >&2; exit 1; }
 key_a="$a/yard-root-a.key"
 key_b="$b/yard-root-b.key"
 for f in "$key_a" "$key_b"; do
@@ -100,8 +100,8 @@ Codeyard extension registry: root key ceremony
 Date: $(date -u '+%Y-%m-%d %H:%M UTC')
 Threshold: 2 of 3
 
-A  $pub_a  encrypted USB stick A ($key_a)
-B  $pub_b  encrypted USB stick B ($key_b), kept in another place
+A  $pub_a  key file A ($key_a)
+B  $pub_b  key file B ($key_b), kept in another place
 C  $pub_c  Bitwarden secure note "Codeyard Yard root key C"
 
 Machine: $(uname -sr), cyx $("$cyx" --version | sed 's/^cyx //')
@@ -122,9 +122,9 @@ In GitHub, environment and repository variable YARD_ROOT_KEYS:
 
 Checks after the ceremony (tick each):
   [ ] Key C read back from the Bitwarden note (done by the script)
-  [ ] Stick A and stick B each open with their own password, on another day
+  [ ] Key files A and B are readable from where they are kept, on another day
   [ ] root.json signed with two keys; \`cyx yard check https://yard.DOMAIN --root-key … --threshold 2\` passes
-  [ ] Stick B stored away from stick A (where: ______________________)
+  [ ] Key file B stored away from key file A (where: ______________________)
 
 Owner sign-off: I hold A, B and C as written above, and no copy of a private key exists elsewhere.
   Name: ______________________   Date: ____________   Signature: ______________________
@@ -133,7 +133,7 @@ cat "$record"
 cat <<EOF
 
 Wrote $record (public keys only; commit it or keep it with the release notes).
-Eject both sticks and store B away from A. Sign root.json with two of the keys:
+Store B away from A. Sign root.json with two of the keys:
   cyx yard sign root root.json --key "$key_a"
   pbpaste | cyx yard sign root root.json --key -      (key C copied from Bitwarden)
 EOF
