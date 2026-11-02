@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-02
+
 ### Added
 
 - Terminal notifications: the bell and OSC 9 / OSC 777 messages (Claude Code and Codex waiting for an answer) flag the
@@ -18,12 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The panel's Maximize and Restore buttons use corner arrows instead of a plain chevron.
 - The Windows app icon fills its frame and has a larger mark, so it no longer looks small on the taskbar
   (`crates/app/assets/windows/codeyard.svg`, built into the `.ico` by `scripts/windows-icon.py`).
 - The app is called "Codeyard" in the window title, the title bar, the welcome page and the app menu.
 
 ### Fixed
 
+- Choosing a recent project or "Open Folder…" from the Dock menu no longer replaces the folder of the front window (and
+  with it a running terminal, local or SSH): a window that holds nothing takes it, a project that is already open comes
+  forward, and any other gets a window of its own.
 - Choose a Docker environment lists the active context first and marks it "Current": with Docker Desktop on macOS
   the first row was `default` (`/var/run/docker.sock`, often missing), so Enter picked an engine that does not answer.
 - Shell integration scripts use Unix line endings even when the SSH agent is cross-compiled from a Windows checkout.
@@ -1547,7 +1553,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/doancan/codeyard/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/doancan/codeyard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/doancan/codeyard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/doancan/codeyard/compare/v0.4.1...v0.5.0
