@@ -481,7 +481,7 @@ Crates marked vendored live in `vendor/`.
 | profiling | 1.0.18 | MIT OR Apache-2.0 |  |
 | profiling-procmacros | 1.0.18 | MIT OR Apache-2.0 |  |
 | psm | 0.1.32 | MIT OR Apache-2.0 |  |
-| pulldown-cmark | 0.13.5 | MIT |  |
+| pulldown-cmark | 0.13.6 | MIT |  |
 | pulley-interpreter | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
 | pulley-macros | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
 | pulp | 0.22.3 | MIT |  |
