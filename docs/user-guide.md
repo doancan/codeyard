@@ -427,8 +427,10 @@ suggested (nearby words first); `"editor.wordBasedSuggestions": false` turns thi
 A folder or file given on the command line always opens, whatever the setting. An empty editor
 shows the Welcome content unless the setting is `"blank"`; "Help: Welcome" opens it as a tab.
 `"window.restoreSession"` is separate: it brings a folder's tabs and unsaved changes back whenever
-you open that folder. Right-click the Dock icon (macOS) for New Window, Open Folder and your
-recent projects; they are also under File ▸ Open Recent.
+you open that folder. Right-click the Dock icon (macOS) for your open windows, recent projects, New Window,
+Open Folder…, Connect to SSH Host…, Go to File…, Settings… and Welcome; recent projects are also under
+File ▸ Open Recent. A recent project or Open Folder… never replaces the folder of the front window: an empty
+window takes it, a project that is already open comes forward, and any other opens in a window of its own.
 
 The gear at the bottom of the activity bar is one menu: **About Codeyard** (version), Settings,
 Color Theme, File Icon Theme, Keyboard Shortcuts and the Command Palette.
@@ -1608,7 +1610,7 @@ A terminal's tab menu can rename it, give it a colour or kill it. *Terminal: Kil
 **Panel toolbar.** While the Terminal tab is shown, the panel header has New Terminal, a menu beside it, Split and Kill.
 The menu starts a terminal with any profile or installed shell (the default profile is ticked) and also offers Split
 Terminal, Run Task…, Configure Tasks…, Select Default Profile… and *Configure Terminal Settings*, which opens Settings
-filtered to the terminal. The maximize button stays highlighted while the panel is maximized; moving a maximized panel to
+filtered to the terminal. The corner-arrows button on the right maximizes the panel (or restores its size) and stays highlighted while the panel is maximized; moving a maximized panel to
 the bottom or the right restores its size.
 
 **Terminal list.** With two or more terminals a list appears beside them:

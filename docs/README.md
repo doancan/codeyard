@@ -31,7 +31,7 @@ code they describe.
 | [extensions/README.md](extensions/README.md) | the extension author documentation: guides, SDKs, `cyx` and the generated references |
 | [extensions/developer-guide.md](extensions/developer-guide.md) | how to write, test and publish an extension |
 | [translating.md](translating.md) | adding a language, the translation file format, plurals, quality bar, adding UI text |
-| [releasing.md](releasing.md) | the manual release procedure |
+| [releasing.md](releasing.md) | the release workflow, the manual fallback, signing and the update key |
 
 `settings.md` is generated (`UPDATE_DOCS=1 cargo test -p app docs_reference`); `scripts/docs-check.sh` and the `docs_*` tests fail
 when a document and the code disagree. The project overview is the root `README.md`; the change history is `CHANGELOG.md`.
