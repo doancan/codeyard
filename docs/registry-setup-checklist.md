@@ -4,6 +4,11 @@ What the owner buys, creates and sends back to put the public extension registry
 go-live steps. How it runs afterwards is in [registry.md](registry.md#running-the-public-registry). Everything else
 (the server's setup, timers, backups, alerts, the canary, the rehearsal) is in the repository and tested.
 
+Two ways to host it, with the same keys, backups and ceremony: **a server of your own that already runs Docker, behind a
+Cloudflare Tunnel** (the public registry, `market.yardcode.app`; [the Docker path](#the-docker-path) at the end of this
+page), or a fresh Hetzner machine with systemd, Caddy and a firewall (sections 1 to 3 below). The ceremony (steps 5 and
+7), the GitHub settings (9) and the app change (11) are the same in both.
+
 Never paste a secret (a token, a password, a private key) into a chat, an issue or a commit. Where a step says
 "on the server", type it there yourself, or share it with a Bitwarden Send that expires in a day.
 
@@ -108,3 +113,63 @@ this Mac with the owner's SSH key and the token above.
 
 Data-only publishing opens after step 11's release. Code stays by invitation (`invited` in `yard.json`), with the 48 h
 wait on clients and a human review of each publisher's first native program.
+
+## The Docker path
+
+For a server of your own with Docker and Docker Compose, and a domain at Cloudflare. Nothing listens on a public
+address: no port is forwarded or opened, and no origin certificate or firewall list is kept. How it runs:
+[registry.md](registry.md#running-on-docker).
+
+### What the owner creates
+
+| What | Choice |
+|---|---|
+| Server | The one that runs Docker already (amd64). The stack adds five small containers, `/opt/yard` and `/srv/yard`; it changes no firewall, SSH or update setting. |
+| Domain | `yardcode.app`, a zone in your Cloudflare account. The registry is `market.yardcode.app`. |
+| Tunnel | Cloudflare Zero Trust → Networks → Tunnels → *Create a tunnel* → *Cloudflared*, named `yard`. Copy its token (a secret). Add a public hostname: `market.yardcode.app`, service **HTTP**, URL `edge:8000`. Cloudflare makes the proxied DNS record itself. |
+| Cloudflare R2 | As in section 1: the bucket `codeyard-yard-backup` and a token for that bucket only. |
+| Alerts | As in section 1. |
+| Root keys | As in section 1. |
+
+In the dashboard, check yourself: **Security → Bots → Bot Fight Mode off** (it would challenge `curl` and `cyx`), and
+**SSL/TLS** may stay at its default: the tunnel needs no origin certificate.
+
+### Go live
+
+Step 5 (the ceremony) and step 7 (signing the root) are the owner's, offline, exactly as in section 3. The rest:
+
+1. **Rehearse** (any time): `deploy/rehearse.sh` and `deploy/yard/docker/test.sh` pass on this Mac.
+2. **Build**: run the `yard-deploy` workflow with *install* off; download the `yard-linux-x86_64` artifact next to the
+   setup script.
+   ```text
+   gh workflow run yard-deploy -f install=false        (wait for it, then:)
+   gh run download "$(gh run list -w yard-deploy -L 1 --json databaseId -q '.[0].databaseId')" -n yard-linux-x86_64 -D deploy/yard/docker/host/
+   ```
+3. **The host**: copy the folder over and run the setup; it builds the image and prints what is next.
+   ```text
+   scp -r deploy/yard/docker kmadmin@10.0.0.119:~/yard-setup
+   ssh -t kmadmin@10.0.0.119 sudo ~/yard-setup/host/setup-host.sh
+   ```
+4. **Secrets**: the owner fills in `/opt/yard/.env` on the server (`sudoedit /opt/yard/.env`): the tunnel token, the R2
+   values, the alert channel. Then the alert test, and a copy of `.env` as a Bitwarden secure note:
+   ```text
+   cd /opt/yard && sudo docker compose run --rm --no-deps ops sh -c 'echo "This is a test alert from the registry." | yard-alert "a test"'
+   ```
+5. **Key ceremony** (the owner, at this Mac, network off): section 3, step 5.
+6. **The registry**, with the three public keys from `yard-ceremony-record.txt`:
+   ```text
+   cd /opt/yard && sudo docker compose run --rm --no-deps ops yard-init --registry market.yardcode.app --root-keys A,B,C --threshold 2
+   ssh kmadmin@10.0.0.119 'cd /opt/yard && sudo docker compose run --rm --no-deps -T ops cat /srv/yard/root.json' > root.json
+   ```
+7. **Sign the root** (the owner, two keys): section 3, step 7.
+8. **Start**:
+   ```text
+   ssh kmadmin@10.0.0.119 'cd /opt/yard && sudo docker compose run --rm --no-deps -T ops sh -c "cat > /srv/yard/root.json.sig"' < root.json.sig
+   ssh kmadmin@10.0.0.119 'cd /opt/yard && sudo docker compose up -d --wait'
+   cyx yard check https://market.yardcode.app --root-key A --root-key B --root-key C --threshold 2
+   ssh kmadmin@10.0.0.119 'cd /opt/yard && sudo docker compose exec -T ops sh -c "yard-watch && yard-backup && yard-restore --check"'
+   ```
+9. **GitHub**: section 3, step 9, with `YARD_URL` = `https://market.yardcode.app` and `YARD_SSH_HOST` a name the runners
+   can reach (the workflows connect by SSH; see [registry.md](registry.md#running-on-docker), "Reaching the server from
+   GitHub"). Authorize the two keys with `sudo yard-authorize canary "ssh-ed25519 …"` and `sudo yard-authorize deploy "ssh-ed25519 …"`.
+10. **Canary** and 11. **The app**: section 3, steps 10 and 11, with `market.yardcode.app` where they say `yard.<domain>`.

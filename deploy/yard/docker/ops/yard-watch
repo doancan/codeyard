@@ -1,0 +1,25 @@
+#!/bin/sh
+# The hourly check (yard-scheduler): the service answers, the index does not expire within 24 h, the online key not
+# within 14 days, the database is being copied to R2, the edge answers and does not pass /metrics on, and the tunnel
+# is connected (when it is meant to run). A failure is alerted by yard-job; the GitHub workflow yard-monitor checks the
+# same from outside, through Cloudflare.
+set -u
+problems=0
+fail() {
+	echo "yard-watch: $*" >&2
+	problems=$((problems + 1))
+}
+curl -fsS --max-time 10 http://yard:8080/healthz >/dev/null || fail "yard does not answer (docker compose logs yard)"
+if ! out=$(yard status /srv/yard/yard.json --hours 24 --key-days 14 2>&1); then
+	fail "$out"
+else
+	echo "$out"
+fi
+curl -fsS --max-time 10 http://litestream:9090/metrics >/dev/null || fail "litestream does not answer: the database is not being copied to R2"
+curl -fsS --max-time 10 http://edge:8000/healthz >/dev/null || fail "edge does not answer: nothing reaches yard from outside"
+code=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' http://edge:8000/metrics)
+[ "$code" = 404 ] || fail "edge answers /metrics with $code, not 404: monitoring data would leave through the tunnel"
+case ",${YARD_WATCH_TUNNEL:-}," in
+*,tunnel,*) curl -fsS --max-time 10 http://cloudflared:2000/ready >/dev/null || fail "cloudflared is not connected to Cloudflare" ;;
+esac
+[ "$problems" = 0 ]

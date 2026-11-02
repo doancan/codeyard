@@ -296,6 +296,12 @@ registry is the same with throwaway keys.
 The owner's part (accounts, the server, the key ceremony) is in [registry-setup-checklist.md](registry-setup-checklist.md),
 in the order it happens. This section is how the registry runs once it is live.
 
+It runs one of two ways, with the same `yard`, the same backups and the same keys: a **Docker Compose stack behind a
+Cloudflare Tunnel** on a server that already runs Docker (the public registry, `market.yardcode.app`; see
+[Running on Docker](#running-on-docker)), or **systemd units with Caddy and a firewall** on a fresh Ubuntu machine
+(Hosting and the unit table below, `deploy/yard/setup.sh`). Where the text says `systemctl`, `/etc/yard/yard.env` or
+`yard-firewall`, Docker's equivalents are in the table in that section.
+
 ### Hosting
 
 | Part | Choice | Cost |
@@ -351,6 +357,77 @@ service (a 304 when nothing changed), so the index and its signature always matc
 Packages are `private`: no shared cache keeps them, so every download is counted; signatures and details files are
 immutable and may be cached anywhere.
 
+### Running on Docker
+
+`deploy/yard/docker/` is the same registry as a Compose stack that publishes no host port: `cloudflared` dials out to
+Cloudflare, and the tunnel's public hostname (`market.yardcode.app`) points at `http://edge:8000` on the compose
+network. There is no origin certificate and no firewall list to keep; nothing listens on a public address. The server
+keeps whatever else it runs: `setup-host.sh` touches no firewall, SSH or update settings.
+
+| Service | Image | Does |
+|---|---|---|
+| `yard` | the one image (below) | `yard serve`; signs the index at start and every 24 h |
+| `litestream` | the one image | copies `yard.sqlite` to R2 as it changes |
+| `edge` | `caddy` (official, pinned) | plain HTTP in front of yard: `/metrics` answers 404, 130 MB body limit, compression, no access log |
+| `cloudflared` | `cloudflare/cloudflared` (official, pinned), profile `tunnel` | the tunnel |
+| `ops` | the one image | `yard-scheduler`: `yard resign` daily, `yard-watch` hourly, `yard-backup` daily, `yard-restore --check` weekly; each through `yard-job`, which alerts on failure. When each last ran is kept in a volume, so a restart skips nothing. It is also the shell for `yard …` commands |
+
+**One image** (`Dockerfile`, Ubuntu 24.04): the scripts, Litestream and rclone (pinned by version and checksum for
+amd64 and arm64), `sqlite3`, `curl`, `jq`. It does not hold `yard`: the `yard-deploy` workflow builds it, and the stack
+mounts `bin/` read-only, so the server never compiles Rust and a deploy is a file swap. Every service runs as user
+10001 with a read-only root file system, no capabilities (Caddy keeps `net_bind_service`, which its binary needs to
+start), `no-new-privileges`, and memory and process limits; each gets only the secrets it uses.
+
+**Files on the server.** `/opt/yard` (the stack: `compose.yml`, `.env` with every secret, mode 600, `bin/yard` and
+`bin/yard.previous`) and `/srv/yard` (the registry's folder, owned by uid 10001, bind-mounted into `yard`, `litestream`
+and `ops`). The template is `deploy/yard/docker/env.example`; a copy of the filled-in `.env` belongs in Bitwarden. Logs are Docker's
+(`docker compose logs yard`), rotated at 5 files of 10 MB.
+
+**Where the systemd path's parts went.**
+
+| Under systemd | On Docker |
+|---|---|
+| `systemctl status yard`, `journalctl -u yard` | `docker compose ps`, `docker compose logs --tail 100 yard` |
+| `systemctl restart yard` | `docker compose restart yard` |
+| `sudo -u yard yard …` | `docker compose exec yard yard …` (or `docker compose run --rm --no-deps ops yard …` when the stack is down) |
+| `/etc/yard/yard.env` | `/opt/yard/.env` |
+| `yard-alert@.service` (`OnFailure=`) | `yard-job`, which the scheduler runs each job through |
+| `yard-firewall`, origin certificate, `ufw` | not needed: no port is open, Cloudflare holds the certificate |
+| `unattended-upgrades` | the host's own policy; images are pinned, so a new version is a change in the repository |
+| `yard-install-binary` (`/usr/local/bin/yard`) | `yard-install-binary` (`/opt/yard/bin/yard`); same name, same key, different work (Deploy below) |
+
+`yard-watch` also checks that `edge` answers and does not pass `/metrics` on, and that the tunnel is connected.
+`yard-monitor` still checks from outside.
+
+**Deploy.** The workflow sends the binary to the `deploy` user, whose one command (`yard-install-binary`) hands it to a
+root helper. The helper starts it once in a throwaway container with no network and no capabilities (nothing the key
+sends runs on the host), keeps the running binary as `bin/yard.previous`, swaps the new one in with one rename,
+recreates `yard`, and waits up to 90 s for it to be healthy. If it is not, the previous binary comes back and the
+command fails, so the workflow run does. The canary key's one command, `revoke 0.0.N`, becomes
+`docker compose exec yard yard revoke … codeyard.canary 0.0.N` the same way. Both helpers check their input again; the
+sudo rules name the helpers, not `docker`.
+
+**Reaching the server from GitHub.** The two workflows connect by SSH to `YARD_SSH_HOST`. A runner on GitHub's network
+cannot reach a LAN address: the host needs an SSH route from outside (a port forward, or SSH over the same Cloudflare
+account), or the two workflows run on a self-hosted runner on the server's network. `yard-monitor` needs none of this.
+
+**Test.** `deploy/yard/docker/test.sh` runs the stack on a developer machine (arm64 or amd64) with throwaway root keys
+and MinIO as the stand-in R2: the stack publishes no port, comes up healthy, `cyx yard check` passes through `edge`,
+`/metrics` answers 404, `yard-backup` then `yard-restore --check` pass, stopping `yard` makes `yard-watch` fail and the
+alert arrive at a stand-in channel, the forced commands take only their own command, and a binary that does not run is
+refused and one that never gets healthy is rolled back. It needs Docker only (it builds `yard` in a Rust container
+unless `YARD_LINUX_BIN` names a Linux binary).
+
+**Restore on Docker.** On a new server run `setup-host.sh` and put the old `.env` back, then, from `/opt/yard`:
+
+```text
+server$  docker compose run --rm --no-deps ops yard-restore                                files from R2, the database from Litestream (or the newest snapshot)
+server$  docker compose run --rm --no-deps ops yard rotate /srv/yard/yard.json             the online key is never backed up
+you$     sign root.next.json with two root keys and copy the signatures back (as in Rotate)
+server$  docker compose run --rm --no-deps ops yard promote /srv/yard/yard.json
+server$  docker compose up -d
+```
+
 ### Root key ceremony
 
 Three Ed25519 root keys, any two of which sign `root.json`. The owner holds all three until a second maintainer takes
@@ -392,7 +469,8 @@ rehearsal below.
 
 Run the `yard-deploy` workflow. It builds `yard` in release mode on Ubuntu 24.04, keeps it as an artifact, and sends
 it to the server, where `yard-install-binary` installs it only if it runs (the previous one stays as
-`/usr/local/bin/yard.previous`) and restarts the service. The deploy key can do nothing else.
+`/usr/local/bin/yard.previous`) and restarts the service. The deploy key can do nothing else. On Docker the same
+command swaps `/opt/yard/bin/yard` and rolls back when yard does not become healthy ([Running on Docker](#running-on-docker)).
 
 ### Monitoring
 

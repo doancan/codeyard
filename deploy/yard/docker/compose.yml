@@ -1,0 +1,145 @@
+# The registry as a Docker Compose stack behind a Cloudflare Tunnel (docs/registry.md, "Running on Docker"). Nothing
+# publishes a host port: cloudflared dials out to Cloudflare and reaches `edge` on the compose network.
+#
+#   yard         yard serve (the binary comes from ./bin, the yard-deploy workflow's artifact)
+#   litestream   copies yard.sqlite to R2 as it changes
+#   edge         Caddy without TLS: /metrics answers 404, body limit, compression, no access log
+#   cloudflared  the tunnel (profile "tunnel", set in .env)
+#   ops          the scheduler: re-sign, watch, backup, weekly restore check; and the shell for `yard …` commands
+#
+# Secrets are only in .env, and each service gets only the part it uses.
+name: yard
+
+x-service: &service
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  logging:
+    driver: local
+    options: { max-size: 10m, max-file: "5" }
+
+x-image: &image codeyard/yard-ops:local
+
+x-registry-folder: &registry-folder "${YARD_DATA:-yard-data}:/srv/yard"
+x-binary-folder: &binary-folder "${YARD_BIN:-./bin}:/opt/yard/bin:ro"
+
+services:
+  yard:
+    <<: *service
+    image: *image
+    build:
+      context: .
+    user: "10001:10001"
+    command: ["yard", "serve", "/srv/yard/yard.json"]
+    volumes: [*registry-folder, *binary-folder]
+    tmpfs: [/tmp]
+    mem_limit: 1g
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "5", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 10s
+      retries: 4
+      start_period: 30s
+
+  litestream:
+    <<: *service
+    image: *image
+    pull_policy: never
+    user: "10001:10001"
+    command: ["litestream", "replicate", "-config", "/etc/litestream.yml"]
+    volumes: [*registry-folder]
+    tmpfs: [/tmp]
+    environment:
+      YARD_R2_BUCKET:
+      YARD_R2_ENDPOINT:
+      YARD_R2_ACCESS_KEY_ID:
+      YARD_R2_SECRET_ACCESS_KEY:
+    depends_on:
+      yard: { condition: service_healthy }
+    mem_limit: 512m
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "5", "http://127.0.0.1:9090/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  edge:
+    <<: *service
+    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    user: "10001:10001"
+    # The image's caddy binary carries the file capability net_bind_service, so exec fails without it in the set (it
+    # listens on 8000 and never binds a low port).
+    cap_add: [NET_BIND_SERVICE]
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    volumes: ["./Caddyfile:/etc/caddy/Caddyfile:ro"]
+    tmpfs: ["/data:uid=10001,gid=10001", "/config:uid=10001,gid=10001"]
+    depends_on:
+      yard: { condition: service_healthy }
+    mem_limit: 256m
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+
+  cloudflared:
+    <<: *service
+    profiles: [tunnel]
+    image: cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: "${CLOUDFLARE_TUNNEL_TOKEN:-}"
+      TUNNEL_METRICS: "0.0.0.0:2000"
+    depends_on:
+      edge: { condition: service_healthy }
+    mem_limit: 256m
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "--metrics", "127.0.0.1:2000", "ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  ops:
+    <<: *service
+    image: *image
+    pull_policy: never
+    user: "10001:10001"
+    command: ["yard-scheduler"]
+    volumes: [*registry-folder, *binary-folder, "ops-work:/work"]
+    tmpfs: [/tmp]
+    environment:
+      YARD_DOMAIN:
+      YARD_WATCH_TUNNEL: "${COMPOSE_PROFILES:-}"
+      YARD_R2_BUCKET:
+      YARD_R2_ENDPOINT:
+      YARD_R2_ACCESS_KEY_ID:
+      YARD_R2_SECRET_ACCESS_KEY:
+      YARD_ALERT_WEBHOOK:
+      YARD_ALERT_SMTP_URL:
+      YARD_ALERT_SMTP_USER:
+      YARD_ALERT_SMTP_PASSWORD:
+      YARD_ALERT_FROM:
+      YARD_ALERT_TO:
+    depends_on:
+      yard: { condition: service_healthy }
+    mem_limit: 512m
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "yard-health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+volumes:
+  # The registry's folder when YARD_DATA is not a path on the host (a developer machine, the test).
+  yard-data:
+  ops-work:

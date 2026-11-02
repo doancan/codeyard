@@ -1,6 +1,8 @@
 # Build yard for the registry's server (Linux x86_64) and install it there (docs/registry.md, "Deploy"). Run by hand;
-# the `yard` environment can require an approval. The binary is also kept as an artifact for setup.sh. The server
-# key can only install a yard binary that runs and restart the service (deploy/yard/install-binary).
+# the `yard` environment can require an approval. The binary is also kept as an artifact for the server's first setup
+# (deploy/yard/setup.sh, or deploy/yard/docker/host/setup-host.sh). The server key can only install a yard binary that
+# runs and restart the service (deploy/yard/install-binary; on Docker deploy/yard/docker/host/install-binary, which also
+# rolls back when yard does not become healthy).
 name: yard-deploy
 on:
   workflow_dispatch:

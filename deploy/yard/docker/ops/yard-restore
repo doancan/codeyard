@@ -1,0 +1,68 @@
+#!/bin/sh
+# Restore the registry from R2 (docs/registry.md, "Restore from backup").
+#   yard-restore            into /srv/yard, on a new server with the stack down; refuses a folder that already has a
+#                           registry
+#   yard-restore --check    into a temporary folder, and check it (yard-scheduler, weekly); changes nothing
+# The database comes from Litestream's copy, or from the newest daily snapshot when that fails.
+set -eu
+check=0
+case "${1:-}" in
+--check) check=1 ;;
+"") ;;
+*) echo "usage: yard-restore [--check]" >&2; exit 2 ;;
+esac
+export RCLONE_S3_PROVIDER=Cloudflare RCLONE_S3_ENDPOINT="$YARD_R2_ENDPOINT" RCLONE_S3_REGION=auto \
+	RCLONE_S3_ACCESS_KEY_ID="$YARD_R2_ACCESS_KEY_ID" RCLONE_S3_SECRET_ACCESS_KEY="$YARD_R2_SECRET_ACCESS_KEY" RCLONE_S3_NO_CHECK_BUCKET=true RCLONE_LOG_LEVEL=ERROR
+remote=":s3:$YARD_R2_BUCKET"
+
+if [ "$check" = 1 ]; then
+	target=$(mktemp -d /work/yard-restore-check.XXXXXX)
+	trap 'rm -rf "$target"' EXIT
+else
+	target=/srv/yard
+	if [ -e "$target/yard.json" ]; then
+		echo "$target already has a registry; restore onto a new server (or move $target away first)" >&2
+		exit 1
+	fi
+	if curl -fsS --max-time 3 http://yard:8080/healthz >/dev/null 2>&1; then
+		echo "stop the stack first: docker compose down" >&2
+		exit 1
+	fi
+fi
+
+rclone copy "$remote/files" "$target"
+if litestream restore -config /etc/litestream.yml -o "$target/yard.sqlite" /srv/yard/yard.sqlite; then
+	from="Litestream's copy"
+else
+	newest=$(rclone lsf "$remote/snapshots" | sort | tail -n 1)
+	[ -n "$newest" ] || { echo "no database copy in $YARD_R2_BUCKET" >&2; exit 1; }
+	rclone copyto "$remote/snapshots/$newest" "$target/yard.sqlite.gz"
+	gunzip "$target/yard.sqlite.gz"
+	from="the snapshot $newest"
+fi
+
+[ "$(sqlite3 "$target/yard.sqlite" 'PRAGMA integrity_check;')" = ok ] || { echo "the restored database is damaged" >&2; exit 1; }
+for f in yard.json root.json root.json.sig public/index.json; do
+	[ -s "$target/$f" ] || { echo "the backup has no $f" >&2; exit 1; }
+done
+missing=0
+for d in $(sqlite3 "$target/yard.sqlite" 'SELECT digest FROM versions UNION SELECT digest FROM target_packages;'); do
+	if [ ! -e "$target/public/packages/$d.cyx" ] && ! find "$target/review" -name "$d.cyx" 2>/dev/null | grep -q .; then
+		echo "the backup has no package $d" >&2
+		missing=$((missing + 1))
+	fi
+done
+[ "$missing" = 0 ] || exit 1
+versions=$(sqlite3 "$target/yard.sqlite" 'SELECT count(*) FROM versions;')
+
+if [ "$check" = 1 ]; then
+	echo "yard-restore --check: the backup restores ($from, $versions versions, every package present)"
+	exit 0
+fi
+cat <<MSG
+Restored /srv/yard from R2 ($from, $versions versions).
+The online key is not in the backup. Next (docs/registry.md, "Restore from backup"):
+  docker compose run --rm --no-deps ops yard rotate /srv/yard/yard.json     then two root key holders sign root.next.json
+  docker compose run --rm --no-deps ops yard promote /srv/yard/yard.json
+  docker compose up -d
+MSG
