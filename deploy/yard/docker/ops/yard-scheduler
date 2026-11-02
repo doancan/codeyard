@@ -1,0 +1,41 @@
+#!/bin/sh
+# What the systemd timers did: runs the jobs on their intervals, each through yard-job (which alerts on failure).
+#   yard-resign         daily    a second daily signature, so the index (72 h) never expires while either runs
+#   yard-watch          hourly   see yard-watch
+#   yard-backup         daily    see yard-backup
+#   yard-restore-check  weekly   yard-restore --check
+# When each job last ran is kept in /work/state, so a restart does not skip a job (systemd's Persistent=true). A job that
+# has never run starts a few minutes after the first start, not at once, so the stack can come up first. Every pass
+# touches /work/heartbeat, which is the container's health check (yard-health).
+set -u
+state=/work/state
+mkdir -p "$state"
+
+# due NAME INTERVAL FIRST-DELAY: 0 (due) when INTERVAL seconds have passed since its last run
+due() {
+	now=$(date +%s)
+	if [ ! -s "$state/$1" ]; then
+		echo $((now - $2 + $3)) > "$state/$1"
+	fi
+	last=$(cat "$state/$1")
+	[ $((now - last)) -ge "$2" ]
+}
+# run NAME INTERVAL FIRST-DELAY COMMAND…
+run() {
+	name=$1 interval=$2 delay=$3
+	shift 3
+	if due "$name" "$interval" "$delay"; then
+		date +%s > "$state/$name"
+		echo "yard-scheduler: $name"
+		yard-job "$name" "$@"
+	fi
+}
+
+while :; do
+	touch /work/heartbeat
+	run resign 86400 300 yard resign /srv/yard/yard.json
+	run watch 3600 300 yard-watch
+	run backup 86400 600 yard-backup
+	run restore-check 604800 1200 yard-restore --check
+	sleep 30
+done

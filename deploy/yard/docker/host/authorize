@@ -1,0 +1,22 @@
+#!/bin/sh
+# Let a workflow's SSH key run its one command on this server, and nothing else:
+#   yard-authorize canary "ssh-ed25519 AAAA… yard-canary"
+#   yard-authorize deploy "ssh-ed25519 AAAA… yard-deploy"
+set -eu
+user=${1:?usage: yard-authorize canary|deploy "PUBLIC KEY"}
+key=${2:?usage: yard-authorize canary|deploy "PUBLIC KEY"}
+case "$user" in
+canary) command=/usr/local/bin/yard-canary-revoke ;;
+deploy) command=/usr/local/bin/yard-install-binary ;;
+*) echo "the user is canary or deploy" >&2; exit 2 ;;
+esac
+case "$key" in
+ssh-ed25519\ *) ;;
+*) echo "give an ssh-ed25519 public key" >&2; exit 2 ;;
+esac
+home=$(getent passwd "$user" | cut -d: -f6)
+install -d -o "$user" -g "$user" -m 700 "$home/.ssh"
+printf 'command="%s",restrict %s\n' "$command" "$key" > "$home/.ssh/authorized_keys"
+chown "$user:$user" "$home/.ssh/authorized_keys"
+chmod 600 "$home/.ssh/authorized_keys"
+echo "$user may now run $command, and nothing else."

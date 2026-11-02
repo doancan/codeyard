@@ -114,7 +114,7 @@ pub(crate) fn dock_items(windows: &[DockWindow], recent: &[state::RecentWorkspac
     }
     items.extend([
         I::action(tr("New Window"), wb::NewWindow),
-        I::action(tr("Open Folder…"), wb::OpenFolder),
+        I::action(tr("Open Folder…"), wb::AddFolderInNewWindow),
         I::action(tr("Connect to SSH Host…"), wb::ShowRemote),
         I::action(tr("Go to File…"), wb::QuickOpen),
     ]);
@@ -187,20 +187,25 @@ fn rebuild(cx: &mut App, recent: &[state::RecentWorkspace]) {
     cx.set_menus(menus(recent));
 }
 
-/// The `n`th recently opened project from the Dock menu: open it in the front window.
+/// The `n`th recently opened project from the Dock menu: a window that holds nothing yet takes it, otherwise it gets a window
+/// of its own (the front window keeps its folder, local or SSH). A project already open in a window just comes forward.
 fn open_recent(n: usize, cx: &mut App) {
     let Some(r) = DOCK_RECENT.lock().unwrap_or_else(|e| e.into_inner()).get(n).cloned() else { return };
     // The menu action arrives while the window is updating: updating the window immediately fails
     // (verified in a real window), so it is deferred to the next effect cycle.
     cx.defer(move |cx| {
-        let handle = cx.active_window().or_else(|| cx.windows().first().copied()).and_then(|w| w.downcast::<wb::Workbench>());
-        if let Some(w) = handle {
-            w.update(cx, |wb, window, cx| {
+        let key = Some((r.host.clone(), r.path.clone()));
+        let workbenches: Vec<_> = cx.windows().into_iter().filter_map(|w| w.downcast::<wb::Workbench>()).collect();
+        let open_already = workbenches.iter().copied().find(|w| w.read(cx).is_ok_and(|wb| wb.workspace_key(cx) == key));
+        let front = cx.active_window().and_then(|w| w.downcast::<wb::Workbench>()).or_else(|| workbenches.first().copied());
+        let empty = front.filter(|w| w.read(cx).is_ok_and(|wb| !wb.holds_workspace(cx)));
+        let Some(target) = open_already.or(empty).or_else(|| crate::open_workbench_window(cx)) else { return };
+        target
+            .update(cx, |wb, window, cx| {
                 window.activate_window();
                 wb.open_recent(r, window, cx)
             })
             .ok();
-        }
     });
 }
 

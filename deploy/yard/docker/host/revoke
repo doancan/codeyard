@@ -1,0 +1,14 @@
+#!/bin/sh
+# Root helper behind yard-canary-revoke (sudo, see setup-host.sh): revoke one version of codeyard.canary in the running
+# yard container. Checks its argument itself; the sudoers line and the forced command are not the only guard.
+#   revoke 0.0.N
+set -eu
+[ -r /etc/yard/stack.conf ] && . /etc/yard/stack.conf
+stack=${YARD_STACK_DIR:-/opt/yard}
+version=${1:-}
+if [ "$#" != 1 ] || ! printf '%s\n' "$version" | grep -Eq '^0\.0\.[0-9]{1,9}$'; then
+	echo "only: revoke 0.0.N" >&2
+	exit 2
+fi
+exec docker compose --project-directory "$stack" exec -T yard yard revoke /srv/yard/yard.json codeyard.canary "$version" \
+	"Canary: a scheduled test that revocation reaches clients. Not a real problem."

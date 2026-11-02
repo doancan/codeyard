@@ -33,3 +33,8 @@ lcov.info
 /deploy/yard/origin.pem
 /deploy/yard/origin.key
 /deploy/yard/yard.env
+# The Docker stack's local inputs (deploy/yard/docker): the binary, the secrets file, the registry's folder.
+/deploy/yard/docker/bin/
+/deploy/yard/docker/host/yard
+/deploy/yard/docker/.env
+/deploy/yard/docker/data/
