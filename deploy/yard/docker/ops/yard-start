@@ -1,0 +1,24 @@
+#!/bin/sh
+# The yard service's command: serve the registry in /srv/yard. With YARD_AUTO_INIT=dev and no registry there yet, create
+# one first (yard-init, with a root key generated and kept on this server instead of the root key ceremony's), so a
+# stack manager can start the stack with no command run by hand. Without it, an empty folder is an error that says what
+# to do. docs/registry-setup-checklist.md, "The Docker path".
+set -eu
+cfg=/srv/yard/yard.json
+if [ ! -f "$cfg" ]; then
+	case "${YARD_AUTO_INIT:-}" in
+	dev)
+		echo "yard-start: no registry in /srv/yard; creating one with its root key on this server (YARD_AUTO_INIT=dev)" >&2
+		yard-init --registry "${YARD_DOMAIN:?yard-start: YARD_DOMAIN names the registry; set it to create one}"
+		;;
+	"")
+		echo "yard-start: no registry in /srv/yard: run yard-init once (docs/registry-setup-checklist.md), or set YARD_AUTO_INIT=dev" >&2
+		exit 1
+		;;
+	*)
+		echo "yard-start: YARD_AUTO_INIT is '$YARD_AUTO_INIT'; the only value is dev" >&2
+		exit 1
+		;;
+	esac
+fi
+exec yard serve "$cfg"
