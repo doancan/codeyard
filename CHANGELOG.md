@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The public extension registry, `market.yardcode.app`, is on: the app trusts it through three root public keys (any two
   of them sign its `root.json`; listed in SECURITY.md), and `cyx publish` uses it by default. The Extensions view and
   `https://yardcode.app/extensions` list what it holds.
+- `extensions/midnight`, a dark theme, is the first extension of the registry; the "Publish an extension" workflow
+  publishes the folders under `extensions/` (keyless, from this repository).
 - Terminal notifications: the bell and OSC 9 / OSC 777 messages (Claude Code and Codex waiting for an answer) flag the
   terminal in the list and on the Terminal tab, show the message as a notice, and flash the taskbar button on Windows
   while the window is in the background (`terminal.notifications`). A command that ran for ten seconds or more and
@@ -38,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Folder uploads over SSH failed on hosts whose `sh` is dash (Ubuntu, Debian): the commit script read its stop signal from a
+  stdin that dash had closed and killed the receiving `tar`.
 - Choosing a recent project or "Open Folder…" from the Dock menu no longer replaces the folder of the front window (and
   with it a running terminal, local or SSH): a window that holds nothing takes it, a project that is already open comes
   forward, and any other gets a window of its own.

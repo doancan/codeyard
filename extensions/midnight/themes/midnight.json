@@ -1,0 +1,16 @@
+{
+  // Codeyard's own format: "appearance" plus the colour roles you want to change; every other role keeps the default.
+  // A VS Code colour theme (with "colors" and "tokenColors") works here too.
+  "name": "Midnight",
+  "appearance": "dark",
+  "color": {
+    "bg": "#1b1f27",
+    "surface": "#20252e",
+    "accent": "#6fdcb4",
+    "text": "#c8d0e0",
+    "syntax-keyword": "#bb9af7",
+    "syntax-string": "#9ece6a",
+    "syntax-function": "#6fdcb4",
+    "syntax-comment": "#5c6370"
+  }
+}
