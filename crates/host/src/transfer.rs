@@ -310,11 +310,12 @@ mkdir "$t/tree"; printf '%s\0' "$t"; tar -C "$t/tree" -xof -; keep=yes"#,
 if [ -e {dest} ] && [ ! -d {dest} ]; then echo 'upload destination is not a folder' >&2; exit 1; fi
 mkdir -p {dest}
 receiver=; watcher=
+exec 3<&0
 cleanup() {{ [ -z "$receiver" ] || kill "$receiver" 2>/dev/null || :; [ -z "$watcher" ] || kill "$watcher" 2>/dev/null || :; }}
 trap cleanup EXIT; trap 'exit 1' HUP INT TERM
 ( if tar -C {tree} -cf - .; then printf 0 > {status}; else printf 1 > {status}; fi ) | tar -C {dest} -xof - &
 receiver=$!
-( IFS= read -r ignored || kill "$receiver" 2>/dev/null || : ) <&0 >/dev/null 2>&1 &
+( IFS= read -r ignored <&3 || kill "$receiver" 2>/dev/null || : ) >/dev/null 2>&1 &
 watcher=$!
 if wait "$receiver"; then extracted=0; else extracted=1; fi
 receiver=
