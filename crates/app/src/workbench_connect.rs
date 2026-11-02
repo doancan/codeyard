@@ -398,6 +398,11 @@ impl Workbench {
         Some((self.host_alias(), path))
     }
 
+    /// Whether the window already holds a folder, or is connected (or connecting) to an SSH host.
+    pub(crate) fn holds_workspace(&self, cx: &App) -> bool {
+        self.root(cx).is_some() || self.host_alias().is_some()
+    }
+
     /// The SSH alias of the window's host (`None` on this computer).
     pub(crate) fn host_alias(&self) -> Option<String> {
         match &self.remote.conn {
