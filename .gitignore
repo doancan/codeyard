@@ -38,3 +38,4 @@ lcov.info
 /deploy/yard/docker/host/yard
 /deploy/yard/docker/.env
 /deploy/yard/docker/data/
+/deploy/yard/docker/yard

@@ -1,0 +1,109 @@
+# The registry and the Codeyard site as one self-contained Compose file, for a stack manager that deploys a single file
+# with its environment variables (Dockhand, Portainer): the published image only, nothing from this folder, and `yard`
+# on Nginx Proxy Manager's network as `codeyard-yard`. compose.yml is the same stack for /opt/yard (setup-host.sh).
+#
+# Environment: NPM_NETWORK (default npm_default), YARD_DOMAIN, YARD_DATA (a host folder owned by uid 10001, or leave it
+# out for a volume), the R2 and alert variables of env.example. YARD_IMAGE defaults to the published image.
+#
+# First start (once; docs/registry-setup-checklist.md, "The Docker path"): before yard can run, create the registry with
+#   docker compose run --rm --no-deps ops yard-init --registry market.yardcode.app --root-keys A,B,C --threshold 2
+# and put the signed root.json.sig in its folder; until then yard restarts and its health check fails.
+name: yard
+
+x-service: &service
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  logging:
+    driver: local
+    options: { max-size: 10m, max-file: "5" }
+
+x-image: &image "${YARD_IMAGE:-ghcr.io/doancan/codeyard-yard:latest}"
+
+x-registry-folder: &registry-folder "${YARD_DATA:-yard-data}:/srv/yard"
+
+services:
+  yard:
+    <<: *service
+    image: *image
+    user: "10001:10001"
+    command: ["yard", "serve", "/srv/yard/yard.json"]
+    volumes: [*registry-folder]
+    networks:
+      default: {}
+      proxy:
+        aliases: [codeyard-yard]
+    tmpfs: [/tmp]
+    mem_limit: 1g
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "5", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 10s
+      retries: 4
+      start_period: 30s
+
+  litestream:
+    <<: *service
+    image: *image
+    user: "10001:10001"
+    command: ["litestream", "replicate", "-config", "/etc/litestream.yml"]
+    volumes: [*registry-folder]
+    tmpfs: [/tmp]
+    environment:
+      YARD_R2_BUCKET:
+      YARD_R2_ENDPOINT:
+      YARD_R2_ACCESS_KEY_ID:
+      YARD_R2_SECRET_ACCESS_KEY:
+    depends_on:
+      yard: { condition: service_healthy }
+    mem_limit: 512m
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "5", "http://127.0.0.1:9090/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  ops:
+    <<: *service
+    image: *image
+    user: "10001:10001"
+    command: ["yard-scheduler"]
+    volumes: [*registry-folder, "ops-work:/work"]
+    tmpfs: [/tmp]
+    environment:
+      YARD_DOMAIN:
+      YARD_R2_BUCKET:
+      YARD_R2_ENDPOINT:
+      YARD_R2_ACCESS_KEY_ID:
+      YARD_R2_SECRET_ACCESS_KEY:
+      YARD_ALERT_WEBHOOK:
+      YARD_ALERT_SMTP_URL:
+      YARD_ALERT_SMTP_USER:
+      YARD_ALERT_SMTP_PASSWORD:
+      YARD_ALERT_FROM:
+      YARD_ALERT_TO:
+    depends_on:
+      yard: { condition: service_healthy }
+    mem_limit: 512m
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "yard-health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+networks:
+  # Nginx Proxy Manager's network (`docker network ls`); its proxy host forwards to http://codeyard-yard:8080.
+  proxy:
+    name: ${NPM_NETWORK:-npm_default}
+    external: true
+
+volumes:
+  # The registry's folder when YARD_DATA is not a path on the host.
+  yard-data:
+  ops-work:

@@ -1,5 +1,5 @@
 # Added to compose.yml by test.sh: a stand-in R2 (MinIO), a stand-in alert channel (it keeps what is posted), and the one
-# host port the test needs to reach `edge` from the developer's machine. Never used on the server.
+# host port the test needs to reach `yard` from the developer's machine. Never used on the server.
 services:
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
@@ -36,8 +36,8 @@ services:
         http.server.HTTPServer(("0.0.0.0", 8080), H).serve_forever()
     volumes: ["hook:/hook"]
 
-  edge:
-    ports: ["127.0.0.1:${YARD_TEST_PORT:-18788}:8000"]
+  yard:
+    ports: ["127.0.0.1:${YARD_TEST_PORT:-18788}:8080"]
 
   ops:
     depends_on:

@@ -3,3 +3,7 @@ data
 .env
 .env.*
 *.md
+compose*.yml
+env.example
+test.sh
+host
