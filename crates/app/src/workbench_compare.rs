@@ -702,6 +702,15 @@ pub(super) fn verify_delete(host: &dyn Host, full: &str, plan: &DeletePlan, _roo
 
 #[cfg(test)]
 mod tests {
+    /// A directory junction `link` to `target`. `mklink` reads a `/` as a switch, so both paths use backslashes.
+    #[cfg(windows)]
+    fn make_junction(link: impl AsRef<std::path::Path>, target: impl AsRef<std::path::Path>) {
+        let back = |p: &std::path::Path| p.to_string_lossy().replace('/', "\\");
+        let output =
+            std::process::Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(back(link.as_ref())).arg(back(target.as_ref())).output().unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    }
+
     use super::*;
     use crate::compare_logic::{self as logic, Row};
 
@@ -802,8 +811,7 @@ mod tests {
             std::os::unix::fs::symlink(&target, &link).unwrap();
             #[cfg(windows)]
             {
-                let output = std::process::Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(&link).arg(&target).output().unwrap();
-                assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+                make_junction(&link, &target);
             }
             let stage = stage_dir_at(&root, &AtomicU64::new(0)).unwrap();
             assert_ne!(stage, link);
@@ -851,8 +859,7 @@ mod tests {
             std::os::unix::fs::symlink(&target, &link).unwrap();
             #[cfg(windows)]
             {
-                let output = std::process::Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(&link).arg(&target).output().unwrap();
-                assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+                make_junction(&link, &target);
             }
             let outcome = copy_jobs(&end(&left), &end(&right), None, &jobs, &AtomicBool::new(false));
             assert_eq!(outcome.copied, 0, "source link: {source_link}; {outcome:?}");
@@ -919,8 +926,7 @@ mod tests {
                 std::os::unix::fs::symlink(target, left.join("empty")).unwrap();
                 #[cfg(windows)]
                 {
-                    let output = std::process::Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(left.join("empty")).arg(target).output().unwrap();
-                    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+                    make_junction(left.join("empty"), target);
                 }
             }
             let outcome = copy_jobs(&end(&left), &end(&right), None, &jobs, &AtomicBool::new(false));
@@ -948,9 +954,7 @@ mod tests {
                 std::os::unix::fs::symlink(&target, path).unwrap();
                 #[cfg(windows)]
                 {
-                    let output =
-                        std::process::Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(path.replace('/', "\\")).arg(&target).output().unwrap();
-                    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+                    make_junction(path, &target);
                 }
                 observed.store(true, Ordering::Relaxed);
             }

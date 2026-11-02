@@ -484,6 +484,7 @@ fn the_http_service_end_to_end() {
 }
 
 #[test]
+#[cfg_attr(windows, ignore = "yard serves from Linux; Windows refuses the rename that replaces an index file a request has open")]
 fn the_site_is_served_beside_the_registry() {
     let t = Test::new("site");
     let site = t.dir.join("site");
