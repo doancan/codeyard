@@ -1,0 +1,18 @@
+#!/bin/sh
+# Run one scheduled job and alert when it fails (what a unit's OnFailure= did under systemd):
+#   yard-job NAME COMMAND [ARGS…]
+# The job's last 40 lines of output are the alert's body. Its exit status is the job's.
+set -u
+name=${1:?usage: yard-job NAME COMMAND [ARGS…]}
+shift
+log=$(mktemp)
+trap 'rm -f "$log"' EXIT
+"$@" > "$log" 2>&1
+status=$?
+if [ "$status" = 0 ]; then
+	cat "$log"
+	exit 0
+fi
+cat "$log" >&2
+tail -n 40 "$log" | yard-alert "$name" || echo "yard-job: $name failed and the alert did not go out" >&2
+exit "$status"

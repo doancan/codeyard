@@ -1,0 +1,15 @@
+# Continuous copy of the registry's database to Cloudflare R2, read by the litestream service. The bucket, endpoint and
+# keys come from the service's environment (compose.yml, from .env). The metrics address is for the container's health
+# check and yard-watch, inside the compose network only.
+addr: ":9090"
+dbs:
+  - path: /srv/yard/yard.sqlite
+    replica:
+      type: s3
+      bucket: ${YARD_R2_BUCKET}
+      path: litestream/yard.sqlite
+      endpoint: ${YARD_R2_ENDPOINT}
+      region: auto
+      force-path-style: true
+      access-key-id: ${YARD_R2_ACCESS_KEY_ID}
+      secret-access-key: ${YARD_R2_SECRET_ACCESS_KEY}

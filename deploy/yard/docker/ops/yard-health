@@ -1,0 +1,3 @@
+#!/bin/sh
+# The ops container's health check: yard-scheduler has gone round within the last two minutes.
+test -n "$(find /work/heartbeat -mmin -2 2>/dev/null)"

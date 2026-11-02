@@ -1,0 +1,11 @@
+#!/bin/sh
+# Forced command for the deploy workflow's SSH key (user `deploy`): the new yard binary arrives on standard input and
+# goes to the root helper (libexec/install), which runs it in a throwaway container first, swaps it in, and rolls back
+# when yard does not become healthy. No command is taken from the caller.
+#   command="/usr/local/bin/yard-install-binary",restrict ssh-ed25519 AAAA… yard-deploy
+set -eu
+if [ -n "${SSH_ORIGINAL_COMMAND:-}" ]; then
+	echo "no command is accepted: the binary goes on standard input" >&2
+	exit 2
+fi
+exec sudo -n /usr/local/libexec/yard/install

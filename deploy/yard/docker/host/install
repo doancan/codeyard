@@ -1,0 +1,59 @@
+#!/bin/sh
+# Root helper behind yard-install-binary (sudo, see setup-host.sh): the new yard binary arrives on standard input.
+# 1. it must run, so it is started once in a throwaway container (no network, no capabilities, read-only) from the
+#    stack's own image; nothing the caller sent runs on the host itself
+# 2. the running binary is kept as bin/yard.previous, and the new one replaces it in one rename
+# 3. yard is recreated and must report healthy within 90 s (YARD_HEALTH_WAIT); if not, the previous binary comes back and the command fails
+set -eu
+[ -r /etc/yard/stack.conf ] && . /etc/yard/stack.conf
+stack=${YARD_STACK_DIR:-/opt/yard}
+image=codeyard/yard-ops:local
+compose() { docker compose --project-directory "$stack" "$@"; }
+
+bin=$stack/bin
+install -d -m 755 "$bin"
+staged=$(mktemp "$bin/.yard.new.XXXXXX")
+trap 'rm -f "$staged"' EXIT
+head -c 200000000 > "$staged"
+chmod 755 "$staged"
+
+docker run --rm --network none --cap-drop ALL --read-only --user 10001:10001 --memory 256m --pids-limit 64 \
+	-v "$staged:/staged/yard:ro" --entrypoint /staged/yard "$image" --version
+
+# healthy: wait for the yard container's health check to pass (YARD_HEALTH_WAIT seconds, 90 by default)
+healthy() {
+	i=0
+	while [ "$i" -lt $((${YARD_HEALTH_WAIT:-90} / 2)) ]; do
+		id=$(compose ps -q yard)
+		status=$([ -n "$id" ] && docker inspect -f '{{.State.Health.Status}}' "$id" 2>/dev/null || echo none)
+		[ "$status" = healthy ] && return 0
+		i=$((i + 1))
+		sleep 2
+	done
+	return 1
+}
+
+had_previous=0
+if [ -x "$bin/yard" ]; then
+	install -m 755 "$bin/yard" "$bin/yard.previous"
+	had_previous=1
+fi
+mv -f "$staged" "$bin/yard"
+compose up -d --no-deps --force-recreate yard
+if healthy; then
+	echo "yard is healthy with the new binary: $(compose exec -T yard yard --version)"
+	exit 0
+fi
+echo "yard did not become healthy with the new binary" >&2
+compose logs --tail 40 yard >&2 || true
+if [ "$had_previous" = 1 ]; then
+	mv -f "$bin/yard.previous" "$bin/yard"
+	install -m 755 "$bin/yard" "$bin/yard.previous"
+	compose up -d --no-deps --force-recreate yard
+	if healthy; then
+		echo "the previous binary is back and healthy" >&2
+	else
+		echo "the previous binary is not healthy either: docker compose logs yard" >&2
+	fi
+fi
+exit 1

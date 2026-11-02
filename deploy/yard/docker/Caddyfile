@@ -1,0 +1,24 @@
+# The registry's edge inside the compose network: plain HTTP on :8000, in front of yard, behind cloudflared (Cloudflare
+# holds the public certificate; the tunnel is the only way in, and no host port is published). What it adds to yard:
+# /metrics is never passed on, a body limit, compression, and no access log.
+{
+	admin off
+	auto_https off
+}
+
+:8000 {
+	# A per-platform package is at most 128 MiB, plus its signature. (Cloudflare's free plan stops uploads at 100 MB;
+	# docs/registry.md, "Hosting".)
+	request_body {
+		max_size 130MB
+	}
+	# For the stack's own monitoring only (yard-watch asks yard directly); never through the tunnel.
+	@internal path /metrics
+	respond @internal 404
+	encode zstd gzip
+	reverse_proxy yard:8080
+	# Nothing about who asks is kept.
+	log {
+		output discard
+	}
+}
