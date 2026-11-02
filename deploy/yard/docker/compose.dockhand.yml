@@ -3,7 +3,8 @@
 # on Nginx Proxy Manager's network as `codeyard-yard`. compose.yml is the same stack for /opt/yard (setup-host.sh).
 #
 # Environment: NPM_NETWORK (default npm_default), YARD_DOMAIN, YARD_DATA (a host folder owned by uid 10001, or leave it
-# out for a volume), the R2 and alert variables of env.example. YARD_IMAGE defaults to the published image.
+# out for a volume), the R2 and alert variables of env.example. YARD_IMAGE defaults to the published image from main
+# (`latest`); `ghcr.io/doancan/codeyard-yard:develop` is the one built from develop.
 #
 # First start (once; docs/registry-setup-checklist.md, "The Docker path"): before yard can run, create the registry with
 #   docker compose run --rm --no-deps ops yard-init --registry market.yardcode.app --root-keys A,B,C --threshold 2

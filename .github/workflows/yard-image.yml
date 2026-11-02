@@ -1,11 +1,12 @@
 # Build the registry's image (yard, Litestream, rclone, the operating scripts and the site) and publish it to the GitHub
-# Container Registry as ghcr.io/<owner>/codeyard-yard: `latest` and `sha-<commit>`. The server runs it with
-# `docker compose pull && docker compose up -d` (deploy/yard/docker, docs/registry.md "Running on Docker").
-# Runs on every push to main that changes yard, the crates it is built from, or the stack; and by hand.
+# Container Registry as ghcr.io/<owner>/codeyard-yard: `latest` from main, `develop` from develop, and `sha-<commit>`
+# from both. The server runs it with `docker compose pull && docker compose up -d` (deploy/yard/docker, docs/registry.md
+# "Running on Docker"). Runs on every push to main or develop that changes yard, the crates it is built from, or the
+# stack; and by hand.
 name: yard-image
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - crates/yard/**
       - crates/ext-api/**
@@ -41,23 +42,26 @@ jobs:
       - name: Build the image
         run: |
           image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/codeyard-yard"
+          # main is `latest`; any other branch is named after itself (develop → `develop`).
+          if [ "$GITHUB_REF_NAME" = main ]; then channel=latest; else channel=$(printf '%s' "$GITHUB_REF_NAME" | tr -c 'A-Za-z0-9_.-' '-'); fi
           echo "IMAGE=$image" >> "$GITHUB_ENV"
+          echo "CHANNEL=$channel" >> "$GITHUB_ENV"
           install -m 755 target/release/yard deploy/yard/docker/yard
           docker build deploy/yard/docker \
             --build-arg YARD=included \
             --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             --label "org.opencontainers.image.description=Codeyard extension registry (yard) and site" \
-            -t "$image:latest" -t "$image:sha-${GITHUB_SHA::12}"
+            -t "$image:$channel" -t "$image:sha-${GITHUB_SHA::12}"
       - name: Check the image
         run: |
-          docker run --rm "$IMAGE:latest" yard --version
-          docker run --rm "$IMAGE:latest" litestream version
-          docker run --rm "$IMAGE:latest" test -s /opt/yard/site/index.html
+          docker run --rm "$IMAGE:$CHANNEL" yard --version
+          docker run --rm "$IMAGE:$CHANNEL" litestream version
+          docker run --rm "$IMAGE:$CHANNEL" test -s /opt/yard/site/index.html
       - name: Publish
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           printf '%s' "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker push --all-tags "$IMAGE"
-          echo "Published $IMAGE:latest and $IMAGE:sha-${GITHUB_SHA::12}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Published $IMAGE:$CHANNEL and $IMAGE:sha-${GITHUB_SHA::12}" >> "$GITHUB_STEP_SUMMARY"
