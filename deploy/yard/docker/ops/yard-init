@@ -1,9 +1,10 @@
 #!/bin/sh
 # Create the registry in /srv/yard: `yard init`, then yard listens on every address of the container's own network
-# (the compose network is the only way to it; no host port is published).
+# (the compose network and the proxy's are the only ways to it; no host port is published) and serves the site from
+# the image (/opt/yard/site) on every path that is not the registry's.
 #   docker compose run --rm --no-deps ops yard-init --registry market.yardcode.app --root-keys A,B,C --threshold 2
 set -eu
 yard init /srv/yard "$@"
 cfg=/srv/yard/yard.json
-jq '.listen = "0.0.0.0:8080"' "$cfg" > "$cfg.tmp"
+jq '.listen = "0.0.0.0:8080" | .site = "/opt/yard/site"' "$cfg" > "$cfg.tmp"
 mv "$cfg.tmp" "$cfg"

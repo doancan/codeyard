@@ -1,8 +1,19 @@
 # The one image behind the yard, litestream and ops services (compose.yml): the operating scripts, Litestream, rclone,
-# sqlite3 and curl. The yard binary is not in it: the yard-deploy workflow builds it (Linux x86_64, Ubuntu 24.04's glibc)
-# and it is mounted from ./bin, so the server never compiles Rust and a new yard is a file swap (host/install).
-# Ubuntu 24.04 is the base because the workflow's runner is: the binary needs the same glibc or newer.
-# docs/registry.md, "Running on Docker".
+# sqlite3 and curl, and the site (site/). Ubuntu 24.04 is the base because the workflows' runner is: yard needs the same
+# glibc or newer. docs/registry.md, "Running on Docker".
+#
+# Where yard comes from:
+#   - the published image (ghcr.io/<owner>/codeyard-yard, the yard-image workflow) has it built in: that workflow puts
+#     the binary beside this file and builds with --build-arg YARD=included;
+#   - a local build (YARD=none, the default) has none, and the stack mounts ./bin instead.
+# Either way ./bin wins when it holds a yard (it is first on PATH), so host/install can still swap the binary in place.
+ARG YARD=none
+
+FROM scratch AS yard-none
+FROM scratch AS yard-included
+COPY --chmod=755 yard /yard
+FROM yard-${YARD} AS yard
+
 FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
 
 ARG TARGETARCH
@@ -41,7 +52,9 @@ RUN groupadd --gid 10001 yard \
 
 COPY --chmod=755 ops/ /usr/local/bin/
 COPY --chmod=644 litestream.yml /etc/litestream.yml
+COPY site/ /opt/yard/site/
+COPY --from=yard / /opt/yard/included/
 
-ENV PATH=/opt/yard/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV PATH=/opt/yard/bin:/opt/yard/included:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 USER 10001:10001
 WORKDIR /srv/yard

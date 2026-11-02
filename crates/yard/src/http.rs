@@ -8,7 +8,9 @@
 //! GET  /packages/<digest>.details.json     its manifest and README, for the Market's page (not a download)
 //! GET  /index.json, /index.json.sig, /root.json, /root.json.sig    the static files, for a registry without a CDN
 //! GET  /healthz
-//! GET  /metrics                   index version and expiry, online key expiry, counts (Prometheus text; local only)
+//! GET  /metrics                   index version and expiry, online key expiry, counts (Prometheus text; local only:
+//!                                  404 to a request that came through a proxy)
+//! GET  anything else               a file of the site folder (`site` in yard.json), else 404
 //! ```
 
 use std::convert::Infallible;
@@ -75,6 +77,9 @@ async fn handle(yard: Arc<Yard>, uploads: Arc<tokio::sync::Semaphore>, req: Requ
     let response = match (req.method().clone(), path.as_str()) {
         (Method::GET, "/healthz") => text(StatusCode::OK, "ok"),
         // For the server's own monitoring; the proxy keeps it from the internet (deploy/yard/Caddyfile).
+        // A proxy in front (Nginx Proxy Manager, Caddy, cloudflared) always says whom it forwards for; monitoring data
+        // is only for the server's own services, which ask directly.
+        (Method::GET, "/metrics") if forwarded(&req) => text(StatusCode::NOT_FOUND, "not found"),
         (Method::GET, "/metrics") => match tokio::task::spawn_blocking({
             let yard = yard.clone();
             move || yard.health()
@@ -154,10 +159,86 @@ async fn handle(yard: Arc<Yard>, uploads: Arc<tokio::sync::Semaphore>, req: Requ
                 Err(_) => text(StatusCode::NOT_FOUND, "not found"),
             }
         }
+        (Method::GET | Method::HEAD, p) if yard.config().site.is_some() && !p.starts_with("/v1/") && !p.starts_with("/packages/") => {
+            let site = yard.config().site.clone().expect("checked");
+            let page = site_file(&site, p).await;
+            let mut r = match page {
+                Some((bytes, kind, cache)) => file(bytes, kind, cache),
+                None => text(StatusCode::NOT_FOUND, "not found"),
+            };
+            site_headers(&mut r);
+            if req.method() == Method::HEAD {
+                *r.body_mut() = Full::new(Bytes::new());
+            }
+            r
+        }
         (Method::GET | Method::POST, _) => text(StatusCode::NOT_FOUND, "not found"),
         _ => text(StatusCode::METHOD_NOT_ALLOWED, "method not allowed"),
     };
     Ok(response)
+}
+
+/// The request came through a proxy: it names the client it forwards for.
+fn forwarded(req: &Request<Incoming>) -> bool {
+    ["forwarded", "x-forwarded-for", "x-real-ip", "cf-connecting-ip"].iter().any(|h| req.headers().contains_key(*h))
+}
+
+/// A file of the site folder for a request path: the file itself when it exists, else `index.html` for a page path
+/// (anything but a missing asset: the pages are drawn by the site's script). Only plain names are looked up, so nothing
+/// outside the folder (or hidden in it) can be asked for.
+async fn site_file(site: &std::path::Path, path: &str) -> Option<(Vec<u8>, &'static str, &'static str)> {
+    let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    let plain = |s: &&str| !s.starts_with('.') && s.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-@".contains(&b));
+    if !parts.iter().all(plain) {
+        return None;
+    }
+    if !parts.is_empty() {
+        let mut f = site.to_path_buf();
+        f.extend(&parts);
+        if let Ok(bytes) = tokio::fs::read(&f).await {
+            let ext = f.extension().and_then(|e| e.to_str()).unwrap_or("");
+            return Some((bytes, content_type(ext), if ext == "html" { "no-cache" } else { "public, max-age=3600" }));
+        }
+    }
+    // A missing asset stays missing; anything else (`/extensions/you.night`: ids have dots) is a page.
+    let asset = parts.last().and_then(|last| last.rsplit_once('.')).is_some_and(|(_, ext)| content_type(ext) != "application/octet-stream");
+    if asset {
+        return None;
+    }
+    tokio::fs::read(site.join("index.html")).await.ok().map(|bytes| (bytes, "text/html; charset=utf-8", "no-cache"))
+}
+
+fn content_type(ext: &str) -> &'static str {
+    match ext {
+        "html" => "text/html; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "js" => "text/javascript; charset=utf-8",
+        "json" => "application/json",
+        "svg" => "image/svg+xml",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "ico" => "image/x-icon",
+        "txt" => "text/plain; charset=utf-8",
+        "woff2" => "font/woff2",
+        _ => "application/octet-stream",
+    }
+}
+
+/// The site runs only its own files and reads only this address; publishers' text is never markup (site/app.js).
+fn site_headers(r: &mut Response<Full<Bytes>>) {
+    let h = r.headers_mut();
+    for (k, v) in [
+        (
+            "content-security-policy",
+            "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        ),
+        ("x-content-type-options", "nosniff"),
+        ("referrer-policy", "strict-origin-when-cross-origin"),
+        ("x-frame-options", "DENY"),
+    ] {
+        h.insert(k, hyper::header::HeaderValue::from_static(v));
+    }
 }
 
 /// Read an upload, holding one of the upload slots until the caller drops it.

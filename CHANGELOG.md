@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The Codeyard site and extension Market for the public registry: a home page and a searchable list of extensions with
+  each one's README, versions and install command, served by `yard` itself (`site` in `yard.json`) from
+  `deploy/yard/docker/site`.
+- The `yard-image` workflow publishes the registry's Docker image, with `yard` and the site inside, to
+  `ghcr.io/<owner>/codeyard-yard`; the server updates with `docker compose pull`.
+
+### Changed
+
+- The Docker stack runs behind the server's Nginx Proxy Manager instead of Caddy and a Cloudflare Tunnel
+  (`compose.npm.yml`, or `compose.port.yml` for a proxy outside Docker); `yard` answers `/metrics` with 404 to any
+  request a proxy forwarded.
+
 ## [0.7.0] - 2026-11-02
 
 The extensions release. Extensions with code run as WebAssembly in a sandboxed process with only the permissions they

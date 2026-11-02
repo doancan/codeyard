@@ -2,7 +2,7 @@
 # The Docker stack, tested end to end on a developer machine: no server, no Cloudflare, no R2 (docs/registry.md,
 # "Running on Docker"). It brings up the stack with throwaway root keys and MinIO as the stand-in R2, then checks:
 #   1. the stack publishes no host port, and comes up healthy
-#   2. `cyx yard check` passes through `edge`, and /metrics answers 404 there
+#   2. `cyx yard check` passes, a proxied /metrics answers 404, and the site answers
 #   3. yard-backup writes to the bucket (files, a database snapshot, Litestream's copy) and yard-restore --check reads it back
 #   4. stopping yard makes yard-watch fail, and the alert reaches the (stand-in) channel
 #   5. the canary and deploy forced commands take their one command and nothing else; the root helpers do their work:
@@ -54,8 +54,9 @@ fi
 ok "yard $(docker run --rm --entrypoint /staged/yard -v "$stack/bin/yard":/staged/yard:ro ubuntu:24.04 --version 2>&1)"
 
 step "The stack folder, as the server has it, with the test's own .env"
-cp "$here/Dockerfile" "$here/.dockerignore" "$here/compose.yml" "$here/compose.test.yml" "$here/litestream.yml" "$here/Caddyfile" "$stack/"
+cp "$here/Dockerfile" "$here/.dockerignore" "$here/compose.yml" "$here/compose.test.yml" "$here/litestream.yml" "$stack/"
 cp -R "$here/ops" "$stack/ops"
+cp -R "$here/site" "$stack/site"
 port=$(python3 -I -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
 cat > "$stack/.env" <<EOF
 YARD_DOMAIN=test.yard.test
@@ -76,7 +77,7 @@ url=http://127.0.0.1:$port
 step "No host port in the stack itself"
 published=$(docker compose -f "$stack/compose.yml" config --format json | python3 -I -c 'import json,sys; c=json.load(sys.stdin); print(sum(len(s.get("ports") or []) for s in c["services"].values()))')
 [ "$published" = 0 ] || die "compose.yml publishes $published host port(s)"
-ok "compose.yml publishes none (the test adds one for edge, in compose.test.yml)"
+ok "compose.yml publishes none (the test adds one for yard, in compose.test.yml)"
 
 step "Build, and a registry with three throwaway root keys (two of three sign)"
 dc build >"$work/compose-build.log" 2>&1 || { tail -n 30 "$work/compose-build.log" >&2; die "docker compose build"; }
@@ -98,21 +99,26 @@ ok "registry created, listening on the compose network, root signed by A and C"
 
 step "docker compose up: every service healthy"
 dc up -d --wait --wait-timeout 180 >"$work/up.log" 2>&1 || { cat "$work/up.log" >&2; die "the stack did not become healthy"; }
-for s in yard litestream edge ops; do
+for s in yard litestream ops; do
 	id=$(dc ps -q "$s")
 	[ "$(docker inspect -f '{{.State.Health.Status}}' "$id")" = healthy ] || die "$s is not healthy"
 done
-ok "yard, litestream, edge and ops are healthy"
+ok "yard, litestream and ops are healthy"
 
-step "cyx yard check through edge; /metrics is not passed on"
+step "cyx yard check; /metrics is refused to a proxy; the site answers"
 # shellcheck disable=SC2086
 "$cyx" yard check "$url" $trust > "$work/check.log" 2>&1 || { cat "$work/check.log" >&2; die "cyx yard check"; }
 ok "$(cat "$work/check.log")"
-code=$(curl -s -o /dev/null -w '%{http_code}' "$url/metrics")
-[ "$code" = 404 ] || die "/metrics through edge answered $code, not 404"
-[ "$(curl -s -o /dev/null -w '%{http_code}' "$url/healthz")" = 200 ] || die "/healthz through edge does not answer 200"
-ok "/metrics 404, /healthz 200"
-big=$(head -c 131000000 /dev/zero | curl -s --max-time 120 -o /dev/null -w '%{http_code}' -X POST --data-binary @- "$url/v1/publish" || true)
+code=$(curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-For: 192.0.2.1' "$url/metrics")
+[ "$code" = 404 ] || die "a proxied /metrics answered $code, not 404"
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$url/healthz")" = 200 ] || die "/healthz does not answer 200"
+ok "proxied /metrics 404, /healthz 200"
+curl -fsS "$url/" | grep -q '<title>Codeyard' || die "the site does not answer at /"
+curl -fsS "$url/extensions/codeyard.canary" | grep -q '<title>Codeyard' || die "an extension page does not answer"
+curl -fsS "$url/app.js" | grep -q 'loadIndex' || die "the site's script does not answer"
+[ "$(curl -s -o /dev/null -w '%{http_code}' "$url/missing.css")" = 404 ] || die "a missing asset is not 404"
+ok "the site answers /, an extension page and its script"
+big=$(head -c 136000000 /dev/zero | curl -s --max-time 120 -o /dev/null -w '%{http_code}' -X POST --data-binary @- "$url/v1/publish" || true)
 [ "$big" = 413 ] || die "an upload over the body limit answered $big, not 413"
 ok "an upload over the body limit answers 413"
 

@@ -116,43 +116,48 @@ wait on clients and a human review of each publisher's first native program.
 
 ## The Docker path
 
-For a server of your own with Docker and Docker Compose, and a domain at Cloudflare. Nothing listens on a public
-address: no port is forwarded or opened, and no origin certificate or firewall list is kept. How it runs:
+For a server of your own with Docker, Docker Compose and Nginx Proxy Manager (NPM), which takes the domains and their
+certificates. The stack opens no port of its own: `yard` joins NPM's Docker network. How it runs:
 [registry.md](registry.md#running-on-docker).
 
 ### What the owner creates
 
 | What | Choice |
 |---|---|
-| Server | The one that runs Docker already (amd64). The stack adds five small containers, `/opt/yard` and `/srv/yard`; it changes no firewall, SSH or update setting. |
-| Domain | `yardcode.app`, a zone in your Cloudflare account. The registry is `market.yardcode.app`. |
-| Tunnel | Cloudflare Zero Trust → Networks → Tunnels → *Create a tunnel* → *Cloudflared*, named `yard`. Copy its token (a secret). Add a public hostname: `market.yardcode.app`, service **HTTP**, URL `edge:8000`. Cloudflare makes the proxied DNS record itself. |
+| Server | The one that runs Docker and NPM already (amd64). The stack adds three small containers, `/opt/yard` and `/srv/yard`; it changes no firewall, SSH or update setting. |
+| Domain | `yardcode.app`: DNS `A` (and `AAAA`) records for `yardcode.app` and `market.yardcode.app` pointing at the address NPM answers on (ports 80 and 443). The site is `yardcode.app`, the registry `market.yardcode.app`. |
+| Proxy host | In NPM: *Proxy Hosts → Add*, domain names `yardcode.app` and `market.yardcode.app`, scheme `http`, forward host `codeyard-yard`, port `8080`, *Block Common Exploits* on; *SSL*: a new Let's Encrypt certificate, *Force SSL* and *HTTP/2* on. |
+| Image | The `yard-image` workflow publishes `ghcr.io/doancan/codeyard-yard` on every push to `main`; run it once by hand (`gh workflow run yard-image`). Make the package public (GitHub → Packages → `codeyard-yard` → *Package settings* → visibility), or `docker login ghcr.io` on the server with a token that may read packages. |
 | Cloudflare R2 | As in section 1: the bucket `codeyard-yard-backup` and a token for that bucket only. |
 | Alerts | As in section 1. |
 | Root keys | As in section 1. |
 
-In the dashboard, check yourself: **Security → Bots → Bot Fight Mode off** (it would challenge `curl` and `cyx`), and
-**SSL/TLS** may stay at its default: the tunnel needs no origin certificate.
+If the domain's DNS is at Cloudflare with the proxy (orange cloud) on, set **SSL/TLS** to *Full (strict)* and turn
+**Security → Bots → Bot Fight Mode** off (it would challenge `curl` and `cyx`); uploads through Cloudflare's free plan
+stop at 100 MB.
 
 ### Go live
 
 Step 5 (the ceremony) and step 7 (signing the root) are the owner's, offline, exactly as in section 3. The rest:
 
+With a stack manager such as Dockhand or Portainer instead of `/opt/yard`, deploy
+`deploy/yard/docker/compose.dockhand.yml` (the published image only, `yard` already on NPM's network) with the
+variables of `env.example` set in the manager; steps 3 and 4 become that, and the `docker compose` commands below run
+against that stack.
+
 1. **Rehearse** (any time): `deploy/rehearse.sh` and `deploy/yard/docker/test.sh` pass on this Mac.
-2. **Build**: run the `yard-deploy` workflow with *install* off; download the `yard-linux-x86_64` artifact next to the
-   setup script.
-   ```text
-   gh workflow run yard-deploy -f install=false        (wait for it, then:)
-   gh run download "$(gh run list -w yard-deploy -L 1 --json databaseId -q '.[0].databaseId')" -n yard-linux-x86_64 -D deploy/yard/docker/host/
-   ```
-3. **The host**: copy the folder over and run the setup; it builds the image and prints what is next.
+2. **Image**: the `yard-image` workflow has published `ghcr.io/doancan/codeyard-yard:latest` (run it by hand the first
+   time: `gh workflow run yard-image`).
+3. **The host**: copy the folder over and run the setup; it prints what is next.
    ```text
    scp -r deploy/yard/docker kmadmin@10.0.0.119:~/yard-setup
    ssh -t kmadmin@10.0.0.119 sudo ~/yard-setup/host/setup-host.sh
    ```
-4. **Secrets**: the owner fills in `/opt/yard/.env` on the server (`sudoedit /opt/yard/.env`): the tunnel token, the R2
-   values, the alert channel. Then the alert test, and a copy of `.env` as a Bitwarden secure note:
+4. **Secrets**: the owner fills in `/opt/yard/.env` on the server (`sudoedit /opt/yard/.env`): `NPM_NETWORK` (NPM's
+   network, from `docker network ls`), the R2 values, the alert channel. Then the image, the alert test, and a copy of
+   `.env` as a Bitwarden secure note:
    ```text
+   cd /opt/yard && sudo docker compose pull
    cd /opt/yard && sudo docker compose run --rm --no-deps ops sh -c 'echo "This is a test alert from the registry." | yard-alert "a test"'
    ```
 5. **Key ceremony** (the owner, at this Mac, network off): section 3, step 5.
@@ -166,6 +171,7 @@ Step 5 (the ceremony) and step 7 (signing the root) are the owner's, offline, ex
    ```text
    ssh kmadmin@10.0.0.119 'cd /opt/yard && sudo docker compose run --rm --no-deps -T ops sh -c "cat > /srv/yard/root.json.sig"' < root.json.sig
    ssh kmadmin@10.0.0.119 'cd /opt/yard && sudo docker compose up -d --wait'
+   (NPM: the proxy host from "What the owner creates"; then https://yardcode.app shows the site)
    cyx yard check https://market.yardcode.app --root-key A --root-key B --root-key C --threshold 2
    ssh kmadmin@10.0.0.119 'cd /opt/yard && sudo docker compose exec -T ops sh -c "yard-watch && yard-backup && yard-restore --check"'
    ```
@@ -173,3 +179,5 @@ Step 5 (the ceremony) and step 7 (signing the root) are the owner's, offline, ex
    can reach (the workflows connect by SSH; see [registry.md](registry.md#running-on-docker), "Reaching the server from
    GitHub"). Authorize the two keys with `sudo yard-authorize canary "ssh-ed25519 …"` and `sudo yard-authorize deploy "ssh-ed25519 …"`.
 10. **Canary** and 11. **The app**: section 3, steps 10 and 11, with `market.yardcode.app` where they say `yard.<domain>`.
+12. **Updates**: a push to `main` publishes a new image; on the server
+    `cd /opt/yard && sudo docker compose pull && sudo docker compose up -d --wait`.
