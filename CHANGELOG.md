@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Choose a Docker environment lists the active context first and marks it "Current": with Docker Desktop on macOS
+  the first row was `default` (`/var/run/docker.sock`, often missing), so Enter picked an engine that does not answer.
 - Shell integration scripts use Unix line endings even when the SSH agent is cross-compiled from a Windows checkout.
 - Windows: tasks and *Terminal: Run Selected Text* ran nothing; the command was typed into the terminal but the line
   feed after it is not Enter to the Windows console. Lines now end with a carriage return, as the Enter key sends.
