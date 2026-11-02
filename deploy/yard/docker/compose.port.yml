@@ -1,0 +1,5 @@
+# Added to compose.yml (COMPOSE_FILE in .env) instead of compose.npm.yml when the proxy is not in Docker, or is on
+# another machine: yard on one host port. YARD_PORT is address:port; keep it on an address only the proxy can reach.
+services:
+  yard:
+    ports: ["${YARD_PORT:-127.0.0.1:8080}:8080"]

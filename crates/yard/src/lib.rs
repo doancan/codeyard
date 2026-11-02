@@ -70,6 +70,10 @@ pub struct Config {
     /// publisher's first native program waits for a reviewer (`yard review`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub invited: Vec<String>,
+    /// A folder of static web pages (the Codeyard site and Market, `deploy/yard/docker/site`) answered for every GET
+    /// that is not one of the registry's own paths. None, the default, serves no site.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site: Option<PathBuf>,
 }
 
 fn default_listen() -> String {
@@ -86,7 +90,7 @@ impl Config {
         let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
         let mut cfg: Config = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
         let base = path.parent().unwrap_or(Path::new("."));
-        for p in [&mut cfg.database, &mut cfg.public, &mut cfg.root, &mut cfg.online_key] {
+        for p in [&mut cfg.database, &mut cfg.public, &mut cfg.root, &mut cfg.online_key].into_iter().chain(cfg.site.as_mut()) {
             if p.is_relative() {
                 *p = base.join(&*p);
             }
@@ -648,6 +652,7 @@ pub fn init(dir: &Path, registry: &str, fulcio: &str, rekor: &str, trust: Option
         root_keys: trust.as_ref().map(|t| t.keys.clone()).unwrap_or_default(),
         threshold: trust.map(|t| t.threshold),
         invited: Vec::new(),
+        site: None,
     };
     std::fs::write(&cfg_path, serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())? + "\n").map_err(|e| e.to_string())?;
     Ok(cfg_path)

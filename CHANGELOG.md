@@ -15,12 +15,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ended while nobody watched shows a notice with its result and flashes the taskbar too.
 - Copy on select in the terminal while Claude Code or Codex runs (`terminal.copyOnSelection`: `agents` by default,
   `always`, `off`), and a "Hold Shift to select text" hint when a drag goes to a program that reads the mouse.
+- The Codeyard site and extension Market for the public registry: a home page and a searchable list of extensions with
+  each one's README, versions and install command, served by `yard` itself (`site` in `yard.json`) from
+  `deploy/yard/docker/site`.
+- The `yard-image` workflow publishes the registry's Docker image, with `yard` and the site inside, to
+  `ghcr.io/<owner>/codeyard-yard`; the server updates with `docker compose pull`.
 
 ### Changed
 
 - The Windows app icon fills its frame and has a larger mark, so it no longer looks small on the taskbar
   (`crates/app/assets/windows/codeyard.svg`, built into the `.ico` by `scripts/windows-icon.py`).
 - The app is called "Codeyard" in the window title, the title bar, the welcome page and the app menu.
+- The Docker stack runs behind the server's Nginx Proxy Manager instead of Caddy and a Cloudflare Tunnel
+  (`compose.npm.yml`, or `compose.port.yml` for a proxy outside Docker); `yard` answers `/metrics` with 404 to any
+  request a proxy forwarded.
 
 ### Fixed
 
