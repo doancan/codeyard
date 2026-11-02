@@ -53,7 +53,7 @@ impl Workbench {
             tabs.push((Bottom::Debug, crate::i18n::t("Debug Console"), 0));
         }
         tabs.push((Bottom::Ports, crate::i18n::t("Ports"), self.active_forwards()));
-        tabs.push((Bottom::Terminal, crate::i18n::t("Terminal"), 0));
+        tabs.push((Bottom::Terminal, crate::i18n::t("Terminal"), self.terminals_asking(cx)));
         tabs.into_iter()
             .map(|(tab, label, badge)| {
                 panel_tab(tab, label.into(), self.chrome.bottom == tab, badge, p, cx)

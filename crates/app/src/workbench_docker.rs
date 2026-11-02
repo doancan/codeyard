@@ -284,7 +284,12 @@ impl Workbench {
         if engine == Engine::Docker {
             self.docker_environments(action, window, cx);
         } else {
-            self.docker_context_picked(docker::DockerContext { engine, ssh: None, name: engine.label().into(), endpoint: "local".into() }, action, window, cx);
+            self.docker_context_picked(
+                docker::DockerContext { engine, ssh: None, name: engine.label().into(), endpoint: "local".into(), current: true },
+                action,
+                window,
+                cx,
+            );
         }
     }
 
@@ -292,7 +297,7 @@ impl Workbench {
         let ssh = self.container_ssh_host();
         let mut command = DockerCommand::docker(None, &["context", "ls", "--format", "{{json .}}"]);
         command.ssh = ssh.clone();
-        self.docker_run(command, window, cx, move |this, text, window, cx| match docker::json_lines::<docker::DockerContext>(&text) {
+        self.docker_run(command, window, cx, move |this, text, window, cx| match docker::contexts(&text) {
             Ok(mut contexts) if !contexts.is_empty() => {
                 for context in &mut contexts {
                     context.ssh = ssh.clone();
@@ -301,7 +306,15 @@ impl Workbench {
                     .iter()
                     .map(|c| PickItem {
                         label: c.name.clone().into(),
-                        detail: Some(format!("{}{}", c.ssh.as_ref().map(|s| format!("SSH: {s} · ")).unwrap_or_default(), c.endpoint).into()),
+                        detail: Some(
+                            format!(
+                                "{}{}{}",
+                                if c.current { format!("{} · ", crate::i18n::t("Current")) } else { String::new() },
+                                c.ssh.as_ref().map(|s| format!("SSH: {s} · ")).unwrap_or_default(),
+                                c.endpoint
+                            )
+                            .into(),
+                        ),
                         keys: None,
                     })
                     .collect();

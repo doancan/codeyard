@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 pub const EXCLUSIVE_SESSION: &str = "x-";
 
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 18;
+pub const VERSION: u32 = 19;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -222,6 +222,15 @@ pub enum Request {
     /// what reading or writing the path would reach. One result per path, in order.
     RealPaths {
         paths: Vec<String>,
+    },
+    /// Metadata for the entry itself, without following a final symlink or directory junction.
+    Lstat {
+        path: String,
+    },
+    /// Atomically publish a complete new file. Never overwrites or follows an existing destination entry.
+    WriteNew {
+        path: String,
+        data: Vec<u8>,
     },
 }
 
@@ -663,6 +672,8 @@ mod tests {
             Request::Hello { client_version: VERSION, session: None },
             Request::ReadPreview { root: "/preview".into(), path: "assets/style.css".into() },
             Request::Copy { from: "/source".into(), to: "/copy".into() },
+            Request::Lstat { path: "/entry".into() },
+            Request::WriteNew { path: "/new-file".into(), data: vec![1, 2, 3] },
         ];
         for body in requests {
             let mut b = Vec::new();
@@ -720,10 +731,15 @@ mod tests {
         assert!(BIGGEST.with(|b| b.get()) < 1024 * 1024, "the header alone must not cause a big allocation");
     }
     #[test]
-    fn copy_appends_after_the_existing_preview_request() {
-        for (request, tag) in
-            [(Request::ReadPreview { root: "/root".into(), path: "file.txt".into() }, 29), (Request::Copy { from: "/from".into(), to: "/to".into() }, 30)]
-        {
+    fn new_requests_append_without_reordering_existing_tags() {
+        for (request, tag) in [
+            (Request::ReadPreview { root: "/root".into(), path: "file.txt".into() }, 29),
+            (Request::Copy { from: "/from".into(), to: "/to".into() }, 30),
+            (Request::TaskSpawn { command: TaskCommand::Shell { shell: None, args: None, line: "true".into() }, cwd: None, env: Vec::new() }, 31),
+            (Request::RealPaths { paths: vec!["/a".into()] }, 36),
+            (Request::Lstat { path: "/entry".into() }, 37),
+            (Request::WriteNew { path: "/new-file".into(), data: vec![1, 2, 3] }, 38),
+        ] {
             let bytes = postcard::to_stdvec(&request).unwrap();
             assert_eq!(bytes[0], tag);
             assert_eq!(postcard::from_bytes::<Request>(&bytes).unwrap(), request);

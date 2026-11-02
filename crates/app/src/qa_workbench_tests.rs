@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use gpui::{Entity, Focusable, TestAppContext, VisualTestContext};
 
+use crate::test_paths::AppPath;
 use crate::ui::{self, ActiveTheme};
 use crate::workbench::Workbench;
 
@@ -714,14 +715,14 @@ fn qa_default_startup_is_the_welcome_page_and_continue_resumes(cx: &mut TestAppC
     let (wb, cx) = setup_persistent(cx, &home);
     open(&wb, &dir, cx);
     open_in(&wb, &dir.join("src/main.rs"), cx);
-    assert_eq!(wb.read_with(cx, |w, cx| w.root_for_test(cx)).as_deref(), Some(dir.to_string_lossy().as_ref()));
+    assert_eq!(wb.read_with(cx, |w, cx| w.root_for_test(cx)).as_deref(), Some(dir.app().as_str()));
 
     let welcome = restart_with(wb, cx, &home, Startup::Welcome);
     assert_eq!(welcome.read_with(cx, |w, cx| w.root_for_test(cx)), None, "welcome: no folder opens by itself");
     assert!(welcome.read_with(cx, |w, cx| w.open_paths(cx)).is_empty(), "welcome: no tabs come back");
 
     let resumed = restart_with(welcome, cx, &home, Startup::Continue);
-    assert_eq!(resumed.read_with(cx, |w, cx| w.root_for_test(cx)).as_deref(), Some(dir.to_string_lossy().as_ref()), "continue: the last folder comes back");
+    assert_eq!(resumed.read_with(cx, |w, cx| w.root_for_test(cx)).as_deref(), Some(dir.app().as_str()), "continue: the last folder comes back");
     assert!(resumed.read_with(cx, |w, cx| w.open_paths(cx)).iter().any(|p| p.ends_with("src/main.rs")), "continue: the tabs come back");
 }
 

@@ -2,6 +2,10 @@
 
 use super::*;
 
+#[cfg(test)]
+#[path = "workbench_save_race_tests.rs"]
+mod race_tests;
+
 impl Workbench {
     /// The active editor's position.
     pub(super) fn current_nav(&self, cx: &App) -> Option<NavPos> {
@@ -117,16 +121,15 @@ impl Workbench {
         };
         let written_version = ed.read(cx).version();
         let host = self.remote.host.clone();
+        let context = super::types::InputContext::Workspace { host: host.clone(), root: self.root(cx) };
         let t = target.clone();
-        let task = cx.background_executor().spawn(async move {
-            if host.stat(&t).is_ok() {
-                return Err(crate::i18n::tf("{} already exists. Choose another name.", &[&t]));
-            }
-            host.write(&t, data, None).map(|_| ()).map_err(|e| crate::i18n::tf("Could not save: {}", &[&e]))
-        });
+        let task = cx.background_executor().spawn(async move { host.write_new(&t, data).map(|_| ()).map_err(|error| save_new_error(&t, error)) });
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
             this.update_in(cx, |this, window, cx| {
+                if !context.matches(this, cx) {
+                    return;
+                }
                 match result {
                     Ok(()) => {
                         this.roots.primary.update(cx, |t, cx| t.reload(&parent_of(&target), cx));
@@ -199,16 +202,15 @@ impl Workbench {
             }
         };
         let local = self.remote.local_host.clone();
+        let context = super::types::InputContext::Workspace { host: self.remote.host.clone(), root: self.root(cx) };
         let t = target.clone();
-        let task = cx.background_executor().spawn(async move {
-            if local.stat(&t).is_ok() {
-                return Err(crate::i18n::tf("{} already exists. Choose another name.", &[&t]));
-            }
-            local.write(&t, data, None).map(|_| ()).map_err(|e| crate::i18n::tf("Could not save: {}", &[&e]))
-        });
+        let task = cx.background_executor().spawn(async move { local.write_new(&t, data).map(|_| ()).map_err(|error| save_new_error(&t, error)) });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
+                if !context.matches(this, cx) {
+                    return;
+                }
                 this.notice = Some(match result {
                     Ok(()) => Notice::Info(crate::i18n::tf("Saved a copy to {}", &[&target]).into()),
                     Err(e) => Notice::Error(e.into()),
@@ -218,5 +220,12 @@ impl Workbench {
             .ok();
         })
         .detach();
+    }
+}
+
+fn save_new_error(path: &str, error: host::HostError) -> String {
+    match error {
+        host::HostError::Op(proto::Error::AlreadyExists(_)) => crate::i18n::tf("{} already exists. Choose another name.", &[&path]),
+        error => crate::i18n::tf("Could not save: {}", &[&error]),
     }
 }

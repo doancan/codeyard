@@ -28,6 +28,12 @@ pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>, obj: &Map<String, Valu
     if let Some(v) = r.bool("terminal.shellIntegration") {
         s.terminal_shell_integration = v;
     }
+    if let Some(v) = r.bool("terminal.notifications") {
+        s.terminal_notifications = v;
+    }
+    if let Some(v) = r.choice("terminal.copyOnSelection", &["agents", "always", "off"]) {
+        s.terminal_copy_on_selection = v;
+    }
     if let Some(v) = r.choice("terminal.confirmOnClose", &["running", "always", "never"]) {
         s.terminal_confirm_close = v;
     }

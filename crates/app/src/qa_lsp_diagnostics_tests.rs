@@ -29,7 +29,7 @@ fn related(uri: &str, line: u32, col: u32, message: &str) -> Value {
 /// fake: on open it publishes, for `src/a.rs`, an E0382 error with related locations in both files and the compiler's
 /// colourful output, and a warning with 22 related locations; after a change it publishes an empty list.
 fn project<'a>(cx: &'a mut TestAppContext, name: &str) -> Option<(Entity<Workbench>, &'a mut VisualTestContext, String, String, FakeServer)> {
-    let d = dir(name);
+    let d = dir(&format!("diagnostics-{name}"));
     let root = d.join("project");
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/a.rs"), A).unwrap();
@@ -228,7 +228,7 @@ fn qa_diag_real_rust_analyzer_explains_a_use_after_move(cx: &mut TestAppContext)
 #[gpui::test]
 fn qa_diag_related_locations_over_ssh(cx: &mut TestAppContext) {
     let Some(_sshd) = crate::test_sshd::start("diag-related") else { return };
-    let d = dir("ssh");
+    let d = dir("diagnostics-ssh");
     let root = d.join("project");
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/a.rs"), A).unwrap();

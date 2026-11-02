@@ -187,9 +187,11 @@ status bar reports it.
 | --- | --- | --- | --- |
 | `terminal.allowClipboardWrite` | `true` / `false` | `false` | Let programs in the terminal write to the clipboard |
 | `terminal.confirmOnClose` | `running`, `always`, `never` | `never` | Ask before closing a terminal |
+| `terminal.copyOnSelection` | `agents`, `always`, `off` | `agents` | Copy text selected with the mouse: while Claude Code or Codex runs, always, or never |
 | `terminal.defaultProfile` | text | empty | Profile new terminals use |
 | `terminal.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the terminal |
 | `terminal.lineHeight` | number 1–2 | `1.2` | Terminal row height, as a multiple of the font size |
+| `terminal.notifications` | `true` / `false` | `true` | Flag a terminal and the taskbar when its program rings the bell or asks for you |
 | `terminal.persistentScrollback` | number 0–10000 | `0` | Lines of each terminal's history kept for the next start, as plain text on this computer (0: none) |
 | `terminal.persistentSessionTimeout` | number 0–1440 | `5` | Minutes the terminals keep running for the next start after Codeyard quits, crashes or is killed (0: not kept) |
 | `terminal.sanitizePaste` | `auto`, `always`, `off` | `auto` | Remove control characters from pasted text |

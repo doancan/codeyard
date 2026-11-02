@@ -15,6 +15,9 @@ impl TerminalView {
         let mut view = Self::blank(host.clone(), cwd.clone(), color, cx);
         view.launched = (shell.clone(), args.clone());
         view.has_shell = true;
+        view.starting = true;
+        // Only to end a shell that comes up after its view is gone; never keeps the connection open itself.
+        let cleanup_host = Arc::downgrade(&host);
         let (cols, rows) = (view.size.cols as u16, view.size.rows as u16);
         let integration = cx.global::<crate::settings::Settings>().terminal_shell_integration;
         let spawn = cx.background_executor().spawn(async move {
@@ -28,6 +31,7 @@ impl TerminalView {
                 Ok(p) => p,
                 Err(e) => {
                     this.update(cx, |t, cx| {
+                        t.starting = false;
                         t.error = Some(crate::i18n::tf("Could not start a shell: {}", &[&e]).into());
                         cx.notify();
                     })
@@ -36,20 +40,33 @@ impl TerminalView {
                 }
             };
             let id = pty.id;
-            let ok = this
-                .update(cx, |t, cx| {
-                    t.pty = Some(id);
-                    // Report it if the view got its size in the meantime.
-                    t.host.pty_resize(id, t.size.cols as u16, t.size.rows as u16);
-                    let pending = std::mem::take(&mut t.pending_input);
-                    if !pending.is_empty() {
-                        t.host.pty_input(id, pending);
+            let ok = this.update(cx, |t, cx| {
+                if t.closed.get() {
+                    // Closed while the shell was starting: the late shell must not keep running.
+                    t.host.pty_kill(id);
+                    return false;
+                }
+                t.pty = Some(id);
+                t.starting = false;
+                // Report it if the view got its size in the meantime.
+                t.host.pty_resize(id, t.size.cols as u16, t.size.rows as u16);
+                let pending = std::mem::take(&mut t.pending_input);
+                if !pending.is_empty() {
+                    t.host.pty_input(id, pending);
+                }
+                cx.notify();
+                true
+            });
+            match ok {
+                Ok(true) => {}
+                Ok(false) => return,
+                Err(_) => {
+                    // The view is gone: end the late shell if its connection is still there.
+                    if let Some(host) = cleanup_host.upgrade() {
+                        host.pty_kill(id);
                     }
-                    cx.notify();
-                })
-                .is_ok();
-            if !ok {
-                return;
+                    return;
+                }
             }
             if keep {
                 Self::fetch_token(this.clone(), id, cx);

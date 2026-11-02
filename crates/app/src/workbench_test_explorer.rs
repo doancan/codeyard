@@ -56,9 +56,14 @@ impl TestingState {
     }
 }
 
-/// `sh -c` arguments running `command` with its errors in the same stream (the process's own error stream is dropped).
-fn shell(command: &str) -> Vec<String> {
-    vec!["-c".into(), format!("exec {command} 2>&1")]
+/// The shell and its arguments running `command` with its errors in the same stream (the process's own error stream is
+/// dropped): `cmd` on local Windows, `sh` everywhere else (SSH servers included).
+fn shell(host: &dyn Host, command: &str) -> (&'static str, Vec<String>) {
+    if cfg!(windows) && !host.is_remote() {
+        ("cmd", vec!["/C".into(), format!("{command} 2>&1")])
+    } else {
+        ("sh", vec!["-c".into(), format!("exec {command} 2>&1")])
+    }
 }
 
 /// Reads the candidate files and keeps those with tests.
@@ -216,7 +221,13 @@ impl Workbench {
                 let header = format!("\x1b[1m$ {}\x1b[0m\n", job.command);
                 out.update(cx, |t, cx| t.append(header.as_bytes(), cx)).ok();
                 let (h, r, command) = (host.clone(), root.clone(), job.command.clone());
-                let spawned = cx.background_executor().spawn(async move { h.proc_spawn("sh", shell(&command), Some(r)) }).await;
+                let spawned = cx
+                    .background_executor()
+                    .spawn(async move {
+                        let (program, args) = shell(&*h, &command);
+                        h.proc_spawn(program, args, Some(r))
+                    })
+                    .await;
                 let mut output: Vec<u8> = Vec::new();
                 let mut exit = None;
                 match spawned {

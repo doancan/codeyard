@@ -10,6 +10,7 @@ use crate::qa_integration_tests::{notice, wait_ticking};
 use crate::qa_lsp_settings_tests::{cargo_project, dir, open_project, rust_analyzer_installed, settle, wait_checked, write_settings};
 use crate::qa_workbench_tests::setup_with_config;
 use crate::test_lsp::FakeServer;
+use crate::test_paths::AppPath;
 use crate::workbench::Workbench;
 
 /// `ğ😀` before the macro: the cursor on `e` of `vec!` is character 14, UTF-16 column 15.
@@ -35,7 +36,7 @@ fn fixture<'a>(cx: &'a mut TestAppContext, name: &str, responses: Value) -> Opti
 
 /// `fixture` with the interface in `language` (the settings file sets it when it loads).
 fn fixture_in<'a>(cx: &'a mut TestAppContext, name: &str, responses: Value, language: &str) -> Option<Fixture<'a>> {
-    let d = dir(name);
+    let d = dir(&format!("rust-commands-{name}"));
     let fake = FakeServer::new(
         &d.join("server"),
         &json!({ "responses": responses, "on_open": [{ "method": "textDocument/publishDiagnostics", "params": { "uri": "$uri", "diagnostics": [
@@ -78,7 +79,7 @@ impl Fixture<'_> {
 }
 
 fn location(path: &Path, line: u32) -> Value {
-    json!({ "uri": crate::lsp::path_to_uri(&path.to_string_lossy()), "range": { "start": { "line": line, "character": 0 }, "end": { "line": line, "character": 7 } } })
+    json!({ "uri": crate::lsp::path_to_uri(&path.app()), "range": { "start": { "line": line, "character": 0 }, "end": { "line": line, "character": 7 } } })
 }
 
 /// AC1: each command sends its method with the file's URI and, where it takes one, the UTF-16 position.
@@ -111,7 +112,7 @@ fn qa_rust_expand_macro_opens_a_scratch_without_diagnostics(cx: &mut TestAppCont
     let scratch = f.active_path().unwrap();
     let ed = f.wb.read_with(f.cx, |wb, _| wb.active_editor_entity()).unwrap();
     assert_eq!(ed.read_with(f.cx, |e, _| (e.text(), e.language())), (expansion.to_string(), "Rust"));
-    assert!(!scratch.starts_with(&*f.root.to_string_lossy()), "outside the project");
+    assert!(!scratch.starts_with(&*f.root.app()), "outside the project");
 
     // The same macro again: a second scratch.
     let file = f.file.clone();
@@ -133,7 +134,7 @@ fn qa_rust_expand_macro_opens_a_scratch_without_diagnostics(cx: &mut TestAppCont
 /// AC3: one parent module opens it.
 #[gpui::test]
 fn qa_rust_parent_module_opens_the_only_result(cx: &mut TestAppContext) {
-    let d = dir("ac3-one-target");
+    let d = dir("rust-commands-ac3-one-target");
     std::fs::create_dir_all(&d).unwrap();
     let parent = d.join("main.rs");
     std::fs::write(&parent, "fn main() {}\n\nmod a;\nmod lib;\n").unwrap();
@@ -146,7 +147,7 @@ fn qa_rust_parent_module_opens_the_only_result(cx: &mut TestAppContext) {
 /// AC3: several parent modules open the location list.
 #[gpui::test]
 fn qa_rust_parent_module_lists_several_results(cx: &mut TestAppContext) {
-    let d = dir("ac3-many-targets");
+    let d = dir("rust-commands-ac3-many-targets");
     std::fs::create_dir_all(&d).unwrap();
     let (a, b) = (d.join("a.rs"), d.join("b.rs"));
     std::fs::write(&a, "mod lib;\n").unwrap();
@@ -303,7 +304,7 @@ fn qa_rust_commands_against_a_real_rust_analyzer(cx: &mut TestAppContext) {
 #[gpui::test]
 fn qa_rust_parent_module_over_ssh(cx: &mut TestAppContext) {
     let Some(_sshd) = crate::test_sshd::start("rust-commands") else { return };
-    let d = dir("ssh");
+    let d = dir("rust-commands-ssh");
     let root = d.join("project");
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/lib.rs"), "mod foo;\n").unwrap();

@@ -16,6 +16,8 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
+use crate::test_paths::AppPath;
+
 const SCRIPT: &str = r#"import json, sys
 scenario_path, log_path, starts_path = sys.argv[1:4]
 with open(scenario_path, encoding='utf-8') as f:
@@ -128,7 +130,7 @@ impl FakeServer {
 
     /// The `lsp.servers` entry that starts this server.
     pub fn command(&self) -> (String, Vec<String>) {
-        let s = |p: &PathBuf| p.to_string_lossy().into_owned();
+        let s = |p: &PathBuf| p.app();
         (python().into(), vec![s(&self.script), s(&self.scenario), s(&self.log), s(&self.starts)])
     }
 
