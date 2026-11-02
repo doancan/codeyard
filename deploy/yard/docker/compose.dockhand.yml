@@ -4,13 +4,15 @@
 # Nginx Proxy Manager forwards yardcode.app and market.yardcode.app to http://<server address>:8080. compose.yml is the
 # same stack for /opt/yard (setup-host.sh).
 #
-# Environment: YARD_PORT, YARD_DOMAIN, YARD_DATA (a host folder owned by uid 10001, or leave it out for a volume), the
+# Environment: YARD_PORT, YARD_DOMAIN, YARD_AUTO_INIT, YARD_DATA (a host folder owned by uid 10001, or leave it out for a volume), the
 # R2 and alert variables of env.example. YARD_IMAGE defaults to the published image from main (`latest`);
 # `ghcr.io/doancan/codeyard-yard:develop` is the one built from develop.
 #
-# First start (once; docs/registry-setup-checklist.md, "The Docker path"): before yard can run, create the registry with
+# First start: with YARD_AUTO_INIT=dev, yard creates the registry itself when its folder is empty, with a root key kept on
+# this server (yard-start). For the public registry the root keys come from the ceremony instead: leave YARD_AUTO_INIT
+# out and create it once with
 #   docker compose run --rm --no-deps ops yard-init --registry market.yardcode.app --root-keys A,B,C --threshold 2
-# and put the signed root.json.sig in its folder; until then yard restarts and its health check fails.
+# then put the signed root.json.sig in its folder (docs/registry-setup-checklist.md, "The Docker path").
 name: yard
 
 x-service: &service
@@ -31,7 +33,10 @@ services:
     <<: *service
     image: *image
     user: "10001:10001"
-    command: ["yard", "serve", "/srv/yard/yard.json"]
+    command: ["yard-start"]
+    environment:
+      YARD_DOMAIN:
+      YARD_AUTO_INIT:
     volumes: [*registry-folder]
     # The one way in: Nginx Proxy Manager forwards to http://<server address>:<this port>.
     ports: ["${YARD_PORT:-8080}:8080"]
