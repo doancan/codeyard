@@ -1,10 +1,12 @@
 # The registry and the Codeyard site as one self-contained Compose file, for a stack manager that deploys a single file
-# with its environment variables (Dockhand, Portainer): the published image only, nothing from this folder, and `yard`
-# on Nginx Proxy Manager's network as `codeyard-yard`. compose.yml is the same stack for /opt/yard (setup-host.sh).
+# with its environment variables (Dockhand, Portainer): the published image only, nothing from this folder. yard is
+# published on one host port, YARD_PORT (default 8080; `127.0.0.1:8080` keeps it to a proxy on the same host), and
+# Nginx Proxy Manager forwards yardcode.app and market.yardcode.app to http://<server address>:8080. compose.yml is the
+# same stack for /opt/yard (setup-host.sh).
 #
-# Environment: NPM_NETWORK (default npm_default), YARD_DOMAIN, YARD_DATA (a host folder owned by uid 10001, or leave it
-# out for a volume), the R2 and alert variables of env.example. YARD_IMAGE defaults to the published image from main
-# (`latest`); `ghcr.io/doancan/codeyard-yard:develop` is the one built from develop.
+# Environment: YARD_PORT, YARD_DOMAIN, YARD_DATA (a host folder owned by uid 10001, or leave it out for a volume), the
+# R2 and alert variables of env.example. YARD_IMAGE defaults to the published image from main (`latest`);
+# `ghcr.io/doancan/codeyard-yard:develop` is the one built from develop.
 #
 # First start (once; docs/registry-setup-checklist.md, "The Docker path"): before yard can run, create the registry with
 #   docker compose run --rm --no-deps ops yard-init --registry market.yardcode.app --root-keys A,B,C --threshold 2
@@ -31,10 +33,8 @@ services:
     user: "10001:10001"
     command: ["yard", "serve", "/srv/yard/yard.json"]
     volumes: [*registry-folder]
-    networks:
-      default: {}
-      proxy:
-        aliases: [codeyard-yard]
+    # The one way in: Nginx Proxy Manager forwards to http://<server address>:<this port>.
+    ports: ["${YARD_PORT:-8080}:8080"]
     tmpfs: [/tmp]
     mem_limit: 1g
     pids_limit: 256
@@ -97,12 +97,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 90s
-
-networks:
-  # Nginx Proxy Manager's network (`docker network ls`); its proxy host forwards to http://codeyard-yard:8080.
-  proxy:
-    name: ${NPM_NETWORK:-npm_default}
-    external: true
 
 volumes:
   # The registry's folder when YARD_DATA is not a path on the host.

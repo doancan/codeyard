@@ -141,7 +141,8 @@ stop at 100 MB.
 Step 5 (the ceremony) and step 7 (signing the root) are the owner's, offline, exactly as in section 3. The rest:
 
 With a stack manager such as Dockhand or Portainer instead of `/opt/yard`, deploy
-`deploy/yard/docker/compose.dockhand.yml` (the published image only, `yard` already on NPM's network) with the
+`deploy/yard/docker/compose.dockhand.yml` (the published image only, `yard` on host port `YARD_PORT`, 8080 by
+default; NPM forwards to `http://<server address>:8080`) with the
 variables of `env.example` set in the manager; steps 3 and 4 become that, and the `docker compose` commands below run
 against that stack.
 
