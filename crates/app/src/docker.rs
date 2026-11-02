@@ -23,6 +23,8 @@ pub struct DockerContext {
     pub name: String,
     #[serde(rename = "DockerEndpoint", default)]
     pub endpoint: String,
+    #[serde(rename = "Current", default)]
+    pub current: bool,
 }
 
 impl DockerContext {
@@ -200,6 +202,14 @@ impl Command {
         all.extend(args.iter().map(|s| s.to_string()));
         Self { program: "docker".into(), args: all, context: None, ssh: None, cwd: None, timeout: Duration::from_secs(30) }
     }
+}
+
+/// Parses `docker context ls` output with the active context first, so the picker's default
+/// selection is the engine Docker itself would use (e.g. `desktop-linux` rather than a stale `default`).
+pub fn contexts(text: &str) -> Result<Vec<DockerContext>, String> {
+    let mut contexts = json_lines::<DockerContext>(text)?;
+    contexts.sort_by_key(|c| !c.current);
+    Ok(contexts)
 }
 
 pub fn json_lines<T: for<'a> Deserialize<'a>>(text: &str) -> Result<Vec<T>, String> {

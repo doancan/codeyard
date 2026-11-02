@@ -1,0 +1,14 @@
+# Added to compose.yml (COMPOSE_FILE in .env) when Nginx Proxy Manager runs in Docker on the same server: `yard` joins
+# the proxy's network as `codeyard-yard`, and the proxy hosts for yardcode.app and market.yardcode.app forward to
+# http://codeyard-yard:8080. NPM_NETWORK is that network's name (`docker network ls`; the one NPM's container is on).
+services:
+  yard:
+    networks:
+      default: {}
+      proxy:
+        aliases: [codeyard-yard]
+
+networks:
+  proxy:
+    name: ${NPM_NETWORK:?set NPM_NETWORK in .env to the network Nginx Proxy Manager is on}
+    external: true

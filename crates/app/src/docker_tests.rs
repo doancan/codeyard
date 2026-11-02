@@ -85,8 +85,13 @@ fn docker_targets_pin_context_and_user_and_reject_options() {
 
 #[test]
 fn docker_ssh_context_routes_operations_and_reconnects_without_local_docker() {
-    let context =
-        DockerContext { engine: Engine::Docker, ssh: Some("linux-build".into()), name: "default".into(), endpoint: "unix:///var/run/docker.sock".into() };
+    let context = DockerContext {
+        engine: Engine::Docker,
+        ssh: Some("linux-build".into()),
+        name: "default".into(),
+        endpoint: "unix:///var/run/docker.sock".into(),
+        current: true,
+    };
     for command in [context.engine.list(&context.name), context.engine.logs(&context.name, "web"), context.engine.command(&context.name, &["start", "web"])] {
         assert_eq!(context.route(command).ssh.as_deref(), Some("linux-build"));
     }
@@ -237,4 +242,16 @@ fn docker_activity_button_opens_full_width_overview_when_enabled(cx: &mut gpui::
     cx.simulate_click(at, gpui::Modifiers::none());
     cx.run_until_parked();
     assert_eq!(wb.read_with(cx, |wb, _| wb.panel_for_test()), Some("explorer"));
+}
+
+#[test]
+fn docker_contexts_put_the_active_context_first() {
+    // Docker Desktop on macOS: `default` points at a socket that may not exist; `desktop-linux` is active.
+    let text = "{\"Current\":false,\"DockerEndpoint\":\"unix:///var/run/docker.sock\",\"Name\":\"default\"}\n\
+                {\"Current\":true,\"DockerEndpoint\":\"unix:///Users/me/.docker/run/docker.sock\",\"Name\":\"desktop-linux\"}\n\
+                {\"Current\":false,\"DockerEndpoint\":\"ssh://build\",\"Name\":\"remote\"}\n";
+    let names: Vec<_> = contexts(text).unwrap().into_iter().map(|c| (c.name, c.current)).collect();
+    assert_eq!(names, [("desktop-linux".into(), true), ("default".into(), false), ("remote".into(), false)]);
+    let legacy = contexts("{\"Name\":\"default\",\"DockerEndpoint\":\"unix:///var/run/docker.sock\"}\n").unwrap();
+    assert!(!legacy[0].current);
 }

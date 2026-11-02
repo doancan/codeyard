@@ -112,12 +112,6 @@ pub fn publish_branch(host: &dyn Host, root: &str) -> Result<String, String> {
     Ok(remote)
 }
 
-/// Fetch a pull request's head (`pull/N/head`) into `FETCH_HEAD`. The remote name comes from the repository's own config.
-pub fn fetch_pull(host: &dyn Host, root: &str, remote: &str, number: u64) -> Result<(), String> {
-    plain_name(remote)?;
-    git_ok(host, root, &["fetch", "--quiet", "--", remote, &format!("pull/{number}/head")]).map(|_| ())
-}
-
 pub fn has_upstream(host: &dyn Host, root: &str) -> bool {
     git(host, root, &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]).is_ok_and(|o| o.ok())
 }
@@ -222,7 +216,7 @@ pub fn autofetch(host: &dyn Host, root: &str, opts: SyncOptions) -> Result<(), S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::git::repo;
+    use crate::git::{checkout_pull, repo};
 
     /// A repository with a bare `origin`, the branch pushed and tracking it, and a second clone for "someone else".
     struct Remote {
@@ -437,7 +431,7 @@ mod tests {
         let listed = remotes(&host, &root).unwrap();
         assert!(listed.iter().all(|(n, _)| !n.starts_with('-')), "{listed:?}");
         assert!(listed.iter().any(|(n, _)| n == "origin"));
-        assert!(fetch_pull(&host, &root, &evil, 1).is_err());
+        assert!(checkout_pull(&host, &root, &evil, 1).is_err());
         assert!(sync(&host, &root, &SyncOp::PushTo { remote: evil.clone() }, SyncOptions::default()).is_err());
         assert!(!marker.exists(), "the command in the remote's name ran");
         // The control: the old command line, with the name passed on as it came, does run it (so the check above can fail).
@@ -447,14 +441,17 @@ mod tests {
     }
 
     #[test]
-    fn a_pull_request_head_is_fetched_from_the_named_remote() {
+    fn a_pull_request_head_is_checked_out_from_the_named_remote() {
         let Some(r) = Remote::new("sync-pr-fetch") else { return };
         let host = host::local();
         let root = r.root();
         // The server keeps a pull request's head under refs/pull/N/head.
         (r.run)(&["push", "-q", "origin", "HEAD:refs/pull/7/head"]).unwrap();
-        assert_eq!(fetch_pull(&host, &root, "origin", 7), Ok(()));
-        assert_eq!((r.run)(&["rev-parse", "FETCH_HEAD"]).unwrap().trim(), (r.run)(&["rev-parse", "HEAD"]).unwrap().trim());
-        assert!(fetch_pull(&host, &root, "origin", 8).is_err(), "a missing pull request is an error");
+        let expected = (r.run)(&["rev-parse", "HEAD"]).unwrap();
+        assert_eq!(checkout_pull(&host, &root, "origin", 7), Ok(()));
+        assert_eq!((r.run)(&["rev-parse", "HEAD"]).unwrap(), expected);
+        assert_eq!((r.run)(&["branch", "--show-current"]).unwrap().trim(), "pr-7");
+        assert!(checkout_pull(&host, &root, "origin", 8).is_err(), "a missing pull request is an error");
+        assert!((r.run)(&["for-each-ref", "refs/codeyard/pull"]).unwrap().is_empty(), "private refs are cleaned after success and failure");
     }
 }

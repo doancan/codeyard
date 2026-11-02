@@ -7,6 +7,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-02
+
+### Added
+
+- The public extension registry, `market.yardcode.app`, is on: the app trusts it through three root public keys (any two
+  of them sign its `root.json`; listed in SECURITY.md), and `cyx publish` uses it by default. The Extensions view and
+  `https://yardcode.app/extensions` list what it holds.
+- `extensions/midnight`, a dark theme, is the first extension of the registry; the "Publish an extension" workflow
+  publishes the folders under `extensions/` (keyless, from this repository).
+- Terminal notifications: the bell and OSC 9 / OSC 777 messages (Claude Code and Codex waiting for an answer) flag the
+  terminal in the list and on the Terminal tab, show the message as a notice, and flash the taskbar button on Windows
+  while the window is in the background (`terminal.notifications`). A command that ran for ten seconds or more and
+  ended while nobody watched shows a notice with its result and flashes the taskbar too.
+- Copy on select in the terminal while Claude Code or Codex runs (`terminal.copyOnSelection`: `agents` by default,
+  `always`, `off`), and a "Hold Shift to select text" hint when a drag goes to a program that reads the mouse.
+- The Codeyard site and extension Market for the public registry: a home page and a searchable list of extensions with
+  each one's README, versions and install command, served by `yard` itself (`site` in `yard.json`) from
+  `deploy/yard/docker/site`.
+- The `yard-image` workflow publishes the registry's Docker image, with `yard` and the site inside, to
+  `ghcr.io/<owner>/codeyard-yard`; the server updates with `docker compose pull`.
+
+### Changed
+
+- The panel's Maximize and Restore buttons use corner arrows instead of a plain chevron.
+- The Windows app icon fills its frame and has a larger mark, so it no longer looks small on the taskbar
+  (`crates/app/assets/windows/codeyard.svg`, built into the `.ico` by `scripts/windows-icon.py`).
+- The app is called "Codeyard" in the window title, the title bar, the welcome page and the app menu.
+- The Docker stack runs behind the server's Nginx Proxy Manager instead of Caddy and a Cloudflare Tunnel
+  (`compose.npm.yml`, or `compose.port.yml` for a proxy outside Docker); `yard` answers `/metrics` with 404 to any
+  request a proxy forwarded.
+
+### Fixed
+
+- Folder uploads over SSH failed on hosts whose `sh` is dash (Ubuntu, Debian): the commit script read its stop signal from a
+  stdin that dash had closed and killed the receiving `tar`.
+- Choosing a recent project or "Open Folder…" from the Dock menu no longer replaces the folder of the front window (and
+  with it a running terminal, local or SSH): a window that holds nothing takes it, a project that is already open comes
+  forward, and any other gets a window of its own.
+- Choose a Docker environment lists the active context first and marks it "Current": with Docker Desktop on macOS
+  the first row was `default` (`/var/run/docker.sock`, often missing), so Enter picked an engine that does not answer.
+- Shell integration scripts use Unix line endings even when the SSH agent is cross-compiled from a Windows checkout.
+- Windows: tasks and *Terminal: Run Selected Text* ran nothing; the command was typed into the terminal but the line
+  feed after it is not Enter to the Windows console. Lines now end with a carriage return, as the Enter key sends.
+- Windows: Ctrl+C in the terminal did not stop the running program when Codeyard itself had been started with Ctrl+C
+  ignored (by some launchers, and by the relaunch after an update), since programs inherit that.
+- Windows: the Testing view could not run tests (it needed `sh`); it runs them with `cmd` now.
+- Windows: a debug `preLaunchTask` command with quotes in it reached `cmd` mangled; `cmd /C` gets its line as written.
+- Windows: the line the debugger stopped on was not shown in an open editor (the path came as `\\?\C:\…`).
+- Windows: Codeyard no longer quits at start when the session's atom table is full (a program that leaks atoms fills
+  it); the window opens without its UI Automation tree.
+- Text selected in the terminal can be copied while Claude Code, Codex or another program redraws its lines (a spinner, a
+  status line) or adds lines below it: the selection follows its text instead of being dropped, so Ctrl+C copies
+  instead of interrupting the program.
+- Local Windows file locations normalize paths before tab lookup and position reveal, so terminal links with backslashes or extended path prefixes retain their requested line and column.
+- Terminal file-link lookups retain their source host and workspace. Delayed results after switching context cannot open old locations through the new connection or overwrite its notices.
+- Tab context menus retain the editor identity and group lifetime, resolving its current position before acting. Reordering or closing tabs cannot redirect Close/Pin/bulk-close commands to a different view; menus from another host/workspace are refused.
+- Explorer context menus retain their source host and workspace. Old menu selections after switching context cannot duplicate files, open naming forms or replace the new workspace's file clipboard.
+- The permanent-delete confirmation shown after a trash failure retains its source host and workspace. Accepting an old fallback prompt after switching context cannot delete a file or folder through the new connection.
+- Terminal profile pickers and the launch dropdown reject delayed shell lists and selections after switching host or workspace. An old default-profile menu cannot change settings in the newly selected context.
+- Terminal rename and color menus retain the original terminal's identity. Switching or reordering terminals cannot apply the selection to a different terminal, and closing the original target makes the old selection a no-op.
+- Windows saves preserve hard links by updating the linked file in place. Agent save guards use filesystem identities for hard-linked aliases, so concurrent saves through different names report conflicts instead of losing edits.
+- Agent writes serialize each resolved target's hash check and publication. Concurrent saves from the same disk version now return one success and conflicts for the other writers instead of silently accepting every save and losing edits.
+- Save As and Save Local Copy publish new files exclusively through the agent, preserving destinations created concurrently and existing dangling links. Protocol 15 adds atomic `WriteNew` without a destination placeholder.
+- Save As and Save Local Copy finish writing to their original destinations after a connection/workspace switch without opening old targets, closing tabs or replacing notices in the newly selected context.
+- File/folder creation, rename, Save As and Save Local Copy forms retain their source host and workspace. Confirming an old form after switching connection or folder cannot start a filesystem operation in the new context.
+- Pull request checkout fetches into an exclusively reserved private Git ref and checks out its object ID, so a concurrent fetch cannot redirect checkout through shared `FETCH_HEAD`. Private refs are cleaned after success or failure.
+- Pull request menus retain the resolved remote URL used to load their list. Checkout refuses a repointed remote and fetches the recorded URL, so an old PR number cannot check out code from a different repository.
+- Completed background-fetch errors appear only in their original host and repository's sync tooltip, and do not keep an old connection alive.
+- Sync and background fetch release their operation guard after a host/repository switch without applying old notices, conflicts, errors or Git refreshes to the new context. Pull/push target pickers reject stale lists and selections.
+- Pull request lists and action menus retain their source host and repository, reject stale selections before fetching or checking out, and discard late results after switching context.
+- Remote inventories read NUL-delimited Git configuration instead of splitting display output, preserving complete URLs with spaces, tabs, newlines and `insteadOf` shorthand. Confirming an unchanged URL leaves its stored value intact.
+- Editing a remote URL discards stale reads after host/repository changes and reports failed reads or removed remotes instead of opening an empty URL form.
+- Git confirmation dialogs retain their host and repository context, including merge/rebase, deletions and sync; delayed branch-deletion commit counts cannot open a confirmation after switching context.
+- Background Git operations apply results, Git refreshes and follow-up UI callbacks only in their original host and repository context, so old successes and errors cannot overwrite a newly opened workspace.
+- Git naming forms retain their original host and repository. Submitting an old branch, tag, worktree, remote or named-stash form after switching context cannot mutate the newly selected repository.
+- Branch checkout pickers reject delayed lists and selections from another host or repository; checkout results no longer overwrite notices or refresh Git in a workspace opened after the operation started.
+- Open Worktree and related Git operation pickers discard delayed lists and selections after their host or repository changes, preventing an old checkout path from opening on a different connection.
+- Compare Folders checks source and destination path components without following links, refusing nested copies redirected through symlinks or Windows junctions after the scan. Protocol 14 adds entry metadata without following the final link.
+- Compare Folders refuses new-folder collisions and skips their descendants, including when a directory link appears at creation; missing or replaced source folders no longer create empty destinations.
+- Concurrent directory creation requests report success only for the caller that creates the final directory; missing parents are still created as needed.
+- Compare Folders keeps copy errors visible when cancellation is requested at the same time; lost write acknowledgements are reported as unconfirmed copies rather than claiming that the destination was left untouched.
+- Large Compare Folders copies exclusively reserve their local temporary directories, skip existing files and directory links, and never clean up an unowned staging path.
+- Compare Folders publishes new small files from exclusively reserved staging entries instead of deleting a destination that changes during copying; failed writes leave no empty destination placeholder.
+- Compare Folders checks cancellation after file reads before writing the destination.
+- Already cancelled transfers stop before creating directories or starting local/remote commands; local directory traversal also checks cancellation for empty trees.
+- Transfer errors for paths containing `cancelled` remain errors, with the completed item count preserved; only a typed cancellation response is shown as a user cancellation.
+- Transfer conflict checks stop on connection or filesystem errors instead of treating an unreadable destination as absent and starting without replacement confirmation.
+- Local folder copies resolve destination symlinks and Windows junctions before creating paths, preventing recursive copies into the source through an alias.
+- Folder uploads extract into an owned private directory before merging; cancellation or a failed existence probe can no
+  longer remove pre-existing or concurrently created destination folders.
+- Cancelling a file upload removes only its own staging file, and partial uploads cannot publish over the original file.
+- Local copies and downloads reserve their own private staging directories instead of truncating or removing pre-existing
+  `.codeyard-part` files or `.codeyard-dl` folders; failed downloads also clean up their staging entries.
+- Simultaneous terminal startups use distinct, exclusively created temporary shell scripts instead of overwriting or renaming each other's files.
+- Obsolete file-transfer completions cannot clear newer progress or refresh a different host's workspace; abandoned transfers are cancelled.
+- Delete dangling symbolic links and Windows directory junctions without following their targets; links to protected
+  directories can be removed while the configured home entry and its parents remain protected.
+- Pending transfer checks and replacement confirmations cannot start overlapping transfers or act on a different SSH host.
+- Terminal and language-server spawn replies time out like other agent requests; late successful spawns are terminated instead of orphaned.
+- Image pastes survive the shell finishing startup during upload; closed terminals no longer start image uploads or show late upload errors.
+- Keystrokes entered while a terminal shell is starting are queued instead of silently discarded.
+- Closing a terminal while its SSH shell is still starting cancels the late shell instead of leaving it running on the server.
+- Terminal shell integration preserves literal percent sequences in working-directory names instead of decoding them as URL escapes.
+
 ## [0.7.0] - 2026-11-02
 
 The extensions release. Extensions with code run as WebAssembly in a sandboxed process with only the permissions they
@@ -1464,7 +1568,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/doancan/codeyard/compare/v0.7.0...v0.7.2
 [0.7.0]: https://github.com/doancan/codeyard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/doancan/codeyard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/doancan/codeyard/compare/v0.4.1...v0.5.0

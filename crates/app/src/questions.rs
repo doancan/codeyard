@@ -218,7 +218,7 @@ pub(crate) fn replace_on_transfer(existing: &[String]) -> Question {
 /// Cancelling a running transfer: going on is the safe answer.
 pub(crate) fn cancel_transfer(label: &str) -> Question {
     Question::new(PromptLevel::Warning, tf("Cancel “{}”?", &[&label]))
-        .detail(t("A file that is only partly transferred is removed, and so is a new folder. A folder you merge into keeps what was already copied."))
+        .detail(t("Temporary transfer data is removed. Changes already made at the destination may remain."))
         .button(t("Cancel Transfer"))
         .cancel(t("Keep Going"))
 }

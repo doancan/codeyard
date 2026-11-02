@@ -2,6 +2,7 @@
 //! background fetch (`git.autofetch`) and the guard that keeps two network operations from running at once.
 
 use gpui::{AppContext as _, Context, SharedString, Window};
+use std::sync::Arc;
 
 use super::git_glue::first_line;
 use super::{Notice, OverlayKind, Workbench};
@@ -20,7 +21,13 @@ pub(super) enum Running {
 pub(super) struct SyncState {
     pub(super) running: Option<Running>,
     /// Why the last background fetch failed; shown as the status bar item's tooltip until a fetch or a sync succeeds.
-    pub(super) autofetch_error: Option<SharedString>,
+    autofetch_error: Option<AutofetchError>,
+}
+
+struct AutofetchError {
+    host: std::sync::Weak<dyn host::Host>,
+    root: String,
+    message: SharedString,
 }
 
 /// How often the background fetch looks at the clock; the period itself comes from `git.autofetchPeriod`.
@@ -99,6 +106,7 @@ impl Workbench {
         self.notice = Some(Notice::Info(working_text(&ops).into()));
         cx.notify();
         let host = self.remote.host.clone();
+        let source_host = host.clone();
         let opts = options(cx.global::<Settings>());
         let list = ops.clone();
         let task = cx.background_executor().spawn(async move {
@@ -119,10 +127,20 @@ impl Workbench {
             this.update(cx, |this, cx| {
                 this.vcs.sync.running = None;
                 this.set_scm_syncing(false, cx);
+                // Another connection was opened while the sync ran: its result belongs to neither what is shown nor
+                // that connection, and must not refresh or keep it.
+                if !Arc::ptr_eq(&source_host, &this.remote.host) {
+                    return;
+                }
                 if picked && this.vcs.repos.inventory.by_worktree(&target).is_none() && !this.all_roots(cx).contains(&target) {
                     // The repository left the workspace while its sync ran: its result says nothing about what is shown.
                     this.notice = Some(Notice::Error(crate::i18n::t("Repository changed while the operation was pending.").into()));
                     this.refresh_git(0, cx);
+                    cx.notify();
+                    return;
+                }
+                // Another repository is shown now: the old result must not replace its notice.
+                if !this.git_context_matches(&source_host, &target) {
                     cx.notify();
                     return;
                 }
@@ -185,9 +203,14 @@ impl Workbench {
             // Several repositories: the question names the one it applies to.
             detail = format!("{}\n{detail}", crate::i18n::tf("Repository: {}", &[&st.root]));
         }
-        // The answer applies to the repository the question was about, never to one selected while it was open.
+        // The answer applies to the connection and repository the question was about, never to one selected while it
+        // was open.
         let root = st.root.clone();
+        let host = self.remote.host.clone();
         self.confirm(window, crate::i18n::t("Sync changes?"), &detail, crate::i18n::t("Sync"), cx, move |this, cx| {
+            if !Arc::ptr_eq(&host, &this.remote.host) {
+                return;
+            }
             if this.git_status().map(|s| s.root.clone()) != Some(root.clone()) {
                 this.notice = Some(Notice::Error(crate::i18n::t("Repository changed while the operation was pending.").into()));
                 cx.notify();
@@ -211,6 +234,8 @@ impl Workbench {
     pub(super) fn show_sync_target_picker(&mut self, pull: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
         let host = self.remote.host.clone();
+        let source_host = host.clone();
+        let source_root = root.clone();
         let task = cx.background_executor().spawn(async move {
             let remotes = git::remotes(host.as_ref(), &root)?;
             let branches = if pull { git::branches(host.as_ref(), &root)?.1 } else { Vec::new() };
@@ -219,6 +244,9 @@ impl Workbench {
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
             this.update_in(cx, |this, window, cx| {
+                if !this.git_context_matches(&source_host, &source_root) {
+                    return;
+                }
                 let (remotes, branches) = match result {
                     Ok(r) => r,
                     Err(e) => {
@@ -251,7 +279,7 @@ impl Workbench {
                 }
                 let title = if pull { crate::i18n::t("Pull from…") } else { crate::i18n::t("Push to…") };
                 let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], title, "", None, cx));
-                this.show_overlay(picker, OverlayKind::SyncTarget(ops), window, cx);
+                this.show_overlay(picker, OverlayKind::SyncTarget { host: source_host, root: source_root, ops }, window, cx);
             })
             .ok();
         })
@@ -270,10 +298,16 @@ impl Workbench {
             },
             _ => String::new(),
         };
-        if let Some(e) = &self.vcs.sync.autofetch_error {
+        if let Some(e) = self.autofetch_error() {
             tip = format!("{tip}\n{}", crate::i18n::tf("The last background fetch failed: {}", &[e]));
         }
         tip.into()
+    }
+
+    fn autofetch_error(&self) -> Option<&SharedString> {
+        let error = self.vcs.sync.autofetch_error.as_ref()?;
+        let host = error.host.upgrade()?;
+        self.git_context_matches(&host, &error.root).then_some(&error.message)
     }
 
     /// Fetch in the background if `git.autofetch` is on, the window is in front, the folder is trusted and nothing else is
@@ -288,18 +322,30 @@ impl Workbench {
         }
         self.vcs.sync.running = Some(Running::Autofetch);
         let host = self.remote.host.clone();
+        let source_host = host.clone();
+        let source_root = root.clone();
         let opts = options(cx.global::<Settings>());
         let task = cx.background_executor().spawn(async move { git::autofetch(host.as_ref(), &root, opts) });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
                 this.vcs.sync.running = None;
+                if !this.git_context_matches(&source_host, &source_root) {
+                    cx.notify();
+                    return;
+                }
                 match result {
                     Ok(()) => {
                         this.vcs.sync.autofetch_error = None;
                         this.refresh_git(0, cx);
                     }
-                    Err(e) => this.vcs.sync.autofetch_error = Some(first_line(&e).to_string().into()),
+                    Err(e) => {
+                        this.vcs.sync.autofetch_error = Some(AutofetchError {
+                            host: std::sync::Arc::downgrade(&source_host),
+                            root: source_root,
+                            message: first_line(&e).to_string().into(),
+                        });
+                    }
                 }
                 cx.notify();
             })
@@ -359,6 +405,6 @@ impl Workbench {
 
     #[cfg(test)]
     pub fn autofetch_error_for_test(&self) -> Option<String> {
-        self.vcs.sync.autofetch_error.as_ref().map(|e| e.to_string())
+        self.autofetch_error().map(|e| e.to_string())
     }
 }

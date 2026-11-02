@@ -484,6 +484,51 @@ fn the_http_service_end_to_end() {
 }
 
 #[test]
+#[cfg_attr(windows, ignore = "yard serves from Linux; Windows refuses the rename that replaces an index file a request has open")]
+fn the_site_is_served_beside_the_registry() {
+    let t = Test::new("site");
+    let site = t.dir.join("site");
+    std::fs::create_dir_all(site.join("assets")).unwrap();
+    std::fs::write(site.join("index.html"), "<!doctype html><title>Codeyard</title>").unwrap();
+    std::fs::write(site.join("app.js"), "route();").unwrap();
+    std::fs::write(site.join("assets/logo.svg"), "<svg/>").unwrap();
+    std::fs::write(site.join(".secret"), "no").unwrap();
+    let path = t.dir.join("yard.json");
+    let mut cfg: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    cfg["site"] = serde_json::json!("site");
+    std::fs::write(&path, serde_json::to_vec(&cfg).unwrap()).unwrap();
+    let yard = std::sync::Arc::new(Yard::open(Config::load(&path).unwrap()).unwrap());
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let listener = rt.block_on(tokio::net::TcpListener::bind("127.0.0.1:0")).unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::thread::spawn(move || rt.block_on(http::serve(yard, listener)));
+
+    let page = b"<!doctype html><title>Codeyard</title>".to_vec();
+    assert_eq!(request(addr, "GET", "/", b""), (200, page.clone()));
+    assert_eq!(request(addr, "GET", "/extensions/you.night", b""), (200, page.clone()), "a page path is the site's page");
+    assert_eq!(request(addr, "GET", "/app.js", b""), (200, b"route();".to_vec()));
+    let head = raw(addr, "GET /assets/logo.svg HTTP/1.1\r\nHost: yard\r\nConnection: close\r\n\r\n");
+    assert!(head.contains("content-type: image/svg+xml") && head.contains("content-security-policy: default-src 'none'"), "{head}");
+    assert_eq!(request(addr, "GET", "/missing.js", b"").0, 404, "a missing file is not the page");
+    assert_eq!(request(addr, "GET", "/.secret", b"").0, 404);
+    assert_eq!(request(addr, "GET", "/../yard.json", b"").0, 404);
+    assert_eq!(request(addr, "GET", "/%2e%2e/yard.json", b"").0, 404);
+    assert_eq!(request(addr, "GET", "/yard.sqlite", b""), (200, page.clone()), "the registry's folder is not the site: only the page");
+    assert_eq!(request(addr, "GET", "/../yard.sqlite", b""), (404, b"not found\n".to_vec()));
+    // The registry's own paths are unchanged.
+    assert_eq!(request(addr, "GET", "/healthz", b""), (200, b"ok\n".to_vec()));
+    assert_eq!(request(addr, "GET", "/index.json", b"").0, 200);
+    assert_eq!(request(addr, "GET", "/packages/zz.details.json", b"").0, 404);
+    assert_eq!(request(addr, "GET", "/v1/publish", b"").0, 404);
+    // Monitoring answers the server's own services, never a request a proxy forwarded.
+    assert_eq!(request(addr, "GET", "/metrics", b"").0, 200);
+    let proxied = raw(addr, "GET /metrics HTTP/1.1\r\nHost: yardcode.app\r\nX-Forwarded-For: 203.0.113.9\r\nConnection: close\r\n\r\n");
+    assert!(proxied.starts_with("HTTP/1.1 404"), "{proxied}");
+    let proxied = raw(addr, "GET /metrics HTTP/1.1\r\nHost: yardcode.app\r\nX-Real-IP: 203.0.113.9\r\nConnection: close\r\n\r\n");
+    assert!(proxied.starts_with("HTTP/1.1 404"), "{proxied}");
+}
+
+#[test]
 fn the_production_pins_load() {
     Pins::from_pem(SIGSTORE_FULCIO, SIGSTORE_REKOR).unwrap();
 }

@@ -670,6 +670,7 @@ struct MenuState {
     actions: Vec<Box<dyn gpui::Action>>,
     return_focus: Option<FocusHandle>,
     app_path: Option<Vec<usize>>,
+    context: Option<types::InputContext>,
     /// The Manage menu: re-anchored to the gear button whenever the viewport changes (zoom, resize).
     follows_manage: bool,
     _sub: Subscription,
@@ -679,8 +680,8 @@ struct MenuState {
 struct MenuTarget {
     path: String,
     is_dir: bool,
-    /// Tab index if this is a tab menu.
-    tab: Option<usize>,
+    /// Stable editor view and group lifetime if this is a tab menu.
+    tab: Option<types::TabTarget>,
 }
 
 /// Layout to restore when leaving zen mode.
@@ -1545,7 +1546,7 @@ impl Workbench {
     /// Close the overlay, give focus back to where it was before it opened.
     fn close_overlay(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<Overlay> {
         let ov = self.overlay.take()?;
-        if matches!(ov.kind, OverlayKind::TaskInput(_) | OverlayKind::Input(InputPurpose::TaskInput)) {
+        if matches!(ov.kind, OverlayKind::TaskInput(_) | OverlayKind::Input { purpose: InputPurpose::TaskInput, .. }) {
             self.task_input_closed(window, cx);
         }
         match &ov.return_focus {
@@ -2433,7 +2434,7 @@ impl Workbench {
     fn update_title(&mut self, window: &mut Window, cx: &mut App) {
         let remote = self.remote.host.is_remote().then(|| self.remote.host.label());
         let parts: Vec<String> = [self.title_text(cx), remote].into_iter().flatten().collect();
-        let title = if parts.is_empty() { "codeyard".to_string() } else { parts.join(" — ") };
+        let title = if parts.is_empty() { "Codeyard".to_string() } else { parts.join(" — ") };
         if title != self.title {
             window.set_window_title(&title);
             self.title = title;

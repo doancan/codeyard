@@ -175,7 +175,10 @@ fn connection_attempt_same_path_on_another_host_replaces_the_workspace(cx: &mut 
         wb.remote.pending_path = Some(path.clone());
         wb.attach_host(source.clone(), "source".into(), window, cx);
     });
-    crate::qa_workbench_tests::open_in(&wb, &root.join("src/main.rs"), cx);
+    // A server's paths are taken as they are: name the file the way the folder is named.
+    let main = format!("{path}/src/main.rs");
+    wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main, window, cx));
+    cx.run_until_parked();
     assert_eq!(wb.read_with(cx, |wb, _| wb.tabs.editors.len()), 1);
     let source_workspace = wb.read_with(cx, |wb, _| wb.persist.workspace_id);
     let tx = wb.update_in(cx, |wb, window, cx| {

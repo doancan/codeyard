@@ -1,0 +1,22 @@
+# Publishes one of the extensions in extensions/ to the public registry (market.yardcode.app).
+# Run it by hand: Actions, "Publish an extension", choose the folder. No secrets: the job's identity token signs the
+# release keyless, so only this repository's workflow can publish these extension ids (docs/registry.md).
+name: Publish an extension
+on:
+  workflow_dispatch:
+    inputs:
+      folder:
+        description: The extension's folder under extensions/
+        required: true
+        default: midnight
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./actions/publish
+        with:
+          folder: extensions/${{ inputs.folder }}

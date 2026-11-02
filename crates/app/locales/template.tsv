@@ -12,11 +12,12 @@
 1 minute	
 15 minutes	
 5 minutes	
+A command failed with code {}	
+A command finished	
 A command is running	
 A compatible Node.js runtime could not be used on this host. Install Node.js 22.22.2 or newer with npm, then retry.	
 A container operation is running. Use Docker: Cancel Operation before starting another.	
 A file named “{}” is already there; a folder cannot replace it. Rename or remove it first.	
-A file that is only partly transferred is removed, and so is a new folder. A folder you merge into keeps what was already copied.	
 A file you opened names a schema that is hosted on {}. Downloading it sends a request to that server (your IP address and the schema's address). Only allow it if you trust the file and the host.	
 A folder named “{}” is already there; a file cannot replace it. Rename or remove it first.	
 A merge commit is created unless it can fast-forward. Conflicts are resolved in Source Control.	
@@ -35,7 +36,6 @@ Abort the rebase?
 Aborting merge…	
 Aborting rebase…	
 About Codeyard	
-About codeyard	
 Accept All Current	
 Accept All Incoming	
 Accept Both	
@@ -181,6 +181,7 @@ Cannot copy {0} to {1}: {2}
 Cannot index {0} with {1}	
 Cannot index {0} with “{1}”	
 Cannot index {} with object	
+Cannot inspect the transfer destination: {}	
 Cannot install the extension: {}	
 Cannot install {0}: {1}	
 Cannot iterate over {}	
@@ -431,6 +432,7 @@ Copy code
 Copy container ID	
 Copy fix	
 Copy link	
+Copy text selected with the mouse: while Claude Code or Codex runs, always, or never	
 Copy the files again on the current host before pasting.	
 Copy the full hash	
 Copy the path at the cursor	
@@ -444,6 +446,7 @@ Copying files here has to wait: the connection is still being set up.
 Copying files here is not possible in this workspace.	
 Copying files here needs the connection to {}, which failed: use Reconnect first.	
 Copying files here works with a connected SSH host: connect first (⌃R).	
+Copying {0} item was not confirmed: {1}|Copying {0} items was not confirmed; first: {1}	
 Copying…	
 Could not add the configuration: {}	
 Could not add the instance: {}	
@@ -487,6 +490,7 @@ Could not read containers: {}
 Could not read the commit: {}	
 Could not read the file: {}	
 Could not read the history: {}	
+Could not read the remote URL: {}	
 Could not read the saved copy: {}	
 Could not read the stash: {}	
 Could not read {0}: {1}	
@@ -496,6 +500,8 @@ Could not read: {}
 Could not refresh container data: {}. Check Docker access on the SSH host and retry.	
 Could not remove the instance: {}	
 Could not remove the server: {}	
+Could not reserve a temporary Git reference.	
+Could not reserve a temporary file for comparison.	
 Could not resolve “{}”: check the spelling and the network (the request ran on {}).	
 Could not run “{}”: {}	
 Could not save files before debugging: {}	
@@ -855,6 +861,7 @@ Extensions: Open Market
 Extensions: Show Extensions	
 External image: open the link to view it.	
 F4 steps through the search results, ⇧F4 goes back.	
+Failed with code {}: {}	
 Favorites	
 Favorites: Show Favorites…	
 Favorites: Toggle Active File	
@@ -934,6 +941,8 @@ Find in Terminal
 Find in file (searched on the host)	
 Find in files	
 Find in selection (⌥⌘L)	
+Finished: {}	
+Flag a terminal and the taskbar when its program rings the bell or asks for you	
 Focus Left Editor Group	
 Focus Next Terminal	
 Focus Previous Terminal	
@@ -1082,10 +1091,10 @@ Help: Keyboard Shortcuts Reference
 Help: Welcome	
 Hex dump (read-only copy)	
 Hide	
+Hide Codeyard	
 Hide Merge Commits	
 Hide Others	
 Hide Panel (⌘J)	
-Hide codeyard	
 High risk: this extension can read private data and send it elsewhere.	
 High risk: this extension can run programs as you.	
 Highlight other uses of the word under the cursor	
@@ -1093,6 +1102,7 @@ Highlight the line with the cursor
 Highlight the matching bracket	
 History is collected while monitoring is active. CPU can exceed 100% across cores. Rates need two samples; counter resets show no rate.	
 History of {}	
+Hold Shift to select text	
 Host and client id of your {} server, such as git.example.com 3f2a9c	
 Host name (from ~/.ssh/config) or user@host	
 Host name of the server {} may connect to, such as github.example.com	
@@ -1770,7 +1780,7 @@ Query: {}
 Quick Fix…	
 Quick fix	
 Quit Anyway	
-Quit codeyard	
+Quit Codeyard	
 Quit without saving	
 Quitting loses everything since the last save.	
 Quitting now can leave the installation unfinished. It takes a few seconds.	
@@ -1827,6 +1837,8 @@ Remote Docker environments currently support attaching to existing containers. C
 Remote Explorer	
 Remote agent protocol	
 Remote connection	
+Remote {} changed since this pull request list was loaded. Reopen the list and try again.	
+Remote {} no longer exists.	
 Remote: Add SSH Host…	
 Remote: Connect to Dev Container…	
 Remote: Connect to Host or Switch Workspace…	
@@ -2258,6 +2270,7 @@ Tasks: Restart Running Task
 Tasks: Run Build Task	
 Tasks: Run Task…	
 Tasks: Terminate Task	
+Temporary transfer data is removed. Changes already made at the destination may remain.	
 Terminal	
 Terminal colour	
 Terminal row height, as a multiple of the font size	
@@ -3078,7 +3091,6 @@ your words
 {0} result in {1} files|{0} results in {1} files	
 {0} says why: “{1}”	
 {0} stays stopped: the registry revoked the installed version ({1}) and has no other version to install	
-{0} was left alone: {1}|{0} were left alone, the first one {1}	
 {0} was not installed from a registry, so it has no package for {1}; install the package built for {1}	
 {0} was stopped: it needs {1}, which was stopped	
 {0} was stopped: the registry revoked this version ({1})	

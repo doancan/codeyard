@@ -11,6 +11,7 @@ use gpui::{Entity, Focusable, Modifiers, MouseButton, TestAppContext, VisualTest
 
 use crate::git::Mark;
 use crate::settings::Settings;
+use crate::test_paths::AppPath;
 use crate::ui::ActiveTheme;
 use crate::workbench::Workbench;
 
@@ -112,10 +113,10 @@ pub(crate) fn repo_with_remote(name: &str) -> (PathBuf, PathBuf, PathBuf) {
     let other = dir.with_extension("other");
     let _ = std::fs::remove_dir_all(&bare);
     let _ = std::fs::remove_dir_all(&other);
-    git_in(dir.parent().unwrap(), &["init", "-q", "--bare", bare.to_str().unwrap()]);
-    git_in(&dir, &["remote", "add", "origin", bare.to_str().unwrap()]);
+    git_in(dir.parent().unwrap(), &["init", "-q", "--bare", bare.app().as_str()]);
+    git_in(&dir, &["remote", "add", "origin", bare.app().as_str()]);
     git_in(&dir, &["push", "-q", "-u", "origin", "main"]);
-    git_in(dir.parent().unwrap(), &["clone", "-q", bare.to_str().unwrap(), other.to_str().unwrap()]);
+    git_in(dir.parent().unwrap(), &["clone", "-q", bare.app().as_str(), other.app().as_str()]);
     git_in(&other, &["config", "user.name", "Other"]);
     git_in(&other, &["config", "user.email", "o@example.com"]);
     (dir, bare, other)
@@ -206,7 +207,7 @@ fn qa_git_worktree_external_commit_refreshes(cx: &mut TestAppContext) {
     let main = repo("qa-wtmain");
     let wt = main.with_extension("wt");
     let _ = std::fs::remove_dir_all(&wt);
-    git_in(&main, &["worktree", "add", "-q", "-b", "wtb", wt.to_str().unwrap()]);
+    git_in(&main, &["worktree", "add", "-q", "-b", "wtb", wt.app().as_str()]);
     std::fs::write(wt.join("README.md"), "# proje\nworktree\n").unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &wt, cx);
@@ -300,7 +301,7 @@ fn qa_git_repo_opened_at_subfolder(cx: &mut TestAppContext) {
     open(&wb, &dir.join("src"), cx);
     wait_ticking(cx, "status", |cx| changes(&wb, cx).is_some_and(|c| c.len() == 2));
     let st = wb.read_with(cx, |wb, _| wb.git_status()).unwrap();
-    assert_eq!(st.root, dir.to_string_lossy());
+    assert_eq!(st.root, dir.app());
     assert_eq!(st.branch.as_deref(), Some("main"));
 }
 
@@ -563,12 +564,18 @@ fn qa_task_output_becomes_problems(cx: &mut TestAppContext) {
     std::fs::create_dir_all(dir.join(".codeyard")).unwrap();
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(dir.join("src/a.c"), "int main(void) { return x; }\n").unwrap();
-    std::fs::write(dir.join(".codeyard/tasks.jsonc"), r#"[ { "label": "build", "command": "printf 'src/a.c:1:27: error: x undeclared\\nnoise line\\n'" } ]"#)
-        .unwrap();
+    // Python prints the same in a POSIX shell and in cmd.
+    let task = format!(
+        r#"[ {{ "label": "build", "command": "{} -c \"print('src/a.c:1:27: error: x undeclared'); print('noise line')\"" }} ]"#,
+        crate::test_lsp::python()
+    );
+    std::fs::write(dir.join(".codeyard/tasks.jsonc"), task).unwrap();
     // Language server off: a real `clangd` on this machine would send its own diagnostics and skew the count.
     let (wb, cx) = setup_with(cx, Settings { lsp_enabled: false, ..Settings::default() });
     open(&wb, &dir, cx);
-    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    if cfg!(unix) {
+        wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    }
     run(&wb, cx, "Tasks: Run Build Task");
     wait_ticking(cx, "problem from task output", |cx| wb.read_with(cx, |wb, _| wb.problems()).iter().any(|(p, n)| p.ends_with("/src/a.c") && *n == 1));
     assert_eq!(wb.read_with(cx, |wb, _| wb.problems().len()), 1, "a message line is not a problem");
@@ -851,8 +858,14 @@ fn qa_debug_build_failure_fills_problems(cx: &mut TestAppContext) {
     }
     let dir = qa_dir("qa-debugbuild");
     std::fs::create_dir_all(dir.join(".vscode")).unwrap();
-    std::fs::write(dir.join(".vscode/tasks.json"), r#"{ "tasks": [ { "label": "build", "command": "printf 'src/a.c:2:3: error: nope\\n' >&2; exit 1" } ] }"#)
-        .unwrap();
+    std::fs::write(
+        dir.join(".vscode/tasks.json"),
+        format!(
+            r#"{{ "tasks": [ {{ "label": "build", "command": "{} -c \"import sys; sys.exit('src/a.c:2:3: error: nope')\"" }} ] }}"#,
+            crate::test_lsp::python()
+        ),
+    )
+    .unwrap();
     std::fs::write(
         dir.join(".vscode/launch.json"),
         r#"{ "configurations": [ { "name": "Run", "type": "lldb", "program": "${workspaceFolder}/a.out", "preLaunchTask": "build" } ] }"#,
@@ -1790,7 +1803,10 @@ fn qa_debug_real_data_breakpoint(cx: &mut TestAppContext) {
 
 fn terminal(wb: &Entity<Workbench>, dir: &Path, cx: &mut VisualTestContext) -> Entity<crate::terminal::TerminalView> {
     open(wb, dir, cx);
-    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    // A POSIX shell where there is one (no login files); the system shell (cmd) on Windows.
+    if cfg!(unix) {
+        wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    }
     cx.simulate_keystrokes("ctrl-`");
     let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
     cx.simulate_keystrokes("e c h o space r e a d y enter");
@@ -1814,15 +1830,19 @@ fn qa_terminal_ctrl_c_interrupts(cx: &mut TestAppContext) {
     // Wait until the child is really running before interrupting: a fixed sleep let Ctrl-C reach the shell before it had started
     // `sleep` on a loaded machine, and then `sleep 60` ran to the end. The echoed command line contains `$((1+1))`, only the output
     // line is exactly `running-2`.
-    type_line(cx, "sh -c 'echo running-$((1+1)); sleep 60'");
-    wait_for(cx, "child running", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == "running-2")));
+    // On Windows `ping` itself says it runs ("Pinging …" is not in the echoed command line).
+    let (command, running) =
+        if cfg!(windows) { ("ping -n 60 127.0.0.1", "Pinging 127.0.0.1") } else { ("sh -c 'echo running-$((1+1)); sleep 60'", "running-2") };
+    type_line(cx, command);
+    wait_for(cx, "child running", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l.starts_with(running))));
     cx.simulate_keystrokes("ctrl-c");
-    type_line(cx, "echo bitti-$((2+3))");
+    type_line(cx, if cfg!(windows) { "echo bitti-5" } else { "echo bitti-$((2+3))" });
     wait_for(cx, "after ctrl-c", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == "bitti-5")));
 }
 
 /// The pty size must match what is drawn (`stty size` rows == visible rows).
 #[gpui::test]
+#[cfg_attr(windows, ignore = "needs a POSIX shell: stty, printf and cat -v")]
 fn qa_terminal_pty_size_matches_grid(cx: &mut TestAppContext) {
     if !crate::test_sshd::posix_shell() {
         return;
@@ -1854,6 +1874,7 @@ fn qa_terminal_pty_size_matches_grid(cx: &mut TestAppContext) {
 /// screen; the mouse wheel there must send ↑/↓ (xterm "alternate scroll",
 /// VS Code does this), otherwise the wheel does nothing in `less`.
 #[gpui::test]
+#[cfg_attr(windows, ignore = "needs a POSIX shell: stty, printf and cat -v")]
 fn qa_terminal_wheel_in_alternate_screen_sends_arrows(cx: &mut TestAppContext) {
     if !crate::test_sshd::posix_shell() {
         return;
@@ -1895,6 +1916,7 @@ fn echoed(cx: &mut VisualTestContext, term: &Entity<crate::terminal::TerminalVie
 /// Programs that enable mouse reporting (htop, vim `mouse=a`, tmux, mc) must
 /// receive clicks (VS Code forwards them).
 #[gpui::test]
+#[cfg_attr(windows, ignore = "needs a POSIX shell: stty, printf and cat -v")]
 fn qa_terminal_mouse_reporting_reaches_program(cx: &mut TestAppContext) {
     if !crate::test_sshd::posix_shell() {
         return;
@@ -1953,7 +1975,7 @@ fn qa_terminal_find_counts_selects_and_closes(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-termfind");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
-    type_line(cx, "for i in 1 2 3; do echo row-$i-needle; done");
+    type_line(cx, if cfg!(windows) { "for %i in (1 2 3) do @echo row-%i-needle" } else { "for i in 1 2 3; do echo row-$i-needle; done" });
     wait_for(cx, "rows", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == "row-3-needle")));
     // The platform's own key opens the bar and typing searches (⌘F on macOS; Ctrl+F belongs to the shell elsewhere).
     cx.simulate_keystrokes(if cfg!(target_os = "macos") { "cmd-f" } else { "ctrl-shift-f" });
@@ -1974,7 +1996,7 @@ fn qa_terminal_find_counts_selects_and_closes(cx: &mut TestAppContext) {
     // The bar has focus: typed text stays there.
     cx.simulate_input("zz");
     cx.simulate_keystrokes("escape");
-    type_line(cx, "echo back-$((2+3))");
+    type_line(cx, if cfg!(windows) { "echo back-5" } else { "echo back-$((2+3))" });
     wait_for(cx, "shell has the keys again", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == "back-5")));
     assert!(!term.read_with(cx, |t, _| t.screen_text()).contains("zz"), "keys typed in the find bar reached the shell");
 }
@@ -2682,7 +2704,7 @@ fn workspace_edits_outside_the_open_folders_are_dropped(cx: &mut TestAppContext)
     open(&wb, &dir, cx);
     let edit_of = |path: &Path| {
         let change = serde_json::json!([{ "range": { "start": { "line": 0, "character": 0 }, "end": { "line": 0, "character": 4 } }, "newText": "gone" }]);
-        serde_json::json!({ "changes": { crate::lsp::path_to_uri(&path.to_string_lossy()): change } })
+        serde_json::json!({ "changes": { crate::lsp::path_to_uri(&path.app()): change } })
     };
     let applied = wb.update(cx, |wb, cx| wb.apply_workspace_edit_for_test(&edit_of(&outside), cx));
     cx.run_until_parked();
@@ -2716,7 +2738,7 @@ fn the_response_file_is_private_and_removed_at_quit(cx: &mut TestAppContext) {
     let path = wb.read_with(cx, |wb, _| wb.response_tab_for_test()).expect("response file");
     let path = Path::new(&path);
     assert!(path.ends_with("response.json"), "{path:?}");
-    wait_for(cx, "response tab", |cx| wb.read_with(cx, |wb, cx| wb.active_editor_entity().is_some_and(|e| e.read(cx).path == path.to_string_lossy())));
+    wait_for(cx, "response tab", |cx| wb.read_with(cx, |wb, cx| wb.active_editor_entity().is_some_and(|e| e.read(cx).path == path.app())));
     assert_eq!(mode(path) & 0o077, 0, "file readable by others: {:o}", mode(path));
     assert_eq!(mode(path.parent().unwrap()) & 0o077, 0, "folder readable by others");
     // The next response replaces it; the request file was never the response tab.
@@ -2779,10 +2801,12 @@ fn untrusted_project_cannot_choose_a_shell_or_a_language_server(cx: &mut TestApp
 fn untrusted_folder_asks_before_running_a_task(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-trust-task");
     std::fs::create_dir_all(dir.join(".codeyard")).unwrap();
-    std::fs::write(dir.join(".codeyard/tasks.jsonc"), r#"[ { "label": "build", "command": "touch ran.txt" } ]"#).unwrap();
+    std::fs::write(dir.join(".codeyard/tasks.jsonc"), r#"[ { "label": "build", "command": "echo ran> ran.txt" } ]"#).unwrap();
     let (wb, cx) = setup_trusting(cx, "qa-trust-task");
     open(&wb, &dir, cx);
-    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    if cfg!(unix) {
+        wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    }
 
     run(&wb, cx, "Tasks: Run Build Task");
     cx.run_until_parked();

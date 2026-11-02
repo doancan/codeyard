@@ -215,6 +215,7 @@ pub fn read(source: &dyn host::Host, ssh: &str, disk: bool, cancel: &AtomicBool)
             ssh: Some(ssh.into()),
             name: context.into(),
             endpoint: format!("SSH: {ssh}"),
+            current: true,
         },
         containers,
         usage,

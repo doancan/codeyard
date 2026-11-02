@@ -303,3 +303,12 @@ fn stopping_a_process_cleans_its_group_after_the_leader_has_already_exited() {
         std::thread::sleep(Duration::from_millis(10));
     }
 }
+
+/// `cmd /C line` runs the line as cmd reads it: the quotes in it reach the program unchanged.
+#[cfg(windows)]
+#[test]
+fn cmd_runs_its_line_as_written() {
+    let out = command("cmd", &["/C".into(), r#"echo "a b"& echo done"#.into()], None).unwrap().output().unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(text.lines().map(str::trim).collect::<Vec<_>>(), [r#""a b""#, "done"]);
+}

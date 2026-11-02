@@ -1,7 +1,7 @@
 //! Integrated terminal (S08): VT parsing with alacritty_terminal, PTY on the agent
 //! (local or remote, same protocol). Colors are derived from the theme.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -60,6 +60,8 @@ mod restore;
 mod revival;
 #[path = "terminal_scroll.rs"]
 mod scroll;
+#[path = "terminal_selection.rs"]
+mod selection;
 
 #[cfg(test)]
 #[path = "terminal_scroll_tests.rs"]
@@ -69,6 +71,13 @@ pub enum TerminalEvent {
     TitleChanged,
     /// A command started or finished (shell integration): the terminal list shows it.
     ActivityChanged,
+    /// The program rang the bell or sent a notification (OSC 9/777), with its message if it had one.
+    Attention(Option<String>),
+    /// A command that ran for 10 seconds or more ended: the line it was typed on and its exit code.
+    LongCommandFinished {
+        command: String,
+        code: Option<i32>,
+    },
     Exited,
     /// A key was pressed after the shell exited.
     CloseRequested,
@@ -188,6 +197,9 @@ pub struct TerminalView {
     cwd: Option<String>,
     host: Arc<dyn Host>,
     pty: Option<u32>,
+    /// A close request must also cancel a shell which has not finished starting.
+    closed: Cell<bool>,
+    starting: bool,
     /// Input sent before the shell started (task command): written once the pty is up.
     pending_input: Vec<u8>,
     /// Fixed title (task name): the shell's title updates don't change it.
@@ -208,6 +220,9 @@ pub struct TerminalView {
     /// Grid origin and cell width from the last paint (for mouse → cell).
     grid: (Point<Pixels>, Pixels),
     selecting: bool,
+    /// "Hold Shift to select": shown for a moment when a drag went to a program that reads the mouse; when it last showed.
+    shift_hint: bool,
+    shift_hint_last: Option<std::time::Instant>,
     /// Link hovered while ⌘ is held: (screen row, columns).
     hover_link: Option<(usize, std::ops::Range<usize>)>,
     /// The find bar, while it is open.
@@ -293,6 +308,8 @@ impl TerminalView {
             cwd,
             host,
             pty: None,
+            closed: Cell::new(false),
+            starting: false,
             pending_input: Vec::new(),
             title_locked: false,
             launched: (None, None),
@@ -306,6 +323,8 @@ impl TerminalView {
             size,
             grid: (Point::default(), px(8.)),
             selecting: false,
+            shift_hint: false,
+            shift_hint_last: None,
             find: None,
             hover_link: None,
             metrics: {
@@ -322,6 +341,8 @@ impl TerminalView {
     }
 
     fn feed(&mut self, data: &[u8]) {
+        // TUIs that redraw in place erase the selected lines; the selection follows its text (terminal_selection.rs).
+        let kept = self.keep_selection();
         // Each shell-integration sequence is noted where it ends, with the cursor where the parser left it.
         let mut at = 0;
         for (end, ev) in self.osc.scan(data) {
@@ -330,6 +351,7 @@ impl TerminalView {
             self.on_osc(ev);
         }
         self.parser.advance(&mut self.term, &data[at..]);
+        self.restore_selection(kept, selection::scroll_bound(data, self.term.screen_lines()));
         // Deleting lines (`CSI M`, which full-screen programs send all the time) while the view is scrolled back can leave the
         // parser's view offset past the end of the history, and drawing that panics: bring it back inside.
         let grid = self.term.grid();
@@ -367,8 +389,21 @@ impl TerminalView {
                         cx.write_to_clipboard(ClipboardItem::new_string(s))
                     }
                 }
+                TermEvent::Bell => self.ask_attention(None),
                 _ => {}
             }
+        }
+        if let Some(message) = self.marks.attention.take() {
+            if cx.global::<crate::settings::Settings>().terminal_notifications {
+                cx.emit(TerminalEvent::Attention(message));
+            } else if self.unseen_finish() == Some(Finished::Attention) {
+                self.mark_seen();
+            }
+        }
+        if let Some((command, code)) = self.marks.long_finish.take()
+            && cx.global::<crate::settings::Settings>().terminal_notifications
+        {
+            cx.emit(TerminalEvent::LongCommandFinished { command, code });
         }
     }
 
@@ -389,18 +424,27 @@ impl TerminalView {
         self.exit.is_some()
     }
 
-    fn write(&self, data: Vec<u8>) {
-        if let (Some(id), false) = (self.pty, self.exit.is_some()) {
-            self.host.pty_input(id, data);
+    fn write(&mut self, data: Vec<u8>) {
+        if self.exit.is_some() || self.closed.get() {
+            return;
+        }
+        match self.pty {
+            Some(id) => self.host.pty_input(id, data),
+            None if self.starting => self.pending_input.extend_from_slice(&data),
+            None => {}
         }
     }
 
     /// Send text to the shell (once it starts, if it hasn't yet).
     pub fn send(&mut self, text: &str) {
-        match self.pty {
-            Some(_) => self.write(text.as_bytes().to_vec()),
-            None => self.pending_input.extend_from_slice(text.as_bytes()),
-        }
+        self.write(text.as_bytes().to_vec());
+    }
+
+    /// Type `text` and press Enter after each of its lines. Enter is a carriage return, as the key sends it: every shell
+    /// takes it, and the Windows console does not take a line feed as Enter.
+    pub fn send_lines(&mut self, text: &str) {
+        let lines: Vec<&str> = text.trim_end_matches('\n').split('\n').map(|l| l.trim_end_matches('\r')).collect();
+        self.send(&format!("{}\r", lines.join("\r")));
     }
 
     pub fn set_fixed_title(&mut self, title: String) {
@@ -410,6 +454,9 @@ impl TerminalView {
 
     /// Close the shell (when the tab is closed).
     pub fn kill(&self) {
+        if self.closed.replace(true) {
+            return;
+        }
         if let Some(id) = self.pty {
             self.host.pty_kill(id);
         }
@@ -681,6 +728,9 @@ impl TerminalView {
         }
         if !self.selecting || ev.pressed_button != Some(MouseButton::Left) {
             self.selecting = false;
+            if ev.pressed_button == Some(MouseButton::Left) && !ev.modifiers.shift && self.term.mode().intersects(TermMode::MOUSE_MODE) {
+                self.show_shift_hint(cx);
+            }
             return;
         }
         let (at, side) = self.grid_point(ev.position);
@@ -690,7 +740,7 @@ impl TerminalView {
         }
     }
 
-    fn on_mouse_up(&mut self, ev: &gpui::MouseUpEvent) {
+    fn on_mouse_up(&mut self, ev: &gpui::MouseUpEvent, cx: &mut Context<Self>) {
         if !ev.modifiers.shift
             && !self.selecting
             && let Some(bytes) = self.mouse_report(0, false, ev.position, &ev.modifiers)
@@ -698,10 +748,12 @@ impl TerminalView {
             self.write(bytes);
             return;
         }
-        self.selecting = false;
+        let was_selecting = std::mem::take(&mut self.selecting);
         // Single click without dragging: don't leave an empty selection.
         if self.term.selection.as_ref().is_some_and(|s| s.is_empty()) {
             self.term.selection = None;
+        } else if was_selecting {
+            self.copy_on_select(cx);
         }
     }
 
@@ -759,13 +811,23 @@ impl TerminalView {
     }
 
     fn paste_image(&mut self, image: gpui::Image, cx: &mut Context<Self>) {
+        if self.closed.get() || self.exit.is_some() || self.error.is_some() || (self.pty.is_none() && !self.starting) {
+            return;
+        }
         let host = self.host.clone();
         let pty = self.pty;
         let task = cx.background_executor().spawn(async move { crate::terminal_image_paste::save_remote_image(host.as_ref(), image) });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
-                if this.pty != pty || this.exit.is_some() {
+                // None -> Some is a normal startup transition. A different
+                // existing PTY, or a closed/failed terminal, cannot accept this paste.
+                if this.closed.get()
+                    || this.exit.is_some()
+                    || this.error.is_some()
+                    || (pty.is_some() && this.pty != pty)
+                    || (this.pty.is_none() && !this.starting)
+                {
                     return;
                 }
                 match result {
@@ -1258,8 +1320,8 @@ impl Render for TerminalView {
             )
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .when(self.hover_link.is_some(), |d| d.cursor(gpui::CursorStyle::PointingHand))
-            .on_mouse_up(MouseButton::Left, cx.listener(|this, ev, _, _| this.on_mouse_up(ev)))
-            .on_mouse_up_out(MouseButton::Left, cx.listener(|this, ev, _, _| this.on_mouse_up(ev)))
+            .on_mouse_up(MouseButton::Left, cx.listener(|this, ev, _, cx| this.on_mouse_up(ev, cx)))
+            .on_mouse_up_out(MouseButton::Left, cx.listener(|this, ev, _, cx| this.on_mouse_up(ev, cx)))
             .relative()
             .size_full()
             .bg(c(p.bg))
@@ -1269,6 +1331,21 @@ impl Render for TerminalView {
             .text_color(c(p.text))
             .child(TerminalElement { view: cx.entity(), palette: p, focused })
             .children(find_bar)
+            .when(self.shift_hint, |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .top(px(theme::SPACE[2]))
+                        .right(px(theme::SPACE[4]))
+                        .px(px(theme::SPACE[3]))
+                        .py(px(theme::SPACE[1]))
+                        .rounded(px(theme::radius::SM))
+                        .bg(c(p.surface_raised))
+                        .text_color(c(p.text))
+                        .text_size(px(crate::ui::text::XS.0))
+                        .child(crate::i18n::t("Hold Shift to select text")),
+                )
+            })
             .when_some(self.error.clone().or(exit_line.map(Into::into)), |d, msg| {
                 d.child(
                     div()
@@ -1287,176 +1364,5 @@ impl Render for TerminalView {
 }
 
 #[cfg(test)]
-mod tests {
-    use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
-
-    use super::*;
-    use crate::ui::text;
-
-    #[test]
-    fn the_terminal_font_size_setting_sets_the_cell_size() {
-        let (_, base) = metrics(text::CODE.0, LINE_HEIGHT);
-        assert_eq!(base, (text::CODE.0 * LINE_HEIGHT).round(), "rows are 1.2 × the font size by default");
-        let (size, line) = metrics(20., LINE_HEIGHT);
-        assert_eq!((size, line), (20., 24.));
-        assert!(line > base && line.fract() == 0., "a bigger font gets taller, whole-pixel rows: {line}");
-        assert_eq!(metrics(2., LINE_HEIGHT).0, 6., "absurd sizes are clamped");
-        assert_eq!(metrics(500., LINE_HEIGHT).0, 48.);
-        assert_eq!(metrics(13., 1.5).1, 20., "terminal.lineHeight widens the rows");
-        assert_eq!(metrics(13., 0.2).1, 13., "never shorter than the font");
-        assert_eq!(metrics(13., f32::NAN).1, 16., "a broken value falls back to the default");
-    }
-
-    #[test]
-    fn a_terminal_that_cannot_keep_up_drops_output_instead_of_growing_without_bound() {
-        let b = OutputBacklog::default();
-        assert!(b.admit(MAX_BACKLOG - 10));
-        assert!(b.admit(10), "exactly at the limit is fine");
-        assert!(!b.admit(1), "over the limit is dropped");
-        assert!(!b.admit(1_000_000));
-        assert!(b.take_dropped(), "the user is told once");
-        assert!(!b.take_dropped());
-        // After the UI catches up, output flows again.
-        b.consumed(MAX_BACKLOG);
-        assert!(b.admit(4096));
-    }
-
-    /// Fault injection, slow consumer, through the real gate: 256 MB of output arrives while the UI reads nothing. At most
-    /// `MAX_BACKLOG` bytes are held, the UI is told output was dropped, and the exit event still arrives after the output.
-    #[test]
-    fn a_flood_behind_a_stalled_terminal_is_capped_and_the_exit_is_kept() {
-        let (tx, rx) = std::sync::mpsc::channel::<PtyEvent>();
-        let backlog = Arc::new(OutputBacklog::default());
-        let gate = backlog.clone();
-        let mut out = crate::ui::bridge_with(rx, move |ev| match ev {
-            PtyEvent::Output(d) => gate.admit(d.len()),
-            PtyEvent::Exit(_) => true,
-        });
-        let chunk = vec![b'y'; 64 * 1024];
-        for _ in 0..4096 {
-            tx.send(PtyEvent::Output(chunk.clone())).unwrap();
-        }
-        tx.send(PtyEvent::Exit(Some(0))).unwrap();
-        drop(tx);
-        // The UI reads nothing until the gate has started refusing output (it must, 256 MB > 32 MB).
-        let start = std::time::Instant::now();
-        while !backlog.dropped.load(std::sync::atomic::Ordering::Relaxed) && start.elapsed() < std::time::Duration::from_secs(30) {
-            std::thread::sleep(std::time::Duration::from_millis(2));
-        }
-        assert!(backlog.dropped.load(std::sync::atomic::Ordering::Relaxed), "the gate never refused anything");
-        let peak = backlog.pending.load(std::sync::atomic::Ordering::Relaxed);
-        assert!(peak <= MAX_BACKLOG, "{peak} bytes were held while the UI stalled");
-        let (mut held, mut exit) = (0usize, None);
-        while exit.is_none() && start.elapsed() < std::time::Duration::from_secs(30) {
-            match out.try_recv() {
-                Ok(PtyEvent::Output(d)) => {
-                    held += d.len();
-                    backlog.consumed(d.len());
-                }
-                Ok(PtyEvent::Exit(code)) => exit = Some(code),
-                Err(_) => std::thread::sleep(std::time::Duration::from_millis(2)),
-            }
-        }
-        assert_eq!(exit, Some(Some(0)), "the exit event is never dropped");
-        assert!(held >= MAX_BACKLOG - chunk.len(), "output up to the cap is delivered ({held})");
-        assert!(backlog.take_dropped(), "the user is told");
-    }
-
-    #[test]
-    fn osc_52_reaches_the_clipboard_only_when_the_setting_allows_it() {
-        let events = Listener::default();
-        let mut term = Term::new(Config::default(), &TermSize { cols: 80, rows: 24 }, events.clone());
-        let mut parser = Processor::<StdSyncHandler>::default();
-        parser.advance(&mut term, b"\x1b]52;c;Zm9v\x07");
-        let queued = std::mem::take(&mut *events.0.borrow_mut());
-        assert!(queued.iter().any(|e| matches!(e, TermEvent::ClipboardStore(..))), "the terminal reports the store request");
-        let texts = |allowed| queued.iter().cloned().filter_map(|e| clipboard_text(e, allowed)).collect::<Vec<_>>();
-        assert!(texts(false).is_empty(), "off by default: nothing is written");
-        assert_eq!(texts(true), ["foo"]);
-        assert!(!crate::settings::Settings::default().terminal_allow_clipboard_write);
-    }
-
-    #[test]
-    fn bridge_with_discards_what_the_gate_refuses() {
-        let (tx, rx) = std::sync::mpsc::channel::<u32>();
-        let mut out = crate::ui::bridge_with(rx, |n| n % 2 == 0);
-        for i in 0..6 {
-            tx.send(i).unwrap();
-        }
-        drop(tx);
-        let got: Vec<u32> = futures::executor::block_on(async {
-            use futures::StreamExt;
-            out.by_ref().collect().await
-        });
-        assert_eq!(got, [0, 2, 4]);
-    }
-    use gpui::Keystroke;
-
-    fn bytes(k: &str, mode: TermMode) -> Option<Vec<u8>> {
-        key_to_bytes(&Keystroke::parse(k).unwrap(), mode)
-    }
-
-    fn mac(k: &str, mode: TermMode) -> Option<&'static [u8]> {
-        macos_line_editing(&Keystroke::parse(k).unwrap(), mode)
-    }
-
-    #[test]
-    fn macos_line_editing_keys_are_readline_keys() {
-        let m = TermMode::empty();
-        assert_eq!(mac("cmd-left", m), Some(&b"\x01"[..]), "start of line");
-        assert_eq!(mac("cmd-right", m), Some(&b"\x05"[..]), "end of line");
-        assert_eq!(mac("alt-left", m), Some(&b"\x1bb"[..]), "word left");
-        assert_eq!(mac("alt-right", m), Some(&b"\x1bf"[..]), "word right");
-        assert_eq!(mac("cmd-backspace", m), Some(&b"\x15"[..]), "delete to line start");
-        assert_eq!(mac("cmd-delete", m), Some(&b"\x0b"[..]), "delete to line end");
-        assert_eq!(mac("alt-delete", m), Some(&b"\x1bd"[..]), "delete word right");
-        // Selections and other combinations keep their xterm meaning; ⌘C / ⌘V stay with the app.
-        for k in ["shift-cmd-left", "alt-shift-left", "ctrl-left", "cmd-c", "cmd-up"] {
-            assert_eq!(mac(k, m), None, "{k}");
-        }
-        // vim, less: plain xterm keys (Ctrl+A would increment a number in vim).
-        assert_eq!(mac("cmd-left", TermMode::ALT_SCREEN), None);
-        assert_eq!(mac("alt-left", TermMode::ALT_SCREEN), None);
-    }
-
-    #[test]
-    fn keys_map_to_xterm_sequences() {
-        let m = TermMode::empty();
-        assert_eq!(bytes("enter", m).unwrap(), b"\r");
-        assert_eq!(bytes("ctrl-c", m).unwrap(), [3]);
-        assert_eq!(bytes("up", m).unwrap(), b"\x1b[A");
-        assert_eq!(bytes("up", TermMode::APP_CURSOR).unwrap(), b"\x1bOA", "vim/less uygulama modu");
-        assert_eq!(bytes("shift-right", m).unwrap(), b"\x1b[1;2C");
-        assert_eq!(bytes("ctrl-delete", m).unwrap(), b"\x1b[3;5~");
-        assert_eq!(bytes("alt-backspace", m).unwrap(), b"\x1b\x7f");
-        assert!(bytes("cmd-v", m).is_none(), "⌘ keys are left to the app");
-    }
-
-    #[test]
-    fn space_keys_are_sent_to_the_terminal() {
-        let m = TermMode::empty();
-        assert_eq!(bytes("space", m), Some(b" ".to_vec()));
-        assert_eq!(bytes("shift-space", m), Some(b" ".to_vec()));
-        assert_eq!(bytes("ctrl-space", m), Some(vec![0]));
-    }
-
-    #[test]
-    fn windows_turkish_characters_are_sent_as_utf8() {
-        for ch in ['ı', 'İ', 'ş', 'ğ', 'ü', 'ö', 'ç', '@', '{', '}', '[', ']', '\\', '|', '€'] {
-            // GPUI resolves AltGr to a text character before dispatching the key.
-            let mut key = Keystroke::parse("a").unwrap();
-            key.key_char = Some(ch.to_string());
-            assert_eq!(key_to_bytes(&key, TermMode::empty()).unwrap(), ch.to_string().as_bytes());
-        }
-    }
-
-    #[test]
-    fn ansi_cube_and_grayscale() {
-        let p = theme::DARK;
-        let o = alacritty_terminal::term::color::Colors::default();
-        assert_eq!(resolve(&p, Color::Indexed(196), &o), 0xff0000);
-        assert_eq!(resolve(&p, Color::Indexed(232), &o), 0x080808);
-        assert_eq!(resolve(&p, Color::Spec(Rgb { r: 1, g: 2, b: 3 }), &o), 0x010203);
-        assert_eq!(resolve(&p, Color::Named(NamedColor::Red), &o), p.danger);
-    }
-}
+#[path = "terminal_tests.rs"]
+mod tests;

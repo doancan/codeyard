@@ -1,0 +1,10 @@
+[extension]
+id          = "codeyard.midnight"
+version     = "0.1.0"
+name        = "Midnight"
+license     = "MIT"
+description = "A calm dark colour theme in graphite and mint: the first extension in the Codeyard registry."
+
+[[themes]]
+label = "Midnight"
+path  = "themes/midnight.json"

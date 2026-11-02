@@ -1,13 +1,15 @@
-# The registry as a Docker Compose stack behind a Cloudflare Tunnel (docs/registry.md, "Running on Docker"). Nothing
-# publishes a host port: cloudflared dials out to Cloudflare and reaches `edge` on the compose network.
+# The registry and the Codeyard site as a Docker Compose stack behind the server's reverse proxy (Nginx Proxy Manager,
+# which holds the domains and their certificates). docs/registry.md, "Running on Docker". Nothing publishes a host port:
+# compose.npm.yml puts `yard` on the proxy's network (or compose.port.yml publishes one port, for a proxy that is not
+# in Docker).
 #
-#   yard         yard serve (the binary comes from ./bin, the yard-deploy workflow's artifact)
+#   yard         yard serve: the registry's API and files, and the site (site/) on every other path
 #   litestream   copies yard.sqlite to R2 as it changes
-#   edge         Caddy without TLS: /metrics answers 404, body limit, compression, no access log
-#   cloudflared  the tunnel (profile "tunnel", set in .env)
 #   ops          the scheduler: re-sign, watch, backup, weekly restore check; and the shell for `yard …` commands
 #
-# Secrets are only in .env, and each service gets only the part it uses.
+# The image is ghcr.io/<owner>/codeyard-yard (YARD_IMAGE in .env, built by the yard-image workflow with yard inside),
+# or built here from this folder with yard mounted from ./bin. Secrets are only in .env, and each service gets only the
+# part it uses.
 name: yard
 
 x-service: &service
@@ -19,7 +21,7 @@ x-service: &service
     driver: local
     options: { max-size: 10m, max-file: "5" }
 
-x-image: &image codeyard/yard-ops:local
+x-image: &image "${YARD_IMAGE:-codeyard/yard-ops:local}"
 
 x-registry-folder: &registry-folder "${YARD_DATA:-yard-data}:/srv/yard"
 x-binary-folder: &binary-folder "${YARD_BIN:-./bin}:/opt/yard/bin:ro"
@@ -31,7 +33,10 @@ services:
     build:
       context: .
     user: "10001:10001"
-    command: ["yard", "serve", "/srv/yard/yard.json"]
+    command: ["yard-start"]
+    environment:
+      YARD_DOMAIN:
+      YARD_AUTO_INIT:
     volumes: [*registry-folder, *binary-folder]
     tmpfs: [/tmp]
     mem_limit: 1g
@@ -67,46 +72,6 @@ services:
       retries: 3
       start_period: 30s
 
-  edge:
-    <<: *service
-    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
-    user: "10001:10001"
-    # The image's caddy binary carries the file capability net_bind_service, so exec fails without it in the set (it
-    # listens on 8000 and never binds a low port).
-    cap_add: [NET_BIND_SERVICE]
-    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
-    volumes: ["./Caddyfile:/etc/caddy/Caddyfile:ro"]
-    tmpfs: ["/data:uid=10001,gid=10001", "/config:uid=10001,gid=10001"]
-    depends_on:
-      yard: { condition: service_healthy }
-    mem_limit: 256m
-    pids_limit: 128
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/healthz"]
-      interval: 15s
-      timeout: 5s
-      retries: 4
-      start_period: 10s
-
-  cloudflared:
-    <<: *service
-    profiles: [tunnel]
-    image: cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
-    command: ["tunnel", "--no-autoupdate", "run"]
-    environment:
-      TUNNEL_TOKEN: "${CLOUDFLARE_TUNNEL_TOKEN:-}"
-      TUNNEL_METRICS: "0.0.0.0:2000"
-    depends_on:
-      edge: { condition: service_healthy }
-    mem_limit: 256m
-    pids_limit: 128
-    healthcheck:
-      test: ["CMD", "cloudflared", "tunnel", "--metrics", "127.0.0.1:2000", "ready"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
   ops:
     <<: *service
     image: *image
@@ -117,7 +82,6 @@ services:
     tmpfs: [/tmp]
     environment:
       YARD_DOMAIN:
-      YARD_WATCH_TUNNEL: "${COMPOSE_PROFILES:-}"
       YARD_R2_BUCKET:
       YARD_R2_ENDPOINT:
       YARD_R2_ACCESS_KEY_ID:

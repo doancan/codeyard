@@ -297,7 +297,7 @@ fn known_english_keys(cx: &mut TestAppContext) -> BTreeSet<String> {
     known.extend(menu_labels(&[Menu { name: "dock".into(), items: crate::menus::dock_items(&[], &recents) }]));
     known.extend(source_keys());
     // Names from test data (fake dock menu, sample folder, product name) aren't text to translate.
-    for not_text in ["dock", "y", "codeyard"] {
+    for not_text in ["dock", "y", "Codeyard"] {
         known.remove(not_text);
     }
     known

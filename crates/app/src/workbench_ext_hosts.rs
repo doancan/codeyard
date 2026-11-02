@@ -131,7 +131,7 @@ impl Workbench {
     /// **Allow Host…** on the extension page of `extension`, with `typed` in its input.
     pub(crate) fn allow_host_for_test(&mut self, extension: &str, typed: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.start_allow_extension_host(extension.to_string(), typed.to_string(), window, cx);
-        assert!(matches!(&self.overlay, Some(o) if matches!(&o.kind, OverlayKind::Input(InputPurpose::AllowHost { .. }))), "the input");
+        assert!(matches!(&self.overlay, Some(o) if matches!(&o.kind, OverlayKind::Input { purpose: InputPurpose::AllowHost { .. }, .. })), "the input");
         self.close_overlay(window, cx);
         self.finish_allow_extension_host(extension.to_string(), typed.to_string(), window, cx);
     }

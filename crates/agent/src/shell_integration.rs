@@ -5,12 +5,14 @@
 //! The scripts are written to the cache folder (`$XDG_CACHE_HOME` or `~/.cache`) under `codeyard/shell-integration/<hash>`,
 //! private to the user (0700 folders, 0600 files). A folder that is a symlink or belongs to someone else is not used.
 
-#[cfg(unix)]
+#[cfg(any(unix, test))]
 use std::io;
+#[cfg(any(unix, test))]
+use std::path::Path;
 #[cfg(unix)]
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-#[cfg(unix)]
+#[cfg(any(unix, test))]
 const FILES: &[(&str, &str)] = &[
     ("zsh/.zshenv", include_str!("shell/zsh/.zshenv")),
     ("zsh/.zprofile", include_str!("shell/zsh/.zprofile")),
@@ -19,6 +21,114 @@ const FILES: &[(&str, &str)] = &[
     ("bash.sh", include_str!("shell/bash.sh")),
     ("fishdata/fish/vendor_conf.d/codeyard.fish", include_str!("shell/fish/codeyard.fish")),
 ];
+
+#[cfg(any(unix, test))]
+fn script_files() -> Vec<(&'static str, String)> {
+    // Cross builds may embed a Windows checkout. Hash and write the same LF
+    // bytes so shell syntax and the cache key do not depend on the build host.
+    FILES.iter().map(|(name, text)| (*name, unix_script(text))).collect()
+}
+
+#[cfg(any(unix, test))]
+fn unix_script(text: &str) -> String {
+    text.replace("\r\n", "\n")
+}
+
+#[cfg(any(unix, test))]
+fn write_script(path: &Path, text: &str) -> io::Result<()> {
+    use std::io::Write;
+    let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let short: String = path.file_name().unwrap_or_default().to_string_lossy().chars().take(60).collect();
+    for _ in 0..8 {
+        let tmp = super::temp_path(parent, &short);
+        let mut file = match super::create_private(&tmp, false) {
+            Ok(file) => file,
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        };
+        let written = file.write_all(text.as_bytes());
+        drop(file);
+        let result = written.and_then(|()| std::fs::rename(&tmp, path));
+        if result.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+        return result;
+    }
+    Err(io::Error::new(io::ErrorKind::AlreadyExists, "could not reserve a shell integration temporary file"))
+}
+
+#[cfg(test)]
+mod script_tests {
+    #[test]
+    fn failed_script_publication_cleans_up_its_temporary_file() {
+        let root = std::env::temp_dir().join(format!("codeyard-shell-failed-write-test-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("bash.sh")).unwrap();
+        assert!(super::write_script(&root.join("bash.sh"), "script").is_err());
+        let names: Vec<_> = std::fs::read_dir(&root).unwrap().map(|entry| entry.unwrap().file_name()).collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("bash.sh")]);
+        assert!(root.join("bash.sh").is_dir());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn script_installation_preserves_an_existing_temporary_file() {
+        let root = std::env::temp_dir().join(format!("codeyard-shell-temp-test-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let target = root.join("bash.sh");
+        let planted = target.with_extension(format!("tmp{}", std::process::id()));
+        std::fs::write(&planted, "unrelated data").unwrap();
+        super::write_script(&target, "shell script").unwrap();
+        assert_eq!(std::fs::read_to_string(&planted).unwrap(), "unrelated data");
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "shell script");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn simultaneous_script_installations_do_not_share_temporary_files() {
+        let root = std::env::temp_dir().join(format!("codeyard-shell-parallel-test-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let target = root.join("bash.sh");
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(16));
+        let workers: Vec<_> = (0..16)
+            .map(|_| {
+                let target = target.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    super::write_script(&target, &"# script\n".repeat(4096))
+                })
+            })
+            .collect();
+        let results: Vec<_> = workers.into_iter().map(|worker| worker.join().unwrap()).collect();
+        assert!(results.iter().all(Result::is_ok), "concurrent installation failed: {results:?}");
+        assert_eq!(std::fs::read_to_string(target).unwrap(), "# script\n".repeat(4096));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn bash_reports_literal_percent_sequences_in_directory_names() {
+        let bash = if cfg!(windows) {
+            std::path::PathBuf::from(std::env::var_os("ProgramFiles").expect("ProgramFiles must be set")).join("Git/bin/bash.exe")
+        } else {
+            std::path::PathBuf::from("bash")
+        };
+        let script = super::script_files().into_iter().find(|(name, _)| *name == "bash.sh").unwrap().1;
+        // Run the shipped prompt hook without sourcing the user's startup files.
+        let hook = script.split_once("  __cy_prompt() {").unwrap().1.split_once("\n  }").unwrap().0;
+        let command = format!("__cy_prompt() {{{hook}\n}}\nPWD='/tmp/rapor%20son%25'; __cy_prompt");
+        let output = std::process::Command::new(bash).args(["--noprofile", "--norc", "-c", &command]).output().unwrap();
+        assert!(output.status.success());
+        let output = String::from_utf8(output.stdout).unwrap();
+        assert!(output.contains("/tmp/rapor%2520son%2525"), "wrong OSC directory: {output:?}");
+    }
+
+    #[test]
+    fn installed_scripts_use_unix_line_endings() {
+        assert_eq!(super::unix_script("for f in a; do\r\n  echo \"$f\"\r\ndone\r\n"), "for f in a; do\n  echo \"$f\"\ndone\n");
+        for (name, text) in super::script_files() {
+            assert!(!text.contains('\r'), "{name} contains Windows line endings");
+        }
+    }
+}
 
 #[cfg(unix)]
 fn cache_root() -> Option<PathBuf> {
@@ -49,15 +159,15 @@ fn private_dir(path: &Path) -> io::Result<()> {
 /// Writes the scripts (if they are not there already) and returns their folder.
 #[cfg(unix)]
 pub fn install_in(root: &Path) -> io::Result<PathBuf> {
-    use std::os::unix::fs::PermissionsExt;
-    let all: String = FILES.iter().map(|(n, t)| format!("{n}\n{t}")).collect();
+    let files = script_files();
+    let all: String = files.iter().map(|(n, t)| format!("{n}\n{t}")).collect();
     let base = root.join("codeyard").join("shell-integration");
     let dir = base.join(format!("{:016x}", proto::content_hash(all.as_bytes())));
     std::fs::create_dir_all(root)?;
     for d in [root.join("codeyard"), base, dir.clone()] {
         private_dir(&d)?;
     }
-    for (name, text) in FILES {
+    for (name, text) in &files {
         let path = dir.join(name);
         if let Some(parent) = path.parent() {
             let mut p = dir.clone();
@@ -70,10 +180,7 @@ pub fn install_in(root: &Path) -> io::Result<PathBuf> {
         if std::fs::symlink_metadata(&path).is_ok_and(|m| m.is_file()) && std::fs::read(&path).is_ok_and(|b| b == text.as_bytes()) {
             continue;
         }
-        let tmp = path.with_extension(format!("tmp{}", std::process::id()));
-        std::fs::write(&tmp, text)?;
-        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
-        std::fs::rename(&tmp, &path)?;
+        write_script(&path, text)?;
     }
     Ok(dir)
 }

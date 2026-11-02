@@ -245,7 +245,10 @@ fn run_without_debugging_sends_no_breakpoints_and_the_post_debug_task_runs(cx: &
         .unwrap();
     write_launch(&dir, &log, &[("Fake", r#", "postDebugTask": "after""#)], "");
     let (wb, cx) = setup_persistent(cx, &home);
-    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    // A POSIX shell where there is one (no login files); the system shell on Windows.
+    if cfg!(unix) {
+        wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    }
     open(&wb, &dir, cx);
     let (_, ed) = open_main(&wb, &dir, cx);
     ed.update(cx, |e, cx| e.toggle_breakpoint_at(4, cx));
@@ -336,7 +339,9 @@ fn a_terminal_that_was_not_offered_is_refused(cx: &mut TestAppContext) {
     let marker = dir.join("terminal-ran");
     write_launch(&dir, &log, &[("Fake", &format!(r#", "sneak": true, "marker": "{}""#, crate::ui::local_path(&marker)))], "");
     let (wb, cx) = setup_persistent(cx, &home);
-    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    if cfg!(unix) {
+        wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    }
     open(&wb, &dir, cx);
     run(&wb, cx, "Debug: Start Debugging");
     let snap = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.debug_snapshot());
@@ -370,7 +375,9 @@ fn inputs_are_asked_before_the_start_and_the_program_can_run_in_a_terminal(cx: &
         r#", "inputs": [ { "id": "name", "type": "promptString", "description": "Your name" }, { "id": "level", "type": "pickString", "description": "Level", "options": ["low", "high"] } ]"#,
     );
     let (wb, cx) = setup_persistent(cx, &home);
-    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    if cfg!(unix) {
+        wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    }
     open(&wb, &dir, cx);
     run(&wb, cx, "Debug: Start Debugging");
     // First question (in order of use): pick a level; then type a name.
@@ -382,7 +389,12 @@ fn inputs_are_asked_before_the_start_and_the_program_can_run_in_a_terminal(cx: &
     let launch = log_lines(&log, "launch");
     assert!(launch[0].contains("\"args\": [\"high\", \"Ada\"]"), "{launch:?}");
     assert!(log_lines(&log, "initialize")[0].contains("\"supportsRunInTerminalRequest\": true"));
-    wait_secs(cx, 10, "the program ran in a terminal", |_| std::fs::read_to_string(&marker).is_ok_and(|t| t.trim() == "ran-in-terminal"));
+    if cfg!(windows) {
+        // Not on local Windows yet: the console says how to run the program instead.
+        wait_secs(cx, 10, "the console says why", |cx| snap(cx).is_some_and(|s| s.3.iter().any(|l| l.contains("internalConsole"))));
+    } else {
+        wait_secs(cx, 10, "the program ran in a terminal", |_| std::fs::read_to_string(&marker).is_ok_and(|t| t.trim() == "ran-in-terminal"));
+    }
     run(&wb, cx, "Debug: Stop");
 }
 

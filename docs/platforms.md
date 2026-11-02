@@ -77,7 +77,7 @@ Windows x64 is built and released as a ZIP and a setup EXE (unsigned, so SmartSc
   The `*-pc-windows-gnu` toolchains get them as on other systems.
 - Extensions: declarative extensions, the Extensions view and `cyx` work as on macOS, and the installer puts `cyx.exe` beside
   Codeyard. *Extensions: Install cyx Command in PATH* names that folder instead of linking (the PATH is the user's to edit).
-  Installed extensions **with code** do not run on Windows in 0.7.0: the AppContainer sandbox they need is off until it
+  Installed extensions **with code** do not run on Windows yet: the AppContainer sandbox they need is off until it
   passes on physical hardware (`ext_proto::appcontainer::VERIFIED`, checked by `scripts/check-exthost-sandbox-windows.ps1`).
   Such an extension cannot be installed: its Market page (and an install from a file) says "*id* contains code, which
   needs a sandbox this system does not provide: AppContainer has not passed the hardware check yet

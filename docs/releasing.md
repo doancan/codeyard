@@ -23,9 +23,6 @@ Nothing is published before all of them succeed, so a failed Windows build leave
 again (delete the tag first with `git push origin :refs/tags/vX.Y.Z`; no release exists yet to remove). The steps below are
 the same procedure by hand, for when the workflow cannot be used.
 
-Release jobs cache Rust dependencies. Changes to Cargo.lock, vendor files or the release workflow on main also run a dry run
-so tag builds can restore the default branch cache. App and agent jobs use separate cache keys.
-
 ## Windows cross-compilation benchmark
 
 The one-off comparison of native Windows MSVC compilation with Linux `cargo-xwin` is complete. Its standalone
@@ -81,9 +78,9 @@ warnings in `shaders` and `agents`; all release jobs also had zero such warnings
    them. Rebuild `codeyard-exthost` (`cargo build -p ext-host`) before running the `cyx` tests locally: `cyx` refuses an
    extension host of another version.
 3. Add a `## [x.y.z] - date` section to `CHANGELOG.md` (move the "Unreleased" entries into it).
-4. Commit, tag `vX.Y.Z` (annotated), push `main` and the tag. Then pin the publish action that new extensions get to the
+4. Commit, tag `vX.Y.Z` (annotated), merge `develop` into `main` through a pull request, then push the tag. Then pin the publish action that new extensions get to the
    release: in `PUBLISH_WORKFLOW` (`crates/cyx/src/scaffold.rs`) and in every `examples/extensions/*/.github/workflows/publish.yml`,
-   replace the commit after `doancan/codeyard/actions/publish@` (the previous release's; `main` before 0.7.0) with the tag's
+   replace the commit after `doancan/codeyard/actions/publish@` (the previous release's) with the tag's
    commit (`git rev-parse vX.Y.Z^{commit}`) and a `# vX.Y.Z` comment. The `cyx` of the release itself still writes the
    previous pin, since the tag's commit is not known when it is built. Extensions that already exist keep their pin until
    their authors move it.
@@ -103,7 +100,7 @@ warnings in `shaders` and `agents`; all release jobs also had zero such warnings
    `SHA256SUMS.txt` and its `.sig`; add the Windows files first if you have them), then
    `UPDATE_SIGNING_KEY="$(cat ~/.codeyard-release-key/update-signing-key.pem)" scripts/sign-release.sh dist` and
    `scripts/verify-release.sh --dir dist`. Use Homebrew OpenSSL 3 or newer (`/opt/homebrew/bin`) on macOS: the system LibreSSL cannot sign.
-10. `gh release create vX.Y.Z dist/* --title "vX.Y.Z" --notes-file dist/RELEASE_NOTES.md --verify-tag`. The title style is `v0.1.0`.
+10. `gh release create vX.Y.Z dist/* --title "vX.Y.Z" --notes-file dist/RELEASE_NOTES.md --verify-tag`. The title style is `vX.Y.Z`.
 11. Delete the untracked `agents/` and `dist/`.
 12. **Windows files.** The Windows ZIP and setup EXE are only built by the `windows` job of `release.yml`, which needs a Windows
     machine. The macOS steps above publish **no** Windows assets, so without the workflow the README's Windows download
@@ -213,7 +210,7 @@ failure comes in a minute and not after the builds. OpenSSL with Ed25519 and `pk
 
 ### Verify a download
 
-    scripts/verify-release.sh v0.2.0                 # downloads the assets with gh, checks signature and every hash
+    scripts/verify-release.sh vX.Y.Z                 # downloads the assets with gh, checks signature and every hash
     scripts/verify-release.sh --dir ~/Downloads/rel  # the same for a folder you already have
 
 It checks the signature with `scripts/update-public-key.pem` (`--key <pem>` trusts another key; the tests use it), then every hash,

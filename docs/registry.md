@@ -359,24 +359,29 @@ immutable and may be cached anywhere.
 
 ### Running on Docker
 
-`deploy/yard/docker/` is the same registry as a Compose stack that publishes no host port: `cloudflared` dials out to
-Cloudflare, and the tunnel's public hostname (`market.yardcode.app`) points at `http://edge:8000` on the compose
-network. There is no origin certificate and no firewall list to keep; nothing listens on a public address. The server
-keeps whatever else it runs: `setup-host.sh` touches no firewall, SSH or update settings.
+`deploy/yard/docker/` is the same registry, with the Codeyard site, as a Compose stack behind the server's own
+reverse proxy, Nginx Proxy Manager (NPM), which holds the domains and their Let's Encrypt certificates. The stack
+publishes no host port: `compose.npm.yml` puts `yard` on NPM's Docker network as `codeyard-yard`, and one NPM proxy
+host with both names, `yardcode.app` (the site) and `market.yardcode.app` (the registry), forwards to
+`http://codeyard-yard:8080` with *Force SSL* and *HTTP/2* on (`compose.port.yml` publishes one port instead, for a
+proxy outside Docker). The server keeps whatever else it runs: `setup-host.sh` touches no firewall, SSH or update
+settings.
 
 | Service | Image | Does |
 |---|---|---|
-| `yard` | the one image (below) | `yard serve`; signs the index at start and every 24 h |
+| `yard` | the one image (below) | `yard serve`; signs the index at start and every 24 h; serves the site (`site` in `yard.json`, `/opt/yard/site` in the image) on every path that is not the registry's, and answers `/metrics` with 404 to any request a proxy forwarded (`X-Forwarded-For`, `X-Real-IP`, `Forwarded`) |
 | `litestream` | the one image | copies `yard.sqlite` to R2 as it changes |
-| `edge` | `caddy` (official, pinned) | plain HTTP in front of yard: `/metrics` answers 404, 130 MB body limit, compression, no access log |
-| `cloudflared` | `cloudflare/cloudflared` (official, pinned), profile `tunnel` | the tunnel |
 | `ops` | the one image | `yard-scheduler`: `yard resign` daily, `yard-watch` hourly, `yard-backup` daily, `yard-restore --check` weekly; each through `yard-job`, which alerts on failure. When each last ran is kept in a volume, so a restart skips nothing. It is also the shell for `yard …` commands |
 
 **One image** (`Dockerfile`, Ubuntu 24.04): the scripts, Litestream and rclone (pinned by version and checksum for
-amd64 and arm64), `sqlite3`, `curl`, `jq`. It does not hold `yard`: the `yard-deploy` workflow builds it, and the stack
-mounts `bin/` read-only, so the server never compiles Rust and a deploy is a file swap. Every service runs as user
-10001 with a read-only root file system, no capabilities (Caddy keeps `net_bind_service`, which its binary needs to
-start), `no-new-privileges`, and memory and process limits; each gets only the secrets it uses.
+amd64 and arm64), `sqlite3`, `curl`, `jq`, and the site (`site/`). The `yard-image` workflow builds `yard`, puts it in
+the image and publishes it as `ghcr.io/<owner>/codeyard-yard` (`latest` and `sha-<commit>`) on every push to `main` that
+changes yard or the stack; the server names it in `YARD_IMAGE` and updates with `docker compose pull && docker compose
+up -d`, so it never compiles Rust. A `yard` in the mounted `bin/` comes first on `PATH`, so `yard-deploy` can still swap
+the binary alone, and a local build (no `YARD_IMAGE`) has no `yard` of its own. The package is private until it is made
+public in its GitHub settings; a private one needs `docker login ghcr.io` on the server with a token that may read
+packages. Every service runs as user 10001 with a read-only root file system, no capabilities, `no-new-privileges`, and
+memory and process limits; each gets only the secrets it uses.
 
 **Files on the server.** `/opt/yard` (the stack: `compose.yml`, `.env` with every secret, mode 600, `bin/yard` and
 `bin/yard.previous`) and `/srv/yard` (the registry's folder, owned by uid 10001, bind-mounted into `yard`, `litestream`
@@ -392,12 +397,12 @@ and `ops`). The template is `deploy/yard/docker/env.example`; a copy of the fill
 | `sudo -u yard yard …` | `docker compose exec yard yard …` (or `docker compose run --rm --no-deps ops yard …` when the stack is down) |
 | `/etc/yard/yard.env` | `/opt/yard/.env` |
 | `yard-alert@.service` (`OnFailure=`) | `yard-job`, which the scheduler runs each job through |
-| `yard-firewall`, origin certificate, `ufw` | not needed: no port is open, Cloudflare holds the certificate |
+| `yard-firewall`, origin certificate, `ufw` | not needed: no port is open, NPM holds the certificate |
 | `unattended-upgrades` | the host's own policy; images are pinned, so a new version is a change in the repository |
 | `yard-install-binary` (`/usr/local/bin/yard`) | `yard-install-binary` (`/opt/yard/bin/yard`); same name, same key, different work (Deploy below) |
 
-`yard-watch` also checks that `edge` answers and does not pass `/metrics` on, and that the tunnel is connected.
-`yard-monitor` still checks from outside.
+`yard-watch` also checks that `yard` refuses a proxied `/metrics` and that the site answers. `yard-monitor` still
+checks from outside.
 
 **Deploy.** The workflow sends the binary to the `deploy` user, whose one command (`yard-install-binary`) hands it to a
 root helper. The helper starts it once in a throwaway container with no network and no capabilities (nothing the key
@@ -412,8 +417,8 @@ cannot reach a LAN address: the host needs an SSH route from outside (a port for
 account), or the two workflows run on a self-hosted runner on the server's network. `yard-monitor` needs none of this.
 
 **Test.** `deploy/yard/docker/test.sh` runs the stack on a developer machine (arm64 or amd64) with throwaway root keys
-and MinIO as the stand-in R2: the stack publishes no port, comes up healthy, `cyx yard check` passes through `edge`,
-`/metrics` answers 404, `yard-backup` then `yard-restore --check` pass, stopping `yard` makes `yard-watch` fail and the
+and MinIO as the stand-in R2: the stack publishes no port, comes up healthy, `cyx yard check` passes, a proxied
+`/metrics` answers 404, the site answers, `yard-backup` then `yard-restore --check` pass, stopping `yard` makes `yard-watch` fail and the
 alert arrive at a stand-in channel, the forced commands take only their own command, and a binary that does not run is
 refused and one that never gets healthy is rolled back. It needs Docker only (it builds `yard` in a Rust container
 unless `YARD_LINUX_BIN` names a Linux binary).
@@ -431,14 +436,13 @@ server$  docker compose up -d
 ### Root key ceremony
 
 Three Ed25519 root keys, any two of which sign `root.json`. The owner holds all three until a second maintainer takes
-one: **A** on an encrypted USB stick at home, **B** on another one kept somewhere else, **C** in the owner's Bitwarden
-vault (a secure note, with two-step login on). Losing one key loses nothing; one stolen key cannot sign anything.
-SECURITY.md lists who holds what.
+one, each key file in a different place (a password manager, an encrypted disk or folder, an offline copy). Losing one
+key loses nothing; one stolen key cannot sign anything. SECURITY.md lists who holds what.
 
-1. Erase two USB sticks in Disk Utility as "APFS (Encrypted)", each with its own password, and insert both.
-2. `CYX=target/release/cyx scripts/yard-root-ceremony.sh /Volumes/YARD-A /Volumes/YARD-B`, with the network off.
-   It shows key C once for the Bitwarden note, checks that the note holds it by reading it back from the clipboard,
-   writes A and B to the sticks and `yard-ceremony-record.txt` (public keys only).
+1. Make a folder for each of A and B (any encrypted or offline place), with the network off.
+2. `CYX=target/release/cyx scripts/yard-root-ceremony.sh /path/to/A /path/to/B`. It shows key C once, to be saved in a
+   place of your choice and read back from the clipboard, writes A and B to their folders and
+   `yard-ceremony-record.txt` (public keys only). `cyx yard keygen FILE` alone makes one key file.
 3. The record has every line to copy: the `yard init` command for the server, the `PUBLIC` constant for the app and
    the `YARD_ROOT_KEYS` variable for GitHub. The owner fills in its checks and signs it; it is kept with the release
    that ships the keys, and its public keys go into SECURITY.md.
