@@ -168,7 +168,7 @@ impl Workbench {
             .on_action(cx.listener(|this, _: &MovePanelLeft, _, cx| this.dock_panel(docks_glue::PanelDock::Left, cx)))
             .on_action(cx.listener(|this, _: &MovePanelRight, _, cx| this.dock_panel(docks_glue::PanelDock::Right, cx)))
             .on_action(cx.listener(|this, _: &MovePanelToBottom, _, cx| this.dock_panel(docks_glue::PanelDock::Bottom, cx)))
-            .on_action(cx.listener(|this, _: &ToggleMaximizedPanel, _, cx| this.toggle_maximized_panel(cx)))
+            .on_action(cx.listener(|this, _: &ToggleMaximizedPanel, window, cx| this.toggle_maximized_panel(window, cx)))
             .on_action(cx.listener(|this, _: &CloseFolder, _, cx| this.close_folder(cx)))
             .on_action(cx.listener(|this, _: &ClearTerminal, _, cx| {
                 if let Some(t) = this.terminals.get(this.active_terminal).cloned() {

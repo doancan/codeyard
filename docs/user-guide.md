@@ -1657,6 +1657,10 @@ the bottom or the right restores its size.
   above are read only from your own settings, never from a project's.
 - Links that programs mark (OSC 8) show and open their real target.
 - The history is capped at 50,000 lines (`terminal.scrollback`).
+- A maximized panel hides the editor area. When a file, a diff or a page opens meanwhile,
+  `workbench.panel.openFromMaximized` decides: `half` (default) shrinks the panel to half of the space, `restore` gives it
+  the size it had before it was maximized, and `tab` moves the terminal into a tab of the editor area, with the new tab
+  beside it.
 - With several terminals the list on the right reorders by dragging a row (the line shows where it lands) or with
   **Terminal: Move Terminal Up / Down**; right-clicking a row opens the terminal menu (Split, Move into Editor Area, Rename,
   Change Color, Kill and the rest). The running indicator is a still dot.

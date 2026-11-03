@@ -789,7 +789,7 @@ impl Workbench {
 
     /// The large-file tab of the focused group to the front, with the keyboard.
     fn show_large_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.chrome.panel_max = false;
+        self.reveal_editor_area(window, cx);
         self.tabs.large_active = true;
         self.tabs.page_active = false;
         self.tabs.diff_active = false;
@@ -801,7 +801,7 @@ impl Workbench {
 
     /// The diff tab of the focused group to the front, with the keyboard.
     fn show_diff_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.chrome.panel_max = false;
+        self.reveal_editor_area(window, cx);
         self.tabs.diff_active = true;
         self.tabs.page_active = false;
         self.tabs.large_active = false;
@@ -813,7 +813,7 @@ impl Workbench {
 
     /// The page tab of the focused group to the front (Settings focuses its search, About its Copy button).
     fn show_page_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.chrome.panel_max = false;
+        self.reveal_editor_area(window, cx);
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;

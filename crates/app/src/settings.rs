@@ -109,6 +109,9 @@ pub struct Settings {
     pub terminal_notifications: bool,
     /// When a finished mouse selection goes to the clipboard: "agents" (Claude Code or Codex runs), "always", "off".
     pub terminal_copy_on_selection: String,
+    /// What a maximized panel does when something opens in the editor area: "half", "restore" or "tab"
+    /// (`workbench.panel.openFromMaximized`).
+    pub panel_open_from_maximized: String,
     /// Closing a terminal asks first: "running" (a program is in the foreground), "always" or "never".
     pub terminal_confirm_close: String,
     /// Terminal profiles per operating system of the machine (`terminal.profiles.macos` / `.linux` / `.windows`).
@@ -352,6 +355,7 @@ impl Default for Settings {
             terminal_shell_integration: true,
             terminal_notifications: true,
             terminal_copy_on_selection: "agents".into(),
+            panel_open_from_maximized: "half".into(),
             terminal_confirm_close: "never".into(),
             terminal_profiles: Default::default(),
             terminal_default_profile: None,
@@ -466,6 +470,7 @@ mod text;
 pub use text::{Seg, array_items, members, set_path_in, set_string_in, set_value_in, value_range};
 #[path = "settings_scope.rs"]
 mod scope;
+pub use scope::{RESTRICTED_KEYS, USER_ONLY_KEYS};
 pub use scope::{Scope, ScopedLayer, Sources, is_user_only};
 #[path = "settings_rust.rs"]
 mod rust;
@@ -473,6 +478,8 @@ mod rust;
 mod scale;
 #[path = "settings_terminal.rs"]
 mod terminal;
+#[path = "settings_workbench.rs"]
+mod workbench;
 #[cfg(test)]
 pub use scale::UI_SCALE_STEPS;
 pub use scale::{SessionScale, UI_SCALE_ERROR, UI_SCALE_MAX, UI_SCALE_MIN, UnsavedScale, parse_ui_scale, step_ui_scale, ui_scale_percent, ui_scale_value};
@@ -517,56 +524,6 @@ pub type Layer<'a> = (&'a str, &'a str, bool);
 pub fn parse_layers(user: &str, project: &[Layer]) -> Result<(Settings, Vec<String>), String> {
     parse_layers_trusted(user, project, false)
 }
-
-/// A project's settings file could choose a program by itself: these keys come only from user
-/// settings or a trusted folder.
-pub const RESTRICTED_KEYS: &[&str] = &[
-    "terminal.shell",
-    "terminal.defaultProfile",
-    "terminal.profiles.macos",
-    "terminal.profiles.linux",
-    "terminal.profiles.windows",
-    "lsp.servers",
-    "json.schemas",
-    "yaml.schemas",
-];
-
-/// Not read from any layer but the user's own file, even in a trusted folder: the gate is global, so one
-/// repo touching it would open it for every folder. `is_user_only` applies it to every non-user layer.
-pub const USER_ONLY_KEYS: &[&str] = &[
-    "modules.containers.enabled",
-    "modules.webPreview.enabled",
-    "webPreview.port",
-    "webPreview.host",
-    "webPreview.liveReload",
-    "webPreview.reloadInterval",
-    "webPreview.root",
-    "security.workspaceTrust.enabled",
-    "security.workspaceTrust.startupPrompt",
-    "http.confirmRequests",
-    "ui.language",
-    // The interface scale applies to every window, so a repository must not zoom the user's whole application.
-    "ui.scale",
-    "update.check",
-    // A repository must not switch extensions on or off for the user, or swap their keys for a preset.
-    "extensions.enabled",
-    "keymap.preset",
-    // A repository must not turn updates (and the fixes they bring) off, nor install them for the user.
-    "extensions.autoUpdate",
-    // A repository must not add a registry to install from.
-    "extensions.registries",
-    // --- git-sync ---
-    // A repository must not turn the question before a sync off, or make every commit push by itself.
-    "git.confirmSync",
-    "git.postCommitCommand",
-    // A repository must not make forwarded ports reachable from the network.
-    "ports.localBind",
-    // A repository must not let programs fill the clipboard, or turn off the checks on what is pasted back: together
-    // they would put a command on the clipboard that a later paste runs.
-    "terminal.allowClipboardWrite",
-    "terminal.sanitizePaste",
-    "terminal.warnMultilinePaste",
-];
 
 /// `trusted`: the folder is trusted. If not, `RESTRICTED_KEYS` in the project layer are ignored and a warning is recorded.
 pub fn parse_layers_trusted(user: &str, project: &[Layer], trusted: bool) -> Result<(Settings, Vec<String>), String> {
@@ -670,9 +627,6 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.bool("files.trimTrailingWhitespace") {
         s.trim_trailing_whitespace = v;
     }
-    if let Some(v) = r.bool("files.trimFinalNewlines") {
-        s.trim_final_newlines = v;
-    }
     if let Some(v) = r.bool("files.insertFinalNewline") {
         s.insert_final_newline = v;
     }
@@ -737,6 +691,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         s.compare_max_files = v as u32;
     }
     terminal::parse(&mut s, &mut r, obj);
+    workbench::parse(&mut s, &mut r);
     rust::parse(&mut s, &mut r);
     if let Some(v) = r.bool("window.restoreSession") {
         s.restore_session = v;
@@ -792,9 +747,6 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.bool("security.workspaceTrust.enabled") {
         s.workspace_trust = v;
-    }
-    if let Some(v) = r.choice("security.workspaceTrust.startupPrompt", &["once", "always", "never"]) {
-        s.workspace_trust_prompt = v;
     }
     if let Some(v) = r.bool("editor.inlayHints.enabled") {
         s.inlay_hints = v;
@@ -1236,6 +1188,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.shellIntegration",
         "terminal.notifications",
         "terminal.copyOnSelection",
+        "workbench.panel.openFromMaximized",
         "terminal.defaultProfile",
         "terminal.profiles.macos",
         "terminal.profiles.linux",

@@ -67,7 +67,7 @@ fn brand_header(p: &Palette) -> impl IntoElement {
 impl Workbench {
     pub(super) fn manage_language_services(&mut self, _: &super::ManageLanguageServices, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(Page::LanguageServices(view)) = self.tabs.page.clone() {
-            self.chrome.panel_max = false;
+            self.reveal_editor_area(window, cx);
             self.tabs.page_active = true;
             self.tabs.diff_active = false;
             self.tabs.large_active = false;
@@ -84,7 +84,7 @@ impl Workbench {
         }));
         window.focus(&view.focus_handle(cx));
         self.tabs.page = Some(Page::LanguageServices(view));
-        self.chrome.panel_max = false;
+        self.reveal_editor_area(window, cx);
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
@@ -94,7 +94,7 @@ impl Workbench {
     pub(super) fn show_welcome(&mut self, _: &ShowWelcome, _: &mut Window, cx: &mut Context<Self>) {
         self.tabs.page = Some(Page::Welcome);
         self.tabs._page_sub = None;
-        self.chrome.panel_max = false;
+        self.unmaximize_panel(cx);
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
@@ -117,7 +117,7 @@ impl Workbench {
         }));
         window.focus(&view.focus_handle(cx));
         self.tabs.page = Some(Page::About(view));
-        self.chrome.panel_max = false;
+        self.reveal_editor_area(window, cx);
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
@@ -172,7 +172,7 @@ impl Workbench {
                 view
             }
         };
-        self.chrome.panel_max = false;
+        self.reveal_editor_area(window, cx);
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
@@ -189,7 +189,7 @@ impl Workbench {
                 return;
             }
             if self.active_editor() == Some(&source) {
-                self.chrome.panel_max = false;
+                self.reveal_editor_area(window, cx);
                 self.tabs.page_active = true;
                 self.tabs.diff_active = false;
                 self.tabs.large_active = false;
@@ -213,7 +213,7 @@ impl Workbench {
         }));
         window.focus(&view.focus_handle(cx));
         self.tabs.page = Some(Page::Markdown(view));
-        self.chrome.panel_max = false;
+        self.reveal_editor_area(window, cx);
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
@@ -247,7 +247,7 @@ impl Workbench {
         }));
         window.focus(&view.focus_handle(cx));
         self.tabs.page = Some(Page::Merge(view));
-        self.chrome.panel_max = false;
+        self.reveal_editor_area(window, cx);
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
@@ -271,7 +271,7 @@ impl Workbench {
         }));
         view.read(cx).focus_search(window, cx);
         self.tabs.page = Some(Page::Shortcuts(view));
-        self.chrome.panel_max = false;
+        self.reveal_editor_area(window, cx);
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;

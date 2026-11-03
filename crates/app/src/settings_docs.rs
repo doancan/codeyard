@@ -183,7 +183,8 @@ mod tests {
     /// Every key the settings parser reads is documented, either in the catalog or in `FILE_ONLY`.
     #[test]
     fn docs_reference_covers_every_parsed_setting() {
-        let src = concat!(include_str!("settings.rs"), include_str!("settings_terminal.rs"), include_str!("settings_rust.rs"));
+        let src =
+            concat!(include_str!("settings.rs"), include_str!("settings_terminal.rs"), include_str!("settings_rust.rs"), include_str!("settings_workbench.rs"));
         let mut parsed = std::collections::BTreeSet::new();
         for m in ["bool", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale"] {
             let needle = format!("r.{m}(\"");

@@ -49,7 +49,7 @@ fn split_record(key: &str) -> Option<(&str, &str)> {
 
 /// The picker's rows for the current folder (`None`: no folder open) and the stored records, in the order shown.
 pub(super) fn trust_rows(current: Option<(&str, bool, bool)>, records: &[(String, String)]) -> Vec<(String, String, TrustChoice)> {
-    use crate::i18n::{t, tf};
+    use crate::i18n::t;
     let mut rows = Vec::new();
     // `current`: (folder, trusted, trusted by its own record rather than a parent's).
     if let Some((root, trusted, own)) = current {
@@ -66,7 +66,8 @@ pub(super) fn trust_rows(current: Option<(&str, bool, bool)>, records: &[(String
         let Some((alias, folder)) = split_record(key) else { continue };
         let place = if alias.is_empty() { String::new() } else { format!("ssh://{alias} · ") };
         let scope = if value == TREE { t("with subfolders").to_string() } else { t("this folder only").to_string() };
-        rows.push((folder.to_string(), tf("{}{} · select to stop trusting", &[&place, &scope]), TrustChoice::Forget(key.clone())));
+        // The folder's name leads, since a full path is cut off long before it says anything.
+        rows.push((ui::file_name(folder).to_string(), format!("{place}{folder} · {scope}"), TrustChoice::Forget(key.clone())));
     }
     rows
 }
@@ -152,7 +153,11 @@ impl Workbench {
             let own = source.as_deref() == Some(root.as_str());
             (root, source.is_some(), own)
         });
-        let rows = trust_rows(current.as_ref().map(|(r, t, o)| (r.as_str(), *t, *o)), &self.trust_records());
+        // The open folder's own record is already the "Don't Trust This Folder" row.
+        let own_key = current.as_ref().filter(|(_, _, own)| *own).map(|(root, _, _)| self.trust_key(root));
+        let mut records = self.trust_records();
+        records.retain(|(key, _)| Some(key) != own_key.as_ref());
+        let rows = trust_rows(current.as_ref().map(|(r, t, o)| (r.as_str(), *t, *o)), &records);
         if rows.is_empty() {
             self.notice = Some(Notice::Info(crate::i18n::t("No trusted folders yet.").into()));
             return cx.notify();
@@ -162,9 +167,9 @@ impl Workbench {
         }
         let items = rows.iter().map(|(label, detail, _)| PickItem { label: label.clone().into(), detail: Some(detail.clone().into()), keys: None }).collect();
         let placeholder = match &current {
-            Some((_, true, _)) => crate::i18n::t("Workspace Trust: this folder is trusted"),
-            Some(_) => crate::i18n::t("Workspace Trust: Restricted Mode, this folder is not trusted"),
-            None => crate::i18n::t("Workspace Trust: trusted folders"),
+            Some((_, true, _)) => crate::i18n::t("Workspace Trust: this folder is trusted. Select a folder to stop trusting it"),
+            Some(_) => crate::i18n::t("Workspace Trust: Restricted Mode, this folder is not trusted. Select a folder to stop trusting it"),
+            None => crate::i18n::t("Workspace Trust: select a trusted folder to stop trusting it"),
         };
         let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], placeholder, "", None, cx));
         let context = super::types::InputContext::Workspace { host: self.remote.host.clone(), root: self.root(cx) };
@@ -269,7 +274,8 @@ mod tests {
                 TrustChoice::Forget("trust:prod:/srv".into()),
             ]
         );
-        assert!(untrusted[3].1.contains("ssh://prod") && untrusted[3].1.contains("subfolders"));
+        assert!(untrusted[3].1.contains("ssh://prod") && untrusted[3].1.contains("/srv") && untrusted[3].1.contains("subfolders"));
+        assert_eq!(untrusted[3].0, "srv", "the name leads and the path is in the detail");
         let own = trust_rows(Some(("/work/app", true, true)), &[]);
         assert_eq!(own.iter().map(|r| r.2.clone()).collect::<Vec<_>>(), [TrustChoice::Forget(String::new())]);
         assert!(trust_rows(Some(("/work/app", true, false)), &[]).is_empty(), "trusted through a parent: only the parent's record can go");

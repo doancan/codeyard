@@ -151,6 +151,13 @@ pub const CATALOG: &[Entry] = &[
     e("terminal.shellIntegration", crate::i18n::tr("Mark prompts, commands and the folder in zsh, bash and fish"), Kind::Bool),
     e("terminal.notifications", crate::i18n::tr("Flag a terminal and the taskbar when its program rings the bell or asks for you"), Kind::Bool),
     e(
+        "workbench.panel.openFromMaximized",
+        crate::i18n::tr(
+            "When a file, diff or page opens while the panel is maximized: shrink the panel to half, give it back its size, or move the terminal into a tab",
+        ),
+        Kind::Choice(&["half", "restore", "tab"]),
+    ),
+    e(
         "terminal.copyOnSelection",
         crate::i18n::tr("Copy text selected with the mouse: while Claude Code or Codex runs, always, or never"),
         Kind::Choice(&["agents", "always", "off"]),
@@ -396,6 +403,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "terminal.shellIntegration" => json!(s.terminal_shell_integration),
         "terminal.notifications" => json!(s.terminal_notifications),
         "terminal.copyOnSelection" => json!(s.terminal_copy_on_selection),
+        "workbench.panel.openFromMaximized" => json!(s.panel_open_from_maximized),
         "terminal.defaultProfile" => json!(s.terminal_default_profile.clone().unwrap_or_default()),
         "terminal.warnMultilinePaste" => json!(s.terminal_warn_multiline.as_str()),
         "terminal.shell" => json!(s.terminal_shell.clone().unwrap_or_default()),

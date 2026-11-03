@@ -2719,6 +2719,7 @@ Welcome (no recent folders yet)
 What kind of extension?	
 What opens at start: welcome (the start page), continue (where you left off, SSH hosts included) or blank (an empty window)	
 What runs after a commit: nothing, push or sync. Your own settings only; a folder cannot change it	
+When a file, diff or page opens while the panel is maximized: shrink the panel to half, give it back its size, or move the terminal into a tab	
 When the close button of a tab shows	
 Where .http requests are sent from: the workspace host (the server when connected over SSH) or this computer	
 Where forwarded ports listen: this computer only, or every network interface	
@@ -2733,9 +2734,9 @@ Without one, F5 finds a configuration from the project (Cargo, Go, or the open P
 Word Wrap	
 Workbench	
 Workspace Trust is off (security.workspaceTrust.enabled).	
-Workspace Trust: Restricted Mode, this folder is not trusted	
-Workspace Trust: this folder is trusted	
-Workspace Trust: trusted folders	
+Workspace Trust: Restricted Mode, this folder is not trusted. Select a folder to stop trusting it	
+Workspace Trust: select a trusted folder to stop trusting it	
+Workspace Trust: this folder is trusted. Select a folder to stop trusting it	
 Workspace changed on disk. Reload before saving.	
 Workspace file could not be read: {}	
 Workspace folder is unavailable: {}	
@@ -3364,7 +3365,6 @@ your words
 {}s	
 {}w	
 {}y	
-{}{} · select to stop trusting	
 “color” must be an object	
 “folders” must be a list	
 “localhost” means {0}: for a service on your own computer set http.runOn to {1}.	

@@ -77,7 +77,7 @@ impl Workbench {
         self.chrome.panel = None;
         self.tabs.page = Some(Page::Containers);
         self.tabs._page_sub = None;
-        self.chrome.panel_max = false;
+        self.unmaximize_panel(cx);
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;

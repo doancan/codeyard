@@ -219,7 +219,7 @@ impl Workbench {
                 }
                 self.tabs.page = Some(Page::ExtView(decl.id.clone()));
                 self.tabs._page_sub = None;
-                self.chrome.panel_max = false;
+                self.reveal_editor_area(window, cx);
                 self.tabs.page_active = true;
                 self.tabs.diff_active = false;
                 self.tabs.large_active = false;

@@ -2076,7 +2076,7 @@ impl Workbench {
         if self.run_in_main_window(window, cx, move |this, window, cx| this.activate(ix, window, cx)) {
             return;
         }
-        self.chrome.panel_max = false;
+        self.reveal_editor_area(window, cx);
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
         self.tabs.page_active = false;

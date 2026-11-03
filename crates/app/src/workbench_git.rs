@@ -333,7 +333,7 @@ impl Workbench {
                 let view = cx.new(|cx| crate::diff::DiffView::new(entry.path.clone(), false, &old, &new, cx).with_label(label));
                 window.focus(&view.focus_handle(cx));
                 this.tabs.diff = Some(view);
-                this.chrome.panel_max = false;
+                this.reveal_editor_area(window, cx);
                 this.tabs.diff_active = true;
                 this.tabs.page_active = false;
                 this.tabs.large_active = false;

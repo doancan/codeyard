@@ -23,7 +23,7 @@ impl Workbench {
     /// `preview`: preview tab. Opens in place of a non-dirty preview tab if there is one
     /// (so tabs don't pile up while browsing).
     pub(super) fn open_file_as(&mut self, host: Arc<dyn Host>, path: String, preview: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.chrome.panel_max = false;
+        self.reveal_editor_area(window, cx);
         let path = if host.is_remote() { path } else { ui::local_path(std::path::Path::new(&path)) };
         // Restored files must apply their hot-exit backup before an explicit open reuses them.
         if let Some(ws) = self.persist.pending_restore.take()
@@ -206,7 +206,7 @@ impl Workbench {
                     let view = cx.new(|cx| crate::diff::DiffView::new(title, false, &text, &current, cx).with_label(crate::i18n::t("Compare")));
                     window.focus(&view.focus_handle(cx));
                     this.tabs.diff = Some(view);
-                    this.chrome.panel_max = false;
+                    this.reveal_editor_area(window, cx);
                     this.tabs.diff_active = true;
                     this.tabs.page_active = false;
                     this.tabs.large_active = false;
@@ -238,7 +238,7 @@ impl Workbench {
                     let view = cx.new(|cx| crate::diff::DiffView::new(title, false, &left, &right, cx).with_label(crate::i18n::t("Compare")));
                     window.focus(&view.focus_handle(cx));
                     this.tabs.diff = Some(view);
-                    this.chrome.panel_max = false;
+                    this.reveal_editor_area(window, cx);
                     this.tabs.diff_active = true;
                     this.tabs.page_active = false;
                     this.tabs.large_active = false;

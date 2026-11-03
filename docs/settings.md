@@ -242,6 +242,7 @@ status bar reports it.
 | `workbench.editor.showTabs` | `true` / `false` | `true` | Show the editor tab bar |
 | `workbench.fontFamily` | text | empty | UI font of the whole window (empty: system font) |
 | `workbench.iconTheme` | `glyphs`, `minimal`, `codeyard`, `badges`, `colorful`, `apple`, `material`, `none` | `glyphs` | File and folder icons |
+| `workbench.panel.openFromMaximized` | `half`, `restore`, `tab` | `half` | When a file, diff or page opens while the panel is maximized: shrink the panel to half, give it back its size, or move the terminal into a tab |
 | `workbench.reduceMotion` | `auto`, `on`, `off` | `auto` | Leave out animations: the blinking cursor, spinners and sliding panels (auto: follow the system setting) |
 | `workbench.statusBar.visible` | `true` / `false` | `true` | Show the status bar |
 | `workbench.tabs.closeButton` | `hover`, `always`, `off` | `hover` | When the close button of a tab shows |

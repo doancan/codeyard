@@ -37,8 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- A diff, Settings or any other page opened while the terminal was maximized stayed hidden behind it; the panel now goes back
-  to its size, as it already did for files.
+- A diff, Settings or any other page opened while the terminal was maximized stayed hidden behind it, and Settings or a
+  palette command did nothing when the keyboard had been left in the hidden editor. The keyboard now goes to the terminal when
+  the panel is maximized, and `workbench.panel.openFromMaximized` (`half`, `restore`, `tab`) says what gives way when
+  something opens.
 
 ## [0.7.2] - 2026-11-02
 
