@@ -20,6 +20,7 @@ pub struct FolderSettings {
     pub format_on_type: Option<bool>,
     pub trim_trailing_whitespace: Option<bool>,
     pub insert_final_newline: Option<bool>,
+    pub trim_final_newlines: Option<bool>,
     pub rulers: Option<Vec<usize>>,
     /// Resolved from the user file and the workspace file as well (`resolve`): nothing falls back to the global
     /// settings, which carry the first folder's own values.
@@ -40,6 +41,7 @@ impl FolderSettings {
         s.format_on_type.get_or_insert(d.format_on_type);
         s.trim_trailing_whitespace.get_or_insert(d.trim_trailing_whitespace);
         s.insert_final_newline.get_or_insert(d.insert_final_newline);
+        s.trim_final_newlines.get_or_insert(d.trim_final_newlines);
         s.code_actions_on_save.get_or_insert(d.code_actions_on_save);
         s.rulers.get_or_insert(d.rulers);
         // `tab_size` / `insert_spaces` stay `None` when nobody sets them: the file's own indentation is guessed.
@@ -64,6 +66,7 @@ impl FolderSettings {
             s.format_on_type = boolean("editor.formatOnType").or(s.format_on_type);
             s.trim_trailing_whitespace = boolean("files.trimTrailingWhitespace").or(s.trim_trailing_whitespace);
             s.insert_final_newline = boolean("files.insertFinalNewline").or(s.insert_final_newline);
+            s.trim_final_newlines = boolean("files.trimFinalNewlines").or(s.trim_final_newlines);
             if let Some(Value::Array(a)) = o.get("editor.rulers")
                 && a.iter().all(|v| v.as_u64().is_some_and(|n| (1..=500).contains(&n)))
             {

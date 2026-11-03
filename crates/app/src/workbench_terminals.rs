@@ -19,12 +19,49 @@ gpui::actions!(
         SelectDefaultTerminalProfile,
         ConfigureTerminalSettings,
         FocusNextTerminal,
-        FocusPreviousTerminal
+        FocusPreviousTerminal,
+        MoveTerminalUp,
+        MoveTerminalDown
     ]
 );
 
 /// Height of a row in the terminal list.
 const TERM_ROW_H: f32 = 28.;
+
+/// A row of the terminal list being dragged to a new place in the list.
+#[derive(Clone)]
+struct DraggedTerminalRow {
+    term: Entity<TerminalView>,
+    /// Its place in the list when the drag began.
+    from: usize,
+    title: SharedString,
+}
+
+impl Render for DraggedTerminalRow {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = *palette(cx);
+        div()
+            .px(px(theme::SPACE[4]))
+            .py(px(theme::SPACE[1]))
+            .rounded(px(theme::radius::SM))
+            .bg(c(p.bg))
+            .border_1()
+            .border_color(c(p.accent))
+            .text_size(px(text::SM.0))
+            .text_color(c(p.text))
+            .child(self.title.clone())
+    }
+}
+
+/// Where the index of the active terminal ends up when the entry at `from` moves to `to` (both within `len`).
+fn index_after_move(active: usize, from: usize, to: usize) -> usize {
+    match (active == from, from < to) {
+        (true, _) => to,
+        (false, true) if active > from && active <= to => active - 1,
+        (false, false) if active >= to && active < from => active + 1,
+        _ => active,
+    }
+}
 
 /// The launch menu's profile and shell entries (the default profile ticked) and what each starts: profiles first, then the
 /// machine's shells that no profile already runs.
@@ -69,11 +106,11 @@ impl TermRow {
     }
 
     /// Beside the glyph: bars while a command runs, a dot for a finish not yet seen or a failed last command.
-    fn indicator(&self, i: usize, p: &Palette) -> Option<AnyElement> {
+    fn indicator(&self, p: &Palette) -> Option<AnyElement> {
         use crate::terminal::{Activity, Finished};
         let dot = |color: u32| div().size(px(7.)).flex_none().rounded_full().bg(c(color)).into_any_element();
         match (&self.activity, self.unseen) {
-            (Activity::Running(_), _) => Some(ui::activity_bars(("term-activity", i), 12., p.accent)),
+            (Activity::Running(_), _) => Some(dot(p.accent)),
             (_, Some(Finished::Attention)) => Some(dot(p.warning)),
             (_, Some(Finished::Failed)) => Some(dot(p.danger)),
             (_, Some(Finished::Succeeded)) => Some(dot(p.success)),
@@ -462,10 +499,20 @@ impl Workbench {
                 (false, false) => (p.text_muted, row.mark.as_deref().map_or(p.text_muted, |m| mark_color(Some(m), p))),
             };
             let tip: SharedString = row.tooltip().into();
+            let accent = p.accent;
+            let dragged = DraggedTerminalRow { term: term.clone(), from: i, title: row.label.clone().into() };
             div()
                 .id(("term-tab", i))
                 .group(group.clone())
                 .relative()
+                .on_drag(dragged, |d, _, _, cx| cx.new(|_| d.clone()))
+                // The dragged row lands in the target's place: below it when it comes from above, otherwise above it.
+                .drag_over::<DraggedTerminalRow>(move |s, d, _, _| match d.from.cmp(&i) {
+                    std::cmp::Ordering::Less => s.border_b_2().border_color(c(accent)),
+                    std::cmp::Ordering::Greater => s.border_t_2().border_color(c(accent)),
+                    std::cmp::Ordering::Equal => s,
+                })
+                .on_drop(cx.listener(move |this, d: &DraggedTerminalRow, _, cx| this.move_terminal(&d.term, i, cx)))
                 .child(crate::a11y_controls::control(
                     crate::a11y_controls::Control::new(
                         crate::i18n::t("Terminals"),
@@ -492,7 +539,7 @@ impl Workbench {
                 // The active row carries the accent on its left edge, like the active editor tab.
                 .when(active, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(px(2.)).bg(c(p.accent))))
                 .child(icon(if paired { "tb-split" } else { "terminal" }, layout::ICON, glyph_color))
-                .children(row.indicator(i, p))
+                .children(row.indicator(p))
                 .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().when(row.exited, |d| d.italic()).child(row.label.clone()))
                 .child(
                     div()
@@ -532,6 +579,13 @@ impl Workbench {
                         })),
                 )
                 .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone())).into())
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |this, ev: &gpui::MouseDownEvent, window, cx| {
+                        this.select_terminal(i, window, cx);
+                        this.open_terminal_menu(ev.position, window, cx);
+                    }),
+                )
                 .on_mouse_down(
                     MouseButton::Middle,
                     cx.listener({
@@ -616,6 +670,37 @@ impl Workbench {
 
     pub(super) fn focus_previous_terminal(&mut self, _: &FocusPreviousTerminal, window: &mut Window, cx: &mut Context<Self>) {
         self.cycle_terminal(-1, window, cx);
+    }
+
+    pub(super) fn move_terminal_up(&mut self, _: &MoveTerminalUp, _: &mut Window, cx: &mut Context<Self>) {
+        self.shift_active_terminal(-1, cx);
+    }
+
+    pub(super) fn move_terminal_down(&mut self, _: &MoveTerminalDown, _: &mut Window, cx: &mut Context<Self>) {
+        self.shift_active_terminal(1, cx);
+    }
+
+    fn shift_active_terminal(&mut self, step: isize, cx: &mut Context<Self>) {
+        let to = self.active_terminal as isize + step;
+        if let Some(term) = self.terminals.get(self.active_terminal).cloned()
+            && (0..self.terminals.len() as isize).contains(&to)
+        {
+            self.move_terminal(&term, to as usize, cx);
+        }
+    }
+
+    /// Put `term` at place `to` of the list. The active terminal stays the active one; the split pair, which holds
+    /// terminals rather than places, is untouched. The order is saved.
+    pub(super) fn move_terminal(&mut self, term: &Entity<TerminalView>, to: usize, cx: &mut Context<Self>) {
+        let Some(from) = self.terminals.iter().position(|t| t == term) else { return };
+        if from == to || to >= self.terminals.len() {
+            return;
+        }
+        let moved = self.terminals.remove(from);
+        self.terminals.insert(to, moved);
+        self.active_terminal = index_after_move(self.active_terminal, from, to);
+        self.persist_terminals(cx);
+        cx.notify();
     }
 
     fn cycle_terminal(&mut self, step: isize, window: &mut Window, cx: &mut Context<Self>) {
@@ -860,10 +945,15 @@ impl Workbench {
             (crate::i18n::t("Copy Last Command Output"), Box::new(crate::terminal::TermCopyLastOutput), false),
             (crate::i18n::t("Clear Terminal"), Box::new(ClearTerminal), true),
             (crate::i18n::t("New Terminal"), Box::new(NewTerminal), true),
-            (crate::i18n::t("Rename…"), Box::new(RenameTerminal), false),
+            (crate::i18n::t("Split Terminal"), Box::new(SplitTerminal), false),
+            (crate::i18n::t("Move Terminal into Editor Area"), Box::new(MoveTerminalIntoEditorArea), false),
+            (crate::i18n::t("Move Terminal Up"), Box::new(MoveTerminalUp), false),
+            (crate::i18n::t("Move Terminal Down"), Box::new(MoveTerminalDown), false),
+            (crate::i18n::t("Rename…"), Box::new(RenameTerminal), true),
             (crate::i18n::t("Change Color…"), Box::new(ChangeTerminalColor), false),
             (crate::i18n::t("Kill Terminal"), Box::new(KillTerminal), true),
             (crate::i18n::t("Kill All Terminals"), Box::new(KillAllTerminals), false),
+            (crate::i18n::t("Configure Terminal Settings"), Box::new(ConfigureTerminalSettings), true),
         ];
         self.show_action_menu(entries, position, window, cx);
     }
@@ -894,14 +984,29 @@ mod tests {
     }
 
     #[test]
+    fn the_active_terminal_keeps_its_identity_when_the_list_is_reordered() {
+        // (active, from, to) -> the index of the same terminal afterwards, checked against a real reorder.
+        for len in 1..6 {
+            for (from, to) in (0..len).flat_map(|f| (0..len).map(move |t| (f, t))) {
+                for active in 0..len {
+                    let mut ids: Vec<usize> = (0..len).collect();
+                    let moved = ids.remove(from);
+                    ids.insert(to, moved);
+                    assert_eq!(ids[index_after_move(active, from, to)], active, "len {len}: {from}->{to}, active {active}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn a_row_shows_what_its_terminal_is_doing() {
         use crate::terminal::{Activity, Finished};
         let row = |activity, unseen| TermRow { label: "zsh".into(), mark: None, exited: false, activity, unseen, cwd: Some("/srv/app".into()) };
         let p = theme::DARK;
-        assert!(row(Activity::Idle, None).indicator(0, &p).is_none(), "nothing to say");
-        assert!(row(Activity::Running("$ make".into()), None).indicator(0, &p).is_some());
-        assert!(row(Activity::Idle, Some(Finished::Succeeded)).indicator(0, &p).is_some());
-        assert!(row(Activity::Failed(2), None).indicator(0, &p).is_some());
+        assert!(row(Activity::Idle, None).indicator(&p).is_none(), "nothing to say");
+        assert!(row(Activity::Running("$ make".into()), None).indicator(&p).is_some());
+        assert!(row(Activity::Idle, Some(Finished::Succeeded)).indicator(&p).is_some());
+        assert!(row(Activity::Failed(2), None).indicator(&p).is_some());
         assert_eq!(row(Activity::Running("$ make".into()), None).tooltip(), "zsh\n/srv/app\nRunning: $ make");
         assert_eq!(row(Activity::Failed(2), None).tooltip(), "zsh\n/srv/app\nThe last command exited with code 2");
     }

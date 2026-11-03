@@ -431,6 +431,19 @@ impl State {
         Ok(())
     }
 
+    pub fn remove(&self, key: &str) -> Result<(), Error> {
+        self.db.execute("delete from kv where key = ?1", [key])?;
+        Ok(())
+    }
+
+    /// Every (key, value) whose key starts with `prefix`, in key order.
+    pub fn entries_with_prefix(&self, prefix: &str) -> Vec<(String, String)> {
+        let Ok(mut stmt) = self.db.prepare("select key, value from kv where substr(key, 1, length(?1)) = ?1 order by key") else {
+            return Vec::new();
+        };
+        stmt.query_map([prefix], |r| Ok((r.get(0)?, r.get(1)?))).map(|rows| rows.flatten().collect()).unwrap_or_default()
+    }
+
     /// Replace a workspace's tabs (order is preserved).
     pub fn save_tabs(&self, workspace: i64, tabs: &[Tab]) -> Result<(), Error> {
         self.save_tabs_with_layout(workspace, tabs, None)
@@ -1000,6 +1013,21 @@ mod tests {
         assert_eq!(s.pinned_workspaces(), vec![(None, "/keep".to_string())]);
         // Unpinning such a name is harmless and must not fail.
         s.set_workspace_pinned(None, "/a\nb", false).unwrap();
+    }
+
+    #[test]
+    fn entries_are_listed_by_prefix_and_can_be_removed() {
+        let state = State::in_memory().unwrap();
+        for (k, v) in [("trust::/a", "1"), ("trust:prod:/b", "tree"), ("trust_migrated_v1", "1"), ("theme", "dark")] {
+            state.set(k, v).unwrap();
+        }
+        let keys = |s: &State| s.entries_with_prefix("trust:").into_iter().map(|(k, _)| k).collect::<Vec<_>>();
+        assert_eq!(keys(&state), ["trust::/a", "trust:prod:/b"], "the prefix ends at its colon and is no pattern");
+        state.remove("trust::/a").unwrap();
+        state.remove("missing").unwrap();
+        assert_eq!(keys(&state), ["trust:prod:/b"]);
+        assert_eq!(state.get("trust::/a"), None);
+        assert!(state.entries_with_prefix("%").is_empty(), "LIKE wildcards are not special");
     }
 
     #[test]

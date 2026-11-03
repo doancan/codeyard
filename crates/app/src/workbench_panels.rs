@@ -130,12 +130,55 @@ impl Workbench {
 
     /// Maximize or restore. An open panel grows towards the top (or the left when docked right) and shrinks back, unless
     /// motion is reduced.
-    pub(super) fn toggle_maximized_panel(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn toggle_maximized_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let animate = self.chrome.panel_open && self.chrome.panel_area.is_some() && !crate::system_prefs::reduce_motion(cx);
         self.chrome.panel_max = !self.chrome.panel_max;
         self.chrome.panel_open = true;
         self.chrome.panel_anim = animate.then(|| (std::time::Instant::now(), self.chrome.panel_max));
+        // A maximized panel hides the editor area. Keyboard focus left in it is on nothing that is drawn, and an action sent
+        // from there (Settings, a command from the palette) reaches no handler: the keyboard goes to the panel's terminal.
+        if self.chrome.panel_max {
+            match self.terminals.get(self.active_terminal).filter(|_| self.chrome.bottom == Bottom::Terminal) {
+                Some(term) => window.focus(&term.focus_handle(cx)),
+                None => window.focus(&self.focus_handle),
+            }
+        }
         cx.notify();
+    }
+
+    /// Something opens in the editor area while the panel is maximized, which hides it: `workbench.panel.openFromMaximized`
+    /// says what gives way. `half`: the panel shrinks to half of the space; `restore`: it goes back to the size it had;
+    /// `tab`: the terminal moves into a tab of the editor area, so the new tab opens beside it.
+    pub(super) fn reveal_editor_area(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.chrome.panel_max {
+            return;
+        }
+        let behaviour = cx.global::<Settings>().panel_open_from_maximized.clone();
+        if behaviour == "tab" && self.chrome.panel_open && self.chrome.bottom == Bottom::Terminal && !self.terminals.is_empty() {
+            // Moving the terminal puts it in the group's page slot and brings it to the front; what the caller is opening
+            // (it may have set its page already) must keep both.
+            let kept = (self.tabs.page.clone(), self.tabs.page_active, self.tabs.diff_active, self.tabs.large_active);
+            self.move_terminal_into_editor(window, cx);
+            (self.tabs.page, self.tabs.page_active, self.tabs.diff_active, self.tabs.large_active) = kept;
+            return;
+        }
+        self.unmaximize_panel(cx);
+    }
+
+    /// `reveal_editor_area` without a window to move a terminal with: `tab` gives the panel half of the space like `half`.
+    pub(super) fn unmaximize_panel(&mut self, cx: &App) {
+        let behaviour = cx.global::<Settings>().panel_open_from_maximized.as_str();
+        self.chrome.panel_max = false;
+        if behaviour != "restore"
+            && let Some(area) = self.chrome.panel_area
+        {
+            let half = |extent: gpui::Pixels| extent / px(1.) / 2.;
+            if self.chrome.panel_dock.beside() {
+                self.chrome.panel_w = half(area.size.width).max(PANEL_MIN * 2.);
+            } else {
+                self.chrome.panel_h = half(area.size.height).max(PANEL_MIN);
+            }
+        }
     }
 
     /// Ends a finished (or overtaken) maximize/restore animation, or asks for its next frame.
@@ -415,6 +458,7 @@ impl Workbench {
                 let view = cx.new(|cx| crate::diff::DiffView::new(rel, staged, old.as_deref().unwrap_or(""), new.as_deref().unwrap_or(""), cx));
                 window.focus(&view.focus_handle(cx));
                 this.tabs.diff = Some(view);
+                this.reveal_editor_area(window, cx);
                 this.tabs.diff_active = true;
                 this.tabs.page_active = false;
                 this.tabs.large_active = false;
@@ -427,13 +471,14 @@ impl Workbench {
 
     /// Open the image in a preview (read-only tab, replacing the previous one).
     pub(super) fn open_image(&mut self, path: String, format: gpui::ImageFormat, window: &mut Window, cx: &mut Context<Self>) {
-        self.chrome.panel_max = false;
+        self.reveal_editor_area(window, cx);
         self.record_nav(cx);
         self.remember_file(&path);
         let host = self.remote.host.clone();
         let view = cx.new(|cx| crate::large::LargeFileView::new_image(host, path, format, cx));
         window.focus(&view.focus_handle(cx));
         self.tabs.large = Some(view);
+        self.reveal_editor_area(window, cx);
         self.tabs.large_active = true;
         self.tabs.page_active = false;
         self.tabs.diff_active = false;
@@ -442,7 +487,7 @@ impl Workbench {
 
     /// Open a large file in a read-only view (replacing the previous one).
     pub(super) fn open_large(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.chrome.panel_max = false;
+        self.reveal_editor_area(window, cx);
         let host = self.remote.host.clone();
         let view = cx.new(|cx| crate::large::LargeFileView::new(host, path, cx));
         view.update(cx, |v, cx| {
@@ -454,6 +499,7 @@ impl Workbench {
         });
         window.focus(&view.focus_handle(cx));
         self.tabs.large = Some(view);
+        self.reveal_editor_area(window, cx);
         self.tabs.large_active = true;
         self.tabs.page_active = false;
         self.tabs.diff_active = false;

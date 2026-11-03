@@ -435,9 +435,7 @@ impl Workbench {
 
     /// Is the folder's author trusted? With the setting off, every folder is trusted.
     pub(super) fn is_trusted_root(&self, root: &str, cx: &App) -> bool {
-        !cx.global::<Settings>().workspace_trust
-            || self.cfg.trusted.contains(&self.trust_key(root))
-            || self.persist.state.as_ref().is_some_and(|s| s.get(&self.trust_key(root)).is_some())
+        !cx.global::<Settings>().workspace_trust || self.trust_source(root).is_some()
     }
 
     /// Trust the folder: stored permanently, project settings (terminal.shell, lsp.servers) are reapplied.
@@ -446,7 +444,7 @@ impl Workbench {
     }
 
     /// Trust several folders in one step (a workspace: its file's folder and its folders), named `name` in the notice.
-    fn trust_roots(&mut self, roots: &[String], name: &str, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn trust_roots(&mut self, roots: &[String], name: &str, window: &mut Window, cx: &mut Context<Self>) {
         for root in roots {
             self.cfg.trusted.insert(self.trust_key(root));
             if let Some(s) = &self.persist.state {
@@ -455,15 +453,12 @@ impl Workbench {
             // Start the language servers held back by the missing trust.
             self.lsp.restricted_notified.remove(root);
         }
-        self.reload_config(window, cx);
-        self.restart_lsp(cx);
-        self.notice = Some(Notice::Info(crate::i18n::tf("Trusted “{}”", &[&name]).into()));
-        cx.notify();
+        self.trust_applied(crate::i18n::tf("Trusted “{}”", &[&name]), window, cx);
     }
 
     /// What answering yes about `root` trusts: the whole open workspace when `root` is its file's folder or one of its
     /// folders, otherwise that folder alone.
-    fn trust_scope(&self, root: &str) -> (Option<String>, Vec<String>) {
+    pub(super) fn trust_scope(&self, root: &str) -> (Option<String>, Vec<String>) {
         match self.workspace_trust_scope().filter(|(_, dirs)| dirs.iter().any(|d| d == root)) {
             Some((name, dirs)) => (Some(name), dirs),
             None => (None, vec![root.to_string()]),

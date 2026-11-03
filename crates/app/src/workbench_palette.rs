@@ -114,6 +114,14 @@ impl Workbench {
             Command::action("Editor: Convert Indentation to Tabs", ConvertIndentToTabs),
             Command::action("View: Toggle Minimap", ToggleMinimap),
             Command::action("View: Toggle Sticky Scroll", ToggleStickyScroll),
+            Command::action("View: Toggle Breadcrumbs", ToggleBreadcrumbs),
+            Command::action("View: Toggle Line Numbers", ToggleLineNumbers),
+            Command::action("View: Toggle Indent Guides", ToggleIndentGuides),
+            Command::action("View: Toggle Inlay Hints", ToggleInlayHints),
+            Command::action("File: Toggle Auto Save", ToggleAutoSave),
+            Command::action("Help: Release Notes", ShowReleaseNotes),
+            Command::action("Help: Report Issue…", ReportIssue),
+            Command::action("Help: Open Crash Reports Folder", OpenCrashReportsFolder),
             Command::action("View: Toggle Render Whitespace", ToggleRenderWhitespace),
             Command::action("Git: Revert Change at Cursor", editor::RevertHunk),
             Command::action("Editor: Transpose Characters", editor::TransposeCharacters),
@@ -257,6 +265,11 @@ impl Workbench {
             Command::action("Editor: Add Cursor Below", editor::AddCursorBelow),
             Command::action("Editor: Add Next Occurrence to Selection", editor::SelectNextOccurrence),
             Command::action("Workspace: Trust This Folder", TrustWorkspace),
+            Command::action("Workspace: Manage Workspace Trust…", ManageWorkspaceTrust),
+            Command::action("Git: Copy Permalink", CopyGitPermalink),
+            Command::action("Git: Copy Changes as Patch", CopyChangesAsPatch),
+            Command::action("Git: Apply Patch from Clipboard", ApplyPatchFromClipboard),
+            Command::action("Git: Open File on Remote", OpenOnGitRemote),
             Command::action("View: Toggle Sidebar", ToggleSidebar),
             Command::action("View: Files", ShowExplorer),
             Command::action("Remote: Connect to Host or Switch Workspace…", ShowRemote),
@@ -291,6 +304,7 @@ impl Workbench {
             Command::action("Preferences: Configure User Snippets", ConfigureSnippets),
             Command::action("Markdown: Open Preview", OpenMarkdownPreview),
             Command::action("File: Compare Active File with Clipboard", CompareWithClipboard),
+            Command::action("File: Compare Selection with Clipboard", CompareSelectionWithClipboard),
             Command::action("File: Compare Active File with Saved", CompareWithSaved),
             // --- compare ---
             Command::action("Compare: Folders…", CompareFolders),
@@ -343,6 +357,8 @@ impl Workbench {
             Command::action("Terminal: Kill Other Terminals", KillOtherTerminals),
             Command::action("Terminal: Focus Next Terminal", FocusNextTerminal),
             Command::action("Terminal: Focus Previous Terminal", FocusPreviousTerminal),
+            Command::action("Terminal: Move Terminal Up", MoveTerminalUp),
+            Command::action("Terminal: Move Terminal Down", MoveTerminalDown),
             Command::action("Terminal: Configure Terminal Settings", ConfigureTerminalSettings),
             Command::action("Terminal: Go to Previous Command", crate::terminal::TermPrevCommand),
             Command::action("Terminal: Go to Next Command", crate::terminal::TermNextCommand),
@@ -813,6 +829,15 @@ impl Workbench {
                 let cwd = self.active_root(cx);
                 self.new_terminal_launch(cwd, launch, window, cx);
             }
+            (OverlayKind::WorkspaceTrust { context, choices }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                if !context.matches(self, cx) {
+                    self.close_overlay(window, cx);
+                    return;
+                }
+                let choice = choices[*index].clone();
+                self.close_overlay(window, cx);
+                self.apply_trust_choice(choice, window, cx);
+            }
             (OverlayKind::TerminalDefaultProfile { context, names }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 if !context.matches(self, cx) {
                     self.close_overlay(window, cx);
@@ -1013,6 +1038,7 @@ impl Workbench {
                 | OverlayKind::LaunchTemplates(_)
                 | OverlayKind::TerminalLaunch { .. }
                 | OverlayKind::TerminalDefaultProfile { .. }
+                | OverlayKind::WorkspaceTrust { .. }
                 | OverlayKind::TerminalColor { .. }
                 | OverlayKind::RemoveFolder(_)
                 | OverlayKind::CompareFolder { .. }

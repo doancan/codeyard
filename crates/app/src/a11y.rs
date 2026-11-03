@@ -751,6 +751,10 @@ impl Workbench {
             Conn::Reconnecting { alias, attempt } => tf("Reconnecting to {0} (attempt {1})", &[alias, attempt]),
             Conn::Failed { alias, .. } => tf("{}: connection failed", &[alias]),
         });
+        if self.restricted_root(cx).is_some() {
+            status.push(t("Restricted Mode").to_string());
+            status_parts.push(StatusPart::Restricted);
+        }
         if let Some(b) = &self.vcs.branch {
             status.push(tf("Branch {}", &[b]));
             status_parts.push(StatusPart::Branch);
@@ -939,6 +943,7 @@ impl Workbench {
                 }
                 match part {
                     StatusPart::Remote => self.show_remote(&ShowRemote, window, cx),
+                    StatusPart::Restricted => self.manage_workspace_trust(&ManageWorkspaceTrust, window, cx),
                     StatusPart::Branch => self.show_branch_picker(window, cx),
                     StatusPart::Problems => self.show_problems(&ShowProblems, window, cx),
                     StatusPart::Position => self.go_to_line(&GoToLine, window, cx),
@@ -951,6 +956,7 @@ impl Workbench {
             }
             (Action::Focus | Action::Click, ABOUT_TAB) if last.about.is_some() => {
                 if let Some(Page::About(view)) = self.tabs.page.clone() {
+                    self.reveal_editor_area(window, cx);
                     self.tabs.page_active = true;
                     self.tabs.diff_active = false;
                     self.tabs.large_active = false;

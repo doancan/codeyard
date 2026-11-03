@@ -276,6 +276,7 @@ impl Workbench {
     pub(super) fn open_extension_page(&mut self, cx: &mut Context<Self>) {
         self.tabs.page = Some(Page::Extension);
         self.tabs._page_sub = None;
+        self.unmaximize_panel(cx);
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;

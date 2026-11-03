@@ -95,6 +95,7 @@ status bar reports it.
 | `files.fallbackEncoding` | `windows1254`, `iso88599`, `iso88591`, `utf8` | `windows1254` | Encoding for files that are not UTF-8 |
 | `files.hotExit` | `true` / `false` | `true` | Keep unsaved changes across restarts |
 | `files.insertFinalNewline` | `true` / `false` | `false` | End files with a newline when saving |
+| `files.trimFinalNewlines` | `true` / `false` | `false` | Remove blank lines at the end of a file when saving |
 | `files.trimTrailingWhitespace` | `true` / `false` | `false` | Remove trailing spaces when saving |
 
 ## `git`
@@ -173,6 +174,7 @@ status bar reports it.
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
 | `security.workspaceTrust.enabled` | `true` / `false` | `true` | Ask before running tasks, tests or the debugger of an untrusted folder |
+| `security.workspaceTrust.startupPrompt` | `once`, `always`, `never` | `once` | Ask whether to trust a folder when it opens: once, every time, or never |
 
 ## `spelling`
 
@@ -240,6 +242,7 @@ status bar reports it.
 | `workbench.editor.showTabs` | `true` / `false` | `true` | Show the editor tab bar |
 | `workbench.fontFamily` | text | empty | UI font of the whole window (empty: system font) |
 | `workbench.iconTheme` | `glyphs`, `minimal`, `codeyard`, `badges`, `colorful`, `apple`, `material`, `none` | `glyphs` | File and folder icons |
+| `workbench.panel.openFromMaximized` | `half`, `restore`, `tab` | `half` | When a file, diff or page opens while the panel is maximized: shrink the panel to half, give it back its size, or move the terminal into a tab |
 | `workbench.reduceMotion` | `auto`, `on`, `off` | `auto` | Leave out animations: the blinking cursor, spinners and sliding panels (auto: follow the system setting) |
 | `workbench.statusBar.visible` | `true` / `false` | `true` | Show the status bar |
 | `workbench.tabs.closeButton` | `hover`, `always`, `off` | `hover` | When the close button of a tab shows |

@@ -3512,3 +3512,68 @@ Reset all settings to the defaults?	Tüm ayarlar varsayılana sıfırlansın mı
 Settings reset. The old file is kept as {}	Ayarlar sıfırlandı. Eski dosya {} olarak saklandı
 {} is replaced by the default settings of this version. The current file is kept next to it as a backup.	{} bu sürümün varsayılan ayarlarıyla değiştirilir. Mevcut dosya yanında yedek olarak saklanır.
 Reset All Settings…	Tüm Ayarları Sıfırla…
+Move Terminal Up	Terminali Yukarı Taşı
+Move Terminal Down	Terminali Aşağı Taşı
+Move Terminal into Editor Area	Terminali Düzenleyici Alanına Taşı
+Terminal: Move Terminal Up	Terminal: Terminali Yukarı Taşı
+Terminal: Move Terminal Down	Terminal: Terminali Aşağı Taşı
+Ask whether to trust a folder when it opens: once, every time, or never	Bir klasör açıldığında güvenip güvenmediğini sor: bir kez, her seferinde ya da hiç
+Don't Trust This Folder	Bu Klasöre Güvenme
+No longer trusting “{}”	“{}” artık güvenilmiyor
+No trusted folders yet.	Henüz güvenilen klasör yok.
+Don't Trust	Güvenme
+Restricted Mode	Kısıtlı Mod
+Restricted Mode: tasks, debugging, and the project's terminal shell and language servers are switched off until you trust this folder. Click to manage trust.	Kısıtlı Mod: bu klasöre güvenene kadar görevler, hata ayıklama ve projenin terminal kabuğu ile dil sunucuları kapalıdır. Güveni yönetmek için tıklayın.
+Trust Folder	Klasöre Güven
+Trust Parent Folder and Subfolders	Üst Klasöre ve Alt Klasörlerine Güven
+Trust Parent Folder “{}” and Subfolders	Üst Klasöre “{}” ve Alt Klasörlerine Güven
+Trust This Folder	Bu Klasöre Güven
+Trust Workspace	Çalışma Alanına Güven
+Workspace Trust is off (security.workspaceTrust.enabled).	Çalışma Alanı Güveni kapalı (security.workspaceTrust.enabled).
+Workspace Trust: Restricted Mode, this folder is not trusted. Select a folder to stop trusting it	Çalışma Alanı Güveni: Kısıtlı Mod, bu klasöre güvenilmiyor. Güvenmeyi bırakmak için bir klasör seçin
+Workspace Trust: this folder is trusted. Select a folder to stop trusting it	Çalışma Alanı Güveni: bu klasöre güveniliyor. Güvenmeyi bırakmak için bir klasör seçin
+Workspace Trust: select a trusted folder to stop trusting it	Çalışma Alanı Güveni: güvenmeyi bırakmak için güvenilen bir klasör seçin
+Workspace: Manage Workspace Trust…	Çalışma Alanı: Çalışma Alanı Güvenini Yönet…
+this folder only	yalnızca bu klasör
+with subfolders	alt klasörleriyle
+“{}” and its folders can run programs through their tasks, debug configurations and project settings. Without trust the window stays in Restricted Mode: those are switched off.	“{}” ve klasörleri görevleri, hata ayıklama yapılandırmaları ve proje ayarları üzerinden program çalıştırabilir. Güvenilmezse pencere Kısıtlı Mod’da kalır: bunlar kapalıdır.
+“{}” can run programs through its tasks, debug configurations and project settings. Without trust the window stays in Restricted Mode: those are switched off.	“{}” görevleri, hata ayıklama yapılandırmaları ve proje ayarları üzerinden program çalıştırabilir. Güvenilmezse pencere Kısıtlı Mod’da kalır: bunlar kapalıdır.
+Remove blank lines at the end of a file when saving	Kaydederken dosyanın sonundaki boş satırları sil
+File: Compare Selection with Clipboard	Dosya: Seçimi Panoyla Karşılaştır
+Select some text first.	Önce biraz metin seçin.
+{} (selection) ↔ Clipboard	{} (seçim) ↔ Pano
+View: Toggle Breadcrumbs	Görünüm: Ekmek Kırıntılarını Aç/Kapat
+View: Toggle Line Numbers	Görünüm: Satır Numaralarını Aç/Kapat
+View: Toggle Indent Guides	Görünüm: Girinti Kılavuzlarını Aç/Kapat
+View: Toggle Inlay Hints	Görünüm: Satır İçi İpuçlarını Aç/Kapat
+File: Toggle Auto Save	Dosya: Otomatik Kaydetmeyi Aç/Kapat
+Help: Release Notes	Yardım: Sürüm Notları
+Help: Report Issue…	Yardım: Sorun Bildir…
+Help: Open Crash Reports Folder	Yardım: Çökme Raporları Klasörünü Aç
+Auto Save is off.	Otomatik Kaydetme kapalı.
+Auto Save is on.	Otomatik Kaydetme açık.
+No crash reports: Codeyard has not crashed.	Çökme raporu yok: Codeyard hiç çökmedi.
+Git: Copy Permalink	Git: Kalıcı Bağlantıyı Kopyala
+Git: Open File on Remote	Git: Dosyayı Uzakta Aç
+Open a file in a Git repository first.	Önce bir Git deposundaki bir dosyayı açın.
+The active file is not in the repository.	Etkin dosya depoda değil.
+This repository has no remote.	Bu deponun uzak deposu yok.
+The file is not tracked by Git.	Dosya Git tarafından izlenmiyor.
+The remote is not on a hosting service Codeyard knows (GitHub, GitLab, Bitbucket, Codeberg).	Uzak depo Codeyard'ın tanıdığı bir barındırma hizmetinde değil (GitHub, GitLab, Bitbucket, Codeberg).
+Permalink copied. The file has changes that are not committed, so the link shows the committed version.	Kalıcı bağlantı kopyalandı. Dosyanın commit edilmemiş değişiklikleri var, bağlantı commit edilmiş sürümü gösterir.
+Permalink copied.	Kalıcı bağlantı kopyalandı.
+Git: Copy Changes as Patch	Git: Değişiklikleri Yama Olarak Kopyala
+Git: Apply Patch from Clipboard	Git: Panodaki Yamayı Uygula
+Open a folder that is a Git repository first.	Önce Git deposu olan bir klasör açın.
+There are no changes to put in a patch.	Yamaya konacak değişiklik yok.
+Patch copied. Untracked files are not part of it.	Yama kopyalandı. İzlenmeyen dosyalar dahil değildir.
+Patch applied to the working tree.	Yama çalışma ağacına uygulandı.
+The patch was not applied: {}	Yama uygulanmadı: {}
+The changes are too large for one patch.	Değişiklikler tek bir yama için çok büyük.
+The patch is too large.	Yama çok büyük.
+The text is not a patch.	Metin bir yama değil.
+Release Notes	Sürüm Notları
+Report Issue…	Sorun Bildir…
+Line Numbers	Satır Numaraları
+Indent Guides	Girinti Kılavuzları
+When a file, diff or page opens while the panel is maximized: shrink the panel to half, give it back its size, or move the terminal into a tab	Panel büyütülmüşken bir dosya, fark ya da sayfa açılınca: paneli yarıya küçült, eski boyutunu ver ya da terminali bir sekmeye taşı

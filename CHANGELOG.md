@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Workspace Trust, end to end: an untrusted folder asks when it opens (Trust Folder, Trust Parent Folder and Subfolders, or
+  Don't Trust; Return and Escape trust nothing), the status bar shows **Restricted Mode** until it is trusted, and **Workspace: Manage Workspace Trust…** trusts or
+  stops trusting the open folder and lists every trusted folder to remove one (`security.workspaceTrust.startupPrompt`).
+- Terminal list: drag a row to a new place, or use **Terminal: Move Terminal Up / Down**; right-click a row for the terminal
+  menu, which also has Split Terminal, Move Terminal into Editor Area and Configure Terminal Settings.
+- `files.trimFinalNewlines`: saving removes the blank lines at the end of a file (with `files.insertFinalNewline` it ends in
+  exactly one line ending); also per folder and in `.vscode/settings.json`.
+- Word part commands for `camelCase`, `PascalCase`, `snake_case`, `kebab-case` and `HTTPServer` names: Move, Select and
+  Delete Word Part Left / Right (`editor.cursorWordPartLeft` and the others; bind them in Keyboard Shortcuts).
+- **File: Compare Selection with Clipboard**.
+- View toggles for Breadcrumbs, Line Numbers, Indent Guides, Inlay Hints and Auto Save (**File: Toggle Auto Save**), and the
+  Help commands **Release Notes**, **Report Issue…** (opens a new issue with the version and system filled in) and **Open Crash
+  Reports Folder**.
+- **Git: Copy Permalink** (the commit, the selected lines marked) and **Git: Open File on Remote** (the branch) for GitHub,
+  GitLab, Bitbucket and Codeberg remotes.
+- **Git: Copy Changes as Patch** and **Git: Apply Patch from Clipboard**: all changes to tracked files since HEAD as one
+  binary-safe patch; applying checks the whole patch first and changes nothing if it does not apply.
+- `codeyard -g FILE:LINE:COLUMN` (`--goto`) opens a file with the cursor at that position.
+- Source Control keeps the row of the change you opened highlighted.
+- Background fetch also runs shortly after a folder opens and when the window comes back to the front, so commits pushed
+  meanwhile show without clicking Sync.
+
+### Changed
+
+- The terminal list shows a still dot for a running command instead of looping bars.
+
+### Fixed
+
+- Terminal performance with programs that redraw a lot (Claude Code, Codex): a title that animates no longer rebuilds the
+  whole window for every frame (the window hears of it at most every 250 ms), output is parsed once per turn in slices of
+  at most 256 KB with a frame drawn in between and at most one turn every 12 ms, a screen row's text is built in one go
+  instead of growing character by character (quadratic for long lines), and saving the terminals no longer reads the whole
+  scrollback when none of it is kept. In a debug build, a synthetic Claude-like stream (30 long coloured rows redrawn 20
+  times a second) takes about a fifth of the main thread it took before.
+
+- A diff, Settings or any other page opened while the terminal was maximized stayed hidden behind it, and Settings or a
+  palette command did nothing when the keyboard had been left in the hidden editor. The keyboard now goes to the terminal when
+  the panel is maximized, and `workbench.panel.openFromMaximized` (`half`, `restore`, `tab`) says what gives way when
+  something opens.
+
 ## [0.7.2] - 2026-11-02
 
 ### Added

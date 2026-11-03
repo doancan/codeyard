@@ -90,6 +90,7 @@ impl Workbench {
     pub(super) fn show_extension_inspector(&mut self, _: &ShowExtensionInspector, window: &mut Window, cx: &mut Context<Self>) {
         self.tabs.page = Some(Page::ExtensionInspector);
         self.tabs._page_sub = None;
+        self.reveal_editor_area(window, cx);
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
