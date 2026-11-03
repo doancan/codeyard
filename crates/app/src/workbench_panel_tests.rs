@@ -6,6 +6,7 @@ fn opening_a_file_from_explorer_restores_a_maximized_panel(cx: &mut gpui::TestAp
     let root = crate::qa_workbench_tests::project("maximized-explorer");
     crate::qa_workbench_tests::open(&wb, &root, cx);
     wb.update_in(cx, |wb, window, cx| {
+        cx.global_mut::<Settings>().panel_open_from_maximized = "restore".into();
         wb.chrome.panel_open = true;
         wb.chrome.panel_max = true;
         wb.chrome.panel_h = 240.;
