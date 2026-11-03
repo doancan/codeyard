@@ -1131,6 +1131,27 @@ impl Buffer {
         }
     }
 
+    /// Delete the blank lines at the end of the file, keeping one line ending if there was any (`a\n\n\n` becomes `a\n`). A
+    /// file of nothing but blank lines becomes empty. Cursors inside the removed part move to the new end.
+    pub fn trim_final_newlines(&mut self) {
+        let n = self.len_chars();
+        let mut end = n;
+        while end > 0 && matches!(self.rope.char(end - 1), '\n' | '\r') {
+            end -= 1;
+        }
+        // The first line ending after the last text stays.
+        let keep = match (end > 0, self.rope.get_char(end), self.rope.get_char(end + 1)) {
+            (true, Some('\r'), Some('\n')) => 2,
+            (true, Some(_), _) => 1,
+            _ => 0,
+        };
+        let cut = end + keep;
+        if cut < n {
+            let to = |p: usize| p.min(cut);
+            self.edit_parts(vec![(cut..n, String::new())], Place::Keep(&to), false);
+        }
+    }
+
     pub fn backspace(&mut self) {
         self.next_is_delete = self.sels.len() == 1 && self.sels[0].selection().is_none();
         self.edit_each(
@@ -1732,6 +1753,7 @@ mod edit_bytes;
 mod lines;
 mod occurrences;
 mod transform;
+mod word_parts;
 use edit_bytes::unify_breaks;
 mod textutil;
 use textutil::{has_mixed_endings, is_combining_mark};

@@ -195,6 +195,21 @@ fn word_at_cursor() {
 }
 
 #[test]
+fn trailing_blank_lines_are_trimmed_to_one_line_ending() {
+    for (before, after) in [("a\n\n\n", "a\n"), ("a\r\n\r\n", "a\r\n"), ("a", "a"), ("a\n", "a\n"), ("a\n\n\nb\n\n", "a\n\n\nb\n"), ("\n\n", ""), ("", "")] {
+        let mut b = Buffer::from_str(before);
+        b.trim_final_newlines();
+        assert_eq!(String::from_utf8(b.to_bytes()).unwrap(), after, "{before:?}");
+    }
+    let mut b = Buffer::from_str("a\n\n\n");
+    b.set_cursor(4, false);
+    b.trim_final_newlines();
+    assert_eq!(b.cursor_line_col(), (1, 0), "a cursor in the removed part lands at the new end");
+    b.undo();
+    assert_eq!(b.len_chars(), 4, "one undo step restores it");
+}
+
+#[test]
 fn save_transforms_keep_cursor() {
     let mut b = Buffer::from_str("a  \nbc\t\nd");
     b.set_cursor(6, false); // "bc|"

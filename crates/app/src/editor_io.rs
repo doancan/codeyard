@@ -430,6 +430,7 @@ impl EditorView {
         }
         let s = cx.global::<Settings>();
         let ec = s.editorconfig;
+        let trim_end = self.scoped(|f| f.trim_final_newlines, s.trim_final_newlines);
         let (trim, final_nl) = (
             ec.then_some(self.rules.trim_trailing_whitespace).flatten().unwrap_or(self.scoped(|f| f.trim_trailing_whitespace, s.trim_trailing_whitespace)),
             ec.then_some(self.rules.insert_final_newline).flatten().unwrap_or(self.scoped(|f| f.insert_final_newline, s.insert_final_newline)),
@@ -442,10 +443,14 @@ impl EditorView {
         if trim {
             self.buffer.trim_trailing_whitespace();
         }
+        // Blank lines go first: with both settings the file then ends in exactly one line ending.
+        if trim_end {
+            self.buffer.trim_final_newlines();
+        }
         if final_nl {
             self.buffer.ensure_final_newline();
         }
-        if trim || final_nl {
+        if trim || final_nl || trim_end {
             self.sync_syntax(cx);
         }
         let data = match self.encoded() {

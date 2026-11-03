@@ -181,6 +181,36 @@ impl EditorView {
         self.after_edit(cx);
     }
 
+    pub(super) fn move_word_part_left(&mut self, _: &MoveWordPartLeft, _: &mut Window, cx: &mut Context<Self>) {
+        self.buffer.move_word_part(false, false);
+        self.after_move(cx);
+    }
+
+    pub(super) fn move_word_part_right(&mut self, _: &MoveWordPartRight, _: &mut Window, cx: &mut Context<Self>) {
+        self.buffer.move_word_part(true, false);
+        self.after_move(cx);
+    }
+
+    pub(super) fn select_word_part_left(&mut self, _: &SelectWordPartLeft, _: &mut Window, cx: &mut Context<Self>) {
+        self.buffer.move_word_part(false, true);
+        self.after_move(cx);
+    }
+
+    pub(super) fn select_word_part_right(&mut self, _: &SelectWordPartRight, _: &mut Window, cx: &mut Context<Self>) {
+        self.buffer.move_word_part(true, true);
+        self.after_move(cx);
+    }
+
+    pub(super) fn delete_word_part_left(&mut self, _: &DeleteWordPartLeft, _: &mut Window, cx: &mut Context<Self>) {
+        self.buffer.delete_word_part(false);
+        self.after_edit(cx);
+    }
+
+    pub(super) fn delete_word_part_right(&mut self, _: &DeleteWordPartRight, _: &mut Window, cx: &mut Context<Self>) {
+        self.buffer.delete_word_part(true);
+        self.after_edit(cx);
+    }
+
     pub(super) fn move_home(&mut self, _: &MoveHome, _: &mut Window, cx: &mut Context<Self>) {
         if !self.row_edge(false, false) {
             self.buffer.move_home(false);

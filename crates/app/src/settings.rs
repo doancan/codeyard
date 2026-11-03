@@ -60,6 +60,8 @@ pub struct Settings {
     pub indent_guides: bool,
     pub trim_trailing_whitespace: bool,
     pub insert_final_newline: bool,
+    /// Remove the blank lines at the end of a file when saving (`files.trimFinalNewlines`).
+    pub trim_final_newlines: bool,
     pub auto_save: AutoSave,
     /// Names/globs hidden in the tree and skipped by search and quick open.
     pub files_exclude: Vec<String>,
@@ -320,6 +322,7 @@ impl Default for Settings {
             indent_guides: true,
             trim_trailing_whitespace: false,
             insert_final_newline: false,
+            trim_final_newlines: false,
             auto_save: AutoSave::Off,
             files_exclude: vec![".git".into(), ".DS_Store".into()],
             search_max_results: 2000,
@@ -666,6 +669,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.bool("files.trimTrailingWhitespace") {
         s.trim_trailing_whitespace = v;
+    }
+    if let Some(v) = r.bool("files.trimFinalNewlines") {
+        s.trim_final_newlines = v;
     }
     if let Some(v) = r.bool("files.insertFinalNewline") {
         s.insert_final_newline = v;
@@ -1197,6 +1203,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "editor.indentGuides",
         "files.trimTrailingWhitespace",
         "files.insertFinalNewline",
+        "files.trimFinalNewlines",
         "files.autoSave",
         "files.autoSaveDelay",
         "files.exclude",

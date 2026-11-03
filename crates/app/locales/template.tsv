@@ -1867,6 +1867,7 @@ Remove Breakpoint
 Remove Expression	
 Remove Host…	
 Remove a host	
+Remove blank lines at the end of a file when saving	
 Remove control characters from pasted text	
 Remove folder from workspace	
 Remove from Favorites	

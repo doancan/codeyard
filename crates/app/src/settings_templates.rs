@@ -123,6 +123,7 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // "editor.codeActionsOnSave": { "source.organizeImports": "explicit", "source.fixAll": "explicit" },
   "files.trimTrailingWhitespace": false,
   "files.insertFinalNewline": false,
+  "files.trimFinalNewlines": false,
   // "off", "afterDelay", "onFocusChange"
   "files.autoSave": "off",
   "files.autoSaveDelay": 1000,

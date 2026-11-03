@@ -95,6 +95,7 @@ status bar reports it.
 | `files.fallbackEncoding` | `windows1254`, `iso88599`, `iso88591`, `utf8` | `windows1254` | Encoding for files that are not UTF-8 |
 | `files.hotExit` | `true` / `false` | `true` | Keep unsaved changes across restarts |
 | `files.insertFinalNewline` | `true` / `false` | `false` | End files with a newline when saving |
+| `files.trimFinalNewlines` | `true` / `false` | `false` | Remove blank lines at the end of a file when saving |
 | `files.trimTrailingWhitespace` | `true` / `false` | `false` | Remove trailing spaces when saving |
 
 ## `git`

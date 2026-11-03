@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stops trusting the open folder and lists every trusted folder to remove one (`security.workspaceTrust.startupPrompt`).
 - Terminal list: drag a row to a new place, or use **Terminal: Move Terminal Up / Down**; right-click a row for the terminal
   menu, which also has Split Terminal, Move Terminal into Editor Area and Configure Terminal Settings.
+- `files.trimFinalNewlines`: saving removes the blank lines at the end of a file (with `files.insertFinalNewline` it ends in
+  exactly one line ending); also per folder and in `.vscode/settings.json`.
+- Word part commands for `camelCase`, `PascalCase`, `snake_case`, `kebab-case` and `HTTPServer` names: Move, Select and
+  Delete Word Part Left / Right (`editor.cursorWordPartLeft` and the others; bind them in Keyboard Shortcuts).
 - Source Control keeps the row of the change you opened highlighted.
 - Background fetch also runs shortly after a folder opens and when the window comes back to the front, so commits pushed
   meanwhile show without clicking Sync.
