@@ -810,6 +810,8 @@ impl Workbench {
             buttons: model.buttons.iter().map(|b| b.label.to_string()).collect(),
             title: model.title.to_string(),
         });
+        // The folder's trust question is a dialog too, and modal in the same way.
+        let dialog = dialog.or_else(|| self.trust_dialog_snap(window));
 
         let find_bar = ed.and_then(|e| e.read(cx).find_bar());
         let find = find_bar.as_ref().map(|b| {
@@ -1072,6 +1074,10 @@ impl Workbench {
             (Action::Focus | Action::Click, id) if id.0 >= UPDATE_BUTTON && id.0 < UPDATE_BUTTON + BLOCK => {
                 let (Some(snap), Some(index)) = (&last.dialog, id.0.checked_sub(UPDATE_BUTTON).map(|i| i as usize)) else { return };
                 // The tree may be a quarter of a second old: act only if that button is still there under the same name.
+                if self.cfg.trust_ask.dialog.is_some() {
+                    self.press_trust_button(index, snap.buttons.get(index).map(String::as_str), req.action == Action::Click, window, cx);
+                    return;
+                }
                 let Some(model) = self.dialog_model(cx) else { return };
                 let Some(button) = model.buttons.get(index).filter(|b| snap.buttons.get(index).is_some_and(|l| *l == b.label.as_ref())) else { return };
                 match req.action {

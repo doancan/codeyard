@@ -177,19 +177,3 @@ fn cancel_gives_the_keyboard_back_to_what_had_it(cx: &mut gpui::TestAppContext) 
         wb.update_in(cx, |_, window, _| window.focus(&editor));
     }
 }
-
-#[test]
-fn the_folder_trust_question_never_trusts_on_return_or_escape() {
-    let q = trust_on_open(None, "app", Some("/work"));
-    check(
-        &q,
-        PromptLevel::Warning,
-        "Do you trust the authors of this folder?",
-        &["Don't Trust", "Trust Folder", "Trust Parent Folder “work” and Subfolders"],
-        0,
-        None,
-    );
-    let alone = trust_on_open(None, "app", None);
-    assert_eq!(alone.buttons, ["Don't Trust", "Trust Folder"], "no parent, no parent button");
-    assert_eq!(trust_on_open(Some("a.code-workspace"), "app", None).buttons[1], "Trust Workspace");
-}

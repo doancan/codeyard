@@ -2860,6 +2860,16 @@ fn restricted(wb: &Entity<Workbench>, cx: &mut VisualTestContext) -> bool {
     wb.read_with(cx, |wb, cx| wb.restricted_for_test(cx))
 }
 
+fn asking(wb: &Entity<Workbench>, cx: &mut VisualTestContext) -> bool {
+    wb.read_with(cx, |wb, _| wb.trust_dialog_for_test().is_some())
+}
+
+/// Presses the button of the folder's question that is labelled `label`.
+fn answer(wb: &Entity<Workbench>, cx: &mut VisualTestContext, label: &str) {
+    wb.update_in(cx, |wb, window, cx| wb.press_trust_for_test(label, window, cx));
+    cx.run_until_parked();
+}
+
 /// An untrusted folder asks when it opens; the buttons trust the folder, trust it with its subfolders, or leave Restricted
 /// Mode on, and "once" does not ask again for a folder that was answered.
 #[gpui::test]
@@ -2873,27 +2883,27 @@ fn an_untrusted_folder_asks_when_it_opens(cx: &mut TestAppContext) {
 
     open(&wb, &a, cx);
     cx.run_until_parked();
-    assert!(cx.has_pending_prompt(), "the folder asks when it opens");
-    cx.simulate_prompt_answer("Don't Trust");
+    assert!(asking(&wb, cx), "the folder asks when it opens");
+    answer(&wb, cx, "Don't Trust");
     cx.run_until_parked();
     assert!(restricted(&wb, cx), "Restricted Mode stays on");
 
     open(&wb, &b, cx);
     cx.run_until_parked();
-    assert!(cx.has_pending_prompt());
-    cx.simulate_prompt_answer("Don't Trust");
+    assert!(asking(&wb, cx));
+    answer(&wb, cx, "Don't Trust");
     cx.run_until_parked();
     open(&wb, &a, cx);
     cx.run_until_parked();
-    assert!(!cx.has_pending_prompt(), "startupPrompt once: an answered folder is not asked again");
+    assert!(!asking(&wb, cx), "startupPrompt once: an answered folder is not asked again");
     assert!(restricted(&wb, cx));
 
     // Parent and subfolders: the earlier folders are trusted without a question of their own.
     open(&wb, &c, cx);
     cx.run_until_parked();
-    assert!(cx.has_pending_prompt());
+    assert!(asking(&wb, cx));
     let parent_name = parent.file_name().unwrap().to_string_lossy().into_owned();
-    cx.simulate_prompt_answer(&format!("Trust Parent Folder “{parent_name}” and Subfolders"));
+    answer(&wb, cx, &format!("Trust Parent Folder “{parent_name}” and Subfolders"));
     cx.run_until_parked();
     assert!(!restricted(&wb, cx));
     open(&wb, &a, cx);
@@ -2908,7 +2918,7 @@ fn trust_can_be_removed_again(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-trust-forget-project");
     open(&wb, &dir, cx);
     cx.run_until_parked();
-    cx.simulate_prompt_answer("Trust Folder");
+    answer(&wb, cx, "Trust Folder");
     cx.run_until_parked();
     assert!(!restricted(&wb, cx));
     run(&wb, cx, "Workspace: Manage Workspace Trust…");
@@ -2917,6 +2927,49 @@ fn trust_can_be_removed_again(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(restricted(&wb, cx), "the folder is back in Restricted Mode");
     assert!(notice(&wb, cx).contains("No longer trusting"), "{}", notice(&wb, cx));
+}
+
+/// The question is a card of its own: it names the buttons, starts the keyboard on "Don't Trust" so that Return and Escape trust
+/// nothing, and a screen reader sees it as a dialog whose buttons it can press.
+#[gpui::test]
+fn the_trust_question_starts_on_dont_trust_and_escape_trusts_nothing(cx: &mut TestAppContext) {
+    let (wb, cx) = setup_asking(cx, "qa-trust-card");
+    let parent = qa_dir("qa-trust-card-parent");
+    let (a, b) = (parent.join("a"), parent.join("b"));
+    for d in [&a, &b] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    open(&wb, &a, cx);
+    cx.run_until_parked();
+    let parent_name = parent.file_name().unwrap().to_string_lossy().into_owned();
+    let labels = wb.read_with(cx, |wb, _| wb.trust_dialog_for_test()).expect("the folder asks");
+    assert_eq!(labels, ["Don't Trust", "Trust Folder", &format!("Trust Parent Folder “{parent_name}” and Subfolders")]);
+    let snap = cx.update(|window, cx| wb.read(cx).trust_dialog_snap_for_test(window));
+    assert_eq!(snap.as_ref().map(|s| s.title.as_str()), Some("Do you trust the authors of this folder?"));
+    assert_eq!(snap.and_then(|s| s.focused), Some(0), "the keyboard starts on Don't Trust");
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    assert!(!asking(&wb, cx), "Escape closes the card");
+    assert!(restricted(&wb, cx), "and trusts nothing");
+
+    open(&wb, &b, cx);
+    cx.run_until_parked();
+    assert!(asking(&wb, cx));
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    assert!(!asking(&wb, cx), "Return answers the button the keyboard is on");
+    assert!(restricted(&wb, cx), "Don't Trust: Return trusts nothing");
+
+    // Trusting takes a Tab (to the first choice) and Return, or a click.
+    open(&wb, &parent.join("c"), cx);
+    std::fs::create_dir_all(parent.join("c")).unwrap();
+    open(&wb, &parent.join("c"), cx);
+    cx.run_until_parked();
+    assert!(asking(&wb, cx));
+    cx.simulate_keystrokes("tab enter");
+    cx.run_until_parked();
+    assert!(!asking(&wb, cx));
+    assert!(!restricted(&wb, cx), "Tab then Return trusts the folder");
 }
 
 /// Compare Selection with Clipboard: nothing selected says so; with a selection the diff is titled with the file.

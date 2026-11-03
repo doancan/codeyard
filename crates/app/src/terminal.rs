@@ -372,6 +372,18 @@ impl TerminalView {
         self.forget_find_match();
     }
 
+    /// A program that began a synchronized update (`CSI ? 2026 h`) and never ended it must not freeze the screen: the parser
+    /// holds the bytes back until the end comes, and only the caller can say that the time is up. Applies what was held once
+    /// it is; otherwise returns how long until then (`None`: no update pending).
+    pub(super) fn release_expired_sync(&mut self) -> Option<std::time::Duration> {
+        let deadline = self.parser.sync_timeout().sync_timeout()?;
+        let left = deadline.checked_duration_since(std::time::Instant::now());
+        if left.is_none() {
+            self.parser.stop_sync(&mut self.term);
+        }
+        left
+    }
+
     /// A title from the program: nothing happens when it is the same, and the window is told at most every `TITLE_EVERY`
     /// (the first change at once, a quicker one after the pause).
     fn set_title(&mut self, title: SharedString, cx: &mut Context<Self>) {
@@ -1157,7 +1169,9 @@ impl Element for TerminalElement {
             cell_w,
             line_h,
         };
-        // A run is as long as a row at most: its text gets that room at once instead of growing a character at a time.
+        // A run starts with room for a typical stretch of text (never more than the rest of its row), not for a whole row:
+        // a full-screen program's frame has dozens of short runs per row.
+        const RUN_ROOM: usize = 48;
         let cols_hint = cols;
         for cell in content.display_iter {
             let row = (cell.point.line.0 + offset) as usize;
@@ -1202,7 +1216,7 @@ impl Element for TerminalElement {
                     r.end += 1;
                 }
                 None => {
-                    let mut text = String::with_capacity(cols_hint);
+                    let mut text = String::with_capacity(cols_hint.saturating_sub(col).min(RUN_ROOM));
                     text.push(ch);
                     runs.push(Run { col, end: col + 1, text, fg, bold, italic, underline });
                 }

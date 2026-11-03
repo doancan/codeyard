@@ -9,7 +9,8 @@ impl Workbench {
         self.open_path(path, window, cx);
         // After the open: moving to the file's folder starts the window's tabs over, and with them any wish kept in them.
         if let Some((line, col)) = at.filter(|_| abs.is_file()) {
-            self.tabs.pending_reveal = Some((ui::local_path(&abs), line as u32, col.saturating_sub(1) as u32, 0));
+            self.tabs.pending_reveal =
+                Some((ui::local_path(&abs), u32::try_from(line).unwrap_or(u32::MAX), u32::try_from(col.saturating_sub(1)).unwrap_or(u32::MAX), 0));
         }
     }
 }

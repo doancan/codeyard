@@ -1490,11 +1490,9 @@ Reconnected, but the server session had expired: terminals were closed.	Yeniden 
 Lost the connection to {}: {}. Your open files stay here and unsaved changes are kept, but they cannot be saved until you reconnect (File: Save a Copy to This Computer… keeps one locally).	{0} sunucusuyla bağlantı koptu: {1}. Açık dosyalarınız burada kalır ve kaydedilmemiş değişiklikler korunur, ancak yeniden bağlanana kadar kaydedilemez (Dosya: Bu Bilgisayara Kopya Kaydet… bir kopyayı yerelde saklar).
 Lost the connection to {}: {}. Your open files stay here.	{0} sunucusuyla bağlantı koptu: {1}. Açık dosyalarınız burada kalır.
 Trusted “{}”	“{}” güvenilir olarak işaretlendi
-“{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	“{}” klasörü görevleri, hata ayıklama yapılandırmaları ve proje ayarları aracılığıyla program çalıştırabilir. Yalnızca bu klasörün nereden geldiğine güveniyorsanız devam edin.
 Do you trust the authors of this folder?	Bu klasörün yazarlarına güveniyor musunuz?
 Trust Folder and Continue	Klasöre Güven ve Devam Et
 Do you trust the authors of this workspace?	Bu çalışma alanının yazarlarına güveniyor musunuz?
-“{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	“{}” ve klasörleri, görevleri, hata ayıklama yapılandırmaları ve proje ayarları aracılığıyla program çalıştırabilir. Yalnızca bu çalışma alanının nereden geldiğine güveniyorsanız devam edin.
 Trust Workspace and Continue	Çalışma Alanına Güven ve Devam Et
 Open a folder first.	Önce bir klasör açın.
 Passphrase	Anahtar parolası
@@ -2204,7 +2202,7 @@ This pulls and pushes commits from and to “{}”.	Bu işlem “{}” deposunda
 This pulls commits from “{}”.	Bu işlem “{}” deposundan commit'leri Pull eder.
 This pushes commits to “{}”.	Bu işlem commit'leri “{}” deposuna Push eder.
 A sync is already running.	Bir eşitleme zaten çalışıyor.
-Fetching in the background: try again in a moment.	Arka planda Fetch ediliyor: birazdan tekrar deneyin.
+Fetching in the background: the sync starts when it is done.	Arka planda Fetch ediliyor: bitince senkronizasyon başlar.
 Pull has conflicts: resolve them in Source Control (or Git: Abort Merge)	Pull çakışmalarla durdu: Kaynak Denetimi'nde çözün (ya da Git: Birleştirmeyi İptal Et)
 Publish failed: {}	Yayımlama başarısız: {}
 Commit or stash your changes first	Önce değişikliklerinizi commit edin ya da Stash'e alın
@@ -3536,8 +3534,6 @@ Workspace Trust: select a trusted folder to stop trusting it	Çalışma Alanı G
 Workspace: Manage Workspace Trust…	Çalışma Alanı: Çalışma Alanı Güvenini Yönet…
 this folder only	yalnızca bu klasör
 with subfolders	alt klasörleriyle
-“{}” and its folders can run programs through their tasks, debug configurations and project settings. Without trust the window stays in Restricted Mode: those are switched off.	“{}” ve klasörleri görevleri, hata ayıklama yapılandırmaları ve proje ayarları üzerinden program çalıştırabilir. Güvenilmezse pencere Kısıtlı Mod’da kalır: bunlar kapalıdır.
-“{}” can run programs through its tasks, debug configurations and project settings. Without trust the window stays in Restricted Mode: those are switched off.	“{}” görevleri, hata ayıklama yapılandırmaları ve proje ayarları üzerinden program çalıştırabilir. Güvenilmezse pencere Kısıtlı Mod’da kalır: bunlar kapalıdır.
 Remove blank lines at the end of a file when saving	Kaydederken dosyanın sonundaki boş satırları sil
 File: Compare Selection with Clipboard	Dosya: Seçimi Panoyla Karşılaştır
 Select some text first.	Önce biraz metin seçin.
@@ -3577,3 +3573,15 @@ Report Issue…	Sorun Bildir…
 Line Numbers	Satır Numaraları
 Indent Guides	Girinti Kılavuzları
 When a file, diff or page opens while the panel is maximized: shrink the panel to half, give it back its size, or move the terminal into a tab	Panel büyütülmüşken bir dosya, fark ya da sayfa açılınca: paneli yarıya küçült, eski boyutunu ver ya da terminali bir sekmeye taşı
+Also every folder inside “{}”, now and later.	“{}” içindeki her klasör de: şimdiki ve sonradan eklenenler.
+Editing, search, Git and themes work as usual.	Düzenleme, arama, Git ve temalar her zamanki gibi çalışır.
+Esc keeps Restricted Mode. Change it later with Workspace: Manage Workspace Trust…	Esc, Kısıtlı Mod'u korur. Sonra Workspace: Manage Workspace Trust… ile değiştirebilirsiniz.
+Its tasks, language servers and settings run. Nothing outside the workspace's folders is trusted.	Görevleri, dil sunucuları ve ayarları çalışır. Çalışma alanının klasörleri dışındaki hiçbir şeye güvenilmez.
+Its tasks, language servers and settings run. Other folders keep asking.	Görevleri, dil sunucuları ve ayarları çalışır. Diğer klasörler sormaya devam eder.
+Language servers	Dil sunucuları
+Only trust folders from people you know: what you trust can run programs on the computer that holds it, with your rights.	Yalnızca tanıdığınız kişilerin klasörlerine güvenin: güvendiğiniz şey, bulunduğu bilgisayarda sizin haklarınızla program çalıştırabilir.
+Project settings that start programs	Program başlatan proje ayarları
+Restricted Mode keeps these off until you trust it:	Kısıtlı Mod, güvenene kadar bunları kapalı tutar:
+Tasks, tests and debugging	Görevler, testler ve hata ayıklama
+“{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	“{}” klasörü görevleri, hata ayıklama yapılandırmaları ve proje ayarları aracılığıyla program çalıştırabilir. Yalnızca bu klasörün nereden geldiğine güveniyorsanız devam edin.
+“{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	“{}” ve klasörleri, görevleri, hata ayıklama yapılandırmaları ve proje ayarları aracılığıyla program çalıştırabilir. Yalnızca bu çalışma alanının nereden geldiğine güveniyorsanız devam edin.

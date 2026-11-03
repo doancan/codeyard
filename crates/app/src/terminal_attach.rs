@@ -94,7 +94,27 @@ impl TerminalView {
             PtyEvent::Output(d) => gate.admit(d.len()),
             PtyEvent::Exit(_) => true,
         });
-        while let Some(first) = events.next().await {
+        // How long until a synchronized update that has not ended is applied anyway (`Terminal::release_expired_sync`).
+        let mut sync_left: Option<std::time::Duration> = None;
+        loop {
+            let first = match sync_left {
+                None => events.next().await,
+                Some(left) => match futures::future::select(events.next(), cx.background_executor().timer(left)).await {
+                    futures::future::Either::Left((ev, _)) => ev,
+                    futures::future::Either::Right(_) => {
+                        let Ok(rest) = this.update(cx, |t, cx| {
+                            let rest = t.release_expired_sync();
+                            cx.notify();
+                            rest
+                        }) else {
+                            return;
+                        };
+                        sync_left = rest;
+                        continue;
+                    }
+                },
+            };
+            let Some(first) = first else { break };
             let turn = std::time::Instant::now();
             // One turn takes what piled up, up to a byte budget: a flood is parsed in slices with the window drawn in between.
             let (mut batch, mut bytes) = (Vec::new(), 0usize);
@@ -113,7 +133,7 @@ impl TerminalView {
             let alive = this
                 .update(cx, |t, cx| {
                     // The output of the turn is parsed as one piece: the work around parsing (selection, marks, find) runs once.
-                    let mut output = Vec::new();
+                    let mut output = Vec::with_capacity(bytes);
                     for ev in batch {
                         match ev {
                             PtyEvent::Output(data) => {
@@ -133,7 +153,9 @@ impl TerminalView {
                     }
                     t.drain_events(cx);
                     cx.notify();
+                    t.release_expired_sync()
                 })
+                .map(|left| sync_left = left)
                 .is_ok();
             if !alive || exited {
                 return;

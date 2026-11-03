@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The question an untrusted folder asks is a card in the window: it says what Restricted Mode keeps off and what still works,
+  names the folder, and offers "Trust Folder" and "Trust Parent Folder and Subfolders" as rows that say what each one covers.
+  The keyboard starts on "Don't Trust", so Return and Escape still trust nothing; Tab walks the choices. Screen readers get it
+  as a modal dialog with pressable buttons.
+- A background fetch refreshes the Git status and graph only when a remote branch changed, which also saves memory.
+
+### Fixed
+
+- A terminal program that starts a synchronized update (`CSI ? 2026 h`) and never ends it no longer freezes the screen: what
+  it drew is shown after 150 ms.
+- A sync, or the push after a commit, asked for while a background fetch runs now starts when the fetch is done instead of
+  being dropped.
+- Word-part movement keeps digits with the capitals before them (`MD5|Hash`, `HTTP2|Server`).
+- Copy Changes as Patch ignores `diff.noprefix` and `diff.mnemonicPrefix`, so Apply Patch reads what it copied.
+- Workspace Trust: closing a folder and opening it again asks again (`startupPrompt` `always`); "Trust Parent Folder" never
+  offers a bare `\\server` of a network path.
+- `codeyard -g FILE:LINE` with a very large line number goes to the end instead of wrapping around.
+- Imported VS Code keybindings for `cursorWordPart…` and `deleteWordPart…` work.
+- The terminal draws full-screen programs with less memory churn.
+
 ## [0.7.3] - 2026-11-03
 
 ### Added
