@@ -363,6 +363,12 @@ fn bind_keys(cx: &mut App) {
         // The update dialog: Esc closes it, Tab walks its buttons, Enter and Space press the focused one (Enter: the primary one).
         KeyBinding::new("escape", UpdateDismiss, Some("UpdateDialog")),
         KeyBinding::new("escape", CancelExtensionConsent, Some("ExtensionConsent")),
+        // The folder's trust question: Esc answers "Don't Trust".
+        KeyBinding::new("escape", TrustDialogDismiss, Some("TrustDialog")),
+        KeyBinding::new("enter", TrustDialogConfirm, Some("TrustDialog")),
+        KeyBinding::new("space", TrustDialogConfirm, Some("TrustDialog")),
+        KeyBinding::new("tab", TrustDialogNext, Some("TrustDialog")),
+        KeyBinding::new("shift-tab", TrustDialogPrev, Some("TrustDialog")),
         KeyBinding::new("up", MarketPrevious, Some("MarketSearch")),
         KeyBinding::new("down", MarketNext, Some("MarketSearch")),
         KeyBinding::new("cmd-w", UpdateDismiss, Some("UpdateDialog")),

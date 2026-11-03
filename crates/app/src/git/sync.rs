@@ -205,12 +205,20 @@ pub fn sync(host: &dyn Host, root: &str, op: &SyncOp, opts: SyncOptions) -> Resu
     }
 }
 
-/// Fetch for `git.autofetch`: nothing to do (and no error) in a repository without a remote.
-pub fn autofetch(host: &dyn Host, root: &str, opts: SyncOptions) -> Result<(), String> {
+/// Fetch for `git.autofetch`: nothing to do (and no error) in a repository without a remote. `Ok(true)`: the fetch changed a
+/// remote branch, so what the window shows (ahead, behind, the graph) is out of date; `Ok(false)`: nothing new came.
+pub fn autofetch(host: &dyn Host, root: &str, opts: SyncOptions) -> Result<bool, String> {
     if remotes(host, root)?.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
-    fetch(host, root, false, opts.prune)
+    let before = remote_branches(host, root);
+    fetch(host, root, false, opts.prune)?;
+    Ok(before != remote_branches(host, root))
+}
+
+/// Every remote branch with the commit it points at: what a fetch can change.
+fn remote_branches(host: &dyn Host, root: &str) -> Result<String, String> {
+    git_ok(host, root, &["for-each-ref", "--format=%(objectname) %(refname)", "refs/remotes"])
 }
 
 #[cfg(test)]
@@ -407,11 +415,12 @@ mod tests {
     fn autofetch_is_quiet_without_a_remote_and_fetches_with_one() {
         let Some((dir, _)) = repo("sync-autofetch-none") else { return };
         let host = host::local();
-        assert_eq!(autofetch(&host, &dir.to_string_lossy(), SyncOptions::default()), Ok(()));
+        assert_eq!(autofetch(&host, &dir.to_string_lossy(), SyncOptions::default()), Ok(false));
         let _ = std::fs::remove_dir_all(&dir);
         let Some(r) = Remote::new("sync-autofetch") else { return };
         r.push_from_elsewhere("remote.txt", "remote\n");
-        assert_eq!(autofetch(&host, &r.root(), SyncOptions::default()), Ok(()));
+        assert_eq!(autofetch(&host, &r.root(), SyncOptions::default()), Ok(true), "a new commit on the remote is news");
+        assert_eq!(autofetch(&host, &r.root(), SyncOptions::default()), Ok(false), "a second fetch finds nothing new");
         assert_eq!((r.run)(&["rev-list", "--count", "HEAD..origin/main"]).unwrap().trim(), "1", "fetched, not merged");
         assert!(!r.dir.join("remote.txt").exists());
     }

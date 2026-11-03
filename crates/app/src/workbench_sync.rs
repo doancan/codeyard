@@ -341,9 +341,12 @@ impl Workbench {
                     return;
                 }
                 match result {
-                    Ok(()) => {
+                    Ok(changed) => {
                         this.vcs.sync.autofetch_error = None;
-                        this.refresh_git(0, cx);
+                        // Nothing new came: the status and the graph on screen are still right, so they are not read again.
+                        if changed {
+                            this.refresh_git(0, cx);
+                        }
                     }
                     Err(e) => {
                         this.vcs.sync.autofetch_error = Some(AutofetchError {

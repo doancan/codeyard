@@ -8,6 +8,18 @@ use super::*;
 
 gpui::actions!(workbench, [ManageWorkspaceTrust]);
 
+#[path = "workbench_trust_dialog.rs"]
+mod dialog;
+use dialog::{DONT_TRUST, TRUST, TRUST_PARENT, TrustDialog};
+pub use dialog::{TrustDialogConfirm, TrustDialogDismiss, TrustDialogNext, TrustDialogPrev};
+
+/// Where the opening question stands: the folder it was last considered for (once per folder change) and the card while it is open.
+#[derive(Default)]
+pub(super) struct TrustAsk {
+    pub(super) prompted: Option<String>,
+    pub(super) dialog: Option<TrustDialog>,
+}
+
 const RECORD_PREFIX: &str = "trust:";
 /// The record's value for a folder trusted together with everything below it.
 const TREE: &str = "tree";
@@ -192,46 +204,53 @@ impl Workbench {
     /// Called while rendering: it acts only when the folder changed since the last look, and never over another question.
     pub(super) fn ask_trust_on_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let root = self.root(cx);
-        if root == self.cfg.trust_prompted {
+        if root == self.cfg.trust_ask.prompted {
             return;
         }
         if root.is_none() {
             // A closed folder is forgotten, so opening it again in this window asks again.
-            self.cfg.trust_prompted = None;
+            self.cfg.trust_ask.prompted = None;
             return;
         }
         let Some(root) = root.filter(|_| self.overlay.is_none() && !self.persist.panel_restoring) else { return };
-        self.cfg.trust_prompted = Some(root.clone());
+        self.cfg.trust_ask.prompted = Some(root.clone());
         let mode = cx.global::<Settings>().workspace_trust_prompt.clone();
         let asked = format!("{ASKED_PREFIX}{}", self.trust_key(&root));
         let already = self.persist.state.as_ref().is_some_and(|s| s.get(&asked).is_some());
         if mode == "never" || self.is_trusted_root(&root, cx) || (mode == "once" && already) {
             return;
         }
-        let parent = parent_folder(&root);
         let (workspace, roots) = self.trust_scope(&root);
-        let question = crate::questions::trust_on_open(workspace.as_deref(), ui::file_name(&root), parent.as_deref());
-        let answer = question.ask(window, cx);
-        let name = workspace.unwrap_or_else(|| ui::file_name(&root).to_string());
-        cx.spawn_in(window, async move |this, cx| {
-            let answer = answer.await;
-            this.update_in(cx, |this, window, cx| {
-                if let Some(s) = &this.persist.state {
-                    let _ = s.set(&asked, "1");
+        let name = workspace.clone().unwrap_or_else(|| ui::file_name(&root).to_string());
+        let focus = [cx.focus_handle(), cx.focus_handle(), cx.focus_handle()];
+        // The keyboard starts on "Don't Trust": Return and Escape trust nothing.
+        let back = window.focused(cx);
+        window.focus(&focus[DONT_TRUST]);
+        self.cfg.trust_ask.dialog = Some(TrustDialog { parent: parent_folder(&root), folder: root, workspace, roots, name, asked, focus, back });
+        cx.notify();
+    }
+
+    /// An answer of the opening question (`DONT_TRUST`, `TRUST` or `TRUST_PARENT`): the card closes, the folder is remembered as
+    /// asked, and the keyboard goes back to what had it.
+    pub(super) fn answer_trust(&mut self, answer: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(d) = self.cfg.trust_ask.dialog.take() else { return };
+        if let Some(s) = &self.persist.state {
+            let _ = s.set(&d.asked, "1");
+        }
+        match answer {
+            TRUST => self.trust_roots(&d.roots, &d.name, window, cx),
+            TRUST_PARENT => {
+                if let Some(parent) = &d.parent {
+                    self.trust_with_subfolders(parent, window, cx);
                 }
-                match answer {
-                    Some(1) => this.trust_roots(&roots, &name, window, cx),
-                    Some(2) => {
-                        if let Some(parent) = &parent {
-                            this.trust_with_subfolders(parent, window, cx);
-                        }
-                    }
-                    _ => {}
-                }
-            })
-            .ok();
-        })
-        .detach();
+            }
+            _ => {}
+        }
+        match d.back {
+            Some(handle) => window.focus(&handle),
+            None => window.focus(&self.focus_handle),
+        }
+        cx.notify();
     }
 }
 
