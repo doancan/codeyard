@@ -539,6 +539,10 @@ rule existed are trusted once. Trusting is remembered per folder (per host over 
 whole: the question becomes "Do you trust the authors of this workspace?" and names the file, and the answer (or
 `Workspace: Trust This Folder`) trusts the file's own folder and every folder it lists in one step. A folder the
 workspace does not list is still asked about on its own, and over SSH the trust only holds on that host.
+A folder you open untrusted asks once whether to trust it (**Trust Folder**, **Trust Parent Folder and Subfolders**, or
+**No, I Don't Trust Them**; `security.workspaceTrust.startupPrompt` can make it ask every time or never), and until you do
+the status bar shows **Restricted Mode**. Click it, or run `Workspace: Manage Workspace Trust…`, to trust the folder or its
+parent, to stop trusting the open folder, or to remove any trusted folder from the list.
 `security.workspaceTrust.enabled: false`
 in your own `settings.jsonc` turns the check off; a project file can never change that key.
 
@@ -1029,8 +1033,8 @@ first), `"git.rebaseWhenSync"` (pull with rebase), `"git.pruneOnFetch"` (default
 (default true), `"git.fetchOnPull"` (fetch every remote before pulling), `"git.postCommitCommand"`
 (`none`, `push` or `sync` after each commit), `"git.enableSmartCommit"` (default true: with nothing
 staged the commit button commits all tracked changes; off, it asks you to stage first) and
-`"git.autofetch"` with `"git.autofetchPeriod"` (on by default; fetches in the background every 180 s
-or more while the window is in front, never in a folder you have not trusted, and a failure only
+`"git.autofetch"` with `"git.autofetchPeriod"` (on by default; fetches in the background shortly after a
+folder opens, whenever the window comes back to the front, and then every 180 s or more while it is in front, never in a folder you have not trusted, and a failure only
 shows in the sync item's tooltip). `git.confirmSync` and `git.postCommitCommand` are read from your
 own settings only: a repository cannot turn the question on or off or make your commits push by themselves.
 

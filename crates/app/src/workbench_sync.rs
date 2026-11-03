@@ -32,6 +32,8 @@ struct AutofetchError {
 
 /// How often the background fetch looks at the clock; the period itself comes from `git.autofetchPeriod`.
 const AUTOFETCH_TICK: std::time::Duration = std::time::Duration::from_secs(5);
+/// A count of seconds that is past any period: the next tick fetches.
+const DUE: u64 = 1 << 32;
 
 fn options(s: &Settings) -> SyncOptions {
     SyncOptions { rebase: s.git_rebase_when_sync, prune: s.git_prune_on_fetch, tags: s.git_pull_tags, fetch_on_pull: s.git_fetch_on_pull }
@@ -358,19 +360,27 @@ impl Workbench {
     /// Runs `autofetch_now` once the period has passed. Like `poll_git`, it only runs while the window is in front.
     pub(super) fn poll_autofetch(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         cx.spawn_in(window, async move |this, cx| {
-            let mut waited = 0u64;
+            // Due from the start, and again whenever the window comes back to the front: the first look at a repository
+            // (or the return to it) shows what others pushed meanwhile, as VS Code does, instead of waiting a period.
+            let mut waited = DUE;
+            let mut was_active = false;
             loop {
                 cx.background_executor().timer(AUTOFETCH_TICK).await;
-                waited += AUTOFETCH_TICK.as_secs();
+                waited = waited.saturating_add(AUTOFETCH_TICK.as_secs());
                 let ok = this
                     .update_in(cx, |this, window, cx| {
                         let (on, period) = {
                             let s = cx.global::<Settings>();
                             (s.git_autofetch, u64::from(s.git_autofetch_period.max(30)))
                         };
+                        let active = window.is_window_active() || cfg!(test);
+                        if active && !was_active {
+                            waited = waited.max(DUE);
+                        }
+                        was_active = active;
                         // Off: start counting again from the moment it is turned on. Due but blocked (window in the
                         // background, a sync running): keep the count, so it fetches as soon as it can.
-                        if !on || (waited >= period && this.autofetch_now(window.is_window_active() || cfg!(test), cx)) {
+                        if !on || (waited >= period && this.autofetch_now(active, cx)) {
                             waited = 0;
                         }
                     })

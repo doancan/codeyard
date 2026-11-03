@@ -2841,3 +2841,80 @@ fn trust_gate_can_be_turned_off_by_the_user(cx: &mut TestAppContext) {
     assert!(!cx.has_pending_prompt());
     assert_eq!(wb.read_with(cx, |wb, _| wb.terminal_count()), 1);
 }
+
+/// A window with the gate on and the folder's question on, over a fresh state; `Some(parent)` is made first as a folder.
+fn setup_asking<'a>(cx: &'a mut TestAppContext, name: &str) -> (Entity<Workbench>, &'a mut VisualTestContext) {
+    let config = qa_dir(&format!("{name}-config"));
+    std::fs::write(config.join("settings.jsonc"), r#"{ "security.workspaceTrust.enabled": true, "security.workspaceTrust.startupPrompt": "once" }"#).unwrap();
+    cx.update(|cx| {
+        crate::bind_keys(cx);
+        cx.set_global(ActiveTheme(theme::DARK));
+        cx.set_global(Settings { workspace_trust: true, workspace_trust_prompt: "once".into(), ..Settings::default() });
+    });
+    let (wb, cx) = cx.add_window_view(move |window, cx| Workbench::with_state(state::State::in_memory().ok(), Some(config), window, cx));
+    wb.update_in(cx, |wb, window, cx| window.focus(&wb.focus_handle(cx)));
+    (wb, cx)
+}
+
+fn restricted(wb: &Entity<Workbench>, cx: &mut VisualTestContext) -> bool {
+    wb.read_with(cx, |wb, cx| wb.restricted_for_test(cx))
+}
+
+/// An untrusted folder asks when it opens; the buttons trust the folder, trust it with its subfolders, or leave Restricted
+/// Mode on, and "once" does not ask again for a folder that was answered.
+#[gpui::test]
+fn an_untrusted_folder_asks_when_it_opens(cx: &mut TestAppContext) {
+    let (wb, cx) = setup_asking(cx, "qa-trust-open");
+    let parent = qa_dir("qa-trust-open-parent");
+    let (a, b, c) = (parent.join("a"), parent.join("b"), parent.join("c"));
+    for d in [&a, &b, &c] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+
+    open(&wb, &a, cx);
+    cx.run_until_parked();
+    assert!(cx.has_pending_prompt(), "the folder asks when it opens");
+    cx.simulate_prompt_answer("No, I Don't Trust Them");
+    cx.run_until_parked();
+    assert!(restricted(&wb, cx), "Restricted Mode stays on");
+
+    open(&wb, &b, cx);
+    cx.run_until_parked();
+    assert!(cx.has_pending_prompt());
+    cx.simulate_prompt_answer("No, I Don't Trust Them");
+    cx.run_until_parked();
+    open(&wb, &a, cx);
+    cx.run_until_parked();
+    assert!(!cx.has_pending_prompt(), "startupPrompt once: an answered folder is not asked again");
+    assert!(restricted(&wb, cx));
+
+    // Parent and subfolders: the earlier folders are trusted without a question of their own.
+    open(&wb, &c, cx);
+    cx.run_until_parked();
+    assert!(cx.has_pending_prompt());
+    let parent_name = parent.file_name().unwrap().to_string_lossy().into_owned();
+    cx.simulate_prompt_answer(&format!("Trust Parent Folder “{parent_name}” and Subfolders"));
+    cx.run_until_parked();
+    assert!(!restricted(&wb, cx));
+    open(&wb, &a, cx);
+    cx.run_until_parked();
+    assert!(!restricted(&wb, cx), "a folder below the trusted parent is trusted");
+}
+
+/// Manage Workspace Trust removes a record: the folder goes back to Restricted Mode.
+#[gpui::test]
+fn trust_can_be_removed_again(cx: &mut TestAppContext) {
+    let (wb, cx) = setup_asking(cx, "qa-trust-forget");
+    let dir = qa_dir("qa-trust-forget-project");
+    open(&wb, &dir, cx);
+    cx.run_until_parked();
+    cx.simulate_prompt_answer("Trust Folder");
+    cx.run_until_parked();
+    assert!(!restricted(&wb, cx));
+    run(&wb, cx, "Workspace: Manage Workspace Trust…");
+    // The first row of a trusted folder is "Don't Trust This Folder".
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    assert!(restricted(&wb, cx), "the folder is back in Restricted Mode");
+    assert!(notice(&wb, cx).contains("No longer trusting"), "{}", notice(&wb, cx));
+}

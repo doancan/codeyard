@@ -54,6 +54,7 @@ impl Workbench {
         let detail_width = width - busy as f32 * 140.;
         let labels = width >= 1100.;
         let branch = self.vcs.branch.clone();
+        let restricted = self.restricted_root(cx).is_some();
         // Errors go in the card at bottom right (error_toast); only info here.
         let notice = match &self.notice {
             Some(Notice::Info(m)) => Some((m.clone(), p.text_muted)),
@@ -117,6 +118,24 @@ impl Workbench {
                     )
                     .on_click(cx.listener(|this, _, w, cx| this.show_remote(&ShowRemote, w, cx))),
             )
+            .when(restricted, |d| {
+                let tip = crate::i18n::t("Restricted Mode: tasks, debugging, and the project's terminal shell and language servers are switched off until you trust this folder. Click to manage trust.");
+                d.child(
+                    item()
+                        .id("sb-restricted")
+                        .flex_shrink()
+                        .cursor_pointer()
+                        .bg(c(p.warning))
+                        .text_color(c(p.on_accent))
+                        .child(icon("lock", SB_ICON, p.on_accent))
+                        .child(ctl("sb-restricted", format!("{}. {tip}", crate::i18n::t("Restricted Mode")), |this, w, cx| {
+                            this.manage_workspace_trust(&ManageWorkspaceTrust, w, cx)
+                        }))
+                        .when(width >= 640., |d| d.child(div().min_w_0().truncate().child(crate::i18n::t("Restricted Mode"))))
+                        .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.into())).into())
+                        .on_click(cx.listener(|this, _, w, cx| this.manage_workspace_trust(&ManageWorkspaceTrust, w, cx))),
+                )
+            })
             .when_some(branch, |d, b| {
                 let (ahead, behind) = self.git_status().map_or((0, 0), |s| (s.ahead, s.behind));
                 let sync = crate::git::counts_label(ahead, behind);

@@ -257,6 +257,7 @@ impl Workbench {
             Command::action("Editor: Add Cursor Below", editor::AddCursorBelow),
             Command::action("Editor: Add Next Occurrence to Selection", editor::SelectNextOccurrence),
             Command::action("Workspace: Trust This Folder", TrustWorkspace),
+            Command::action("Workspace: Manage Workspace Trust…", ManageWorkspaceTrust),
             Command::action("View: Toggle Sidebar", ToggleSidebar),
             Command::action("View: Files", ShowExplorer),
             Command::action("Remote: Connect to Host or Switch Workspace…", ShowRemote),
@@ -815,6 +816,15 @@ impl Workbench {
                 let cwd = self.active_root(cx);
                 self.new_terminal_launch(cwd, launch, window, cx);
             }
+            (OverlayKind::WorkspaceTrust { context, choices }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                if !context.matches(self, cx) {
+                    self.close_overlay(window, cx);
+                    return;
+                }
+                let choice = choices[*index].clone();
+                self.close_overlay(window, cx);
+                self.apply_trust_choice(choice, window, cx);
+            }
             (OverlayKind::TerminalDefaultProfile { context, names }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 if !context.matches(self, cx) {
                     self.close_overlay(window, cx);
@@ -1015,6 +1025,7 @@ impl Workbench {
                 | OverlayKind::LaunchTemplates(_)
                 | OverlayKind::TerminalLaunch { .. }
                 | OverlayKind::TerminalDefaultProfile { .. }
+                | OverlayKind::WorkspaceTrust { .. }
                 | OverlayKind::TerminalColor { .. }
                 | OverlayKind::RemoveFolder(_)
                 | OverlayKind::CompareFolder { .. }

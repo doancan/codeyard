@@ -162,6 +162,9 @@ pub struct Settings {
     /// Commands run from an untrusted folder (tasks, debugging, project-level
     /// `terminal.shell` / `lsp.servers`) ask for confirmation (`security.workspaceTrust.enabled`).
     pub workspace_trust: bool,
+    /// Ask about an untrusted folder when it opens: "once" (until answered), "always" or "never"
+    /// (`security.workspaceTrust.startupPrompt`).
+    pub workspace_trust_prompt: String,
     /// Open the diff view as a single column (inline).
     pub diff_inline: bool,
     /// Auto-close brackets and quotes.
@@ -371,6 +374,8 @@ impl Default for Settings {
             linked_editing: true,
             // Tests treat folders as trusted; those exercising the trust gate turn this on.
             workspace_trust: !cfg!(test),
+            // Like the gate itself, off in tests: the many tests that open folders would each be asked.
+            workspace_trust_prompt: if cfg!(test) { "never" } else { "once" }.into(),
             diff_inline: false,
             minimap: true,
             word_wrap: false,
@@ -534,6 +539,7 @@ pub const USER_ONLY_KEYS: &[&str] = &[
     "webPreview.reloadInterval",
     "webPreview.root",
     "security.workspaceTrust.enabled",
+    "security.workspaceTrust.startupPrompt",
     "http.confirmRequests",
     "ui.language",
     // The interface scale applies to every window, so a repository must not zoom the user's whole application.
@@ -780,6 +786,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.bool("security.workspaceTrust.enabled") {
         s.workspace_trust = v;
+    }
+    if let Some(v) = r.choice("security.workspaceTrust.startupPrompt", &["once", "always", "never"]) {
+        s.workspace_trust_prompt = v;
     }
     if let Some(v) = r.bool("editor.inlayHints.enabled") {
         s.inlay_hints = v;
@@ -1294,6 +1303,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "editor.formatters",
         "workbench.colorCustomizations",
         "security.workspaceTrust.enabled",
+        "security.workspaceTrust.startupPrompt",
         "explorer.confirmDelete",
         "explorer.confirmDragAndDrop",
         "workbench.tree.guides",

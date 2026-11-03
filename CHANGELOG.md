@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Workspace Trust, end to end: an untrusted folder asks when it opens (Trust Folder, Trust Parent Folder and Subfolders, or
+  No), the status bar shows **Restricted Mode** until it is trusted, and **Workspace: Manage Workspace Trust…** trusts or
+  stops trusting the open folder and lists every trusted folder to remove one (`security.workspaceTrust.startupPrompt`).
+- Terminal list: drag a row to a new place, or use **Terminal: Move Terminal Up / Down**; right-click a row for the terminal
+  menu, which also has Split Terminal, Move Terminal into Editor Area and Configure Terminal Settings.
+- Source Control keeps the row of the change you opened highlighted.
+- Background fetch also runs shortly after a folder opens and when the window comes back to the front, so commits pushed
+  meanwhile show without clicking Sync.
+
+### Changed
+
+- The terminal list shows a still dot for a running command instead of looping bars.
+
+### Fixed
+
+- A diff, Settings or any other page opened while the terminal was maximized stayed hidden behind it; the panel now goes back
+  to its size, as it already did for files.
+
 ## [0.7.2] - 2026-11-02
 
 ### Added

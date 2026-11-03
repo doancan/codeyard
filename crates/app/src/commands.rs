@@ -148,6 +148,7 @@ registry! {
     "workbench.findInFiles" => wb::FindInFiles,
     "workbench.toggleSidebar" => wb::ToggleSidebar,
     "workspace.trust" => wb::TrustWorkspace,
+    "workspace.manageTrust" => wb::ManageWorkspaceTrust,
     "workbench.showFiles" => wb::ShowExplorer,
     "remote.connectDevContainer" => wb::RemoteDocker,
     "docker.openProject" => wb::DockerOpenProject,

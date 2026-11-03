@@ -198,6 +198,9 @@ mod view_windows_glue;
 pub use term_daemon_glue::{enable_terminal_daemon, terminal_daemon_socket};
 #[path = "workbench_terminals.rs"]
 mod terminals_glue;
+#[path = "workbench_trust.rs"]
+mod trust_glue;
+pub use trust_glue::ManageWorkspaceTrust;
 #[cfg(test)]
 #[path = "workbench_testing.rs"]
 mod testing_glue;
@@ -1355,6 +1358,7 @@ impl Workbench {
                 theme_override: false,
                 project: Vec::new(),
                 trusted: Default::default(),
+                trust_prompted: None,
                 dirty: false,
                 folders: Default::default(),
                 folder_texts: Default::default(),

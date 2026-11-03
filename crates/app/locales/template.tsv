@@ -121,6 +121,7 @@ Ask before moving a file or folder by dragging it in the explorer
 Ask before moving a file to the Trash	
 Ask before pasting several lines into the terminal	
 Ask before running tasks, tests or the debugger of an untrusted folder	
+Ask whether to trust a folder when it opens: once, every time, or never	
 Asking the source control provider…	
 At most {} extra folders fit in one workspace.	
 Attach to a native process	
@@ -678,6 +679,7 @@ Docker: {}
 Docker: {}. Check Output and verify that the selected engine is running.	
 Docker: {}. Check Output. Dev Container creation requires the separately installed Dev Container CLI.	
 Don't Save	
+Don't Trust This Folder	
 Done	
 Download	
 Download Here	
@@ -1454,6 +1456,7 @@ No line comment syntax for this file type
 No lines match “{}”.	
 No log lines match the current filters.	
 No log output	
+No longer trusting “{}”	
 No macro at the cursor	
 No matches	
 No matches in this file any more.	
@@ -1500,6 +1503,7 @@ No tests found for this file type.
 No tests found. Tests are read from Rust, Go, Python and JavaScript test files.	
 No tests to run.	
 No timestamp	
+No trusted folders yet.	
 No type definition found	
 No unsaved changes: the file matches what is on disk.	
 No version of this extension can be installed: they were withdrawn or revoked.	
@@ -1508,6 +1512,7 @@ No view is in the secondary side bar. Use View: Move View to Secondary Side Bar.
 No workspace file is open.	
 No workspace file is open. Use File: Save Workspace As… to create one.	
 No worktrees found.	
+No, I Don't Trust Them	
 Node.js program	
 None	
 None in this session.	
@@ -1949,6 +1954,8 @@ Restore window
 Restored from the last session, only the first {} results were kept: they may be out of date. Rerun to refresh.	
 Restored from the last session: the results may be out of date. Rerun to refresh.	
 Restored {} file: {}|Restored {} files: {}	
+Restricted Mode	
+Restricted Mode: tasks, debugging, and the project's terminal shell and language servers are switched off until you trust this folder. Click to manage trust.	
 Result	
 Resume updates	
 Retry	
@@ -2498,7 +2505,12 @@ Too many files to preview ({}). Narrow the search.
 Track which remote branch?	
 Transfer cancelled.	
 Transfer failed: {}	
+Trust Folder	
 Trust Folder and Continue	
+Trust Parent Folder and Subfolders	
+Trust Parent Folder “{}” and Subfolders	
+Trust This Folder	
+Trust Workspace	
 Trust Workspace and Continue	
 Trust this host and connect	
 Trusted “{}”	
@@ -2683,10 +2695,15 @@ Without Full Disk Access, Desktop, Documents or external drives may look empty.
 Without one, F5 finds a configuration from the project (Cargo, Go, or the open Python or JavaScript file).	
 Word Wrap	
 Workbench	
+Workspace Trust is off (security.workspaceTrust.enabled).	
+Workspace Trust: Restricted Mode, this folder is not trusted	
+Workspace Trust: this folder is trusted	
+Workspace Trust: trusted folders	
 Workspace changed on disk. Reload before saving.	
 Workspace file could not be read: {}	
 Workspace folder is unavailable: {}	
 Workspace saved as {}	
+Workspace: Manage Workspace Trust…	
 Workspace: Trust This Folder	
 Workspace: {} folder in the Explorer.|Workspace: {} folders in the Explorer.	
 Worktree locked: {}	
@@ -3005,6 +3022,7 @@ theme {} isn't installed here: copy its .json into ~/.config/codeyard/themes to 
 theme “{}” not found (available: auto, {})	
 there is no built-in matcher called “{}”	
 this computer	
+this folder only	
 this value cannot be watched	
 this version was revoked	
 too many copies	
@@ -3039,6 +3057,7 @@ via the gh CLI
 via the public GitHub API (set GITHUB_TOKEN or use gh for private repositories and check results)	
 waiting for the connection	
 whole file	
+with subfolders	
 withdrawn	
 withdrawn by its publisher	
 workbench.colorCustomizations: unknown color role {0} (see crates/theme/design/tokens.json: {1})	
@@ -3307,6 +3326,7 @@ your words
 {}s	
 {}w	
 {}y	
+{}{} · select to stop trusting	
 “color” must be an object	
 “folders” must be a list	
 “localhost” means {0}: for a service on your own computer set http.runOn to {1}.	
@@ -3314,8 +3334,10 @@ your words
 “{0}” is not a valid regular expression ({1}). Escape special characters with a backslash.	
 “{}” already exists. Replace it?	
 “{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	
+“{}” and its folders can run programs through their tasks, debug configurations and project settings. Without trust the window stays in Restricted Mode: those are switched off.	
 “{}” asks for inputs, which a compound cannot ask for: start it on its own.	
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	
+“{}” can run programs through its tasks, debug configurations and project settings. Without trust the window stays in Restricted Mode: those are switched off.	
 “{}” can't be opened	
 “{}” cannot be used in a key binding	
 “{}” is a built-in shortcut; an extension cannot change it	

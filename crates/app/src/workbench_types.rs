@@ -67,6 +67,11 @@ pub(super) enum OverlayKind {
         context: InputContext,
         launches: Vec<crate::terminal::Launch>,
     },
+    /// "Workspace: Manage Workspace Trust…": what each row does.
+    WorkspaceTrust {
+        context: InputContext,
+        choices: Vec<super::trust_glue::TrustChoice>,
+    },
     /// "Terminal: Select Default Profile…": profile names.
     TerminalDefaultProfile {
         context: InputContext,

@@ -3517,3 +3517,25 @@ Move Terminal Down	Terminali Aşağı Taşı
 Move Terminal into Editor Area	Terminali Düzenleyici Alanına Taşı
 Terminal: Move Terminal Up	Terminal: Terminali Yukarı Taşı
 Terminal: Move Terminal Down	Terminal: Terminali Aşağı Taşı
+Ask whether to trust a folder when it opens: once, every time, or never	Bir klasör açıldığında güvenip güvenmediğini sor: bir kez, her seferinde ya da hiç
+Don't Trust This Folder	Bu Klasöre Güvenme
+No longer trusting “{}”	“{}” artık güvenilmiyor
+No trusted folders yet.	Henüz güvenilen klasör yok.
+No, I Don't Trust Them	Hayır, Güvenmiyorum
+Restricted Mode	Kısıtlı Mod
+Restricted Mode: tasks, debugging, and the project's terminal shell and language servers are switched off until you trust this folder. Click to manage trust.	Kısıtlı Mod: bu klasöre güvenene kadar görevler, hata ayıklama ve projenin terminal kabuğu ile dil sunucuları kapalıdır. Güveni yönetmek için tıklayın.
+Trust Folder	Klasöre Güven
+Trust Parent Folder and Subfolders	Üst Klasöre ve Alt Klasörlerine Güven
+Trust Parent Folder “{}” and Subfolders	Üst Klasöre “{}” ve Alt Klasörlerine Güven
+Trust This Folder	Bu Klasöre Güven
+Trust Workspace	Çalışma Alanına Güven
+Workspace Trust is off (security.workspaceTrust.enabled).	Çalışma Alanı Güveni kapalı (security.workspaceTrust.enabled).
+Workspace Trust: Restricted Mode, this folder is not trusted	Çalışma Alanı Güveni: Kısıtlı Mod, bu klasöre güvenilmiyor
+Workspace Trust: this folder is trusted	Çalışma Alanı Güveni: bu klasöre güveniliyor
+Workspace Trust: trusted folders	Çalışma Alanı Güveni: güvenilen klasörler
+Workspace: Manage Workspace Trust…	Çalışma Alanı: Çalışma Alanı Güvenini Yönet…
+this folder only	yalnızca bu klasör
+with subfolders	alt klasörleriyle
+{}{} · select to stop trusting	{}{} · güvenmeyi bırakmak için seçin
+“{}” and its folders can run programs through their tasks, debug configurations and project settings. Without trust the window stays in Restricted Mode: those are switched off.	“{}” ve klasörleri görevleri, hata ayıklama yapılandırmaları ve proje ayarları üzerinden program çalıştırabilir. Güvenilmezse pencere Kısıtlı Mod’da kalır: bunlar kapalıdır.
+“{}” can run programs through its tasks, debug configurations and project settings. Without trust the window stays in Restricted Mode: those are switched off.	“{}” görevleri, hata ayıklama yapılandırmaları ve proje ayarları üzerinden program çalıştırabilir. Güvenilmezse pencere Kısıtlı Mod’da kalır: bunlar kapalıdır.

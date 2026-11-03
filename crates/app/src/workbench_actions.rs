@@ -46,6 +46,7 @@ impl Workbench {
             .on_action(cx.listener(|this, _: &ClearSavedTerminalHistory, _, cx| this.clear_saved_terminal_history(cx)))
             .on_action(cx.listener(Self::kill_all_terminals))
             .on_action(cx.listener(Self::kill_other_terminals))
+            .on_action(cx.listener(Self::manage_workspace_trust))
             .on_action(cx.listener(Self::focus_next_terminal))
             .on_action(cx.listener(Self::focus_previous_terminal))
             .on_action(cx.listener(Self::move_terminal_up))

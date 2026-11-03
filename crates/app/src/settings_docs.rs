@@ -105,7 +105,7 @@ fn default_text(key: &str) -> String {
     }
     // Tests run with the trust check and language servers off and the language forced to `en`; the shipped defaults are
     // on and `auto`.
-    let s = Settings { workspace_trust: true, lsp_enabled: true, ui_language: "auto".into(), ..Settings::default() };
+    let s = Settings { workspace_trust: true, workspace_trust_prompt: "once".into(), lsp_enabled: true, ui_language: "auto".into(), ..Settings::default() };
     match current(&s, key) {
         serde_json::Value::Null => "detected".into(),
         serde_json::Value::String(t) if t.is_empty() => "empty".into(),

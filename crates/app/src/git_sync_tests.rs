@@ -307,6 +307,9 @@ fn background_fetch_waits_for_its_period_and_for_a_front_trusted_idle_window(cx:
     let f = Fixture::new("sync-autofetch");
     let on = Settings { git_autofetch: true, git_autofetch_period: 60, ..quiet() };
     let (wb, cx) = opened(cx, &f, on.clone());
+    // The first look at the repository fetches at once; after that the period applies.
+    tick(cx, 10);
+    wait_ticking(cx, "the first fetch", |cx| !wb.read_with(cx, |wb, _| wb.sync_running_for_test()));
     f.push_elsewhere("r.txt", "r\n");
     // Not yet due.
     tick(cx, 30);

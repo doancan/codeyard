@@ -228,6 +228,11 @@ pub const CATALOG: &[Entry] = &[
     e("emmet.triggerExpansionOnTab", crate::i18n::tr("Expand Emmet abbreviations (div.box>ul>li*3) with Tab"), Kind::Bool),
     e("diffEditor.renderSideBySide", crate::i18n::tr("Diff view side by side (off: inline)"), Kind::Bool),
     e("security.workspaceTrust.enabled", crate::i18n::tr("Ask before running tasks, tests or the debugger of an untrusted folder"), Kind::Bool),
+    e(
+        "security.workspaceTrust.startupPrompt",
+        crate::i18n::tr("Ask whether to trust a folder when it opens: once, every time, or never"),
+        Kind::Choice(&["once", "always", "never"]),
+    ),
     e("modules.containers.enabled", crate::i18n::tr("Enable container environments (user settings only; disconnect containers before disabling)"), Kind::Bool),
     e(
         "modules.webPreview.enabled",
@@ -270,6 +275,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "editor.inlayHints.enabled" => json!(s.inlay_hints),
         "editor.linkedEditing" => json!(s.linked_editing),
         "security.workspaceTrust.enabled" => json!(s.workspace_trust),
+        "security.workspaceTrust.startupPrompt" => json!(s.workspace_trust_prompt),
         "modules.containers.enabled" => json!(s.docker_enabled),
         "modules.webPreview.enabled" => json!(s.web_preview_enabled),
         "webPreview.port" => json!(s.web_preview.port),

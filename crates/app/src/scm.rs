@@ -125,6 +125,8 @@ pub struct ScmPanel {
     a11y_frames: crate::painted::RowBounds<AccessFrame>,
     host: Arc<dyn Host>,
     status: Option<Arc<Status>>,
+    /// The change last clicked open (path, staged): its row stays highlighted so the opened diff can be told apart.
+    opened: Option<(String, bool)>,
     message: Entity<TextField>,
     /// Worktrees with an operation running: one at a time per repository, repositories run independently.
     busy: HashSet<String>,
@@ -277,6 +279,7 @@ impl ScmPanel {
             syncing: false,
             has_remote: false,
             menu_open: false,
+            opened: None,
             ext: Default::default(),
             _subs: subs,
         }
@@ -287,6 +290,12 @@ impl ScmPanel {
         let new_root = status.as_ref().map(|s| s.root.clone());
         if !Arc::ptr_eq(&self.host, &host) || old_root != new_root {
             self.worktrees.reset();
+        }
+        // A file that is no longer changed has nothing open to point at.
+        if let Some((path, _)) = &self.opened
+            && !status.as_ref().is_some_and(|s| s.changes.iter().any(|c| &c.path == path))
+        {
+            self.opened = None;
         }
         let host_changed = !Arc::ptr_eq(&self.host, &host);
         if host_changed {
@@ -551,6 +560,7 @@ impl ScmPanel {
             .overflow_hidden()
             .cursor_pointer()
             .hover(|d| d.bg(c(p.surface_hover)))
+            .when(self.opened.as_ref().is_some_and(|(open, open_staged)| *open == change.path && *open_staged == staged), |d| d.bg(c(p.surface_active)))
             .child(crate::icon_theme::file_icon_el(&name, layout::ICON, &p))
             .child(div().flex_shrink().min_w_0().overflow_hidden().text_color(c(mark.color(&p))).when(mark == Mark::Deleted, |d| d.line_through()).child(name))
             .child(div().flex_1().min_w_0().overflow_hidden().text_size(px(text::XS.0)).text_color(c(p.text_muted)).children(dir))
@@ -562,9 +572,13 @@ impl ScmPanel {
                     move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.clone().into())).into()
                 })
             })
-            .on_click(cx.listener(move |_, _, _, cx| match repo {
-                Some(repo) => cx.emit(ScmEvent::OpenRepoDiff { repo, path: path.clone(), staged }),
-                None => cx.emit(ScmEvent::OpenDiff { path: path.clone(), staged }),
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.opened = Some((path.clone(), staged));
+                cx.notify();
+                match repo {
+                    Some(repo) => cx.emit(ScmEvent::OpenRepoDiff { repo, path: path.clone(), staged }),
+                    None => cx.emit(ScmEvent::OpenDiff { path: path.clone(), staged }),
+                }
             }))
             .on_mouse_down(
                 MouseButton::Right,

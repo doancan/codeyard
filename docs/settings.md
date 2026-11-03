@@ -173,6 +173,7 @@ status bar reports it.
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
 | `security.workspaceTrust.enabled` | `true` / `false` | `true` | Ask before running tasks, tests or the debugger of an untrusted folder |
+| `security.workspaceTrust.startupPrompt` | `once`, `always`, `never` | `once` | Ask whether to trust a folder when it opens: once, every time, or never |
 
 ## `spelling`
 
