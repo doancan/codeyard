@@ -205,6 +205,7 @@ impl Render for Workbench {
         let all = open_all_windows(cx);
         crate::a11y_controls::Controls::retain(cx, &all);
         self.step_panel_anim(window);
+        self.ask_trust_on_open(window, cx);
         // The repository search waits until Source Control is on screen (connecting opens a home folder: no scan unasked).
         if self.view_shown(Panel::Scm) {
             self.discover_if_pending(cx);

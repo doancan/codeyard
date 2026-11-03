@@ -144,8 +144,17 @@ impl EditorView {
         self.buffer.selections()
     }
 
-    /// QA: the selected text of each cursor (empty selection = empty string).
-    #[cfg(test)]
+    /// The first and last line (1-based) of the selection, or of the cursor's line when nothing is selected.
+    pub fn selected_lines(&self) -> (usize, usize) {
+        let Some(range) = self.buffer.selection() else {
+            let line = self.buffer.cursor_line_col().0 + 1;
+            return (line, line);
+        };
+        // The line ending of the last selected line belongs to that line, so a selection ending at a line's start stops above.
+        (self.buffer.char_to_line(range.start) + 1, self.buffer.char_to_line(range.end.saturating_sub(1).max(range.start)) + 1)
+    }
+
+    /// The selected text of each cursor (an empty selection is an empty string).
     pub fn selected_text_all(&self) -> Vec<String> {
         self.buffer.selected_texts()
     }
@@ -430,6 +439,7 @@ impl EditorView {
         }
         let s = cx.global::<Settings>();
         let ec = s.editorconfig;
+        let trim_end = self.scoped(|f| f.trim_final_newlines, s.trim_final_newlines);
         let (trim, final_nl) = (
             ec.then_some(self.rules.trim_trailing_whitespace).flatten().unwrap_or(self.scoped(|f| f.trim_trailing_whitespace, s.trim_trailing_whitespace)),
             ec.then_some(self.rules.insert_final_newline).flatten().unwrap_or(self.scoped(|f| f.insert_final_newline, s.insert_final_newline)),
@@ -442,10 +452,14 @@ impl EditorView {
         if trim {
             self.buffer.trim_trailing_whitespace();
         }
+        // Blank lines go first: with both settings the file then ends in exactly one line ending.
+        if trim_end {
+            self.buffer.trim_final_newlines();
+        }
         if final_nl {
             self.buffer.ensure_final_newline();
         }
-        if trim || final_nl {
+        if trim || final_nl || trim_end {
             self.sync_syntax(cx);
         }
         let data = match self.encoded() {

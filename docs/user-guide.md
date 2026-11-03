@@ -37,6 +37,11 @@ is the complete list and always matches your key bindings; every setting is in [
 
 ## Keys
 
+The commands below have no key until you give them one in Keyboard Shortcuts: **Move / Select / Delete Word Part Left /
+Right** (`editor.cursorWordPartLeft` and the others) stop inside `camelCase`, `snake_case`, `kebab-case` and `HTTPServer`
+names; **File: Compare Selection with Clipboard**; and the View toggles **Breadcrumbs**, **Line Numbers**, **Indent
+Guides**, **Inlay Hints** and **File: Toggle Auto Save**, which change the running session and leave `settings.jsonc` alone.
+
 | | macOS | Linux / Windows |
 | --- | --- | --- |
 | Go to file | ⌘P | Ctrl+P |
@@ -424,7 +429,8 @@ suggested (nearby words first); `"editor.wordBasedSuggestions": false` turns thi
   gone you land on the Welcome screen with a note.
 - `"blank"`: an empty window with just the logo.
 
-A folder or file given on the command line always opens, whatever the setting. An empty editor
+A folder or file given on the command line always opens, whatever the setting. `codeyard -g src/main.rs:42:7` (or
+`--goto`) opens the file with the cursor at line 42, column 7; the column is optional. An empty editor
 shows the Welcome content unless the setting is `"blank"`; "Help: Welcome" opens it as a tab.
 `"window.restoreSession"` is separate: it brings a folder's tabs and unsaved changes back whenever
 you open that folder. Right-click the Dock icon (macOS) for your open windows, recent projects, New Window,
@@ -535,10 +541,15 @@ a test or the debugger first asks "Do you trust the authors of this folder?". A 
 program (a filter, diff or merge driver, an ssh or credential command, a hooks folder) gets **no Git at all** until it is
 trusted: `git status` alone would run its filters. A notice names the settings. Folders you had already opened before this
 rule existed are trusted once. Trusting is remembered per folder (per host over SSH) and starts the language servers at once;
-`Workspace: Trust This Folder` does it without a question. With a workspace file open, trust covers the workspace as a
+`Workspace: Trust This Folder` does it without a question. A folder trusted through its parent can only be removed
+through the parent's record in the list. With a workspace file open, trust covers the workspace as a
 whole: the question becomes "Do you trust the authors of this workspace?" and names the file, and the answer (or
 `Workspace: Trust This Folder`) trusts the file's own folder and every folder it lists in one step. A folder the
 workspace does not list is still asked about on its own, and over SSH the trust only holds on that host.
+A folder you open untrusted asks once whether to trust it (**Trust Folder**, **Trust Parent Folder and Subfolders**, or
+**Don't Trust**; `security.workspaceTrust.startupPrompt` can make it ask every time or never), and until you do
+the status bar shows **Restricted Mode**. Click it, or run `Workspace: Manage Workspace Trust…`, to trust the folder or its
+parent, to stop trusting the open folder, or to remove any trusted folder from the list.
 `security.workspaceTrust.enabled: false`
 in your own `settings.jsonc` turns the check off; a project file can never change that key.
 
@@ -1029,10 +1040,17 @@ first), `"git.rebaseWhenSync"` (pull with rebase), `"git.pruneOnFetch"` (default
 (default true), `"git.fetchOnPull"` (fetch every remote before pulling), `"git.postCommitCommand"`
 (`none`, `push` or `sync` after each commit), `"git.enableSmartCommit"` (default true: with nothing
 staged the commit button commits all tracked changes; off, it asks you to stage first) and
-`"git.autofetch"` with `"git.autofetchPeriod"` (on by default; fetches in the background every 180 s
-or more while the window is in front, never in a folder you have not trusted, and a failure only
+`"git.autofetch"` with `"git.autofetchPeriod"` (on by default; fetches in the background shortly after a
+folder opens, whenever the window comes back to the front, and then every 180 s or more while it is in front, never in a folder you have not trusted, and a failure only
 shows in the sync item's tooltip). `git.confirmSync` and `git.postCommitCommand` are read from your
 own settings only: a repository cannot turn the question on or off or make your commits push by themselves.
+
+Four palette commands work with the hosting service and with patches. **Git: Copy Permalink** copies a link to the open
+file at the commit `HEAD` is on, with the selected lines marked, and **Git: Open File on Remote** opens the file on the
+current branch in the browser; both work for GitHub, GitLab, Bitbucket and Codeberg remotes (an unknown host says so
+instead of guessing a layout). **Git: Copy Changes as Patch** copies every change to tracked files since `HEAD`, staged or
+not, as one patch (untracked files are not part of it), and **Git: Apply Patch from Clipboard** applies a patch to the working
+tree: the whole patch is checked first and nothing changes if it does not apply.
 
 ## Projects, favorites, bookmarks, tasks
 
@@ -1097,7 +1115,8 @@ changed inside a changed line.
 
 If Codeyard panics it writes a report to `crashes/` next to its state database
 (`~/.local/state/codeyard` or `~/Library/Application Support/codeyard`, or `CODEYARD_STATE_DIR`). Nothing is
-sent anywhere: attach the file to a bug report yourself.
+sent anywhere: attach the file to a bug report yourself. The Help menu has **Release Notes**, **Report Issue…** (a new
+issue with the version and system filled in) and, in the palette, **Help: Open Crash Reports Folder**.
 
 Over SSH, "File: Save a Copy to This Computer…" saves the open remote file to a path on your own machine.
 
@@ -1210,7 +1229,7 @@ of the active file, and Source Control shows the repository of the active file (
 was picked in Source Control; see **Several repositories** under Git). Each extra folder's own settings
 (`.vscode/settings.json`, `.codeyard/settings.jsonc`) apply to its files: indentation (`editor.tabSize`,
 `editor.insertSpaces`), saving (`editor.formatOnSave`, `editor.codeActionsOnSave`,
-`files.trimTrailingWhitespace`, `files.insertFinalNewline`), `editor.formatOnPaste` / `formatOnType`
+`files.trimTrailingWhitespace`, `files.insertFinalNewline`, `files.trimFinalNewlines`), `editor.formatOnPaste` / `formatOnType`
 and `editor.rulers`; the first folder's settings already merge into the global ones. Editing the file
 re-reads it.
 
@@ -1638,6 +1657,13 @@ the bottom or the right restores its size.
   above are read only from your own settings, never from a project's.
 - Links that programs mark (OSC 8) show and open their real target.
 - The history is capped at 50,000 lines (`terminal.scrollback`).
+- A maximized panel hides the editor area. When a file, a diff or a page opens meanwhile,
+  `workbench.panel.openFromMaximized` decides: `half` (default) shrinks the panel to half of the space, `restore` gives it
+  the size it had before it was maximized, and `tab` moves the terminal into a tab of the editor area, with the new tab
+  beside it.
+- With several terminals the list on the right reorders by dragging a row (the line shows where it lands) or with
+  **Terminal: Move Terminal Up / Down**; right-clicking a row opens the terminal menu (Split, Move into Editor Area, Rename,
+  Change Color, Kill and the rest). The running indicator is a still dot.
 
 ## Port forwarding
 

@@ -307,6 +307,9 @@ fn background_fetch_waits_for_its_period_and_for_a_front_trusted_idle_window(cx:
     let f = Fixture::new("sync-autofetch");
     let on = Settings { git_autofetch: true, git_autofetch_period: 60, ..quiet() };
     let (wb, cx) = opened(cx, &f, on.clone());
+    // The first look at the repository fetches at once; after that the period applies.
+    tick(cx, 10);
+    wait_ticking(cx, "the first fetch", |cx| !wb.read_with(cx, |wb, _| wb.sync_running_for_test()));
     f.push_elsewhere("r.txt", "r\n");
     // Not yet due.
     tick(cx, 30);
@@ -418,4 +421,44 @@ fn file_menu_stages_and_unstages_the_selected_file(cx: &mut TestAppContext) {
     });
     assert!(git_in(&f.dir, &["diff", "--cached", "--name-only"]).trim().is_empty());
     assert_eq!(std::fs::read_to_string(f.dir.join("README.md")).unwrap(), "changed again\n");
+}
+
+/// Copy Permalink names the commit and marks the selected lines; a remote that is a local path has no web page.
+#[gpui::test]
+fn a_permalink_names_the_commit_and_the_selected_lines(cx: &mut TestAppContext) {
+    let f = Fixture::new("sync-permalink");
+    f.commit_here("notes.txt", "one\ntwo\nthree\n");
+    let (wb, cx) = opened(cx, &f, quiet());
+    crate::qa_workbench_tests::open_in(&wb, &f.dir.join("notes.txt"), cx);
+    wait_ticking(cx, "file open", |cx| wb.read_with(cx, |wb, _| wb.active_editor_entity().is_some()));
+    let clipboard = |cx: &mut VisualTestContext| cx.read_from_clipboard().and_then(|c| c.text());
+
+    run(&wb, cx, "Git: Copy Permalink");
+    wait_ticking(cx, "the answer", |cx| !notice(&wb, cx).is_empty());
+    assert!(notice(&wb, cx).contains("not on a hosting service"), "{}", notice(&wb, cx));
+
+    git_in(&f.dir, &["remote", "set-url", "origin", "git@github.com:doancan/codeyard.git"]);
+    let sha = git_in(&f.dir, &["rev-parse", "HEAD"]).trim().to_string();
+    wb.update_in(cx, |wb, window, cx| wb.active_editor_entity().unwrap().update(cx, |e, cx| e.go_to_line(2, window, cx)));
+    run(&wb, cx, "Git: Copy Permalink");
+    wait_ticking(cx, "the link", |cx| clipboard(cx).is_some_and(|c| c.contains("github.com")));
+    assert_eq!(clipboard(cx), Some(format!("https://github.com/doancan/codeyard/blob/{sha}/notes.txt#L2")));
+}
+
+/// Copy Changes as Patch and Apply Patch from Clipboard go through the palette: the patch of one checkout applies in another.
+#[gpui::test]
+fn a_patch_copied_from_the_changes_applies_from_the_clipboard(cx: &mut TestAppContext) {
+    let f = Fixture::new("sync-patch");
+    f.commit_here("p.txt", "one\ntwo\n");
+    let (wb, cx) = opened(cx, &f, quiet());
+    std::fs::write(f.dir.join("p.txt"), "one\nTWO\n").unwrap();
+    run(&wb, cx, "Git: Copy Changes as Patch");
+    wait_ticking(cx, "the patch", |cx| cx.read_from_clipboard().and_then(|c| c.text()).is_some_and(|t| t.contains("+TWO")));
+    git_in(&f.dir, &["checkout", "--", "p.txt"]);
+    assert_eq!(std::fs::read_to_string(f.dir.join("p.txt")).unwrap(), "one\ntwo\n");
+    run(&wb, cx, "Git: Apply Patch from Clipboard");
+    wait_ticking(cx, "applied", |cx| notice(&wb, cx).contains("Patch applied"));
+    assert_eq!(std::fs::read_to_string(f.dir.join("p.txt")).unwrap(), "one\nTWO\n");
+    run(&wb, cx, "Git: Apply Patch from Clipboard");
+    wait_ticking(cx, "the refusal", |cx| notice(&wb, cx).contains("was not applied"));
 }

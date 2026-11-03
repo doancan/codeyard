@@ -205,6 +205,8 @@ pub(super) struct ConfigState {
     /// Folders trusted this session, as `trust_key`s so the same path on another host is not covered (persistent record: state
     /// `trust:` keys; only here if there is no state).
     pub(super) trusted: std::collections::HashSet<String>,
+    /// The folder the opening question was last considered for (once per folder change).
+    pub(super) trust_prompted: Option<String>,
     pub(super) dirty: bool,
     /// Own settings of extra folders (root -> settings): applied to that folder's files.
     pub(super) folders: std::collections::HashMap<String, Arc<crate::folder_settings::FolderSettings>>,

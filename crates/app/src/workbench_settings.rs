@@ -47,6 +47,7 @@ pub const CATALOG: &[Entry] = &[
     e("files.autoSaveDelay", crate::i18n::tr("Delay for afterDelay (ms)"), Kind::Number { min: 100., max: 600_000. }),
     e("files.trimTrailingWhitespace", crate::i18n::tr("Remove trailing spaces when saving"), Kind::Bool),
     e("files.insertFinalNewline", crate::i18n::tr("End files with a newline when saving"), Kind::Bool),
+    e("files.trimFinalNewlines", crate::i18n::tr("Remove blank lines at the end of a file when saving"), Kind::Bool),
     e("files.hotExit", crate::i18n::tr("Keep unsaved changes across restarts"), Kind::Bool),
     e("files.enableTrash", crate::i18n::tr("Move deleted local files to the Trash"), Kind::Bool),
     e("files.fallbackEncoding", crate::i18n::tr("Encoding for files that are not UTF-8"), Kind::Choice(&["windows1254", "iso88599", "iso88591", "utf8"])),
@@ -150,6 +151,13 @@ pub const CATALOG: &[Entry] = &[
     e("terminal.shellIntegration", crate::i18n::tr("Mark prompts, commands and the folder in zsh, bash and fish"), Kind::Bool),
     e("terminal.notifications", crate::i18n::tr("Flag a terminal and the taskbar when its program rings the bell or asks for you"), Kind::Bool),
     e(
+        "workbench.panel.openFromMaximized",
+        crate::i18n::tr(
+            "When a file, diff or page opens while the panel is maximized: shrink the panel to half, give it back its size, or move the terminal into a tab",
+        ),
+        Kind::Choice(&["half", "restore", "tab"]),
+    ),
+    e(
         "terminal.copyOnSelection",
         crate::i18n::tr("Copy text selected with the mouse: while Claude Code or Codex runs, always, or never"),
         Kind::Choice(&["agents", "always", "off"]),
@@ -228,6 +236,11 @@ pub const CATALOG: &[Entry] = &[
     e("emmet.triggerExpansionOnTab", crate::i18n::tr("Expand Emmet abbreviations (div.box>ul>li*3) with Tab"), Kind::Bool),
     e("diffEditor.renderSideBySide", crate::i18n::tr("Diff view side by side (off: inline)"), Kind::Bool),
     e("security.workspaceTrust.enabled", crate::i18n::tr("Ask before running tasks, tests or the debugger of an untrusted folder"), Kind::Bool),
+    e(
+        "security.workspaceTrust.startupPrompt",
+        crate::i18n::tr("Ask whether to trust a folder when it opens: once, every time, or never"),
+        Kind::Choice(&["once", "always", "never"]),
+    ),
     e("modules.containers.enabled", crate::i18n::tr("Enable container environments (user settings only; disconnect containers before disabling)"), Kind::Bool),
     e(
         "modules.webPreview.enabled",
@@ -270,6 +283,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "editor.inlayHints.enabled" => json!(s.inlay_hints),
         "editor.linkedEditing" => json!(s.linked_editing),
         "security.workspaceTrust.enabled" => json!(s.workspace_trust),
+        "security.workspaceTrust.startupPrompt" => json!(s.workspace_trust_prompt),
         "modules.containers.enabled" => json!(s.docker_enabled),
         "modules.webPreview.enabled" => json!(s.web_preview_enabled),
         "webPreview.port" => json!(s.web_preview.port),
@@ -297,6 +311,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         }),
         "files.trimTrailingWhitespace" => json!(s.trim_trailing_whitespace),
         "files.insertFinalNewline" => json!(s.insert_final_newline),
+        "files.trimFinalNewlines" => json!(s.trim_final_newlines),
         "files.hotExit" => json!(s.hot_exit),
         "files.enableTrash" => json!(s.enable_trash),
         "files.fallbackEncoding" => json!(s.fallback_encoding.setting_name()),
@@ -388,6 +403,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "terminal.shellIntegration" => json!(s.terminal_shell_integration),
         "terminal.notifications" => json!(s.terminal_notifications),
         "terminal.copyOnSelection" => json!(s.terminal_copy_on_selection),
+        "workbench.panel.openFromMaximized" => json!(s.panel_open_from_maximized),
         "terminal.defaultProfile" => json!(s.terminal_default_profile.clone().unwrap_or_default()),
         "terminal.warnMultilinePaste" => json!(s.terminal_warn_multiline.as_str()),
         "terminal.shell" => json!(s.terminal_shell.clone().unwrap_or_default()),

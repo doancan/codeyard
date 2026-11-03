@@ -59,6 +59,13 @@ pub(super) struct ScmProviders {
     owned: HashSet<String>,
 }
 
+impl ScmProviders {
+    /// The next frame finds the claims again (the trust records changed).
+    pub(super) fn invalidate(&mut self) {
+        self.key = None;
+    }
+}
+
 /// Provider text shown in the panel: trimmed to `max` characters, without control or invisible characters.
 fn clean(s: &str, max: usize) -> String {
     s.chars().filter(|c| !ext_manifest::is_deceptive(*c)).take(max).collect::<String>().trim().to_string()

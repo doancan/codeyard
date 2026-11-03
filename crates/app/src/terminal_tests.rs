@@ -169,3 +169,76 @@ fn ansi_cube_and_grayscale() {
     assert_eq!(resolve(&p, Color::Spec(Rgb { r: 1, g: 2, b: 3 }), &o), 0x010203);
     assert_eq!(resolve(&p, Color::Named(NamedColor::Red), &o), p.danger);
 }
+
+/// What a program like Claude Code sends: many redraws of a screen of long, multi-coloured, wrapping lines.
+fn tui_stream(frames: usize) -> Vec<u8> {
+    let mut out = Vec::new();
+    for frame in 0..frames {
+        out.extend_from_slice(b"\x1b[40A");
+        for row in 0..40 {
+            out.extend_from_slice(b"\x1b[2K");
+            for word in 0..60 {
+                let color = 31 + (word + row + frame) % 7;
+                out.extend_from_slice(format!("\x1b[{color}mword{word:02}\x1b[0m ").as_bytes());
+            }
+            out.extend_from_slice(b"\r\n");
+        }
+    }
+    out
+}
+
+/// Parsing a long TUI stream must stay fast, and feeding it in one piece must not be slower than in the chunks the pty
+/// delivers it in (the pump batches the chunks of one turn).
+#[gpui::test]
+fn feeding_a_tui_stream_is_fast(cx: &mut gpui::TestAppContext) {
+    let data = tui_stream(300);
+    cx.update(|cx| cx.set_global(crate::settings::Settings::default()));
+    let make = |cx: &mut gpui::TestAppContext| {
+        let view = cx.new(|cx| TerminalView::output_only(std::sync::Arc::new(host::local()), "bench".into(), cx));
+        view.update(cx, |t, _| t.set_size(200, 50));
+        view
+    };
+    let chunked = make(cx);
+    let start = std::time::Instant::now();
+    chunked.update(cx, |t, _| data.chunks(16 * 1024).for_each(|c| t.feed(c)));
+    let per_chunk = start.elapsed();
+    let whole = make(cx);
+    let start = std::time::Instant::now();
+    whole.update(cx, |t, _| t.feed(&data));
+    let in_one = start.elapsed();
+    eprintln!("BENCH feed {} KB: chunked {per_chunk:?}, one piece {in_one:?}", data.len() / 1024);
+    let (a, b) = (chunked.read_with(cx, |t, _| t.scrollback_text()), whole.read_with(cx, |t, _| t.scrollback_text()));
+    assert!(a == b, "the pump feeds a turn's chunks as one piece: the screen must come out the same");
+    assert!(per_chunk < std::time::Duration::from_secs(5 * crate::test_sshd::timeout_scale()), "{per_chunk:?}");
+}
+
+/// A program that animates its title (a spinner) must not make the window rebuild for every frame: the first change is told
+/// at once, the ones after it are gathered, and only the last title is kept.
+#[gpui::test]
+fn an_animated_title_tells_the_window_at_most_every_quarter_second(cx: &mut gpui::TestAppContext) {
+    cx.update(|cx| cx.set_global(crate::settings::Settings::default()));
+    let view = cx.new(|cx| TerminalView::output_only(std::sync::Arc::new(host::local()), "t".into(), cx));
+    let told = std::rc::Rc::new(std::cell::Cell::new(0));
+    let counter = told.clone();
+    let _sub = cx.update(|cx| {
+        cx.subscribe(&view, move |_, event: &TerminalEvent, _| {
+            if matches!(event, TerminalEvent::TitleChanged) {
+                counter.set(counter.get() + 1)
+            }
+        })
+    });
+    view.update(cx, |t, cx| {
+        for frame in "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏".chars().cycle().take(100) {
+            t.set_title(format!("{frame} working").into(), cx);
+        }
+        t.set_title("working".into(), cx);
+        t.set_title("working".into(), cx);
+    });
+    assert_eq!(told.get(), 1, "one telling, not one per frame");
+    cx.executor().advance_clock(std::time::Duration::from_millis(300));
+    cx.run_until_parked();
+    assert_eq!(told.get(), 2, "the changes since are told once the pause is over");
+    assert_eq!(view.read_with(cx, |t, _| t.title.to_string()), "working");
+    view.update(cx, |t, cx| t.set_title("working".into(), cx));
+    assert_eq!(told.get(), 2, "the same title is not news");
+}

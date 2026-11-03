@@ -981,3 +981,39 @@ fn opening_the_active_file_as_workspace_keeps_the_keyboard_in_the_window(cx: &mu
     let focused = cx.update(|window, cx| window.focused(cx).is_some() && wb.read(cx).focus_handle(cx).contains_focused(window, cx));
     assert!(focused, "the keyboard is still in the window");
 }
+
+/// `files.trimFinalNewlines` removes the blank lines at the end of a file when it is saved, and `files.insertFinalNewline`
+/// still leaves exactly one line ending after them.
+#[gpui::test]
+fn saving_trims_blank_lines_at_the_end(cx: &mut gpui::TestAppContext) {
+    let config = crate::qa_workbench_tests::fresh("trim-final-newlines-config");
+    std::fs::write(config.join("settings.jsonc"), r#"{ "files.trimFinalNewlines": true, "files.insertFinalNewline": true }"#).unwrap();
+    let (wb, cx) = crate::qa_workbench_tests::setup_with_config(cx, &config);
+    let root = crate::qa_workbench_tests::fresh("trim-final-newlines-project");
+    let (blank, bare) = (root.join("blank.txt"), root.join("bare.txt"));
+    std::fs::write(&blank, "one\n\n\n\n").unwrap();
+    std::fs::write(&bare, "two").unwrap();
+    crate::qa_workbench_tests::open(&wb, &root, cx);
+    for path in [&blank, &bare] {
+        crate::qa_workbench_tests::open_in(&wb, path, cx);
+        crate::qa_integration_tests::wait_secs(cx, 5, "file open", |cx| wb.read_with(cx, |wb, _| wb.active_editor_entity().is_some()));
+        wb.update(cx, |wb, cx| wb.active_editor_entity().unwrap().update(cx, |e, cx| e.save_now(cx)));
+    }
+    crate::qa_integration_tests::wait_secs(cx, 5, "saved", |cx| {
+        cx.run_until_parked();
+        std::fs::read_to_string(&blank).is_ok_and(|t| t == "one\n") && std::fs::read_to_string(&bare).is_ok_and(|t| t == "two\n")
+    });
+}
+
+/// `codeyard -g FILE:LINE:COLUMN` opens the file and puts the cursor there.
+#[gpui::test]
+fn the_command_line_opens_a_file_at_a_position(cx: &mut gpui::TestAppContext) {
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    let root = crate::qa_workbench_tests::project("cli-goto");
+    let file = root.join("src/lib.rs");
+    wb.update_in(cx, |wb, window, cx| wb.open_path_at(&file.to_string_lossy(), Some((4, 3)), window, cx));
+    crate::qa_integration_tests::wait_secs(cx, 5, "cursor placed", |cx| {
+        cx.run_until_parked();
+        wb.read_with(cx, |wb, cx| wb.active_editor_entity().is_some_and(|e| e.read(cx).cursor_position() == (4, 3)))
+    });
+}

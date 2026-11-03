@@ -3,6 +3,11 @@
 
 use super::*;
 
+/// The most output one turn of the pump parses before the window gets to draw.
+const TURN_BYTES: usize = 256 * 1024;
+/// The least time between two turns while output keeps coming (a little under a 60 Hz frame).
+const FRAME_INTERVAL: std::time::Duration = std::time::Duration::from_millis(12);
+
 impl TerminalView {
     /// A new shell on the terminal daemon (`host`), whose token is kept so a restart can take it back.
     pub fn kept(host: Arc<dyn Host>, cwd: Option<String>, launch: Launch, cx: &mut Context<Self>) -> Self {
@@ -90,30 +95,41 @@ impl TerminalView {
             PtyEvent::Exit(_) => true,
         });
         while let Some(first) = events.next().await {
-            let mut batch = vec![first];
-            while let Ok(more) = events.try_recv() {
-                batch.push(more);
-                if batch.len() > 256 {
-                    break;
+            let turn = std::time::Instant::now();
+            // One turn takes what piled up, up to a byte budget: a flood is parsed in slices with the window drawn in between.
+            let (mut batch, mut bytes) = (Vec::new(), 0usize);
+            let mut next = Some(first);
+            while let Some(ev) = next.take() {
+                bytes += match &ev {
+                    PtyEvent::Output(d) => d.len(),
+                    PtyEvent::Exit(_) => 0,
+                };
+                batch.push(ev);
+                if bytes < TURN_BYTES && batch.len() < 256 {
+                    next = events.try_recv().ok();
                 }
             }
             let mut exited = false;
             let alive = this
                 .update(cx, |t, cx| {
+                    // The output of the turn is parsed as one piece: the work around parsing (selection, marks, find) runs once.
+                    let mut output = Vec::new();
                     for ev in batch {
                         match ev {
                             PtyEvent::Output(data) => {
                                 backlog.consumed(data.len());
-                                t.feed(&data);
-                                if backlog.take_dropped() {
-                                    t.feed(b"\r\n\x1b[2m[output was dropped: the terminal could not keep up]\x1b[0m\r\n");
-                                }
+                                output.extend_from_slice(&data);
                             }
                             PtyEvent::Exit(code) => {
+                                t.feed(&std::mem::take(&mut output));
                                 t.on_exit(code, cx);
                                 exited = true;
                             }
                         }
+                    }
+                    t.feed(&output);
+                    if backlog.take_dropped() {
+                        t.feed(b"\r\n\x1b[2m[output was dropped: the terminal could not keep up]\x1b[0m\r\n");
                     }
                     t.drain_events(cx);
                     cx.notify();
@@ -121,6 +137,12 @@ impl TerminalView {
                 .is_ok();
             if !alive || exited {
                 return;
+            }
+            // Drawing follows every turn. Output arriving faster than the display shows is gathered for the next turn, so a
+            // busy program costs one frame per interval rather than one per chunk.
+            // (Tests run on a clock that only moves when told to: a wait here would never end.)
+            if let Some(rest) = FRAME_INTERVAL.checked_sub(turn.elapsed()).filter(|_| !cfg!(test)) {
+                cx.background_executor().timer(rest).await;
             }
         }
         this.update(cx, |t, cx| t.on_exit(None, cx)).ok();

@@ -140,6 +140,7 @@ impl Workbench {
             Some(cx.subscribe_in(&view, window, |this, view, ev: &CompareEvent, window, cx| this.on_compare_event(view.clone(), ev, window, cx)));
         window.focus(&view.focus_handle(cx));
         self.tabs.page = Some(Page::Compare(view));
+        self.reveal_editor_area(window, cx);
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
@@ -188,6 +189,7 @@ impl Workbench {
                         cx.new(|cx| crate::diff::DiffView::new(path.clone(), false, &text(&a), &text(&b), cx).with_label(crate::i18n::t("Left ↔ Right")));
                     window.focus(&diff.focus_handle(cx));
                     this.tabs.diff = Some(diff);
+                    this.reveal_editor_area(window, cx);
                     this.tabs.diff_active = true;
                     this.tabs.page_active = false;
                     this.tabs.large_active = false;

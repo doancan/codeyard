@@ -28,6 +28,9 @@ the 2026-10-27 local run passed 1,516 tests, with three documented manual/data-d
   - program output: test runners, compilers, git, port scanners, GitHub;
   - language-server and debug-adapter replies of random shape, and their framing in any chunking;
   - the terminal stream in random chunks.
+  `feeding_a_tui_stream_is_fast` (terminal tests) feeds 11 MB of a Claude-like screen redraw (long coloured rows, cursor moves)
+  and checks that chunked and whole feeding give the same screen; it prints the time (`--nocapture`) for comparing a change to the
+  terminal's output path. For frame cost, run the app with a program that redraws in place and take a CPU sample (`sample <pid> 6`).
   The protocol crate decodes mutated frames in both directions. Two tests drive the terminal with hostile output while
   scrolled back.
   The extension crates (`crates/ext-*`, `fuzz_tests.rs`) parse what strangers publish, so they also run longer:

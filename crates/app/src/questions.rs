@@ -117,6 +117,42 @@ pub(crate) fn trust(workspace: Option<&str>, folder: &str) -> Question {
     confirm(PromptLevel::Warning, title.into(), detail, button)
 }
 
+/// The question a folder asks when it opens untrusted. `parent`: the folder above it, offered as a second place to trust
+/// together with everything below it. The first button changes nothing, so the folder stays in Restricted Mode.
+pub(crate) fn trust_on_open(workspace: Option<&str>, folder: &str, parent: Option<&str>) -> Question {
+    let (title, detail) = match workspace {
+        Some(name) => (
+            t("Do you trust the authors of this workspace?"),
+            tf(
+                "“{}” and its folders can run programs through their tasks, debug configurations and project settings. Without trust the window stays in Restricted Mode: those are switched off.",
+                &[&name],
+            ),
+        ),
+        None => (
+            t("Do you trust the authors of this folder?"),
+            tf(
+                "“{}” can run programs through its tasks, debug configurations and project settings. Without trust the window stays in Restricted Mode: those are switched off.",
+                &[&folder],
+            ),
+        ),
+    };
+    // The button that changes nothing comes first, so Return (which answers the first button unless it is Cancel) and Escape
+    // both leave the folder untrusted: trusting takes a click.
+    let q = Question::new(PromptLevel::Warning, title).detail(detail).cancel(t("Don't Trust")).button(if workspace.is_some() {
+        t("Trust Workspace")
+    } else {
+        t("Trust Folder")
+    });
+    match parent {
+        Some(parent) => q.button(tf("Trust Parent Folder “{}” and Subfolders", &[&ui_name(parent)])),
+        None => q,
+    }
+}
+
+fn ui_name(path: &str) -> String {
+    crate::ui::file_name(path).to_string()
+}
+
 /// What a structural replace offers: everything, or (when some files would not parse) skipping those or replacing
 /// anyway; the last button cancels. `choices` are the acting buttons' labels in order.
 pub(crate) fn structural_replace(title: &str, detail: &str, choices: &[&str]) -> Question {

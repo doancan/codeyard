@@ -113,6 +113,8 @@ pub struct Launch {
 
 /// Upper bound (bytes) on terminal output not yet parsed.
 const MAX_BACKLOG: usize = 32 * 1024 * 1024;
+/// The window hears of a changed title at most this often.
+const TITLE_EVERY: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// Pending-output counter between the bridge thread and the UI: a chunk over the limit is dropped (see `admit`).
 pub(crate) struct OutputBacklog {
@@ -204,6 +206,10 @@ pub struct TerminalView {
     pending_input: Vec<u8>,
     /// Fixed title (task name): the shell's title updates don't change it.
     title_locked: bool,
+    /// When the window was last told the title changed, and whether a later telling is waiting: a program that animates its
+    /// title (a spinner) would otherwise rebuild the whole window for every frame of it.
+    title_told: std::time::Instant,
+    title_waiting: bool,
     /// Program and arguments it was started with (`None`: the user's shell), kept so a restart can start the same.
     launched: (Option<String>, Option<Vec<String>>),
     /// Started with a shell (not an output-only terminal): saved for the next start from the moment it opens.
@@ -312,6 +318,8 @@ impl TerminalView {
             starting: false,
             pending_input: Vec::new(),
             title_locked: false,
+            title_told: std::time::Instant::now() - TITLE_EVERY,
+            title_waiting: false,
             launched: (None, None),
             has_shell: false,
             token: None,
@@ -364,6 +372,30 @@ impl TerminalView {
         self.forget_find_match();
     }
 
+    /// A title from the program: nothing happens when it is the same, and the window is told at most every `TITLE_EVERY`
+    /// (the first change at once, a quicker one after the pause).
+    fn set_title(&mut self, title: SharedString, cx: &mut Context<Self>) {
+        if self.title == title {
+            return;
+        }
+        self.title = title;
+        if self.title_told.elapsed() >= TITLE_EVERY {
+            self.title_told = std::time::Instant::now();
+            cx.emit(TerminalEvent::TitleChanged);
+        } else if !std::mem::replace(&mut self.title_waiting, true) {
+            cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(TITLE_EVERY).await;
+                this.update(cx, |t, cx| {
+                    t.title_waiting = false;
+                    t.title_told = std::time::Instant::now();
+                    cx.emit(TerminalEvent::TitleChanged);
+                })
+                .ok();
+            })
+            .detach();
+        }
+    }
+
     fn drain_events(&mut self, cx: &mut Context<Self>) {
         if std::mem::take(&mut self.marks.activity_changed) {
             cx.emit(TerminalEvent::ActivityChanged);
@@ -374,14 +406,8 @@ impl TerminalView {
                 // The terminal is answering a query (like the cursor position): write it back to the shell.
                 TermEvent::PtyWrite(s) => self.write(s.into_bytes()),
                 TermEvent::Title(_) | TermEvent::ResetTitle if self.title_locked => {}
-                TermEvent::Title(t) => {
-                    self.title = t.into();
-                    cx.emit(TerminalEvent::TitleChanged);
-                }
-                TermEvent::ResetTitle => {
-                    self.title = "terminal".into();
-                    cx.emit(TerminalEvent::TitleChanged);
-                }
+                TermEvent::Title(t) => self.set_title(t.into(), cx),
+                TermEvent::ResetTitle => self.set_title("terminal".into(), cx),
                 // OSC 52: only when the setting allows it (a program could otherwise replace what the user copied).
                 TermEvent::ClipboardStore(..) => {
                     let allowed = cx.global::<crate::settings::Settings>().terminal_allow_clipboard_write;
@@ -1016,6 +1042,8 @@ pub fn key_to_bytes(k: &gpui::Keystroke, mode: TermMode) -> Option<Vec<u8>> {
 
 struct Run {
     col: usize,
+    /// The column after the text's last character.
+    end: usize,
     text: String,
     fg: u32,
     bold: bool,
@@ -1129,6 +1157,8 @@ impl Element for TerminalElement {
             cell_w,
             line_h,
         };
+        // A run is as long as a row at most: its text gets that room at once instead of growing a character at a time.
+        let cols_hint = cols;
         for cell in content.display_iter {
             let row = (cell.point.line.0 + offset) as usize;
             let col = cell.point.column.0;
@@ -1165,15 +1195,20 @@ impl Element for TerminalElement {
             let wide = cell.flags.contains(Flags::WIDE_CHAR);
             let runs = &mut frame.rows[row];
             // A wide character gets its own run: grid alignment must not break.
-            let extend = runs
-                .last_mut()
-                .filter(|r| !wide && r.fg == fg && r.bold == bold && r.italic == italic && r.underline == underline && r.col + r.text.chars().count() == col);
+            let extend = runs.last_mut().filter(|r| !wide && r.fg == fg && r.bold == bold && r.italic == italic && r.underline == underline && r.end == col);
             match extend {
-                Some(r) => r.text.push(ch),
-                None => runs.push(Run { col, text: ch.to_string(), fg, bold, italic, underline }),
+                Some(r) => {
+                    r.text.push(ch);
+                    r.end += 1;
+                }
+                None => {
+                    let mut text = String::with_capacity(cols_hint);
+                    text.push(ch);
+                    runs.push(Run { col, end: col + 1, text, fg, bold, italic, underline });
+                }
             }
             if wide {
-                runs.push(Run { col: col + 2, text: String::new(), fg, bold, italic, underline });
+                runs.push(Run { col: col + 2, end: col + 2, text: String::new(), fg, bold, italic, underline });
             }
         }
         let cur = content.cursor;
@@ -1194,7 +1229,7 @@ impl Element for TerminalElement {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let Some(frame) = frame.take() else { return };
+        let Some(mut frame) = frame.take() else { return };
         let p = self.palette;
         let line_h = frame.line_h;
         let origin = grid_origin(bounds);
@@ -1204,8 +1239,8 @@ impl Element for TerminalElement {
         }
         let style = window.text_style();
         let font_size = style.font_size.to_pixels(window.rem_size());
-        for (row, runs) in frame.rows.iter().enumerate() {
-            for run in runs.iter().filter(|r| !r.text.trim().is_empty()) {
+        for (row, runs) in std::mem::take(&mut frame.rows).into_iter().enumerate() {
+            for run in runs.into_iter().filter(|r| !r.text.trim().is_empty()) {
                 let mut font = style.font();
                 if run.bold {
                     font.weight = FontWeight::BOLD;
@@ -1221,7 +1256,7 @@ impl Element for TerminalElement {
                     underline: run.underline.then(|| gpui::UnderlineStyle { color: Some(c(run.fg).into()), thickness: px(1.), wavy: false }),
                     strikethrough: None,
                 };
-                let shaped = window.text_system().shape_line(run.text.clone().into(), font_size, &[tr], None);
+                let shaped = window.text_system().shape_line(run.text.into(), font_size, &[tr], None);
                 let _ = shaped.paint(cell(row, run.col), line_h, window, cx);
             }
         }

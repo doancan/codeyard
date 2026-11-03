@@ -60,6 +60,8 @@ pub struct Settings {
     pub indent_guides: bool,
     pub trim_trailing_whitespace: bool,
     pub insert_final_newline: bool,
+    /// Remove the blank lines at the end of a file when saving (`files.trimFinalNewlines`).
+    pub trim_final_newlines: bool,
     pub auto_save: AutoSave,
     /// Names/globs hidden in the tree and skipped by search and quick open.
     pub files_exclude: Vec<String>,
@@ -107,6 +109,9 @@ pub struct Settings {
     pub terminal_notifications: bool,
     /// When a finished mouse selection goes to the clipboard: "agents" (Claude Code or Codex runs), "always", "off".
     pub terminal_copy_on_selection: String,
+    /// What a maximized panel does when something opens in the editor area: "half", "restore" or "tab"
+    /// (`workbench.panel.openFromMaximized`).
+    pub panel_open_from_maximized: String,
     /// Closing a terminal asks first: "running" (a program is in the foreground), "always" or "never".
     pub terminal_confirm_close: String,
     /// Terminal profiles per operating system of the machine (`terminal.profiles.macos` / `.linux` / `.windows`).
@@ -162,6 +167,9 @@ pub struct Settings {
     /// Commands run from an untrusted folder (tasks, debugging, project-level
     /// `terminal.shell` / `lsp.servers`) ask for confirmation (`security.workspaceTrust.enabled`).
     pub workspace_trust: bool,
+    /// Ask about an untrusted folder when it opens: "once" (until answered), "always" or "never"
+    /// (`security.workspaceTrust.startupPrompt`).
+    pub workspace_trust_prompt: String,
     /// Open the diff view as a single column (inline).
     pub diff_inline: bool,
     /// Auto-close brackets and quotes.
@@ -317,6 +325,7 @@ impl Default for Settings {
             indent_guides: true,
             trim_trailing_whitespace: false,
             insert_final_newline: false,
+            trim_final_newlines: false,
             auto_save: AutoSave::Off,
             files_exclude: vec![".git".into(), ".DS_Store".into()],
             search_max_results: 2000,
@@ -346,6 +355,7 @@ impl Default for Settings {
             terminal_shell_integration: true,
             terminal_notifications: true,
             terminal_copy_on_selection: "agents".into(),
+            panel_open_from_maximized: "half".into(),
             terminal_confirm_close: "never".into(),
             terminal_profiles: Default::default(),
             terminal_default_profile: None,
@@ -371,6 +381,8 @@ impl Default for Settings {
             linked_editing: true,
             // Tests treat folders as trusted; those exercising the trust gate turn this on.
             workspace_trust: !cfg!(test),
+            // Like the gate itself, off in tests: the many tests that open folders would each be asked.
+            workspace_trust_prompt: if cfg!(test) { "never" } else { "once" }.into(),
             diff_inline: false,
             minimap: true,
             word_wrap: false,
@@ -458,6 +470,9 @@ mod text;
 pub use text::{Seg, array_items, members, set_path_in, set_string_in, set_value_in, value_range};
 #[path = "settings_scope.rs"]
 mod scope;
+pub use scope::RESTRICTED_KEYS;
+#[cfg(test)]
+pub use scope::USER_ONLY_KEYS;
 pub use scope::{Scope, ScopedLayer, Sources, is_user_only};
 #[path = "settings_rust.rs"]
 mod rust;
@@ -465,6 +480,8 @@ mod rust;
 mod scale;
 #[path = "settings_terminal.rs"]
 mod terminal;
+#[path = "settings_workbench.rs"]
+mod workbench;
 #[cfg(test)]
 pub use scale::UI_SCALE_STEPS;
 pub use scale::{SessionScale, UI_SCALE_ERROR, UI_SCALE_MAX, UI_SCALE_MIN, UnsavedScale, parse_ui_scale, step_ui_scale, ui_scale_percent, ui_scale_value};
@@ -509,55 +526,6 @@ pub type Layer<'a> = (&'a str, &'a str, bool);
 pub fn parse_layers(user: &str, project: &[Layer]) -> Result<(Settings, Vec<String>), String> {
     parse_layers_trusted(user, project, false)
 }
-
-/// A project's settings file could choose a program by itself: these keys come only from user
-/// settings or a trusted folder.
-pub const RESTRICTED_KEYS: &[&str] = &[
-    "terminal.shell",
-    "terminal.defaultProfile",
-    "terminal.profiles.macos",
-    "terminal.profiles.linux",
-    "terminal.profiles.windows",
-    "lsp.servers",
-    "json.schemas",
-    "yaml.schemas",
-];
-
-/// Not read from any layer but the user's own file, even in a trusted folder: the gate is global, so one
-/// repo touching it would open it for every folder. `is_user_only` applies it to every non-user layer.
-pub const USER_ONLY_KEYS: &[&str] = &[
-    "modules.containers.enabled",
-    "modules.webPreview.enabled",
-    "webPreview.port",
-    "webPreview.host",
-    "webPreview.liveReload",
-    "webPreview.reloadInterval",
-    "webPreview.root",
-    "security.workspaceTrust.enabled",
-    "http.confirmRequests",
-    "ui.language",
-    // The interface scale applies to every window, so a repository must not zoom the user's whole application.
-    "ui.scale",
-    "update.check",
-    // A repository must not switch extensions on or off for the user, or swap their keys for a preset.
-    "extensions.enabled",
-    "keymap.preset",
-    // A repository must not turn updates (and the fixes they bring) off, nor install them for the user.
-    "extensions.autoUpdate",
-    // A repository must not add a registry to install from.
-    "extensions.registries",
-    // --- git-sync ---
-    // A repository must not turn the question before a sync off, or make every commit push by itself.
-    "git.confirmSync",
-    "git.postCommitCommand",
-    // A repository must not make forwarded ports reachable from the network.
-    "ports.localBind",
-    // A repository must not let programs fill the clipboard, or turn off the checks on what is pasted back: together
-    // they would put a command on the clipboard that a later paste runs.
-    "terminal.allowClipboardWrite",
-    "terminal.sanitizePaste",
-    "terminal.warnMultilinePaste",
-];
 
 /// `trusted`: the folder is trusted. If not, `RESTRICTED_KEYS` in the project layer are ignored and a warning is recorded.
 pub fn parse_layers_trusted(user: &str, project: &[Layer], trusted: bool) -> Result<(Settings, Vec<String>), String> {
@@ -725,6 +693,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         s.compare_max_files = v as u32;
     }
     terminal::parse(&mut s, &mut r, obj);
+    workbench::parse(&mut s, &mut r);
     rust::parse(&mut s, &mut r);
     if let Some(v) = r.bool("window.restoreSession") {
         s.restore_session = v;
@@ -1188,6 +1157,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "editor.indentGuides",
         "files.trimTrailingWhitespace",
         "files.insertFinalNewline",
+        "files.trimFinalNewlines",
         "files.autoSave",
         "files.autoSaveDelay",
         "files.exclude",
@@ -1220,6 +1190,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.shellIntegration",
         "terminal.notifications",
         "terminal.copyOnSelection",
+        "workbench.panel.openFromMaximized",
         "terminal.defaultProfile",
         "terminal.profiles.macos",
         "terminal.profiles.linux",
@@ -1294,6 +1265,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "editor.formatters",
         "workbench.colorCustomizations",
         "security.workspaceTrust.enabled",
+        "security.workspaceTrust.startupPrompt",
         "explorer.confirmDelete",
         "explorer.confirmDragAndDrop",
         "workbench.tree.guides",

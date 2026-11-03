@@ -138,6 +138,7 @@ impl Workbench {
         let place = self.place_of(ed.read(cx), cx);
         ed.update(cx, |e, cx| e.set_workspace_matches(place != Place::Other, cx));
         self.tabs.page = Some(Page::Search(ed.clone()));
+        self.reveal_editor_area(window, cx);
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;

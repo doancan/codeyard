@@ -65,6 +65,7 @@ pub(in crate::workbench) enum Part {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(in crate::workbench) enum StatusPart {
     Remote,
+    Restricted,
     Branch,
     Problems,
     Position,

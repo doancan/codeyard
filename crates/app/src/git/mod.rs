@@ -9,6 +9,8 @@ mod branch;
 mod diff;
 mod ignore;
 mod log;
+mod patch;
+mod permalink;
 mod pull;
 mod refs;
 mod stash;
@@ -21,6 +23,8 @@ pub use branch::*;
 pub use diff::*;
 pub use ignore::*;
 pub use log::*;
+pub use patch::{apply_patch, changes_patch};
+pub use permalink::file_url as web_file_url;
 pub use pull::checkout_pull;
 pub use refs::*;
 pub use stash::*;
@@ -32,7 +36,12 @@ pub use worktree::parse_worktree_entries;
 pub use worktree::{Worktree, worktree_entries};
 
 fn git(host: &dyn Host, cwd: &str, args: &[&str]) -> Result<host::ExecOutput, String> {
-    let out = host.exec("git", args, Some(cwd), None).map_err(|e| e.to_string())?;
+    git_stdin(host, cwd, args, None)
+}
+
+/// `git` with `stdin` for the command to read.
+fn git_stdin(host: &dyn Host, cwd: &str, args: &[&str], stdin: Option<Vec<u8>>) -> Result<host::ExecOutput, String> {
+    let out = host.exec("git", args, Some(cwd), stdin).map_err(|e| e.to_string())?;
     if out.code == Some(127) {
         return Err(crate::i18n::t("git is not installed on this host").into());
     }

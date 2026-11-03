@@ -309,6 +309,7 @@ mod tests {
             wb.ensure_container_search(cx);
             wb.chrome.panel = None;
             wb.tabs.page = Some(Page::Containers);
+            wb.unmaximize_panel(cx);
             wb.tabs.page_active = true;
             cx.notify();
         });

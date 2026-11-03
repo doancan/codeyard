@@ -32,7 +32,9 @@ The tree, in the order a screen reader walks it:
   show the folder or file in the Explorer); the menu bar the app draws on Windows and Linux (`MenuItem`s that open
   their menu under them); the panel's buttons (New Terminal, Launch Profile…, Split Terminal, Kill Terminal, Move
   Panel, Maximize or Restore, Hide Panel) and its list of terminals ("Terminals": a `Tab` each, selected while in
-  front, with Kill Terminal); the editor tabs' buttons ("Tab actions": Close, Unpin, Read, Preview HTML, with the
+  front, with Kill Terminal; Move Terminal Up and Down reorder them from the palette and the menu, as dragging does for the
+  pointer); the status bar's "Restricted Mode" item (a button that opens Manage Workspace Trust, listed with the other
+  status items while the folder is not trusted); the editor tabs' buttons ("Tab actions": Close, Unpin, Read, Preview HTML, with the
   tab's name as description); the large-file, diff and page tabs (Settings, Welcome, Merge, Compare, Markdown,
   Containers, the Inspector, Language Services…) as tabs of the "Editor tabs" list with their Close buttons; and
   every other editor group's tabs in a group "Editor group 2", whose `Click` brings that group forward with the tab.
