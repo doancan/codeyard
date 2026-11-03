@@ -163,6 +163,21 @@ fn two_syncs_never_run_at_once(cx: &mut TestAppContext) {
     assert!(!wb.read_with(cx, |wb, _| wb.sync_running_for_test()));
 }
 
+/// A sync asked for while a background fetch runs (or the push after a commit) is not dropped: it starts when the fetch is done.
+#[gpui::test]
+fn a_sync_asked_for_during_a_background_fetch_runs_when_it_is_done(cx: &mut TestAppContext) {
+    let f = Fixture::new("sync-queued");
+    let (wb, cx) = opened(cx, &f, Settings { git_autofetch: true, ..quiet() });
+    f.push_elsewhere("q.txt", "q\n");
+    wb.update(cx, |wb, cx| {
+        assert!(wb.autofetch_for_test(true, cx));
+        wb.sync_for_test(vec![crate::git::SyncOp::Pull], cx);
+        assert_eq!(wb.notice_text().as_deref(), Some("Fetching in the background: the sync starts when it is done."));
+    });
+    wait_ticking(cx, "the queued pull", |_| f.dir.join("q.txt").exists());
+    wait_ticking(cx, "ends", |cx| !wb.read_with(cx, |wb, _| wb.sync_running_for_test()));
+}
+
 #[gpui::test]
 fn a_pull_that_conflicts_points_at_the_way_out(cx: &mut TestAppContext) {
     let f = Fixture::new("sync-conflict");

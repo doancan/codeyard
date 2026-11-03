@@ -2204,7 +2204,7 @@ This pulls and pushes commits from and to “{}”.	Bu işlem “{}” deposunda
 This pulls commits from “{}”.	Bu işlem “{}” deposundan commit'leri Pull eder.
 This pushes commits to “{}”.	Bu işlem commit'leri “{}” deposuna Push eder.
 A sync is already running.	Bir eşitleme zaten çalışıyor.
-Fetching in the background: try again in a moment.	Arka planda Fetch ediliyor: birazdan tekrar deneyin.
+Fetching in the background: the sync starts when it is done.	Arka planda Fetch ediliyor: bitince senkronizasyon başlar.
 Pull has conflicts: resolve them in Source Control (or Git: Abort Merge)	Pull çakışmalarla durdu: Kaynak Denetimi'nde çözün (ya da Git: Birleştirmeyi İptal Et)
 Publish failed: {}	Yayımlama başarısız: {}
 Commit or stash your changes first	Önce değişikliklerinizi commit edin ya da Stash'e alın

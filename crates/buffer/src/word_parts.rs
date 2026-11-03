@@ -42,7 +42,12 @@ impl Buffer {
                     i -= 1;
                 }
                 if i > 0 && self.part_kind(i - 1) == Kind::Upper {
+                    // A run that starts with a digit belongs to the capitals before it (`MD5`), a lowercase one takes one (`Hash`).
+                    let digits_first = !self.rope.char(i).is_alphabetic();
                     i -= 1;
+                    while digits_first && i > 0 && self.part_kind(i - 1) == Kind::Upper {
+                        i -= 1;
+                    }
                 }
             }
             class => {
@@ -72,7 +77,7 @@ impl Buffer {
                     i += 1;
                 }
                 if i < n && self.part_kind(i) == Kind::Lower {
-                    if i - start > 1 {
+                    if i - start > 1 && self.rope.char(i).is_alphabetic() {
                         i -= 1;
                     } else {
                         while i < n && self.part_kind(i) == Kind::Lower {
@@ -130,9 +135,22 @@ mod tests {
         assert_eq!(parts("snake_case_name"), [5, 10, 15]);
         assert_eq!(parts("kebab-case"), [5, 10]);
         assert_eq!(parts("a1b2"), [4], "digits stay with their letters");
+        assert_eq!(parts("MD5Hash"), [3, 7], "digits stay with the capitals before them");
+        assert_eq!(parts("HTTP2Server"), [5, 11]);
         assert_eq!(parts("x.y(z)"), [1, 2, 3, 4, 5, 6]);
         assert_eq!(parts("  foo  bar"), [5, 10]);
         assert_eq!(parts("ÇalışanAdı"), [7, 10], "Unicode letters are letters");
+    }
+
+    #[test]
+    fn capitals_followed_by_digits_split_the_same_way_going_left() {
+        let b = Buffer::from_str("MD5Hash");
+        let (mut at, mut stops) = (b.len_chars(), Vec::new());
+        while at > 0 {
+            at = b.word_part_start_before(at);
+            stops.push(at);
+        }
+        assert_eq!(stops, [3, 0]);
     }
 
     #[test]

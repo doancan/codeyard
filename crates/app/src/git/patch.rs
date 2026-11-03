@@ -6,9 +6,10 @@ use super::*;
 const MAX_PATCH: usize = 32 << 20;
 
 /// Every change to tracked files since HEAD, staged or not, as one patch that `apply_patch` (or `git apply`) takes back.
+/// The prefixes are fixed: `diff.noprefix` or `diff.mnemonicPrefix` in the user's config would make a patch `git apply` reads wrongly.
 /// Untracked files are not part of it: Git has no patch for a file it does not know.
 pub fn changes_patch(host: &dyn Host, root: &str) -> Result<String, String> {
-    let out = git(host, root, &["diff", "HEAD", "--binary", "--no-color", "--no-ext-diff", "--no-textconv"])?;
+    let out = git(host, root, &["diff", "HEAD", "--binary", "--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/"])?;
     if !out.ok() {
         return Err(failure_text(&out));
     }

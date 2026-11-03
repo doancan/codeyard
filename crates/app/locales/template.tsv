@@ -878,7 +878,7 @@ Fetch from all remotes
 Fetch from the remote in the background while the window is in front	
 Fetch removes remote branches that were deleted on the server	
 Fetched	
-Fetching in the background: try again in a moment.	
+Fetching in the background: the sync starts when it is done.	
 Fetching…	
 Fewer context lines	
 File	

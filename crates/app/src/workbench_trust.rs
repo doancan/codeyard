@@ -30,7 +30,9 @@ pub(super) fn parent_folder(path: &str) -> Option<String> {
     let trimmed = path.trim_end_matches(['/', '\\']);
     let (parent, _) = trimmed.rsplit_once(['/', '\\'])?;
     let parent = parent.trim_end_matches(['/', '\\']);
-    let is_disk_root = parent.is_empty() || (parent.len() == 2 && parent.ends_with(':'));
+    // `\\server` is no folder either: trusting it would trust every share on that server.
+    let is_server = parent.strip_prefix("\\\\").is_some_and(|p| !p.contains(['/', '\\']));
+    let is_disk_root = parent.is_empty() || (parent.len() == 2 && parent.ends_with(':')) || is_server;
     (!is_disk_root).then(|| parent.to_string())
 }
 
@@ -193,6 +195,11 @@ impl Workbench {
         if root == self.cfg.trust_prompted {
             return;
         }
+        if root.is_none() {
+            // A closed folder is forgotten, so opening it again in this window asks again.
+            self.cfg.trust_prompted = None;
+            return;
+        }
         let Some(root) = root.filter(|_| self.overlay.is_none() && !self.persist.panel_restoring) else { return };
         self.cfg.trust_prompted = Some(root.clone());
         let mode = cx.global::<Settings>().workspace_trust_prompt.clone();
@@ -248,6 +255,8 @@ mod tests {
         assert_eq!(parent_folder(r"C:\Users\a\proj"), Some(r"C:\Users\a".into()));
         assert_eq!(parent_folder(r"C:\Users"), None);
         assert_eq!(parent_folder("proj"), None);
+        assert_eq!(parent_folder(r"\\srv\share\proj"), Some(r"\\srv\share".into()));
+        assert_eq!(parent_folder(r"\\srv\share"), None, "\\\\srv is every share on the server");
     }
 
     #[test]
