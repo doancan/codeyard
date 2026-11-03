@@ -39,6 +39,9 @@ matter most are:
   keychain under its publisher identity. Codeyard adds the token to the extension's requests to that account's hosts;
   the extension process never receives it. Each sign-in asks first, and the extension's page signs out
   ([plugin-architecture.md](docs/plugin-architecture.md#64-auth)).
+- Opening a folder that is not trusted asks first, with "Don't Trust" as the answer Return and Escape give, and the window
+  stays in Restricted Mode (shown in the status bar) until it is trusted; Workspace: Manage Workspace Trust… lists and
+  removes what was trusted.
 - Until a folder is trusted: project settings cannot change `terminal.shell`, `lsp.servers` or schema associations, language
   servers do not start, schema downloads are limited to SchemaStore and `git status` runs with `core.fsmonitor` off
   (details: [architecture](docs/architecture.md#workspace-trust-in-one-place)).

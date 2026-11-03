@@ -1229,7 +1229,7 @@ of the active file, and Source Control shows the repository of the active file (
 was picked in Source Control; see **Several repositories** under Git). Each extra folder's own settings
 (`.vscode/settings.json`, `.codeyard/settings.jsonc`) apply to its files: indentation (`editor.tabSize`,
 `editor.insertSpaces`), saving (`editor.formatOnSave`, `editor.codeActionsOnSave`,
-`files.trimTrailingWhitespace`, `files.insertFinalNewline`), `editor.formatOnPaste` / `formatOnType`
+`files.trimTrailingWhitespace`, `files.insertFinalNewline`, `files.trimFinalNewlines`), `editor.formatOnPaste` / `formatOnType`
 and `editor.rulers`; the first folder's settings already merge into the global ones. Editing the file
 re-reads it.
 
