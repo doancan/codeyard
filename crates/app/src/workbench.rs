@@ -197,6 +197,12 @@ mod term_tabs_glue;
 mod view_windows_glue;
 #[cfg(any(unix, windows))]
 pub use term_daemon_glue::{enable_terminal_daemon, terminal_daemon_socket};
+#[path = "workbench_patch.rs"]
+mod patch_glue;
+pub use patch_glue::{ApplyPatchFromClipboard, CopyChangesAsPatch};
+#[path = "workbench_permalink.rs"]
+mod permalink_glue;
+pub use permalink_glue::{CopyGitPermalink, OpenOnGitRemote};
 #[path = "workbench_terminals.rs"]
 mod terminals_glue;
 #[path = "workbench_toggles.rs"]

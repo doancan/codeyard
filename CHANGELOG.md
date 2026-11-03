@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - View toggles for Breadcrumbs, Line Numbers, Indent Guides, Inlay Hints and Auto Save (**File: Toggle Auto Save**), and the
   Help commands **Release Notes**, **Report Issue…** (opens a new issue with the version and system filled in) and **Open Crash
   Reports Folder**.
+- **Git: Copy Permalink** (the commit, the selected lines marked) and **Git: Open File on Remote** (the branch) for GitHub,
+  GitLab, Bitbucket and Codeberg remotes.
+- **Git: Copy Changes as Patch** and **Git: Apply Patch from Clipboard**: all changes to tracked files since HEAD as one
+  binary-safe patch; applying checks the whole patch first and changes nothing if it does not apply.
 - Source Control keeps the row of the change you opened highlighted.
 - Background fetch also runs shortly after a folder opens and when the window comes back to the front, so commits pushed
   meanwhile show without clicking Sync.

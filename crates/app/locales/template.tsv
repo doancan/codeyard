@@ -989,6 +989,7 @@ Git: Abort Rebase
 Git: Add Remote…	
 Git: Add Worktree…	
 Git: Add to .gitignore	
+Git: Apply Patch from Clipboard	
 Git: Apply Stash…	
 Git: Blame Line	
 Git: Checkout (Detached)…	
@@ -1002,6 +1003,8 @@ Git: Commit Signed Off
 Git: Compare with Branch…	
 Git: Compare with Commit…	
 Git: Continue Rebase	
+Git: Copy Changes as Patch	
+Git: Copy Permalink	
 Git: Create Branch From…	
 Git: Create Branch…	
 Git: Create Tag…	
@@ -1017,6 +1020,7 @@ Git: Fetch (All Remotes)
 Git: Merge Branch…	
 Git: Open Changes	
 Git: Open File (HEAD)	
+Git: Open File on Remote	
 Git: Open Worktree…	
 Git: Pop Latest Stash	
 Git: Pop Stash…	
@@ -1605,6 +1609,7 @@ Open a Markdown file (.md) to preview it.
 Open a Rust file first	
 Open a file first	
 Open a file first.	
+Open a file in a Git repository first.	
 Open a file in the editor first.	
 Open a file inside a folder to run its tests.	
 Open a file to see its history.	
@@ -1618,6 +1623,7 @@ Open a folder first: tasks come from its package.json, Makefile, Cargo.toml or t
 Open a folder first; folders are added to it.	
 Open a folder in a Linux distribution	
 Open a folder on {}	
+Open a folder that is a Git repository first.	
 Open a folder to debug it.	
 Open a folder to find its tests.	
 Open a folder to search in it.	
@@ -1663,6 +1669,8 @@ Passphrase
 Password	
 Paste	
 Paste {} line into the terminal?|Paste {} lines into the terminal?	
+Patch applied to the working tree.	
+Patch copied. Untracked files are not part of it.	
 Path (relative to the folder, or absolute)	
 Path in container	
 Path of the folder (~ is your home folder)	
@@ -1678,6 +1686,8 @@ Paused
 Paused on entry	
 Paused on exception: {}	
 Payload	
+Permalink copied.	
+Permalink copied. The file has changes that are not committed, so the link shows the committed version.	
 Permanently delete {0} item on {1}?|Permanently delete {0} items on {1}?	
 Permanently delete “{0}” on {1}?	
 Permission switches	
@@ -2343,11 +2353,13 @@ The Rust language server does not support this command
 The SSH connection is gone: reconnect to forward again	
 The TLS/SSL handshake with {} failed (certificate or protocol problem): {}	
 The Timeline section of the explorer lists the commits of the open file; click one to see its diff.	
+The active file is not in the repository.	
 The address is malformed: {}	
 The branch goes back to how it was before the rebase started.	
 The branch is fully merged into the current branch.	
 The branch is removed from the remote repository for everyone. Local branches are not touched.	
 The bundled service catalogue is invalid. Reinstall Codeyard before retrying.	
+The changes are too large for one patch.	
 The clipboard has no text.	
 The complete file list is available in Output.	
 The connection dropped; trying to reconnect. Unsaved changes are kept.	
@@ -2374,6 +2386,7 @@ The file changed on disk while you were editing. Nothing was saved.
 The file could not be read.	
 The file is empty.	
 The file is not open any more.	
+The file is not tracked by Git.	
 The file is too large for an outline.	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
@@ -2388,6 +2401,8 @@ The new version couldn't be installed from here. You can download it from the re
 The number {} cannot be written in JSON	
 The open folder is no longer listed in the workspace file.	
 The other editor's settings.json could not be read	
+The patch is too large.	
+The patch was not applied: {}	
 The pattern does not parse: {0} (line {1}, column {2})	
 The preLaunchTask “{0}” did not succeed ({1}), so debugging was not started. Check its terminal, then start debugging again.	
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	
@@ -2401,6 +2416,7 @@ The query was edited: press Enter or Rerun to search for it.
 The quoted value is not closed	
 The release notes are longer: read the rest at {}	
 The release notes are longer: read the rest on GitHub.	
+The remote is not on a hosting service Codeyard knows (GitHub, GitLab, Bitbucket, Codeberg).	
 The remote “{}” is not reachable as a git repository (it may be private or renamed); check `git remote -v`	
 The repeated string would be too long	
 The request failed.	
@@ -2423,6 +2439,7 @@ The task file is not valid JSON.
 The task file is too large or has too many tasks.	
 The terminal could not move to a new window: {}	
 The test runner stopped without reporting this test. See Test Results for build or runner errors.	
+The text is not a patch.	
 The token has no signature.	
 The update couldn't be installed	
 The update couldn't be verified	
@@ -2445,6 +2462,7 @@ Theme: Pick File Icon Theme…
 Theme: Save Current Colors as User Theme…	
 Themes live in {}: drop theme .json files there	
 Themes, languages, language servers, snippets and key bindings that come with Codeyard are built in and always on.	
+There are no changes to put in a patch.	
 There are no local changes to stash	
 There are no staged changes to stash	
 There are no stashes.	
@@ -2494,6 +2512,7 @@ This pulls commits from “{}”.
 This pushes commits to “{}”.	
 This release has no installer for this system. Download it from the release page.	
 This replacement is too large to preview. Narrow the search (fewer files or matches).	
+This repository has no remote.	
 This repository has no remote. Add one with Git: Add Remote…	
 This search belongs to {0} on {1}, which this window does not show. Results cannot be opened or replaced here.	
 This tab cannot move to that window: its folder is on another machine.	

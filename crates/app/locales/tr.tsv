@@ -3554,3 +3554,22 @@ Help: Open Crash Reports Folder	Yardım: Çökme Raporları Klasörünü Aç
 Auto Save is off.	Otomatik Kaydetme kapalı.
 Auto Save is on.	Otomatik Kaydetme açık.
 No crash reports: Codeyard has not crashed.	Çökme raporu yok: Codeyard hiç çökmedi.
+Git: Copy Permalink	Git: Kalıcı Bağlantıyı Kopyala
+Git: Open File on Remote	Git: Dosyayı Uzakta Aç
+Open a file in a Git repository first.	Önce bir Git deposundaki bir dosyayı açın.
+The active file is not in the repository.	Etkin dosya depoda değil.
+This repository has no remote.	Bu deponun uzak deposu yok.
+The file is not tracked by Git.	Dosya Git tarafından izlenmiyor.
+The remote is not on a hosting service Codeyard knows (GitHub, GitLab, Bitbucket, Codeberg).	Uzak depo Codeyard'ın tanıdığı bir barındırma hizmetinde değil (GitHub, GitLab, Bitbucket, Codeberg).
+Permalink copied. The file has changes that are not committed, so the link shows the committed version.	Kalıcı bağlantı kopyalandı. Dosyanın commit edilmemiş değişiklikleri var, bağlantı commit edilmiş sürümü gösterir.
+Permalink copied.	Kalıcı bağlantı kopyalandı.
+Git: Copy Changes as Patch	Git: Değişiklikleri Yama Olarak Kopyala
+Git: Apply Patch from Clipboard	Git: Panodaki Yamayı Uygula
+Open a folder that is a Git repository first.	Önce Git deposu olan bir klasör açın.
+There are no changes to put in a patch.	Yamaya konacak değişiklik yok.
+Patch copied. Untracked files are not part of it.	Yama kopyalandı. İzlenmeyen dosyalar dahil değildir.
+Patch applied to the working tree.	Yama çalışma ağacına uygulandı.
+The patch was not applied: {}	Yama uygulanmadı: {}
+The changes are too large for one patch.	Değişiklikler tek bir yama için çok büyük.
+The patch is too large.	Yama çok büyük.
+The text is not a patch.	Metin bir yama değil.

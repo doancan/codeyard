@@ -146,6 +146,16 @@ impl EditorView {
 
     /// QA: the selected text of each cursor (empty selection = empty string).
     #[cfg(test)]
+    /// The first and last line (1-based) of the selection, or of the cursor's line when nothing is selected.
+    pub fn selected_lines(&self) -> (usize, usize) {
+        let Some(range) = self.buffer.selection() else {
+            let line = self.buffer.cursor_line_col().0 + 1;
+            return (line, line);
+        };
+        // The line ending of the last selected line belongs to that line, so a selection ending at a line's start stops above.
+        (self.buffer.char_to_line(range.start) + 1, self.buffer.char_to_line(range.end.saturating_sub(1).max(range.start)) + 1)
+    }
+
     pub fn selected_text_all(&self) -> Vec<String> {
         self.buffer.selected_texts()
     }
