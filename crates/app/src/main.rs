@@ -772,6 +772,8 @@ fn bind_file(cx: &mut App, text: &str, label: &str) -> Vec<String> {
 
 struct Args {
     path: Option<String>,
+    /// `-g FILE:LINE:COL`: the position to put the cursor at in `path`, counted from 1.
+    goto: Option<(usize, usize)>,
     connect: Option<String>,
     theme: Option<String>,
     terminal: bool,
@@ -907,6 +909,7 @@ fn parse_args() -> Args {
 fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
     let mut args = Args {
         path: None,
+        goto: None,
         connect: None,
         theme: None,
         terminal: false,
@@ -923,6 +926,11 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
     let mut it = argv;
     while let Some(a) = it.next() {
         match a.as_str() {
+            "-g" | "--goto" => {
+                if let Some(target) = it.next() {
+                    (args.path, args.goto) = split_goto(&target);
+                }
+            }
             "--connect" => args.connect = it.next(),
             "--theme" => args.theme = it.next(),
             "--terminal" => args.terminal = true,
@@ -949,7 +957,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             }
             "-h" | "--help" => {
                 println!(
-                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|FOLDER|ID[@VERSION] [--accept-permissions]] [--update-extensions]"
+                    "usage: codeyard [FOLDER | FILE] [-g|--goto FILE[:LINE[:COLUMN]]] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|FOLDER|ID[@VERSION] [--accept-permissions]] [--update-extensions]"
                 );
                 std::process::exit(0);
             }
@@ -957,6 +965,30 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
         }
     }
     args
+}
+
+/// `FILE:LINE:COLUMN` as `code -g` takes it: the position is a trailing run of `:number` parts (at most two); a colon that
+/// belongs to the path (a Windows drive, `C:\x.rs`) is not one, and neither is a name that merely ends in digits.
+fn split_goto(target: &str) -> (Option<String>, Option<(usize, usize)>) {
+    let number = |s: &str| s.parse::<usize>().ok().filter(|n| *n > 0);
+    let mut path = target;
+    let mut numbers = Vec::new();
+    while numbers.len() < 2 {
+        match path.rsplit_once(':').and_then(|(head, tail)| number(tail).map(|n| (head, n))) {
+            Some((head, n)) if !head.is_empty() && !(head.len() == 1 && head.as_bytes()[0].is_ascii_alphabetic()) => {
+                numbers.push(n);
+                path = head;
+            }
+            _ => break,
+        }
+    }
+    let goto = match numbers.as_slice() {
+        [] => None,
+        [line] => Some((*line, 1)),
+        [col, line] => Some((*line, *col)),
+        _ => None,
+    };
+    (Some(path.to_string()), goto)
 }
 
 /// `--accept-permissions` grants what a package being installed asks for. An update that asks for more is reviewed in the
@@ -984,6 +1016,22 @@ mod args_tests {
         // Its value is not taken for a path, and a trailing --do is harmless.
         assert_eq!(parse(false, &["--do", "key:enter"]).path, None);
         assert!(parse(false, &["--do"]).run.is_empty());
+    }
+
+    #[test]
+    fn goto_takes_a_line_and_a_column_after_the_path() {
+        use super::split_goto;
+        let at = |s: &str| split_goto(s);
+        assert_eq!(at("src/a.rs"), (Some("src/a.rs".into()), None));
+        assert_eq!(at("src/a.rs:12"), (Some("src/a.rs".into()), Some((12, 1))));
+        assert_eq!(at("src/a.rs:12:5"), (Some("src/a.rs".into()), Some((12, 5))));
+        assert_eq!(at(r"C:\work\a.rs:3:4"), (Some(r"C:\work\a.rs".into()), Some((3, 4))), "the drive's colon is part of the path");
+        assert_eq!(at(r"C:\a.rs"), (Some(r"C:\a.rs".into()), None));
+        assert_eq!(at("C:7"), (Some("C:7".into()), None), "a drive letter alone is no file name");
+        assert_eq!(at("a.rs:0"), (Some("a.rs:0".into()), None), "lines count from 1");
+        assert_eq!(at("a:1:2:3"), (Some("a:1".into()), Some((2, 3))), "at most two numbers: line 2, column 3");
+        assert_eq!(parse(false, &["-g", "a.rs:9:2", "--theme", "dark"]).goto, Some((9, 2)));
+        assert_eq!(parse(false, &["--goto", "a.rs"]).path.as_deref(), Some("a.rs"));
     }
 
     #[test]
@@ -1267,7 +1315,7 @@ fn main() {
                     wb.use_theme(id, window, cx);
                 }
                 if let Some(path) = &args.path {
-                    wb.open_path(path, window, cx);
+                    wb.open_path_at(path, args.goto, window, cx);
                 } else if args.connect.is_none() && reopen.is_none() {
                     wb.restore_last(window, cx);
                 }

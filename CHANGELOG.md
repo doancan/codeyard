@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   GitLab, Bitbucket and Codeberg remotes.
 - **Git: Copy Changes as Patch** and **Git: Apply Patch from Clipboard**: all changes to tracked files since HEAD as one
   binary-safe patch; applying checks the whole patch first and changes nothing if it does not apply.
+- `codeyard -g FILE:LINE:COLUMN` (`--goto`) opens a file with the cursor at that position.
 - Source Control keeps the row of the change you opened highlighted.
 - Background fetch also runs shortly after a folder opens and when the window comes back to the front, so commits pushed
   meanwhile show without clicking Sync.

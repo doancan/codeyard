@@ -1004,3 +1004,16 @@ fn saving_trims_blank_lines_at_the_end(cx: &mut gpui::TestAppContext) {
         std::fs::read_to_string(&blank).is_ok_and(|t| t == "one\n") && std::fs::read_to_string(&bare).is_ok_and(|t| t == "two\n")
     });
 }
+
+/// `codeyard -g FILE:LINE:COLUMN` opens the file and puts the cursor there.
+#[gpui::test]
+fn the_command_line_opens_a_file_at_a_position(cx: &mut gpui::TestAppContext) {
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    let root = crate::qa_workbench_tests::project("cli-goto");
+    let file = root.join("src/lib.rs");
+    wb.update_in(cx, |wb, window, cx| wb.open_path_at(&file.to_string_lossy(), Some((4, 3)), window, cx));
+    crate::qa_integration_tests::wait_secs(cx, 5, "cursor placed", |cx| {
+        cx.run_until_parked();
+        wb.read_with(cx, |wb, cx| wb.active_editor_entity().is_some_and(|e| e.read(cx).cursor_position() == (4, 3)))
+    });
+}

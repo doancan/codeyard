@@ -424,7 +424,8 @@ suggested (nearby words first); `"editor.wordBasedSuggestions": false` turns thi
   gone you land on the Welcome screen with a note.
 - `"blank"`: an empty window with just the logo.
 
-A folder or file given on the command line always opens, whatever the setting. An empty editor
+A folder or file given on the command line always opens, whatever the setting. `codeyard -g src/main.rs:42:7` (or
+`--goto`) opens the file with the cursor at line 42, column 7; the column is optional. An empty editor
 shows the Welcome content unless the setting is `"blank"`; "Help: Welcome" opens it as a tab.
 `"window.restoreSession"` is separate: it brings a folder's tabs and unsaved changes back whenever
 you open that folder. Right-click the Dock icon (macOS) for your open windows, recent projects, New Window,

@@ -197,6 +197,8 @@ mod term_tabs_glue;
 mod view_windows_glue;
 #[cfg(any(unix, windows))]
 pub use term_daemon_glue::{enable_terminal_daemon, terminal_daemon_socket};
+#[path = "workbench_cli.rs"]
+mod cli_glue;
 #[path = "workbench_patch.rs"]
 mod patch_glue;
 pub use patch_glue::{ApplyPatchFromClipboard, CopyChangesAsPatch};
