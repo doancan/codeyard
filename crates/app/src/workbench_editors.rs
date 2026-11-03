@@ -206,6 +206,7 @@ impl Workbench {
                     let view = cx.new(|cx| crate::diff::DiffView::new(title, false, &text, &current, cx).with_label(crate::i18n::t("Compare")));
                     window.focus(&view.focus_handle(cx));
                     this.tabs.diff = Some(view);
+                    this.chrome.panel_max = false;
                     this.tabs.diff_active = true;
                     this.tabs.page_active = false;
                     this.tabs.large_active = false;
@@ -237,6 +238,7 @@ impl Workbench {
                     let view = cx.new(|cx| crate::diff::DiffView::new(title, false, &left, &right, cx).with_label(crate::i18n::t("Compare")));
                     window.focus(&view.focus_handle(cx));
                     this.tabs.diff = Some(view);
+                    this.chrome.panel_max = false;
                     this.tabs.diff_active = true;
                     this.tabs.page_active = false;
                     this.tabs.large_active = false;

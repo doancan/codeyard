@@ -37,3 +37,45 @@ fn quick_open_of_an_existing_tab_restores_a_maximized_panel(cx: &mut gpui::TestA
     cx.simulate_keystrokes("enter");
     assert!(wb.read_with(cx, |wb, _| !wb.chrome.panel_max && wb.chrome.panel_open));
 }
+
+#[gpui::test]
+fn opening_a_diff_or_a_page_restores_a_maximized_panel(cx: &mut gpui::TestAppContext) {
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    let root = crate::qa_workbench_tests::project("maximized-diff-page");
+    crate::qa_workbench_tests::open(&wb, &root, cx);
+    let maximize = |wb: &mut Workbench| {
+        wb.chrome.panel_open = true;
+        wb.chrome.panel_max = true;
+    };
+    wb.update_in(cx, |wb, window, cx| {
+        maximize(wb);
+        wb.open_compare("a ↔ b".into(), "Compare", "one\n", "two\n", window, cx);
+        assert!(!wb.chrome.panel_max, "a diff must not open behind a maximized panel");
+        assert!(wb.chrome.panel_open, "the panel stays available");
+        maximize(wb);
+        wb.open_settings_page(&OpenSettingsPage, window, cx);
+        assert!(!wb.chrome.panel_max, "Settings must not open behind a maximized panel");
+    });
+}
+
+#[gpui::test]
+fn dragging_a_terminal_row_reorders_the_list_and_keeps_the_active_terminal(cx: &mut gpui::TestAppContext) {
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    let root = crate::qa_workbench_tests::project("terminal-reorder");
+    crate::qa_workbench_tests::open(&wb, &root, cx);
+    wb.update_in(cx, |wb, window, cx| {
+        for _ in 0..3 {
+            wb.new_terminal(&NewTerminal, window, cx);
+        }
+    });
+    cx.run_until_parked();
+    wb.update(cx, |wb, cx| {
+        let [a, b, c] = wb.terminals_for_test().try_into().expect("three terminals");
+        assert_eq!(wb.active_terminal().as_ref(), Some(&c), "the newest terminal is active");
+        wb.move_terminal(&c, 0, cx);
+        assert_eq!(wb.terminals_for_test(), [c.clone(), a.clone(), b.clone()]);
+        assert_eq!(wb.active_terminal().as_ref(), Some(&c), "the active terminal follows its row");
+        wb.move_terminal(&a, 99, cx);
+        assert_eq!(wb.terminals_for_test(), [c, a, b], "an out-of-range drop changes nothing");
+    });
+}

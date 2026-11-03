@@ -179,6 +179,8 @@ registry! {
     "terminal.killOthers" => wb::KillOtherTerminals,
     "terminal.focusNext" => wb::FocusNextTerminal,
     "terminal.focusPrevious" => wb::FocusPreviousTerminal,
+    "terminal.moveUp" => wb::MoveTerminalUp,
+    "terminal.moveDown" => wb::MoveTerminalDown,
     "terminal.configureSettings" => wb::ConfigureTerminalSettings,
     "debug.runWithoutDebugging" => wb::RunWithoutDebugging,
     "debug.runToCursor" => wb::RunToCursor,

@@ -415,6 +415,7 @@ impl Workbench {
                 let view = cx.new(|cx| crate::diff::DiffView::new(rel, staged, old.as_deref().unwrap_or(""), new.as_deref().unwrap_or(""), cx));
                 window.focus(&view.focus_handle(cx));
                 this.tabs.diff = Some(view);
+                this.chrome.panel_max = false;
                 this.tabs.diff_active = true;
                 this.tabs.page_active = false;
                 this.tabs.large_active = false;
@@ -434,6 +435,7 @@ impl Workbench {
         let view = cx.new(|cx| crate::large::LargeFileView::new_image(host, path, format, cx));
         window.focus(&view.focus_handle(cx));
         self.tabs.large = Some(view);
+        self.chrome.panel_max = false;
         self.tabs.large_active = true;
         self.tabs.page_active = false;
         self.tabs.diff_active = false;
@@ -454,6 +456,7 @@ impl Workbench {
         });
         window.focus(&view.focus_handle(cx));
         self.tabs.large = Some(view);
+        self.chrome.panel_max = false;
         self.tabs.large_active = true;
         self.tabs.page_active = false;
         self.tabs.diff_active = false;

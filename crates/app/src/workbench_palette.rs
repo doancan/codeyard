@@ -343,6 +343,8 @@ impl Workbench {
             Command::action("Terminal: Kill Other Terminals", KillOtherTerminals),
             Command::action("Terminal: Focus Next Terminal", FocusNextTerminal),
             Command::action("Terminal: Focus Previous Terminal", FocusPreviousTerminal),
+            Command::action("Terminal: Move Terminal Up", MoveTerminalUp),
+            Command::action("Terminal: Move Terminal Down", MoveTerminalDown),
             Command::action("Terminal: Configure Terminal Settings", ConfigureTerminalSettings),
             Command::action("Terminal: Go to Previous Command", crate::terminal::TermPrevCommand),
             Command::action("Terminal: Go to Next Command", crate::terminal::TermNextCommand),

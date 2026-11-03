@@ -15,6 +15,7 @@ impl Workbench {
         let view = cx.new(|cx| crate::diff::DiffView::new(title, false, left, right, cx).with_label(label));
         window.focus(&view.focus_handle(cx));
         self.tabs.diff = Some(view);
+        self.chrome.panel_max = false;
         self.tabs.diff_active = true;
         self.tabs.page_active = false;
         self.tabs.large_active = false;

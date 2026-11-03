@@ -951,6 +951,7 @@ impl Workbench {
             }
             (Action::Focus | Action::Click, ABOUT_TAB) if last.about.is_some() => {
                 if let Some(Page::About(view)) = self.tabs.page.clone() {
+                    self.chrome.panel_max = false;
                     self.tabs.page_active = true;
                     self.tabs.diff_active = false;
                     self.tabs.large_active = false;

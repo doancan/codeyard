@@ -48,6 +48,8 @@ impl Workbench {
             .on_action(cx.listener(Self::kill_other_terminals))
             .on_action(cx.listener(Self::focus_next_terminal))
             .on_action(cx.listener(Self::focus_previous_terminal))
+            .on_action(cx.listener(Self::move_terminal_up))
+            .on_action(cx.listener(Self::move_terminal_down))
             .on_action(cx.listener(Self::configure_terminal_settings))
             .on_action(cx.listener(Self::rename_terminal))
             .on_action(cx.listener(Self::change_terminal_color))

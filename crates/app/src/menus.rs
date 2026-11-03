@@ -486,6 +486,8 @@ pub(crate) fn menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
                 sep(),
                 I::action(tr("Focus Next Terminal"), wb::FocusNextTerminal),
                 I::action(tr("Focus Previous Terminal"), wb::FocusPreviousTerminal),
+                I::action(tr("Move Terminal Up"), wb::MoveTerminalUp),
+                I::action(tr("Move Terminal Down"), wb::MoveTerminalDown),
                 sep(),
                 I::action(tr("Find"), crate::terminal::TermFind),
                 I::action(tr("Select All"), crate::terminal::TermSelectAll),

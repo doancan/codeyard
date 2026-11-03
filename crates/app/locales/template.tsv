@@ -1353,6 +1353,9 @@ Move Line Down
 Move Line Up	
 Move Panel Right	
 Move Panel to Bottom	
+Move Terminal Down	
+Move Terminal Up	
+Move Terminal into Editor Area	
 Move deleted local files to the Trash	
 Move to Trash	
 Move “{0}” into “{1}”?	
@@ -2289,6 +2292,8 @@ Terminal: Go to Previous Command
 Terminal: Kill All Terminals	
 Terminal: Kill Other Terminals	
 Terminal: Move Terminal Back to Panel	
+Terminal: Move Terminal Down	
+Terminal: Move Terminal Up	
 Terminal: Move Terminal into Editor Area	
 Terminal: Move Terminal into New Window	
 Terminal: Move Terminals Back to Panel	
