@@ -303,6 +303,7 @@ impl ScmPanel {
             self.busy.clear();
         }
         if host_changed || (new_root.is_some() && old_root != new_root) {
+            self.opened = None;
             // Another repository: the history, stashes and commit details on screen belong to the previous one and
             // must not be acted on; they go at once, and the new repository's load replaces them.
             self.clear_history();

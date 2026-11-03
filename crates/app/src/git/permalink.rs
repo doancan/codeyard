@@ -1,17 +1,8 @@
 //! Links to a file on the hosting service of a remote: GitHub, GitLab, Bitbucket and Codeberg (Gitea) addresses built
 //! from the remote's URL. Nothing is fetched: the link is opened in the browser or copied.
 
-/// Characters a path segment of a repository or file may keep as they are in a URL.
-fn unreserved(b: u8) -> bool {
-    b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~')
-}
-
-fn encode_segment(segment: &str) -> String {
-    segment.bytes().map(|b| if unreserved(b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
-}
-
 fn encode_path(path: &str) -> String {
-    path.split('/').map(encode_segment).collect::<Vec<_>>().join("/")
+    path.split('/').map(crate::texttools::url_encode).collect::<Vec<_>>().join("/")
 }
 
 /// The web address of a remote repository (`https://host/group/repo`) and its host. Accepts `https://`, `ssh://`, `git@host:path`
@@ -30,12 +21,14 @@ fn web_address(remote: &str) -> Option<(String, String)> {
         }
         _ => return None,
     };
+    // `github.com-work` is an ssh alias for one of several accounts; the site is still github.com.
     let host = host.to_ascii_lowercase();
+    let host = if host.starts_with("github.com-") { "github.com".to_string() } else { host };
     if host.is_empty() || !host.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-')) || !host.contains('.') {
         return None;
     }
     let path = path.trim_matches('/').trim_end_matches(".git").trim_end_matches('/');
-    let valid = |s: &str| !s.is_empty() && s != "." && s != ".." && s.bytes().all(|b| unreserved(b));
+    let valid = |s: &str| !s.is_empty() && s != "." && s != ".." && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~'));
     let segments: Vec<&str> = path.split('/').collect();
     (segments.len() >= 2 && segments.iter().all(|s| valid(s))).then(|| (host.clone(), format!("https://{host}/{}", segments.join("/"))))
 }
@@ -47,9 +40,9 @@ pub fn file_url(remote: &str, rev: &str, path: &str, lines: (usize, usize)) -> O
     let (a, b) = lines;
     let (rev, path) = (encode_path(rev), encode_path(path));
     let range = |single: String, span: String| if a == b { single } else { span };
-    Some(if host == "github.com" || host.starts_with("github.com-") {
+    Some(if host == "github.com" {
         format!("{base}/blob/{rev}/{path}#{}", range(format!("L{a}"), format!("L{a}-L{b}")))
-    } else if host.contains("gitlab") {
+    } else if host == "gitlab.com" || host.starts_with("gitlab.") {
         format!("{base}/-/blob/{rev}/{path}#{}", range(format!("L{a}"), format!("L{a}-{b}")))
     } else if host == "bitbucket.org" {
         format!("{base}/src/{rev}/{path}#{}", range(format!("lines-{a}"), format!("lines-{a}:{b}")))
@@ -76,6 +69,7 @@ mod tests {
             assert_eq!(web_address(remote), Some(("github.com".into(), "https://github.com/doancan/codeyard".into())), "{remote}");
         }
         assert_eq!(web_address("git@gitlab.com:group/sub/repo.git").unwrap().1, "https://gitlab.com/group/sub/repo");
+        assert_eq!(web_address("git@github.com-work:o/r.git").unwrap().1, "https://github.com/o/r", "an ssh alias is the site itself");
     }
 
     #[test]
@@ -85,6 +79,7 @@ mod tests {
             assert_eq!(web_address(remote), None, "{remote:?}");
         }
         assert_eq!(file_url("git@example.org:a/b.git", "main", "x.rs", (1, 1)), None, "an unknown host has an unknown layout");
+        assert_eq!(file_url("https://notgitlab.evil.com/a/b", "main", "x.rs", (1, 1)), None, "only gitlab.com and gitlab.* hosts");
     }
 
     #[test]

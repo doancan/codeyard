@@ -681,6 +681,7 @@ Docker: {}
 Docker: {}. Check Output and verify that the selected engine is running.	
 Docker: {}. Check Output. Dev Container creation requires the separately installed Dev Container CLI.	
 Don't Save	
+Don't Trust	
 Don't Trust This Folder	
 Done	
 Download	
@@ -1141,6 +1142,7 @@ In Privacy & Security, press + and add Codeyard, then turn it on.
 In the file tree, type to jump to a name; ⇧→ opens everything inside a folder, ⇧← closes it.	
 In the secondary side bar: {}	
 Incoming	
+Indent Guides	
 Indent of each folder level in the explorer (px)	
 Indent using 2 spaces	
 Indent using 4 spaces	
@@ -1259,6 +1261,7 @@ Let {0} use your account on {1}?
 Let {} read the clipboard?	
 Lifecycle: {}	
 Lightweight editing, on this machine or over SSH.	
+Line Numbers	
 Line endings for this file (applied on save)	
 Line height in pixels	
 Line numbers in the gutter	
@@ -1524,7 +1527,6 @@ No view is in the secondary side bar. Use View: Move View to Secondary Side Bar.
 No workspace file is open.	
 No workspace file is open. Use File: Save Workspace As… to create one.	
 No worktrees found.	
-No, I Don't Trust Them	
 Node.js program	
 None	
 None in this session.	
@@ -1856,6 +1858,7 @@ Regular expression (⌥R)
 Reinstall	
 Reinstall Language Services	
 Reinstall Previous Version	
+Release Notes	
 Release Page	
 Reload history	
 Remote & Languages	
@@ -1935,6 +1938,7 @@ Replaced {0}; could not change {1}
 Replaced {}	
 Replaced {} match|Replaced {} matches	
 Replacement preview	
+Report Issue…	
 Report copied	
 Report saved to {}	
 Report…	

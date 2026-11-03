@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Workspace Trust, end to end: an untrusted folder asks when it opens (Trust Folder, Trust Parent Folder and Subfolders, or
-  No), the status bar shows **Restricted Mode** until it is trusted, and **Workspace: Manage Workspace Trust…** trusts or
+  Don't Trust; Return and Escape trust nothing), the status bar shows **Restricted Mode** until it is trusted, and **Workspace: Manage Workspace Trust…** trusts or
   stops trusting the open folder and lists every trusted folder to remove one (`security.workspaceTrust.startupPrompt`).
 - Terminal list: drag a row to a new place, or use **Terminal: Move Terminal Up / Down**; right-click a row for the terminal
   menu, which also has Split Terminal, Move Terminal into Editor Area and Configure Terminal Settings.

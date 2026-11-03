@@ -36,7 +36,12 @@ pub use worktree::parse_worktree_entries;
 pub use worktree::{Worktree, worktree_entries};
 
 fn git(host: &dyn Host, cwd: &str, args: &[&str]) -> Result<host::ExecOutput, String> {
-    let out = host.exec("git", args, Some(cwd), None).map_err(|e| e.to_string())?;
+    git_stdin(host, cwd, args, None)
+}
+
+/// `git` with `stdin` for the command to read.
+fn git_stdin(host: &dyn Host, cwd: &str, args: &[&str], stdin: Option<Vec<u8>>) -> Result<host::ExecOutput, String> {
+    let out = host.exec("git", args, Some(cwd), stdin).map_err(|e| e.to_string())?;
     if out.code == Some(127) {
         return Err(crate::i18n::t("git is not installed on this host").into());
     }

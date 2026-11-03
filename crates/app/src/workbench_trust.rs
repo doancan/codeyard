@@ -34,9 +34,17 @@ pub(super) fn parent_folder(path: &str) -> Option<String> {
     (!is_disk_root).then(|| parent.to_string())
 }
 
-/// A trust record's key split into the SSH alias (empty on this computer) and the folder.
+/// A trust record's key split into the host (empty on this computer; an SSH alias, or `docker:name`, `wsl:distro`) and the
+/// folder, which is the part that starts like a path: `/…`, `\…` or a drive (`C:\…`).
 fn split_record(key: &str) -> Option<(&str, &str)> {
-    key.strip_prefix(RECORD_PREFIX)?.split_once(':')
+    let rest = key.strip_prefix(RECORD_PREFIX)?;
+    let starts_path = |s: &str| {
+        s.starts_with(['/', '\\']) || s.as_bytes().get(..3).is_some_and(|b| b[0].is_ascii_alphabetic() && b[1] == b':' && matches!(b[2], b'/' | b'\\'))
+    };
+    rest.char_indices()
+        .filter(|(_, c)| *c == ':')
+        .find_map(|(i, _)| starts_path(&rest[i + 1..]).then(|| (&rest[..i], &rest[i + 1..])))
+        .or_else(|| rest.split_once(':'))
 }
 
 /// The picker's rows for the current folder (`None`: no folder open) and the stored records, in the order shown.
@@ -100,15 +108,19 @@ impl Workbench {
         if let Some(s) = &self.persist.state {
             let _ = s.set(&key, TREE);
         }
-        self.trust_applied(ui::file_name(folder), window, cx);
+        self.trust_applied(crate::i18n::tf("Trusted “{}”", &[&ui::file_name(folder)]), window, cx);
     }
 
-    /// The state after the trust records changed: settings and language servers are read again for what is trusted now.
-    fn trust_applied(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
+    /// The state after the trust records changed: settings, language servers and extension source control are read again for
+    /// what is trusted now.
+    pub(super) fn trust_applied(&mut self, notice: String, window: &mut Window, cx: &mut Context<Self>) {
         self.lsp.restricted_notified.clear();
+        // The extension SCM claims are keyed on the number of session records, which a record from an earlier session or a
+        // folder already cached does not change.
+        self.cfg.exts.scm.invalidate();
         self.reload_config(window, cx);
         self.restart_lsp(cx);
-        self.notice = Some(Notice::Info(crate::i18n::tf("Trusted “{}”", &[&name]).into()));
+        self.notice = Some(Notice::Info(notice.into()));
         cx.notify();
     }
 
@@ -122,15 +134,11 @@ impl Workbench {
         self.cfg.trusted.remove(&format!("{key}{TREE_CACHE}"));
         if let Some(s) = &self.persist.state {
             let _ = s.remove(&key);
+            // A folder forgotten asks again when it next opens, even after "once".
+            let _ = s.remove(&format!("{ASKED_PREFIX}{key}"));
         }
-        // The folder asks again when it next opens, even after "once".
-        self.cfg.trust_prompted = None;
-        self.lsp.restricted_notified.clear();
-        self.reload_config(window, cx);
-        self.restart_lsp(cx);
         let folder = split_record(&key).map_or(key.as_str(), |(_, f)| f).to_string();
-        self.notice = Some(Notice::Info(crate::i18n::tf("No longer trusting “{}”", &[&ui::file_name(&folder)]).into()));
-        cx.notify();
+        self.trust_applied(crate::i18n::tf("No longer trusting “{}”", &[&ui::file_name(&folder)]), window, cx);
     }
 
     /// "Workspace: Manage Workspace Trust…": trust or stop trusting the open folder, and the list of trusted folders.
@@ -200,8 +208,12 @@ impl Workbench {
                     let _ = s.set(&asked, "1");
                 }
                 match answer {
-                    Some(0) => this.trust_roots(&roots, &name, window, cx),
-                    Some(1) if parent.is_some() => this.trust_with_subfolders(&parent.unwrap_or_default(), window, cx),
+                    Some(1) => this.trust_roots(&roots, &name, window, cx),
+                    Some(2) => {
+                        if let Some(parent) = &parent {
+                            this.trust_with_subfolders(parent, window, cx);
+                        }
+                    }
                     _ => {}
                 }
             })
@@ -238,6 +250,8 @@ mod tests {
         assert_eq!(split_record("trust::/srv/app"), Some(("", "/srv/app")));
         assert_eq!(split_record("trust:prod:/srv/app"), Some(("prod", "/srv/app")));
         assert_eq!(split_record(r"trust::C:\proj"), Some(("", r"C:\proj")), "a drive letter's colon stays in the folder");
+        assert_eq!(split_record("trust:docker:web:/srv/app"), Some(("docker:web", "/srv/app")), "a container's name has a colon");
+        assert_eq!(split_record(r"trust:wsl:Ubuntu:C:\x"), Some(("wsl:Ubuntu", r"C:\x")));
         assert_eq!(split_record("trust_migrated_v1"), None);
     }
 

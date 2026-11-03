@@ -2874,14 +2874,14 @@ fn an_untrusted_folder_asks_when_it_opens(cx: &mut TestAppContext) {
     open(&wb, &a, cx);
     cx.run_until_parked();
     assert!(cx.has_pending_prompt(), "the folder asks when it opens");
-    cx.simulate_prompt_answer("No, I Don't Trust Them");
+    cx.simulate_prompt_answer("Don't Trust");
     cx.run_until_parked();
     assert!(restricted(&wb, cx), "Restricted Mode stays on");
 
     open(&wb, &b, cx);
     cx.run_until_parked();
     assert!(cx.has_pending_prompt());
-    cx.simulate_prompt_answer("No, I Don't Trust Them");
+    cx.simulate_prompt_answer("Don't Trust");
     cx.run_until_parked();
     open(&wb, &a, cx);
     cx.run_until_parked();

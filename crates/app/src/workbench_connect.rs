@@ -453,10 +453,7 @@ impl Workbench {
             // Start the language servers held back by the missing trust.
             self.lsp.restricted_notified.remove(root);
         }
-        self.reload_config(window, cx);
-        self.restart_lsp(cx);
-        self.notice = Some(Notice::Info(crate::i18n::tf("Trusted “{}”", &[&name]).into()));
-        cx.notify();
+        self.trust_applied(crate::i18n::tf("Trusted “{}”", &[&name]), window, cx);
     }
 
     /// What answering yes about `root` trusts: the whole open workspace when `root` is its file's folder or one of its

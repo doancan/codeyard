@@ -118,7 +118,7 @@ pub(crate) fn trust(workspace: Option<&str>, folder: &str) -> Question {
 }
 
 /// The question a folder asks when it opens untrusted. `parent`: the folder above it, offered as a second place to trust
-/// together with everything below it. The last button changes nothing, so the folder stays in Restricted Mode.
+/// together with everything below it. The first button changes nothing, so the folder stays in Restricted Mode.
 pub(crate) fn trust_on_open(workspace: Option<&str>, folder: &str, parent: Option<&str>) -> Question {
     let (title, detail) = match workspace {
         Some(name) => (
@@ -136,12 +136,17 @@ pub(crate) fn trust_on_open(workspace: Option<&str>, folder: &str, parent: Optio
             ),
         ),
     };
-    let q = Question::new(PromptLevel::Warning, title).detail(detail).button(if workspace.is_some() { t("Trust Workspace") } else { t("Trust Folder") });
-    let q = match parent {
+    // The button that changes nothing comes first, so Return (which answers the first button unless it is Cancel) and Escape
+    // both leave the folder untrusted: trusting takes a click.
+    let q = Question::new(PromptLevel::Warning, title).detail(detail).cancel(t("Don't Trust")).button(if workspace.is_some() {
+        t("Trust Workspace")
+    } else {
+        t("Trust Folder")
+    });
+    match parent {
         Some(parent) => q.button(tf("Trust Parent Folder “{}” and Subfolders", &[&ui_name(parent)])),
         None => q,
-    };
-    q.cancel(t("No, I Don't Trust Them"))
+    }
 }
 
 fn ui_name(path: &str) -> String {

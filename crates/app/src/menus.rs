@@ -77,6 +77,8 @@ pub(crate) fn desktop_menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
         name: tr("Help").into(),
         items: vec![
             I::action(tr("Welcome"), wb::ShowWelcome),
+            I::action(tr("Release Notes"), wb::ShowReleaseNotes),
+            I::action(tr("Report Issue…"), wb::ReportIssue),
             I::action(tr("About Codeyard"), wb::ShowAbout),
             I::action(tr("Check for Updates…"), wb::CheckForUpdates),
         ],
@@ -417,6 +419,9 @@ pub(crate) fn menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
                 I::action(tr("Toggle Panel"), wb::TogglePanel),
                 I::action(tr("Split Editor"), wb::SplitEditor),
                 I::action(tr("Word Wrap"), wb::ToggleWordWrap),
+                I::action(tr("Breadcrumbs"), wb::ToggleBreadcrumbs),
+                I::action(tr("Line Numbers"), wb::ToggleLineNumbers),
+                I::action(tr("Indent Guides"), wb::ToggleIndentGuides),
                 sep(),
                 I::action(tr("Fold"), ed::FoldRegion),
                 I::action(tr("Unfold"), ed::UnfoldRegion),

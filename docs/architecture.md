@@ -334,9 +334,9 @@ An untrusted folder (anything not opened before the trust gate existed and not t
 language-server gate was introduced are trusted once (`trust_migrated_v1`) so existing projects keep working.
 
 A window whose folder is not trusted is in **Restricted Mode**: the status bar shows a "Restricted Mode" item (click it to
-manage trust). When a folder opens untrusted it asks once ("Trust Folder", "Trust Parent Folder and Subfolders" or "No, I
-Don't Trust Them"; `security.workspaceTrust.startupPrompt`: `once`, `always`, `never`; `workbench_trust.rs`). "Workspace: Manage
-Workspace Trust…" trusts the open folder or its parent, stops trusting the open folder, and lists every record to remove one.
+manage trust). When a folder opens untrusted it asks once ("Don't Trust" first, so Return and Escape trust nothing, then "Trust Folder" and
+"Trust Parent Folder and Subfolders"; `security.workspaceTrust.startupPrompt`: `once`, `always`, `never`; `workbench_trust.rs`). "Workspace: Manage
+Workspace Trust…" trusts the open folder or its parent, stops trusting the open folder (when it has a record of its own; one trusted through a parent goes with the parent's record), and lists every record to remove one.
 A record's value is `1` (that folder) or `tree` (also everything below it); `trust_source` finds the record that covers a
 folder. Trust is never offered for a filesystem root.
 

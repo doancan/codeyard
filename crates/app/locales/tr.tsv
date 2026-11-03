@@ -3521,7 +3521,7 @@ Ask whether to trust a folder when it opens: once, every time, or never	Bir klas
 Don't Trust This Folder	Bu Klasöre Güvenme
 No longer trusting “{}”	“{}” artık güvenilmiyor
 No trusted folders yet.	Henüz güvenilen klasör yok.
-No, I Don't Trust Them	Hayır, Güvenmiyorum
+Don't Trust	Güvenme
 Restricted Mode	Kısıtlı Mod
 Restricted Mode: tasks, debugging, and the project's terminal shell and language servers are switched off until you trust this folder. Click to manage trust.	Kısıtlı Mod: bu klasöre güvenene kadar görevler, hata ayıklama ve projenin terminal kabuğu ile dil sunucuları kapalıdır. Güveni yönetmek için tıklayın.
 Trust Folder	Klasöre Güven
@@ -3573,3 +3573,7 @@ The patch was not applied: {}	Yama uygulanmadı: {}
 The changes are too large for one patch.	Değişiklikler tek bir yama için çok büyük.
 The patch is too large.	Yama çok büyük.
 The text is not a patch.	Metin bir yama değil.
+Release Notes	Sürüm Notları
+Report Issue…	Sorun Bildir…
+Line Numbers	Satır Numaraları
+Indent Guides	Girinti Kılavuzları

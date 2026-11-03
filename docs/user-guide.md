@@ -37,6 +37,11 @@ is the complete list and always matches your key bindings; every setting is in [
 
 ## Keys
 
+The commands below have no key until you give them one in Keyboard Shortcuts: **Move / Select / Delete Word Part Left /
+Right** (`editor.cursorWordPartLeft` and the others) stop inside `camelCase`, `snake_case`, `kebab-case` and `HTTPServer`
+names; **File: Compare Selection with Clipboard**; and the View toggles **Breadcrumbs**, **Line Numbers**, **Indent
+Guides**, **Inlay Hints** and **File: Toggle Auto Save**, which change the running session and leave `settings.jsonc` alone.
+
 | | macOS | Linux / Windows |
 | --- | --- | --- |
 | Go to file | ⌘P | Ctrl+P |
@@ -536,12 +541,13 @@ a test or the debugger first asks "Do you trust the authors of this folder?". A 
 program (a filter, diff or merge driver, an ssh or credential command, a hooks folder) gets **no Git at all** until it is
 trusted: `git status` alone would run its filters. A notice names the settings. Folders you had already opened before this
 rule existed are trusted once. Trusting is remembered per folder (per host over SSH) and starts the language servers at once;
-`Workspace: Trust This Folder` does it without a question. With a workspace file open, trust covers the workspace as a
+`Workspace: Trust This Folder` does it without a question. A folder trusted through its parent can only be removed
+through the parent's record in the list. With a workspace file open, trust covers the workspace as a
 whole: the question becomes "Do you trust the authors of this workspace?" and names the file, and the answer (or
 `Workspace: Trust This Folder`) trusts the file's own folder and every folder it lists in one step. A folder the
 workspace does not list is still asked about on its own, and over SSH the trust only holds on that host.
 A folder you open untrusted asks once whether to trust it (**Trust Folder**, **Trust Parent Folder and Subfolders**, or
-**No, I Don't Trust Them**; `security.workspaceTrust.startupPrompt` can make it ask every time or never), and until you do
+**Don't Trust**; `security.workspaceTrust.startupPrompt` can make it ask every time or never), and until you do
 the status bar shows **Restricted Mode**. Click it, or run `Workspace: Manage Workspace Trust…`, to trust the folder or its
 parent, to stop trusting the open folder, or to remove any trusted folder from the list.
 `security.workspaceTrust.enabled: false`
@@ -1039,6 +1045,13 @@ folder opens, whenever the window comes back to the front, and then every 180 s 
 shows in the sync item's tooltip). `git.confirmSync` and `git.postCommitCommand` are read from your
 own settings only: a repository cannot turn the question on or off or make your commits push by themselves.
 
+Four palette commands work with the hosting service and with patches. **Git: Copy Permalink** copies a link to the open
+file at the commit `HEAD` is on, with the selected lines marked, and **Git: Open File on Remote** opens the file on the
+current branch in the browser; both work for GitHub, GitLab, Bitbucket and Codeberg remotes (an unknown host says so
+instead of guessing a layout). **Git: Copy Changes as Patch** copies every change to tracked files since `HEAD`, staged or
+not, as one patch (untracked files are not part of it), and **Git: Apply Patch from Clipboard** applies a patch to the working
+tree: the whole patch is checked first and nothing changes if it does not apply.
+
 ## Projects, favorites, bookmarks, tasks
 
 `⌃R` opens the **workspace switcher**, the one place for opening and connecting: saved projects first
@@ -1102,7 +1115,8 @@ changed inside a changed line.
 
 If Codeyard panics it writes a report to `crashes/` next to its state database
 (`~/.local/state/codeyard` or `~/Library/Application Support/codeyard`, or `CODEYARD_STATE_DIR`). Nothing is
-sent anywhere: attach the file to a bug report yourself.
+sent anywhere: attach the file to a bug report yourself. The Help menu has **Release Notes**, **Report Issue…** (a new
+issue with the version and system filled in) and, in the palette, **Help: Open Crash Reports Folder**.
 
 Over SSH, "File: Save a Copy to This Computer…" saves the open remote file to a path on your own machine.
 
@@ -1643,6 +1657,9 @@ the bottom or the right restores its size.
   above are read only from your own settings, never from a project's.
 - Links that programs mark (OSC 8) show and open their real target.
 - The history is capped at 50,000 lines (`terminal.scrollback`).
+- With several terminals the list on the right reorders by dragging a row (the line shows where it lands) or with
+  **Terminal: Move Terminal Up / Down**; right-clicking a row opens the terminal menu (Split, Move into Editor Area, Rename,
+  Change Color, Kill and the rest). The running indicator is a still dot.
 
 ## Port forwarding
 

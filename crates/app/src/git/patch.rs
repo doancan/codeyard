@@ -33,7 +33,7 @@ pub fn apply_patch(host: &dyn Host, root: &str, patch: &str) -> Result<(), Strin
         return Err(crate::i18n::t("The text is not a patch.").to_string());
     }
     for args in [&["apply", "--check", "--whitespace=nowarn", "-"][..], &["apply", "--whitespace=nowarn", "-"][..]] {
-        let out = host.exec("git", args, Some(root), Some(patch.as_bytes().to_vec())).map_err(|e| e.to_string())?;
+        let out = git_stdin(host, root, args, Some(patch.as_bytes().to_vec()))?;
         if !out.ok() {
             return Err(failure_text(&out));
         }

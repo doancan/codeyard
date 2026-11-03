@@ -123,6 +123,7 @@ impl Workbench {
                 d.child(
                     item()
                         .id("sb-restricted")
+                        .child(a11y::part_frame(a11y::Part::Status(a11y::StatusPart::Restricted), cx))
                         .flex_shrink()
                         .cursor_pointer()
                         .bg(c(p.warning))

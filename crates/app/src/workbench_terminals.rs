@@ -32,6 +32,8 @@ const TERM_ROW_H: f32 = 28.;
 #[derive(Clone)]
 struct DraggedTerminalRow {
     term: Entity<TerminalView>,
+    /// Its place in the list when the drag began.
+    from: usize,
     title: SharedString,
 }
 
@@ -498,13 +500,18 @@ impl Workbench {
             };
             let tip: SharedString = row.tooltip().into();
             let accent = p.accent;
-            let dragged = DraggedTerminalRow { term: term.clone(), title: row.label.clone().into() };
+            let dragged = DraggedTerminalRow { term: term.clone(), from: i, title: row.label.clone().into() };
             div()
                 .id(("term-tab", i))
                 .group(group.clone())
                 .relative()
                 .on_drag(dragged, |d, _, _, cx| cx.new(|_| d.clone()))
-                .drag_over::<DraggedTerminalRow>(move |s, _, _, _| s.border_t_2().border_color(c(accent)))
+                // The dragged row lands in the target's place: below it when it comes from above, otherwise above it.
+                .drag_over::<DraggedTerminalRow>(move |s, d, _, _| match d.from.cmp(&i) {
+                    std::cmp::Ordering::Less => s.border_b_2().border_color(c(accent)),
+                    std::cmp::Ordering::Greater => s.border_t_2().border_color(c(accent)),
+                    std::cmp::Ordering::Equal => s,
+                })
                 .on_drop(cx.listener(move |this, d: &DraggedTerminalRow, _, cx| this.move_terminal(&d.term, i, cx)))
                 .child(crate::a11y_controls::control(
                     crate::a11y_controls::Control::new(

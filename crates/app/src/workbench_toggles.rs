@@ -25,17 +25,10 @@ fn toggled_auto_save(current: &AutoSave) -> AutoSave {
     }
 }
 
-/// `text` for a URL's query: everything but unreserved characters percent-encoded.
-fn percent_encode(text: &str) -> String {
-    text.bytes()
-        .map(|b| if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') { (b as char).to_string() } else { format!("%{b:02X}") })
-        .collect()
-}
-
 /// The new-issue page of the repository, with the version and system already in the text.
 fn report_issue_url() -> String {
     let body = format!("\n\n---\nCodeyard {} on {} {}", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH);
-    format!("{}/issues/new?body={}", env!("CARGO_PKG_REPOSITORY"), percent_encode(&body))
+    format!("{}/issues/new?body={}", env!("CARGO_PKG_REPOSITORY"), crate::texttools::url_encode(&body))
 }
 
 fn release_notes_url() -> String {
@@ -111,10 +104,9 @@ mod tests {
 
     #[test]
     fn the_issue_page_carries_the_version_and_encodes_the_text() {
-        assert_eq!(percent_encode("a b/ç~"), "a%20b%2F%C3%A7~");
         let url = report_issue_url();
         assert!(url.starts_with(env!("CARGO_PKG_REPOSITORY")) && url.contains("/issues/new?body="), "{url}");
-        assert!(url.contains(&percent_encode(env!("CARGO_PKG_VERSION"))) && !url.contains(' ') && !url.contains('\n'), "{url}");
+        assert!(url.contains(&crate::texttools::url_encode(env!("CARGO_PKG_VERSION"))) && !url.contains(' ') && !url.contains('\n'), "{url}");
         assert!(release_notes_url().ends_with(&format!("/releases/tag/v{}", env!("CARGO_PKG_VERSION"))));
     }
 }
