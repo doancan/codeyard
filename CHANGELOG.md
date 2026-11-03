@@ -37,6 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Terminal performance with programs that redraw a lot (Claude Code, Codex): a title that animates no longer rebuilds the
+  whole window for every frame (the window hears of it at most every 250 ms), output is parsed once per turn in slices of
+  at most 256 KB with a frame drawn in between and at most one turn every 12 ms, a screen row's text is built in one go
+  instead of growing character by character (quadratic for long lines), and saving the terminals no longer reads the whole
+  scrollback when none of it is kept. In a debug build, a synthetic Claude-like stream (30 long coloured rows redrawn 20
+  times a second) takes about a fifth of the main thread it took before.
+
 - A diff, Settings or any other page opened while the terminal was maximized stayed hidden behind it, and Settings or a
   palette command did nothing when the keyboard had been left in the hidden editor. The keyboard now goes to the terminal when
   the panel is maximized, and `workbench.panel.openFromMaximized` (`half`, `restore`, `tab`) says what gives way when

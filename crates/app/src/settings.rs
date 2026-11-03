@@ -470,7 +470,9 @@ mod text;
 pub use text::{Seg, array_items, members, set_path_in, set_string_in, set_value_in, value_range};
 #[path = "settings_scope.rs"]
 mod scope;
-pub use scope::{RESTRICTED_KEYS, USER_ONLY_KEYS};
+pub use scope::RESTRICTED_KEYS;
+#[cfg(test)]
+pub use scope::USER_ONLY_KEYS;
 pub use scope::{Scope, ScopedLayer, Sources, is_user_only};
 #[path = "settings_rust.rs"]
 mod rust;
