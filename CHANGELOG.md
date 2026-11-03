@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-11-04
+
 ### Changed
 
 - The question an untrusted folder asks is a card in the window: it says what Restricted Mode keeps off and what still works,
@@ -1634,7 +1636,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.3...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.4...HEAD
+[0.7.4]: https://github.com/doancan/codeyard/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/doancan/codeyard/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/doancan/codeyard/compare/v0.7.0...v0.7.2
 [0.7.0]: https://github.com/doancan/codeyard/compare/v0.6.0...v0.7.0
