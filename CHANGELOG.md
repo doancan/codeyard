@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exactly one line ending); also per folder and in `.vscode/settings.json`.
 - Word part commands for `camelCase`, `PascalCase`, `snake_case`, `kebab-case` and `HTTPServer` names: Move, Select and
   Delete Word Part Left / Right (`editor.cursorWordPartLeft` and the others; bind them in Keyboard Shortcuts).
+- **File: Compare Selection with Clipboard**.
+- View toggles for Breadcrumbs, Line Numbers, Indent Guides, Inlay Hints and Auto Save (**File: Toggle Auto Save**), and the
+  Help commands **Release Notes**, **Report Issue…** (opens a new issue with the version and system filled in) and **Open Crash
+  Reports Folder**.
 - Source Control keeps the row of the change you opened highlighted.
 - Background fetch also runs shortly after a folder opens and when the window comes back to the front, so commits pushed
   meanwhile show without clicking Sync.

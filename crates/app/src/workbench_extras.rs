@@ -10,6 +10,8 @@ use super::{
 };
 use crate::ui;
 
+gpui::actions!(workbench, [CompareSelectionWithClipboard]);
+
 impl Workbench {
     pub(super) fn open_compare(&mut self, title: String, label: &'static str, left: &str, right: &str, window: &mut Window, cx: &mut Context<Self>) {
         let view = cx.new(|cx| crate::diff::DiffView::new(title, false, left, right, cx).with_label(label));
@@ -37,6 +39,22 @@ impl Workbench {
         };
         let title = crate::i18n::tf("{} ↔ Clipboard", &[&ui::file_name(&path)]);
         self.open_compare(title, crate::i18n::t("Compare"), &clip.replace("\r\n", "\n"), &current, window, cx);
+    }
+
+    /// "Compare Selection with Clipboard": the selected text (all selections, one per line block) against the clipboard.
+    pub(super) fn compare_selection_with_clipboard(&mut self, _: &CompareSelectionWithClipboard, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(ed) = self.active_editor().cloned() else { return };
+        let selected = ed.read(cx).selected_text_all().join("\n");
+        if selected.is_empty() {
+            self.notice = Some(Notice::Info(crate::i18n::t("Select some text first.").into()));
+            return cx.notify();
+        }
+        let Some(clip) = cx.read_from_clipboard().and_then(|c| c.text()) else {
+            self.notice = Some(Notice::Info(crate::i18n::t("The clipboard has no text.").into()));
+            return cx.notify();
+        };
+        let title = crate::i18n::tf("{} (selection) ↔ Clipboard", &[&ui::file_name(&ed.read(cx).path)]);
+        self.open_compare(title, crate::i18n::t("Compare"), &clip.replace("\r\n", "\n"), &selected.replace("\r\n", "\n"), window, cx);
     }
 
     /// Unsaved changes: compare with the on-disk version.
@@ -369,6 +387,11 @@ impl Workbench {
                 None
             }
         }
+    }
+
+    #[cfg(test)]
+    pub fn diff_title_for_test(&self, cx: &gpui::App) -> Option<String> {
+        self.tabs.diff_active.then(|| self.tabs.diff.as_ref().map(|d| d.read(cx).path.clone())).flatten()
     }
 
     #[cfg(test)]

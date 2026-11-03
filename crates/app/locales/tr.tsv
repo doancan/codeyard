@@ -3540,3 +3540,17 @@ with subfolders	alt klasörleriyle
 “{}” and its folders can run programs through their tasks, debug configurations and project settings. Without trust the window stays in Restricted Mode: those are switched off.	“{}” ve klasörleri görevleri, hata ayıklama yapılandırmaları ve proje ayarları üzerinden program çalıştırabilir. Güvenilmezse pencere Kısıtlı Mod’da kalır: bunlar kapalıdır.
 “{}” can run programs through its tasks, debug configurations and project settings. Without trust the window stays in Restricted Mode: those are switched off.	“{}” görevleri, hata ayıklama yapılandırmaları ve proje ayarları üzerinden program çalıştırabilir. Güvenilmezse pencere Kısıtlı Mod’da kalır: bunlar kapalıdır.
 Remove blank lines at the end of a file when saving	Kaydederken dosyanın sonundaki boş satırları sil
+File: Compare Selection with Clipboard	Dosya: Seçimi Panoyla Karşılaştır
+Select some text first.	Önce biraz metin seçin.
+{} (selection) ↔ Clipboard	{} (seçim) ↔ Pano
+View: Toggle Breadcrumbs	Görünüm: Ekmek Kırıntılarını Aç/Kapat
+View: Toggle Line Numbers	Görünüm: Satır Numaralarını Aç/Kapat
+View: Toggle Indent Guides	Görünüm: Girinti Kılavuzlarını Aç/Kapat
+View: Toggle Inlay Hints	Görünüm: Satır İçi İpuçlarını Aç/Kapat
+File: Toggle Auto Save	Dosya: Otomatik Kaydetmeyi Aç/Kapat
+Help: Release Notes	Yardım: Sürüm Notları
+Help: Report Issue…	Yardım: Sorun Bildir…
+Help: Open Crash Reports Folder	Yardım: Çökme Raporları Klasörünü Aç
+Auto Save is off.	Otomatik Kaydetme kapalı.
+Auto Save is on.	Otomatik Kaydetme açık.
+No crash reports: Codeyard has not crashed.	Çökme raporu yok: Codeyard hiç çökmedi.

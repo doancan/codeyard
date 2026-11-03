@@ -81,6 +81,7 @@ mod ext_views_glue;
 mod ext_watch_glue;
 #[path = "workbench_extras.rs"]
 mod extras_glue;
+pub use extras_glue::CompareSelectionWithClipboard;
 #[path = "workbench_file_batch.rs"]
 mod file_batch_glue;
 #[path = "workbench_folder.rs"]
@@ -198,6 +199,11 @@ mod view_windows_glue;
 pub use term_daemon_glue::{enable_terminal_daemon, terminal_daemon_socket};
 #[path = "workbench_terminals.rs"]
 mod terminals_glue;
+#[path = "workbench_toggles.rs"]
+mod toggles_glue;
+pub use toggles_glue::{
+    OpenCrashReportsFolder, ReportIssue, ShowReleaseNotes, ToggleAutoSave, ToggleBreadcrumbs, ToggleIndentGuides, ToggleInlayHints, ToggleLineNumbers,
+};
 #[path = "workbench_trust.rs"]
 mod trust_glue;
 pub use trust_glue::ManageWorkspaceTrust;

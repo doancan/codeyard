@@ -128,6 +128,8 @@ Attach to a native process
 Aug	
 Auto (follow system)	
 Auto Forwarded	
+Auto Save is off.	
+Auto Save is on.	
 Auto-detect project	
 Back	
 Back to SSH workspace and container details	
@@ -896,6 +898,7 @@ File: Close Folder
 File: Compare Active File With…	
 File: Compare Active File with Clipboard	
 File: Compare Active File with Saved	
+File: Compare Selection with Clipboard	
 File: Copy Path of Active File	
 File: Copy Relative Path of Active File	
 File: Filter Log Lines…	
@@ -918,6 +921,7 @@ File: Save As…
 File: Save Workspace	
 File: Save Workspace As…	
 File: Save a Copy to This Computer…	
+File: Toggle Auto Save	
 Files	
 Files are still unsaved. Resolve editor errors, then start debugging again.	
 Files of {0} that are missing or changed: {1}. Reinstall it.	
@@ -1090,6 +1094,9 @@ Help: About Codeyard
 Help: Check for Updates…	
 Help: Grant Full Disk Access…	
 Help: Keyboard Shortcuts Reference	
+Help: Open Crash Reports Folder	
+Help: Release Notes	
+Help: Report Issue…	
 Help: Welcome	
 Hex dump (read-only copy)	
 Hide	
@@ -1426,6 +1433,7 @@ No containers found on this host.
 No containers in this Docker environment.	
 No containers in this environment.	
 No containers match the current filters.	
+No crash reports: Codeyard has not crashed.	
 No debug adapter for type “{0}”. Supported: lldb (C, C++, Rust, Swift), go, python; or add {1} to the configuration.	
 No debug configuration: add .vscode/launch.json, or open a Cargo / Go project or a Python file.	
 No debug session.	
@@ -2083,6 +2091,7 @@ Select a word and press ⌘D to add the next match as another cursor.
 Select all matches (⌥↵)	
 Select at most 20 timestamps	
 Select for Compare	
+Select some text first.	
 Select the active file in the explorer	
 Selected container	
 Selected {} for compare. Right-click another file and choose Compare.	
@@ -2647,7 +2656,11 @@ View: Split Editor Left
 View: Split Editor Up	
 View: Switch Editor…	
 View: Testing	
+View: Toggle Breadcrumbs	
 View: Toggle Full Screen	
+View: Toggle Indent Guides	
+View: Toggle Inlay Hints	
+View: Toggle Line Numbers	
 View: Toggle Maximized Panel	
 View: Toggle Minimap	
 View: Toggle Panel	
@@ -3169,6 +3182,7 @@ your words
 {} (not verified by a registry)	
 {} (previous settings kept)	
 {} (saved {}) ↔ editor	
+{} (selection) ↔ Clipboard	
 {} (terminal)	
 {} (“{}” failed; {} of {} items were transferred before it)	
 {} KB · image preview	
