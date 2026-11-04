@@ -17,7 +17,7 @@ impl Workbench {
     pub(super) fn set_file_clipboard(&mut self, paths: Vec<String>, cut: bool, cx: &App) {
         let paths = crate::file_batch::top_level(paths, &self.all_roots(cx));
         if !paths.is_empty() {
-            self.roots.file_clip = Some(Arc::new(Clipboard { host: self.remote.host.clone(), paths, cut }));
+            self.roots.file_clip = Some(Arc::new(Clipboard { host: self.remote.host.clone(), paths, cut, stamp: crate::system_clipboard::stamp() }));
         }
     }
 
@@ -46,7 +46,17 @@ impl Workbench {
     }
 
     pub(super) fn paste_file_clipboard(&mut self, dir: String, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(clip) = self.roots.file_clip.clone() else { return };
+        // Files copied in Finder after the Explorer's own copy (or with no copy here at all) are pasted instead. Anything else
+        // copied since, such as text, leaves the Explorer's copy in place.
+        let own = self.roots.file_clip.clone();
+        if own.as_ref().is_none_or(|clip| clip.stamp != crate::system_clipboard::stamp()) {
+            let files = crate::system_clipboard::files();
+            if !files.is_empty() {
+                self.paste_system_files(files, dir, window, cx);
+                return;
+            }
+        }
+        let Some(clip) = own else { return };
         if !Arc::ptr_eq(&clip.host, &self.remote.host) {
             self.notice = Some(Notice::Error(crate::i18n::t("Copy the files again on the current host before pasting.").into()));
             cx.notify();
@@ -54,6 +64,17 @@ impl Workbench {
         }
         let op = if clip.cut { Operation::Move(dir) } else { Operation::Copy(dir) };
         self.start_file_batch(clip.paths.clone(), op, Some(clip), false, window, cx);
+    }
+
+    /// Files from the system clipboard: copied like the Explorer's own (a copy next to the original gets "copy" in its name),
+    /// or uploaded when the folder is on an SSH host.
+    fn paste_system_files(&mut self, files: Vec<std::path::PathBuf>, dir: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.remote.host.is_remote() {
+            self.drop_external(files, dir, window, cx);
+            return;
+        }
+        let paths = files.iter().map(|p| crate::ui::local_path(p)).collect();
+        self.start_file_batch(paths, Operation::Copy(dir), None, false, window, cx);
     }
 
     pub(super) fn move_file_selection(&mut self, paths: Vec<String>, dir: String, window: &mut Window, cx: &mut Context<Self>) {

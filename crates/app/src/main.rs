@@ -229,6 +229,7 @@ mod structural;
 #[cfg(test)]
 mod structural_tests;
 mod sysopen;
+mod system_clipboard;
 mod system_prefs;
 mod task_run;
 mod terminal;
