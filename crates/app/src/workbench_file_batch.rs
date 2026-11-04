@@ -49,12 +49,10 @@ impl Workbench {
         // Files copied in Finder after the Explorer's own copy (or with no copy here at all) are pasted instead. Anything else
         // copied since, such as text, leaves the Explorer's copy in place.
         let own = self.roots.file_clip.clone();
-        if own.as_ref().is_none_or(|clip| clip.stamp != crate::system_clipboard::stamp()) {
-            let files = crate::system_clipboard::files();
-            if !files.is_empty() {
-                self.paste_system_files(files, dir, window, cx);
-                return;
-            }
+        let (stamp, files) = crate::system_clipboard::read();
+        if !files.is_empty() && own.as_ref().is_none_or(|clip| clip.stamp != stamp) {
+            self.paste_system_files(files, dir, window, cx);
+            return;
         }
         let Some(clip) = own else { return };
         if !Arc::ptr_eq(&clip.host, &self.remote.host) {

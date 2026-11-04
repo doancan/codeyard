@@ -27,9 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The up arrow in a new zsh terminal recalls your earlier commands again. The shell integration made the system's zshrc put
   `HISTFILE` inside Codeyard's cache folder, so every terminal started with an empty history that was never saved to
   `~/.zsh_history`. A `HISTFILE` your own `.zshrc` sets still wins.
-- ⌘V in the Explorer pastes files copied in Finder (macOS), into the selected folder: copied locally, uploaded on an SSH
-  host. A file pasted into its own folder gets "copy" in its name instead of overwriting itself, and the Explorer's own
-  copy still pastes when it is the newer one.
+- Pasting in the Explorer takes files copied in the system's file manager (Finder, Windows Explorer, and the GNOME, KDE and
+  other Linux file managers), into the selected folder: copied locally, uploaded on an SSH host. A file pasted into its own
+  folder gets "copy" in its name instead of overwriting itself, and the Explorer's own copy still pastes when it is the
+  newer one. On Linux the clipboard is read with `wl-paste` (Wayland) or `xclip` (X11), so one of them has to be installed.
 - The other forms of `git.autofetch` (`"all"`) and `editor.quickSuggestions` (an object per context) that a project's
   `.vscode/settings.json` may hold no longer raise "expected true or false". A settings warning now names the file the value came
   from instead of always blaming `settings.jsonc`.

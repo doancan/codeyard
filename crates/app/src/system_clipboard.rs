@@ -1,20 +1,30 @@
-//! Files on the system clipboard: what Finder's ⌘C leaves there. gpui's clipboard carries text and images only, so the
-//! Explorer's own ⌘C / ⌘V (`file_batch::Clipboard`) never saw them. Read on macOS; Windows and Linux report none yet.
+//! Files on the system clipboard: what a file manager's Copy leaves there (Finder's ⌘C, Explorer's Ctrl+C, the GNOME, KDE and
+//! other file managers' Ctrl+C). gpui's clipboard carries text and images only, so the Explorer's own copy and paste
+//! (`file_batch::Clipboard`) never saw them. macOS reads the pasteboard, Windows the `CF_HDROP` list, Linux asks `wl-paste` or
+//! `xclip` (`system_clipboard_linux`).
 //! Tests never touch the real clipboard: `set_for_test` stands in for it.
 
 use std::path::PathBuf;
 
+// Compiled on every Unix in test builds, so the parsing and the time limit are tested on a Mac too; used only on Linux.
+#[cfg_attr(not(all(unix, not(target_os = "macos"))), allow(dead_code))]
+#[cfg(any(all(unix, not(target_os = "macos")), all(test, unix)))]
+#[path = "system_clipboard_linux.rs"]
+mod linux;
+
 /// A number that changes whenever anything is copied anywhere. A paste compares it with the one the Explorer noted at
-/// its own copy to tell which of the two clipboards is newer.
+/// its own copy to tell which of the two clipboards is newer. (On Linux it follows the files on the clipboard, so a copy of
+/// the very same files again looks like no change.)
 #[cfg(not(test))]
 pub fn stamp() -> isize {
     imp::stamp()
 }
 
-/// The files on the clipboard that still exist, in order.
+/// The clipboard's change number and the files on it that still exist, in order, read once.
 #[cfg(not(test))]
-pub fn files() -> Vec<PathBuf> {
-    imp::files().into_iter().filter(|p| p.exists()).collect()
+pub fn read() -> (isize, Vec<PathBuf>) {
+    let (stamp, files) = imp::read();
+    (stamp, files.into_iter().filter(|p| p.exists()).collect())
 }
 
 #[cfg(test)]
@@ -28,8 +38,8 @@ pub fn stamp() -> isize {
 }
 
 #[cfg(test)]
-pub fn files() -> Vec<PathBuf> {
-    FAKE.with(|f| f.borrow().0.iter().filter(|p| p.exists()).cloned().collect())
+pub fn read() -> (isize, Vec<PathBuf>) {
+    FAKE.with(|f| (f.borrow().1, f.borrow().0.iter().filter(|p| p.exists()).cloned().collect()))
 }
 
 /// The clipboard as a test wants it: these files, and this change number.
@@ -38,7 +48,7 @@ pub fn set_for_test(files: Vec<PathBuf>, stamp: isize) {
     FAKE.with(|f| *f.borrow_mut() = (files, stamp));
 }
 
-// In test builds `stamp` and `files` answer from `FAKE`, so the real ones go unused there.
+// In test builds `stamp` and `read` answer from `FAKE`, so the real ones go unused there.
 #[cfg_attr(test, allow(dead_code))]
 #[cfg(target_os = "macos")]
 mod imp {
@@ -60,8 +70,9 @@ mod imp {
         stamp_of(general())
     }
 
-    pub fn files() -> Vec<PathBuf> {
-        files_in(general())
+    pub fn read() -> (isize, Vec<PathBuf>) {
+        let pasteboard = general();
+        (stamp_of(pasteboard), files_in(pasteboard))
     }
 
     pub fn stamp_of(pasteboard: Pasteboard) -> isize {
@@ -153,7 +164,27 @@ mod imp {
 }
 
 #[cfg_attr(test, allow(dead_code))]
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+#[path = "system_clipboard_windows.rs"]
+mod imp;
+
+#[cfg_attr(test, allow(dead_code))]
+#[cfg(all(unix, not(target_os = "macos")))]
+mod imp {
+    use std::path::PathBuf;
+
+    pub fn stamp() -> isize {
+        super::linux::read().0
+    }
+
+    pub fn read() -> (isize, Vec<PathBuf>) {
+        super::linux::read()
+    }
+}
+
+/// No file clipboard to read: nothing is ever pasted from outside.
+#[cfg_attr(test, allow(dead_code))]
+#[cfg(not(any(windows, unix)))]
 mod imp {
     use std::path::PathBuf;
 
@@ -161,8 +192,8 @@ mod imp {
         0
     }
 
-    pub fn files() -> Vec<PathBuf> {
-        Vec::new()
+    pub fn read() -> (isize, Vec<PathBuf>) {
+        (0, Vec::new())
     }
 }
 
