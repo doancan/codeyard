@@ -1,7 +1,6 @@
 //! SSH: the system `ssh` binary. ~/.ssh/config, ProxyJump, ssh-agent and
 //! hardware keys work unchanged; no crypto of our own.
 
-use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -53,16 +52,41 @@ fn bundle_dirs_for(exe: &Path) -> Vec<PathBuf> {
     dirs
 }
 
-/// Agent binaries bundled with the app.
-pub struct EmbeddedAgent {
+/// An agent published as a release asset next to this build. The app carries only its SHA-256: the server downloads the
+/// bytes from the release (or, without internet access there, this computer downloads them and copies them over ssh), and
+/// whichever way they come, they run only when the hash matches.
+pub struct PublishedAgent {
     pub triple: &'static str,
-    pub bytes: &'static [u8],
+    pub sha256: &'static str,
+}
+
+/// Where an agent's bytes come from.
+pub enum AgentSource {
+    /// A file on this computer (developer override, a Unix package's sidecar, a source build): uploaded over ssh.
+    Local(Vec<u8>),
+    /// A release asset with a known hash (see [`PublishedAgent`]).
+    Published { sha256: &'static str, url: String },
+}
+
+impl AgentSource {
+    pub fn sha256(&self) -> String {
+        match self {
+            AgentSource::Local(bytes) => sha256_hex(bytes),
+            AgentSource::Published { sha256, .. } => (*sha256).to_string(),
+        }
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
 }
 
 pub struct AgentBundle {
     dirs: Vec<PathBuf>,
     override_dir: Option<PathBuf>,
-    embedded: &'static [EmbeddedAgent],
+    published: &'static [PublishedAgent],
+    /// Release download folder of this build, `<repository>/releases/download/v<version>`.
+    release_url: String,
 }
 
 impl AgentBundle {
@@ -77,29 +101,41 @@ impl AgentBundle {
         if let Ok(exe) = std::env::current_exe() {
             dirs.extend(bundle_dirs_for(&exe));
         }
-        AgentBundle { dirs, override_dir, embedded: &[] }
+        AgentBundle { dirs, override_dir, published: &[], release_url: String::new() }
     }
 
-    pub fn with_embedded(mut self, embedded: &'static [EmbeddedAgent]) -> Self {
-        self.embedded = embedded;
+    /// Agents fetched from a release instead of being shipped with the app. `release_url` is the release's download folder;
+    /// `$CODEYARD_AGENT_BASE_URL` replaces it (a mirror for networks that cannot reach GitHub; the hashes still apply).
+    pub fn with_published(mut self, release_url: impl Into<String>, published: &'static [PublishedAgent]) -> Self {
+        self.release_url = std::env::var("CODEYARD_AGENT_BASE_URL").ok().filter(|u| !u.trim().is_empty()).unwrap_or_else(|| release_url.into());
+        self.published = published;
         self
     }
 
     pub fn supports(&self, triple: &str) -> bool {
-        self.embedded.iter().any(|a| a.triple == triple) || self.find(triple).is_some()
+        self.published.iter().any(|a| a.triple == triple) || self.find(triple).is_some()
     }
 
-    /// An explicit developer override wins; otherwise use the bytes signed into the app.
-    /// Sidecar files remain a fallback for Unix bundles and unbundled source builds.
-    pub fn binary(&self, triple: &str) -> Result<Option<Cow<'static, [u8]>>> {
-        let override_file = self.override_dir.as_ref().map(|dir| dir.join(format!("codeyard-agent-{triple}"))).filter(|p| p.is_file());
+    /// An explicit developer override wins; then the agents published with this build; then sidecar files (Unix bundles,
+    /// unbundled source builds).
+    pub fn source(&self, triple: &str) -> Result<Option<AgentSource>> {
+        let named = format!("codeyard-agent-{triple}");
+        let override_file = self.override_dir.as_ref().map(|dir| dir.join(&named)).filter(|p| p.is_file());
         if override_file.is_none()
-            && let Some(agent) = self.embedded.iter().find(|a| a.triple == triple)
+            && let Some(agent) = self.published.iter().find(|a| a.triple == triple)
         {
-            return Ok(Some(Cow::Borrowed(agent.bytes)));
+            let base = self.release_url.trim_end_matches('/');
+            return Ok(Some(AgentSource::Published { sha256: agent.sha256, url: format!("{base}/{named}") }));
         }
         let Some(path) = override_file.or_else(|| self.find(triple)) else { return Ok(None) };
-        std::fs::read(&path).map(|bytes| Some(Cow::Owned(bytes))).map_err(|e| HostError::Disconnected(format!("{}: {e}", path.display())))
+        std::fs::read(&path).map(|bytes| Some(AgentSource::Local(bytes))).map_err(|e| HostError::Disconnected(format!("{}: {e}", path.display())))
+    }
+
+    /// A copy of a published agent already on this computer: a sidecar with the same hash (a source build made with
+    /// scripts/build-windows.ps1) or an earlier download in the cache.
+    fn local_copy(&self, triple: &str, sha256: &str) -> Option<Vec<u8>> {
+        let cached = agent_cache_file(triple, sha256);
+        [self.find(triple), cached].into_iter().flatten().find_map(|p| std::fs::read(p).ok().filter(|b| sha256_hex(b) == sha256))
     }
 
     pub fn find(&self, triple: &str) -> Option<PathBuf> {
@@ -589,10 +625,28 @@ pub fn script_command(alias: &str, script: &str) -> Result<Command> {
 /// Overall timeout for container/WSL commands (ssh has its own `ConnectTimeout`), agent upload included.
 const RUN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
+/// Marks the start and end of a script's own output. The remote user's startup files (`~/.bashrc`, `~/.zshenv`) run even for a
+/// command and may print a welcome, an `nvm` or `conda` notice or a stray `echo` to stdout, which would otherwise be read as the
+/// script's output ("unsupported server: Welcome back"). The script runs in a subshell so its exit status is kept.
+const OUT_MARK: &str = "__cy_out__";
+
+fn mark_output(script: &str) -> String {
+    format!("printf '%s\\n' {OUT_MARK}; ( {script}\n ); rc=$?; printf '\\n%s\\n' {OUT_MARK}; exit $rc")
+}
+
+/// What a marked script printed: the text between the marks, or all of `out` when the marks are not both there.
+fn unmark_output(out: &str) -> &str {
+    let Some(start) = out.find(OUT_MARK) else { return out };
+    let body = &out[start + OUT_MARK.len()..];
+    let Some(end) = body.rfind(OUT_MARK) else { return out };
+    let inner = body[..end].strip_prefix('\n').unwrap_or(&body[..end]);
+    inner.strip_suffix('\n').unwrap_or(inner)
+}
+
 fn run(alias: &str, script: &str, stdin: Option<&[u8]>) -> Result<String> {
     use std::io::{Read, Write};
     check_target(alias)?;
-    let mut cmd = script_command(alias, script)?;
+    let mut cmd = script_command(alias, &mark_output(script))?;
     cmd.stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() }).stdout(Stdio::piped()).stderr(Stdio::piped());
     let program = cmd.get_program().to_string_lossy().into_owned();
     let mut child = cmd.spawn().map_err(|e| HostError::Disconnected(format!("could not start {program}: {e}")))?;
@@ -635,13 +689,16 @@ fn run(alias: &str, script: &str, stdin: Option<&[u8]>) -> Result<String> {
         let err = String::from_utf8_lossy(&stderr).trim().to_string();
         return Err(HostError::Disconnected(if err.is_empty() { format!("{program} exited with {status}") } else { err }));
     }
-    Ok(String::from_utf8_lossy(&stdout).into_owned())
+    Ok(unmark_output(&String::from_utf8_lossy(&stdout)).to_string())
 }
 
 /// Connection steps, used by the UI for progress.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
     Probing,
+    /// The server downloads the agent from the release.
+    Downloading,
+    /// The agent goes over the ssh connection (from a local file, or downloaded here because the server could not).
     Uploading,
     Starting,
 }
@@ -693,15 +750,96 @@ else if [ -s "$f" ] && [ "$(tail -c1 "$f" | wc -l | tr -d ' ')" = 0 ]; then prin
 /// bundle. Check the actual executable before attaching or starting a daemon.
 fn check_agent_version(output: &str) -> Result<()> {
     let version = output.trim().parse::<u32>().map_err(|_| {
-        HostError::Disconnected("Could not determine the remote agent's protocol version. Rebuild or reinstall the Codeyard agent bundle.".into())
+        HostError::Disconnected("Could not determine the remote agent's protocol version. Reinstall Codeyard (or rebuild the agents of a source build).".into())
     })?;
     if version != proto::VERSION {
         return Err(HostError::Disconnected(format!(
-            "The bundled SSH agent uses protocol {version}, but this Codeyard client requires protocol {}. Rebuild the agent bundle with scripts/build-windows.ps1 or reinstall Codeyard; check CODEYARD_AGENT_DIR if set.",
+            "The SSH agent uses protocol {version}, but this Codeyard client requires protocol {}. Reinstall Codeyard or rebuild the agents with scripts/build-windows.ps1; check CODEYARD_AGENT_DIR and CODEYARD_AGENT_BASE_URL if set.",
             proto::VERSION
         )));
     }
     Ok(())
+}
+
+/// Copy the agent over the ssh connection: write to a temp file, verify the hash on the server, move into place only on a match.
+fn upload_agent(alias: &str, dir: &str, remote: &str, sha: &str, bytes: &[u8]) -> Result<String> {
+    let script = format!(
+        r#"set -e; mkdir -p {dir}; t={remote}.tmp.$$; cat > "$t"; chmod 755 "$t";
+h=$( (sha256sum "$t" 2>/dev/null || shasum -a 256 "$t") | cut -d' ' -f1);
+if [ "$h" = {sha} ]; then mv "$t" {remote}; else rm -f "$t"; echo "agent hash mismatch: $h" >&2; exit 3; fi
+{remote} --version"#,
+        dir = sh_quote(dir),
+        remote = sh_quote(remote),
+        sha = sh_quote(sha),
+    );
+    run(alias, &script, Some(bytes))
+}
+
+/// The server downloads the agent with curl or wget into a temp file; it is moved into place only when its hash matches.
+/// Exit 4: no downloader or the download failed; 3: wrong hash. Either way nothing is left behind.
+fn remote_download_script(dir: &str, remote: &str, sha: &str, url: &str) -> String {
+    format!(
+        r#"set -e; mkdir -p {dir}; t={remote}.dl.$$; u={url};
+if command -v curl >/dev/null 2>&1; then curl -fsSL --connect-timeout 10 --max-time 90 -o "$t" "$u" || {{ rm -f "$t"; echo "curl could not download $u" >&2; exit 4; }};
+elif command -v wget >/dev/null 2>&1; then wget -q -T 20 -O "$t" "$u" || {{ rm -f "$t"; echo "wget could not download $u" >&2; exit 4; }};
+else echo "neither curl nor wget is installed" >&2; exit 4; fi
+chmod 755 "$t"; h=$( (sha256sum "$t" 2>/dev/null || shasum -a 256 "$t") | cut -d' ' -f1);
+if [ "$h" = {sha} ]; then mv "$t" {remote}; else rm -f "$t"; echo "downloaded agent hash mismatch: $h" >&2; exit 3; fi
+{remote} --version"#,
+        dir = sh_quote(dir),
+        remote = sh_quote(remote),
+        sha = sh_quote(sha),
+        url = sh_quote(url),
+    )
+}
+
+/// Downloaded agents on this computer, kept for the next server: `<cache>/codeyard/agents/codeyard-agent-<triple>-<sha>`.
+fn agent_cache_file(triple: &str, sha256: &str) -> Option<PathBuf> {
+    Some(dirs::cache_dir()?.join(APP_DIR).join("agents").join(format!("codeyard-agent-{triple}-{}", &sha256[..sha256.len().min(16)])))
+}
+
+/// The system curl (Windows 10+ ships `System32\curl.exe`); never one found in a project folder through `PATH`.
+fn system_curl() -> PathBuf {
+    #[cfg(windows)]
+    {
+        let root = std::env::var_os("SystemRoot").map_or_else(|| PathBuf::from(r"C:\Windows"), PathBuf::from);
+        root.join("System32").join("curl.exe")
+    }
+    #[cfg(not(windows))]
+    {
+        PathBuf::from("/usr/bin/curl")
+    }
+}
+
+/// Fallback when the server cannot download: fetch the release asset here, check its hash, keep it in the cache.
+fn download_agent(url: &str, triple: &str, sha256: &str) -> std::result::Result<Vec<u8>, String> {
+    let file = agent_cache_file(triple, sha256).ok_or("no cache folder")?;
+    let dir = file.parent().ok_or("no cache folder")?;
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let tmp = file.with_extension(format!("part{}", std::process::id()));
+    let out = Command::new(system_curl())
+        .args(["-q", "-fsSL", "--proto", "=https", "--proto-redir", "=https", "--connect-timeout", "15", "--max-time", "120", "-o"])
+        .arg(&tmp)
+        .arg("--")
+        .arg(url)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("could not start curl: {e}"))?;
+    let result = (|| {
+        if !out.status.success() {
+            let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            return Err(if err.is_empty() { format!("curl exited with {}", out.status) } else { err });
+        }
+        let bytes = std::fs::read(&tmp).map_err(|e| e.to_string())?;
+        let got = sha256_hex(&bytes);
+        if got != sha256 {
+            return Err(format!("downloaded agent hash mismatch: {got}"));
+        }
+        std::fs::rename(&tmp, &file).map_err(|e| e.to_string())?;
+        Ok(bytes)
+    })();
+    let _ = std::fs::remove_file(&tmp);
+    result
 }
 
 /// Connect: identify the server, install the agent if missing (SHA-256 verified), start it.
@@ -718,34 +856,50 @@ pub fn connect_session(alias: &str, bundle: &AgentBundle, session: Option<String
     let uname = lines.next().unwrap_or_default();
     let home = lines.next().unwrap_or_default().trim().to_string();
     let triple = triple_for_uname(uname).ok_or_else(|| HostError::Disconnected(format!("unsupported server: {uname}")))?;
-    let binary = bundle.binary(triple)?.ok_or_else(|| {
+    let source = bundle.source(triple)?.ok_or_else(|| {
         HostError::Disconnected(format!(
-            "no agent binary bundled for {triple} (codeyard-agent-{triple}). Reinstall the complete Codeyard package or set CODEYARD_AGENT_DIR.{}",
+            "no agent for {triple} (codeyard-agent-{triple}). Reinstall the complete Codeyard package or set CODEYARD_AGENT_DIR.{}",
             if cfg!(windows) { " For a source build, run scripts/build-windows.ps1." } else { "" },
         ))
     })?;
-    let sha: String = Sha256::digest(&binary).iter().map(|b| format!("{b:02x}")).collect();
+    let sha = source.sha256();
 
     // CODEYARD_REMOTE_DIR: agent location on the server (default ~/.cache/codeyard).
     let dir = std::env::var("CODEYARD_REMOTE_DIR").unwrap_or_else(|_| format!("{home}/.cache/{APP_DIR}"));
     let remote = format!("{dir}/agent-v{}-{}", proto::VERSION, &sha[..12]);
     let remote_quoted = sh_quote(&remote);
     let installed = run(alias, &format!("if test -x {remote_quoted}; then {remote_quoted} --version; else printf '%s' missing; fi"), None)?;
-    let reported = if installed.trim() == "missing" {
-        progress(Step::Uploading);
-        // Write to a temp file, verify the hash on the server, move into place only on a match.
-        let script = format!(
-            r#"set -e; mkdir -p {dir}; t={remote}.tmp.$$; cat > "$t"; chmod 755 "$t";
-h=$( (sha256sum "$t" 2>/dev/null || shasum -a 256 "$t") | cut -d' ' -f1);
-if [ "$h" = {sha} ]; then mv "$t" {remote}; else rm -f "$t"; echo "agent hash mismatch: $h" >&2; exit 3; fi
-{remote} --version"#,
-            dir = sh_quote(&dir),
-            remote = sh_quote(&remote),
-            sha = sh_quote(&sha),
-        );
-        run(alias, &script, Some(&binary))?
-    } else {
+    let reported = if installed.trim() != "missing" {
         installed
+    } else {
+        match source {
+            AgentSource::Local(bytes) => {
+                progress(Step::Uploading);
+                upload_agent(alias, &dir, &remote, &sha, &bytes)?
+            }
+            AgentSource::Published { sha256, url } => {
+                if let Some(bytes) = bundle.local_copy(triple, sha256) {
+                    progress(Step::Uploading);
+                    upload_agent(alias, &dir, &remote, &sha, &bytes)?
+                } else {
+                    // Like VS Code's server: the server fetches the release asset itself. Without internet access there
+                    // (or without curl and wget), this computer downloads it and copies it over the ssh connection.
+                    progress(Step::Downloading);
+                    match run(alias, &remote_download_script(&dir, &remote, &sha, &url), None) {
+                        Ok(out) => out,
+                        Err(remote_err) => {
+                            progress(Step::Uploading);
+                            let bytes = download_agent(&url, triple, sha256).map_err(|local_err| {
+                                HostError::Disconnected(format!(
+                                    "Could not get the Codeyard agent for {triple}. The server could not download it ({remote_err}), and neither could this computer ({local_err}). URL: {url}"
+                                ))
+                            })?;
+                            upload_agent(alias, &dir, &remote, &sha, &bytes)?
+                        }
+                    }
+                }
+            }
+        }
     };
     check_agent_version(&reported)?;
 
@@ -839,6 +993,40 @@ pub fn spawn_local_agent(bundle: &AgentBundle) -> Result<RemoteHost> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn output_between_marks_ignores_what_a_remote_shell_prints_around_it() {
+        use super::{OUT_MARK, mark_output, unmark_output};
+        let noisy = format!("Welcome back!\nnvm: using node 20\n{OUT_MARK}\nLinux x86_64\n/home/me\n\n{OUT_MARK}\ntrailing banner\n");
+        assert_eq!(unmark_output(&noisy), "Linux x86_64\n/home/me\n", "only the script's own lines, its trailing blank line kept");
+        assert_eq!(unmark_output(&format!("{OUT_MARK}\nadded\n{OUT_MARK}\n")), "added");
+        assert_eq!(unmark_output(&format!("{OUT_MARK}\n\n{OUT_MARK}\n")), "", "a script with no output");
+        // Without both marks (an old server shell that never ran the wrapper) everything is returned as before.
+        assert_eq!(unmark_output("Linux x86_64\n"), "Linux x86_64\n");
+        assert_eq!(unmark_output(&format!("{OUT_MARK}\nhalf")), format!("{OUT_MARK}\nhalf"));
+        assert!(mark_output("true").contains(OUT_MARK));
+    }
+
+    /// Through a real shell: noise printed before the wrapper (a startup file), the script's output and its exit status.
+    #[cfg(unix)]
+    #[test]
+    fn a_marked_script_keeps_its_output_and_its_exit_status_under_shell_noise() {
+        use super::{mark_output, unmark_output};
+        let run = |script: &str| {
+            let out = std::process::Command::new("sh")
+                .args(["-c", &format!("echo 'Last login: yesterday'; echo 'conda: base'; {}", mark_output(script))])
+                .output()
+                .unwrap();
+            (unmark_output(&String::from_utf8_lossy(&out.stdout)).to_string(), out.status.code())
+        };
+        let uname = String::from_utf8(std::process::Command::new("uname").arg("-s").output().unwrap().stdout).unwrap();
+        assert_eq!(run(r#"uname -s; printf '%s\n' "$HOME""#), (format!("{uname}{}\n", std::env::var("HOME").unwrap()), Some(0)));
+        let (out, code) = run("echo partial; exit 3");
+        assert_eq!((out.as_str(), code), ("partial\n", Some(3)), "a failing script still fails");
+        // `set -e` and a `cat` of stdin, as the agent upload does, work inside the wrapper.
+        let (out, code) = run("set -e; t=$(printf abc | cat); echo $t; false; echo not-reached");
+        assert_eq!((out.as_str(), code), ("abc\n", Some(1)));
+    }
     #[test]
     fn agent_protocol_is_checked_before_attach() {
         assert!(super::check_agent_version(&format!("{}\n", proto::VERSION)).is_ok());
@@ -849,28 +1037,54 @@ mod tests {
         assert!(super::check_agent_version("not a version").is_err());
     }
 
-    static EMBEDDED: &[EmbeddedAgent] = &[EmbeddedAgent { triple: "x86_64-unknown-linux-musl", bytes: b"embedded agent" }];
+    const SHA: &str = "0000000000000000000000000000000000000000000000000000000000000001";
+    static PUBLISHED: &[PublishedAgent] = &[PublishedAgent { triple: "x86_64-unknown-linux-musl", sha256: SHA }];
+
+    fn local_bytes(source: Option<AgentSource>) -> Vec<u8> {
+        match source {
+            Some(AgentSource::Local(bytes)) => bytes,
+            _ => panic!("expected a local agent"),
+        }
+    }
 
     #[test]
-    fn embedded_agents_work_without_files_and_take_precedence_over_old_sidecars() {
+    fn published_agents_are_downloaded_from_the_release_and_take_precedence_over_old_sidecars() {
         let triple = "x86_64-unknown-linux-musl";
-        let dir = std::env::temp_dir().join(format!("codeyard-embedded-agents-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("codeyard-published-agents-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let sidecar = dir.join(format!("codeyard-agent-{triple}"));
-        let mut bundle = AgentBundle { dirs: vec![dir.clone()], override_dir: None, embedded: EMBEDDED };
+        let mut bundle = AgentBundle {
+            dirs: vec![dir.clone()],
+            override_dir: None,
+            published: PUBLISHED,
+            release_url: "https://github.com/o/r/releases/download/v1.2.3/".into(),
+        };
         assert!(bundle.supports(triple));
-        assert_eq!(bundle.binary(triple).unwrap().unwrap().as_ref(), b"embedded agent");
-        assert!(matches!(bundle.binary(triple).unwrap().unwrap(), Cow::Borrowed(_)), "no extraction or extra allocation is needed");
+        let Some(AgentSource::Published { sha256, url }) = bundle.source(triple).unwrap() else { panic!("expected a published agent") };
+        assert_eq!((sha256, url.as_str()), (SHA, "https://github.com/o/r/releases/download/v1.2.3/codeyard-agent-x86_64-unknown-linux-musl"));
         assert!(!bundle.supports("unsupported"));
-        assert!(bundle.binary("unsupported").unwrap().is_none());
+        assert!(bundle.source("unsupported").unwrap().is_none());
         std::fs::write(&sidecar, b"old sidecar").unwrap();
-        assert_eq!(bundle.binary(triple).unwrap().unwrap().as_ref(), b"embedded agent");
+        assert!(matches!(bundle.source(triple).unwrap(), Some(AgentSource::Published { .. })));
+        assert!(bundle.local_copy(triple, SHA).is_none(), "a sidecar with another hash is never sent in place of the release");
+        let sidecar_sha = sha256_hex(b"old sidecar");
+        assert_eq!(bundle.local_copy(triple, &sidecar_sha).as_deref(), Some(&b"old sidecar"[..]), "a source build's own agent is used without a download");
         bundle.override_dir = Some(dir.clone());
-        assert_eq!(bundle.binary(triple).unwrap().unwrap().as_ref(), b"old sidecar", "explicit developer overrides still work");
-        bundle.embedded = &[];
+        assert_eq!(local_bytes(bundle.source(triple).unwrap()), b"old sidecar", "explicit developer overrides still work");
+        bundle.published = &[];
         bundle.override_dir = None;
-        assert_eq!(bundle.binary(triple).unwrap().unwrap().as_ref(), b"old sidecar", "Unix sidecar bundles still work");
+        assert_eq!(local_bytes(bundle.source(triple).unwrap()), b"old sidecar", "Unix sidecar bundles still work");
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn the_server_download_script_verifies_the_hash_and_quotes_everything() {
+        let script = remote_download_script("/home/a b/.cache/codeyard", "/home/a b/.cache/codeyard/agent-v1-abc", SHA, "https://example.com/x'y");
+        assert!(script.contains("command -v curl") && script.contains("command -v wget"), "{script}");
+        assert!(script.contains(&format!("[ \"$h\" = '{SHA}' ]")), "{script}");
+        assert!(script.contains(r#"u='https://example.com/x'\''y'"#), "the URL can never break out of its quotes: {script}");
+        assert!(script.contains("'/home/a b/.cache/codeyard/agent-v1-abc' --version"), "{script}");
+        assert!(script.matches("rm -f \"$t\"").count() >= 3, "a failed download or a wrong hash leaves nothing behind: {script}");
     }
 
     #[test]
@@ -886,7 +1100,7 @@ mod tests {
             std::fs::create_dir_all(file.parent().unwrap()).unwrap();
             std::fs::write(file, b"fixture").unwrap();
         }
-        let bundle = AgentBundle { dirs: bundle_dirs_for(&exe), override_dir: None, embedded: &[] };
+        let bundle = AgentBundle { dirs: bundle_dirs_for(&exe), override_dir: None, published: &[], release_url: String::new() };
         assert_eq!(bundle.find_with_exe(triple, Some(&exe)), Some(bundled.clone()));
         std::fs::remove_file(&bundled).unwrap();
         assert_eq!(bundle.find_with_exe(triple, Some(&exe)), Some(staged.clone()));

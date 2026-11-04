@@ -3,7 +3,8 @@
 # Needs Rust (msvc) and Visual Studio Build Tools with the Windows SDK (fxc.exe for GPUI's shaders).
 # With Inno Setup 6 installed it also builds Codeyard-<version>-windows-x64-setup.exe
 # (installer\windows\codeyard.iss).
-# $env:AGENTS_DIR: optional prebuilt SSH agents. Otherwise built from source and embedded in the EXE.
+# $env:AGENTS_DIR: optional prebuilt SSH agents. Otherwise built from source. Only their SHA-256 goes into the EXE: servers
+# download the agents from the release, so a release must publish these same files (release.yml, publish job).
 # Licence texts go into the zip as licenses\ (same list as scripts/licenses.sh; that script checks both agree).
 # The .exe is unsigned, so SmartScreen warns; a release needs a code-signing certificate.
 $ErrorActionPreference = 'Stop'

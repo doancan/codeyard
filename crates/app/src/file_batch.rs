@@ -11,6 +11,8 @@ pub struct Clipboard {
     pub host: Arc<dyn Host>,
     pub paths: Vec<String>,
     pub cut: bool,
+    /// The system clipboard's change number at the copy: a different one at paste means something was copied elsewhere since.
+    pub stamp: isize,
 }
 
 #[derive(Clone)]

@@ -1,4 +1,4 @@
-# Move only the EXE to an empty directory and verify both agents without touching user state or SSH.
+# Move only the EXE to an empty directory and verify both recorded agent hashes without touching user state, SSH or the network.
 param([Parameter(Mandatory)][string]$Executable)
 $ErrorActionPreference = 'Stop'
 # A GUI app must not allocate a separate console, including in the Debug profile.
@@ -53,8 +53,8 @@ try {
         $process.WaitForExit(5000) | Out-Null
         throw 'Standalone agent check timed out'
     }
-    if ($process.ExitCode -ne 0) { throw "The EXE is missing valid embedded Linux agents (exit $($process.ExitCode))" }
-    Write-Output 'Standalone checks passed: GUI executable, application icon, embedded Linux agents.'
+    if ($process.ExitCode -ne 0) { throw "The EXE is missing the Linux agent hashes (exit $($process.ExitCode))" }
+    Write-Output 'Standalone checks passed: GUI executable, application icon, Linux agent hashes.'
 } finally {
     $resolvedScratch = [System.IO.Path]::GetFullPath($scratch)
     if (-not $resolvedScratch.StartsWith($targetRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {

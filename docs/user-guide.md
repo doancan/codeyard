@@ -138,7 +138,9 @@ keys are commands like any other (`rows.previous`, `rows.next`, `rows.first`, `r
 `list.showContextMenu`), so `keybindings.jsonc` can change them.
 
 Right-click in the file tree for new file/folder, cut/copy/paste, rename, delete, copy path,
-favorites. Drag files and folders onto a folder to move them (an existing file is never
+favorites. Paste also takes files copied in the system's file manager (Finder, Windows Explorer, a Linux file manager):
+copied into the folder, or uploaded when it is on an SSH host. On Linux this needs `wl-paste` (Wayland) or `xclip` (X11).
+Drag files and folders onto a folder to move them (an existing file is never
 overwritten). Deleting a file or folder deletes it permanently after asking; with
 `"files.enableTrash": true` local files go to the Trash instead. SSH hosts have no Trash: there the question says
 "Permanently delete … on <host>?" and the button is *Delete Permanently*. Right-click a tab for close others /

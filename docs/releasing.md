@@ -89,9 +89,11 @@ warnings in `shaders` and `agents`; all release jobs also had zero such warnings
    (the variable name is the triple in capitals with `_` for `-`; no zig needed), plus
    `cargo build --profile release-agent -p agent` for macOS; copy them to `agents/codeyard-agent-<triple>`.
    On Windows, `./scripts/build-windows.ps1` builds the two static Linux agents using Rust's musl targets and bundled
-   linker (no WSL or Docker needed), then embeds them in the application. Use `-Profile Release` for an optimized build.
-6. `AGENTS_DIR="$PWD/agents" scripts/bundle-macos.sh` builds the app, the bundle and the DMG.
-7. Collect `dist/`: `Codeyard-X.Y.Z-macos-arm64.dmg`, `codeyard-X.Y.Z-macos-arm64.tar.gz` (binary, `agents/` and `licenses/`).
+   linker (no WSL or Docker needed), then records their SHA-256 in the application. Use `-Profile Release` for an optimized build.
+6. `AGENTS_DIR="$PWD/agents" scripts/bundle-macos.sh` builds the app, the bundle and the DMG; the app records the agents'
+   SHA-256 (they are not put into the bundle). `target/release/codeyard --check-agent-bundle` must exit 0.
+7. Collect `dist/`: `Codeyard-X.Y.Z-macos-arm64.dmg`, `codeyard-X.Y.Z-macos-arm64.tar.gz` (binary and `licenses/`), and the
+   agents themselves, `cp agents/codeyard-agent-* dist/` (the apps download them from the release: see below).
 8. Release notes: the CHANGELOG section plus installation instructions that match the artifact. Use the GitHub workflow
    for Developer ID signing and notarization; an ad-hoc local build still requires user approval in Privacy & Security.
    Save the notes as `dist/RELEASE_NOTES.md`: the same file is the release body
@@ -110,10 +112,23 @@ warnings in `shaders` and `agents`; all release jobs also had zero such warnings
     release notes that this version has no Windows build.
 
 The Windows packaging script builds both Linux agents automatically unless `AGENTS_DIR` supplies a prebuilt bundle
-(release CI supplies the macOS agents too). It validates their ELF architecture and embeds the agents in the EXE:
-users do not need a separate `agents/` directory. Windows release builds fail if either Linux agent is missing.
-Before packaging, a smoke test copies only the EXE to an empty directory and runs `--check-agent-bundle` without
-starting the UI, reading user state or contacting a server. App updates therefore update the embedded agents together.
+(release CI supplies the macOS agents too). It validates their ELF architecture and records only their SHA-256 in the EXE;
+the agents are **not** inside the Windows app, and since the same change not inside the macOS app either
+(`bundle-macos.sh` records the hashes of `AGENTS_DIR` the same way). Like VS Code's server, they are fetched on first connect from the release of
+the app's own version, `releases/download/vX.Y.Z/codeyard-agent-<triple>`:
+
+1. the server downloads the file with `curl` or `wget`;
+2. if it cannot (no internet access, no downloader, a proxy in the way), the app downloads it on this computer (the system
+   `curl.exe`), keeps it in the user cache folder (`codeyard/agents`) for the next server, and copies it over the ssh connection.
+
+Either way the file is moved into place on the server only when its SHA-256 is the recorded one. The `publish` job of
+`release.yml` therefore attaches the agents to every release (and lists them in the signed `SHA256SUMS.txt`); a release
+without them leaves users unable to connect. A manual release must upload the same `agents/` files the Windows and macOS
+builds hashed. `CODEYARD_AGENT_BASE_URL` points the download at a mirror (see `environment.md`).
+Windows release builds fail if either Linux agent is missing. Before packaging, a smoke test copies only the EXE to an
+empty directory and runs `--check-agent-bundle` without starting the UI, reading user state or contacting a server.
+A source build made with `scripts/build-windows.ps1` finds its own agents in `target/agents` (same hash) and uploads them
+without downloading anything.
 
 ## Licence texts
 

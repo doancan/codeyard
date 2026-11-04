@@ -1062,8 +1062,28 @@ impl Workbench {
     }
 }
 
+/// The line of a git failure to show: git opens its fetch and push output with "From <url>" / "To <url>", which says nothing
+/// about what went wrong, so the first line after those is used.
 pub(super) fn first_line(e: &str) -> &str {
-    e.lines().find(|l| !l.trim().is_empty()).unwrap_or(e).trim()
+    let mut lines = e.lines().map(str::trim).filter(|l| !l.is_empty());
+    let first = lines.clone().next();
+    lines.find(|l| !l.starts_with("From ") && !l.starts_with("To ")).or(first).unwrap_or(e.trim())
+}
+
+#[cfg(test)]
+mod first_line_tests {
+    use super::first_line;
+
+    #[test]
+    fn a_failure_headline_skips_the_from_and_to_lines_of_git() {
+        let clobber = "From https://github.com/x/y\n ! [rejected] v1 -> v1  (would clobber existing tag)";
+        assert_eq!(first_line(clobber), "! [rejected] v1 -> v1  (would clobber existing tag)");
+        assert_eq!(first_line("To github.com:x/y.git\n ! [rejected] main -> main (fetch first)"), "! [rejected] main -> main (fetch first)");
+        assert_eq!(first_line("remote: Permission denied\nfatal: unable to access"), "remote: Permission denied", "a remote's own words stay");
+        assert_eq!(first_line("fatal: not a git repository"), "fatal: not a git repository");
+        assert_eq!(first_line("From https://x/y"), "From https://x/y", "nothing else to show: the line itself");
+        assert_eq!(first_line(""), "");
+    }
 }
 
 #[cfg(test)]

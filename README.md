@@ -90,10 +90,13 @@ read-only view.
 **macOS (Apple silicon).** Download the DMG from [Releases](https://github.com/doancan/codeyard/releases), open it and drag
 **Codeyard** to Applications. New tag releases use Developer ID signing and Apple notarization. Older releases published
 before this change require approval in System Settings → Privacy & Security on first launch. A single runnable binary is also published as
-`codeyard-<version>-macos-arm64.tar.gz`; keep its `agents/` folder next to it, SSH needs it.
+`codeyard-<version>-macos-arm64.tar.gz`.
 
-**Windows (x64).** Download the setup EXE or the portable ZIP from [Releases](https://github.com/doancan/codeyard/releases); keep the
-portable app's `agents/` folder next to the EXE, SSH needs it. Builds are unsigned. The native terminal uses ConPTY (Windows 10 1809
+The SSH agent is not part of the download on either system: like VS Code's server, on first connect the server
+downloads it from the same release (or, without internet access there, Codeyard downloads it and copies it over ssh), and it
+runs only if its SHA-256 is the one the app was built with.
+
+**Windows (x64).** Download the setup EXE or the portable ZIP from [Releases](https://github.com/doancan/codeyard/releases). Builds are unsigned. The native terminal uses ConPTY (Windows 10 1809
 or newer). To build locally you need Rust's MSVC toolchain and the Visual Studio C++ Build Tools with the Windows SDK (GPUI needs
 `fxc.exe`), then `cargo build --release --locked -p app`; `scripts\bundle-windows.ps1` makes the ZIP and, with Inno Setup 6, the
 installer. `scripts\check-windows.ps1` runs the native checks. Windows SSH needs a key or ssh-agent and a known host entry, and

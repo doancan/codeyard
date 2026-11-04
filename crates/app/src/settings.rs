@@ -473,7 +473,7 @@ mod scope;
 pub use scope::RESTRICTED_KEYS;
 #[cfg(test)]
 pub use scope::USER_ONLY_KEYS;
-pub use scope::{Scope, ScopedLayer, Sources, is_user_only};
+pub use scope::{Scope, ScopedLayer, Sources, is_user_only, name_layer};
 #[path = "settings_rust.rs"]
 mod rust;
 #[path = "settings_scale.rs"]
@@ -545,6 +545,8 @@ pub fn parse_scoped(user: &str, layers: &[ScopedLayer]) -> Result<(Settings, Vec
     let mut merged = user_obj.clone();
     let mut quiet: Vec<String> = Vec::new();
     let mut sources = Sources::default();
+    // The file each effective key was read from, so a warning about its value names that file.
+    let mut origin: std::collections::HashMap<String, &str> = std::collections::HashMap::new();
     for &ScopedLayer { name, text, warn, trusted, scope } in layers {
         match serde_json::from_str::<Value>(&theme::themes::strip_jsonc(text)) {
             Ok(Value::Object(o)) => {
@@ -561,6 +563,7 @@ pub fn parse_scoped(user: &str, layers: &[ScopedLayer]) -> Result<(Settings, Vec
                         quiet.push(k.clone());
                     }
                     sources.0.insert(k.clone(), scope);
+                    origin.insert(k.clone(), name);
                     merged.insert(k, v);
                 }
             }
@@ -569,7 +572,7 @@ pub fn parse_scoped(user: &str, layers: &[ScopedLayer]) -> Result<(Settings, Vec
         }
     }
     let (s, more) = parse_object(&merged, &quiet);
-    warnings.extend(more);
+    warnings.extend(more.into_iter().map(|w| name_layer(w, &origin)));
     Ok((s, warnings, sources))
 }
 
@@ -654,7 +657,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         s.search_max_results = v as u32;
     }
     // --- git-sync ---
-    if let Some(v) = r.bool("git.autofetch") {
+    if let Some(v) = r.bool_or("git.autofetch", &[("all", true)]) {
         s.git_autofetch = v;
     }
     if let Some(v) = r.number("git.autofetchPeriod", 30., 86_400.) {
@@ -932,7 +935,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.bool("editor.hover.enabled") {
         s.hover_enabled = v;
     }
-    if let Some(v) = r.bool("editor.quickSuggestions") {
+    if let Some(v) = r.quick_suggestions("editor.quickSuggestions") {
         s.quick_suggestions = v;
     }
     if let Some(v) = r.strings("search.exclude") {
@@ -1332,6 +1335,39 @@ impl Reader<'_> {
                 None
             }
         }
+    }
+
+    /// A boolean, or one of the words other editors also write for the same setting (`git.autofetch`: "all").
+    fn bool_or(&mut self, key: &str, words: &[(&str, bool)]) -> Option<bool> {
+        match self.get(key)? {
+            Value::Bool(b) => return Some(*b),
+            Value::String(w) => {
+                if let Some((_, v)) = words.iter().find(|(word, _)| word == w) {
+                    return Some(*v);
+                }
+            }
+            _ => {}
+        }
+        self.warn(crate::i18n::tf("{}: expected true or false", &[&key]));
+        None
+    }
+
+    /// `editor.quickSuggestions`: true or false, or an object with a mode per context (`other`, `comments`, `strings`).
+    /// Only code (`other`) is what the setting here is about; a missing one counts as on.
+    fn quick_suggestions(&mut self, key: &str) -> Option<bool> {
+        match self.get(key)? {
+            Value::Bool(b) => return Some(*b),
+            Value::Object(o) => match o.get("other") {
+                None => return Some(true),
+                Some(Value::Bool(b)) => return Some(*b),
+                Some(Value::String(mode)) if matches!(mode.as_str(), "on" | "inline") => return Some(true),
+                Some(Value::String(mode)) if mode == "off" => return Some(false),
+                Some(_) => {}
+            },
+            _ => {}
+        }
+        self.warn(crate::i18n::tf("{}: expected true or false", &[&key]));
+        None
     }
 
     fn number(&mut self, key: &str, min: f64, max: f64) -> Option<f64> {

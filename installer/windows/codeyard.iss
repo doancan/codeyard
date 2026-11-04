@@ -1,7 +1,7 @@
 ; Codeyard Windows installer (Inno Setup 6).
 ;   iscc /DAppVersion=0.1.0 installer\windows\codeyard.iss
 ; Input: target\release\codeyard.exe, the licence texts (installed to {app}\licenses, same list as
-; scripts\licenses.sh). SSH agents are embedded in Codeyard.exe by scripts/build-windows.ps1.
+; scripts\licenses.sh). SSH agents are not installed: Codeyard.exe records their hashes and downloads them from the release.
 ; Output: target\windows\Codeyard-<version>-windows-x64-setup.exe
 ; Normally run by scripts\bundle-windows.ps1.
 

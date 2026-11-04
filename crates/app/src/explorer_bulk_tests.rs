@@ -191,3 +191,98 @@ fn explorer_bulk_cancel_before_confirmation_prevents_every_side_effect(cx: &mut 
 fn wait_idle(wb: &gpui::Entity<crate::workbench::Workbench>, cx: &mut VisualTestContext) {
     crate::qa_integration_tests::wait_ticking(cx, "the file operation to finish", |cx| !wb.read_with(cx, |wb, _| wb.file_operation_active_for_test()));
 }
+
+fn names(dir: &std::path::Path) -> Vec<String> {
+    let mut names: Vec<_> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    names.sort();
+    names
+}
+
+fn paste_into(wb: &gpui::Entity<crate::workbench::Workbench>, dir: &std::path::Path, cx: &mut VisualTestContext) {
+    wb.update_in(cx, |wb, window, cx| wb.tree_event_for_test(TreeEvent::Paste { dir: crate::ui::local_path(dir) }, window, cx));
+    cx.run_until_parked();
+}
+
+#[gpui::test]
+fn explorer_paste_takes_files_copied_in_finder(cx: &mut TestAppContext) {
+    let dir = fresh("explorer-finder-paste");
+    let outside = fresh("explorer-finder-paste-outside");
+    let target = dir.join("destination");
+    std::fs::create_dir(&target).unwrap();
+    std::fs::write(outside.join("rapor ğüş.txt"), "from finder\n").unwrap();
+    std::fs::create_dir(outside.join("klasör")).unwrap();
+    std::fs::write(outside.join("klasör").join("ic.txt"), "inside\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    crate::system_clipboard::set_for_test(vec![outside.join("rapor ğüş.txt")], 1);
+    paste_into(&wb, &target, cx);
+    crate::qa_integration_tests::wait_ticking(cx, "the pasted file", |_| target.join("rapor ğüş.txt").exists());
+    assert_eq!(std::fs::read_to_string(target.join("rapor ğüş.txt")).unwrap(), "from finder\n");
+    assert!(outside.join("rapor ğüş.txt").exists(), "Finder's copy is a copy, the original stays");
+
+    crate::system_clipboard::set_for_test(vec![outside.join("klasör")], 2);
+    paste_into(&wb, &target, cx);
+    crate::qa_integration_tests::wait_ticking(cx, "the pasted folder", |_| target.join("klasör").join("ic.txt").exists());
+}
+
+#[gpui::test]
+fn explorer_paste_into_the_files_own_folder_makes_a_copy_and_keeps_the_original(cx: &mut TestAppContext) {
+    let dir = fresh("explorer-finder-same-folder");
+    std::fs::write(dir.join("a.txt"), "original\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    crate::system_clipboard::set_for_test(vec![dir.join("a.txt")], 1);
+    paste_into(&wb, &dir, cx);
+    crate::qa_integration_tests::wait_ticking(cx, "the copy next to the original", |_| names(&dir).len() == 2);
+    assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "original\n");
+    let copy = names(&dir).into_iter().find(|n| n != "a.txt").unwrap();
+    assert!(copy.contains("copy"), "{copy}");
+    assert_eq!(std::fs::read_to_string(dir.join(&copy)).unwrap(), "original\n");
+}
+
+#[gpui::test]
+fn explorer_paste_follows_whichever_copy_is_newer(cx: &mut TestAppContext) {
+    let dir = fresh("explorer-which-clipboard");
+    let outside = fresh("explorer-which-clipboard-outside");
+    let (own, finder) = (dir.join("own.txt"), outside.join("finder.txt"));
+    std::fs::write(&own, "own").unwrap();
+    std::fs::write(&finder, "finder").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+
+    // Copied in the Explorer while Finder's files were already there: the Explorer's copy is the newer one.
+    crate::system_clipboard::set_for_test(vec![finder.clone()], 5);
+    wb.update_in(cx, |wb, window, cx| wb.tree_event_for_test(TreeEvent::Copy(crate::ui::local_path(&own)), window, cx));
+    let target = dir.join("one");
+    std::fs::create_dir(&target).unwrap();
+    paste_into(&wb, &target, cx);
+    crate::qa_integration_tests::wait_ticking(cx, "the Explorer's copy", |_| target.join("own.txt").exists());
+    assert!(!target.join("finder.txt").exists());
+
+    // Finder copied afterwards: its files win.
+    crate::system_clipboard::set_for_test(vec![finder.clone()], 6);
+    let target = dir.join("two");
+    std::fs::create_dir(&target).unwrap();
+    paste_into(&wb, &target, cx);
+    crate::qa_integration_tests::wait_ticking(cx, "Finder's copy", |_| target.join("finder.txt").exists());
+    assert!(!target.join("own.txt").exists());
+
+    // Something else (text) copied afterwards: no files on the clipboard, so the Explorer's copy still pastes.
+    wb.update_in(cx, |wb, window, cx| wb.tree_event_for_test(TreeEvent::Copy(crate::ui::local_path(&own)), window, cx));
+    crate::system_clipboard::set_for_test(Vec::new(), 7);
+    let target = dir.join("three");
+    std::fs::create_dir(&target).unwrap();
+    paste_into(&wb, &target, cx);
+    crate::qa_integration_tests::wait_ticking(cx, "the Explorer's copy again", |_| target.join("own.txt").exists());
+}
+
+#[gpui::test]
+fn explorer_paste_with_nothing_to_paste_changes_nothing(cx: &mut TestAppContext) {
+    let dir = fresh("explorer-paste-nothing");
+    std::fs::write(dir.join("a.txt"), "a").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    crate::system_clipboard::set_for_test(vec![dir.join("gone.txt")], 3);
+    paste_into(&wb, &dir, cx);
+    assert_eq!(names(&dir), ["a.txt"], "a file that no longer exists is not pasted");
+}
