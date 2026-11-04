@@ -9,6 +9,7 @@ publish = false
 
 [build-dependencies]
 embed-resource = "3.0.12"
+sha2 = "0.11.1"
 
 [dependencies]
 accesskit = "0.25.1"

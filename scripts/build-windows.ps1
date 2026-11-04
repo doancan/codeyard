@@ -1,4 +1,5 @@
-# Build a standalone Windows app, including all Linux SSH agents, in one command.
+# Build the Windows app and the Linux SSH agents in one command. The EXE records the agents' SHA-256; it finds these
+# agents in target/agents (same hash) and uploads them, while an installed release downloads them from GitHub.
 param([ValidateSet('Debug', 'Release')][string]$Profile = 'Debug')
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Run this script on Windows.' }

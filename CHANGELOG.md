@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Windows and macOS: the SSH agents are no longer part of the download (Codeyard.exe, the DMG and the tar.gz, whose
+  `agents/` folder is gone). Like VS Code's server, the agent is fetched on first
+  connect from the GitHub release of the app's version: the server downloads it with `curl` or `wget`, and when it cannot
+  (no internet access), Codeyard downloads it on this computer, keeps it for the next server and copies it over ssh. The
+  app carries only the agents' SHA-256, and an agent with any other hash is never run. Releases now attach
+  `codeyard-agent-<triple>` files; `CODEYARD_AGENT_BASE_URL` points the download at a mirror.
+
 ## [0.7.4] - 2026-11-04
 
 ### Changed

@@ -9,7 +9,8 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_STATE_DIR` | Folder for the local state database, crash reports and backups (default: `~/Library/Application Support/codeyard` on macOS, `~/.local/state/codeyard` elsewhere). Local managed language services also use this profile’s `language-services` subdirectory. Extension accounts and `secrets` stay in the system keychain, but under keys of this profile’s own, so a test profile neither reads nor replaces the user’s. |
 | `CODEYARD_CONFIG_DIR` | Folder for `settings.jsonc`, `keybindings.jsonc`, `themes/`, `snippets/`, `projects.jsonc` (default `~/.config/codeyard`). |
 | `CODEYARD_SSH_CONFIG` | Use this file instead of `~/.ssh/config` for host lists and connections. |
-| `CODEYARD_AGENT_DIR` | Optional developer override for `codeyard-agent-<triple>` binaries. Windows uses embedded agents by default; Unix packages use `agents/` next to the executable (or the macOS bundle's Resources directory). |
+| `CODEYARD_AGENT_DIR` | Optional developer override for `codeyard-agent-<triple>` binaries. Windows and macOS releases download the agents of their release by default (the server fetches them, or the app does and copies them over ssh); source builds use `target/agents`, and other Unix packages `agents/` next to the executable. |
+| `CODEYARD_AGENT_BASE_URL` | Windows and macOS: download the agents from this folder instead of `https://github.com/doancan/codeyard/releases/download/v<version>` (a mirror for networks that cannot reach GitHub). The files must be the release's own: their SHA-256 is checked. |
 | `CODEYARD_REMOTE_DIR` | Where the agent is installed on the server (default `~/.cache/codeyard`). |
 | `CODEYARD_NO_A11Y` | Set to disable the accessibility tree (macOS and Windows). |
 | `CODEYARD_NO_DOCK_ICON` | Do not set the Dock icon at run time (bare binaries only). |

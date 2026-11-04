@@ -7,8 +7,9 @@
 #   SIGN_IDENTITY="Developer ID Application: Name (TEAMID)" scripts/bundle-macos.sh
 # Other machines also need notarization (scripts/notarize-macos.sh); Gatekeeper blocks an
 # unsigned download until the user picks right-click > Open.
-# AGENTS_DIR=<dir>: the codeyard-agent-<triple> files in it go into the bundle under
-# Contents/Resources/agents/; the app copies them to a server on first connect.
+# AGENTS_DIR=<dir>: the codeyard-agent-<triple> files whose SHA-256 the app records (crates/app/build.rs). The agents are
+# not put into the bundle: a server downloads them from the release of this version (or the app does and copies them over
+# ssh), so a release must publish these same files (release.yml, publish job).
 # Licence texts (scripts/licenses.sh) go into Contents/Resources/licenses/ and the DMG's Licenses/ folder.
 # Icon source: crates/app/assets/macos/codeyard.svg (1024x1024, transparent corners).
 set -euo pipefail
@@ -43,11 +44,6 @@ cp target/release/cyx "$APP/Contents/MacOS/cyx"
 # `codeyard-exthost`, which runs code extensions: the only binary with wasmtime, and the only one with a
 # hardened-runtime exception (crates/ext-host/exthost.entitlements).
 cp target/release/codeyard-exthost "$APP/Contents/MacOS/codeyard-exthost"
-if [ -n "${AGENTS_DIR:-}" ]; then
-  # Resources/, not MacOS/: Linux binaries cannot be code-signed, so they are sealed as data.
-  mkdir "$APP/Contents/Resources/agents"
-  cp "$AGENTS_DIR"/codeyard-agent-* "$APP/Contents/Resources/agents/"
-fi
 cp "$TMP/Codeyard.icns" "$APP/Contents/Resources/Codeyard.icns"
 # Licence texts: inside the bundle (before signing, so the seal covers them) and again at the DMG root.
 scripts/licenses.sh copy "$APP/Contents/Resources/licenses"
@@ -111,14 +107,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 plutil -lint "$APP/Contents/Info.plist" >/dev/null
 
-# Sign inside out: the bundled Mach-O agents first (`--deep` does not look into Resources/, and
-# notarization rejects an unsigned Mach-O), then the app. Linux ELF agents count as data.
+# Sign inside out: the nested executables, then the app.
 # --options runtime is required for notarization and harmless for an ad-hoc signature.
 sign_args=(--force --options runtime --sign "${SIGN_IDENTITY:--}")
 if [ -n "${SIGN_IDENTITY:-}" ]; then sign_args+=(--timestamp); fi
-for agent in "$APP"/Contents/Resources/agents/codeyard-agent-*-apple-darwin; do
-  [ -f "$agent" ] && codesign "${sign_args[@]}" "$agent"
-done
 # A nested executable is signed on its own before the bundle seal (notarization checks each one).
 codesign "${sign_args[@]}" "$APP/Contents/MacOS/cyx"
 codesign "${sign_args[@]}" --entitlements crates/ext-host/exthost.entitlements "$APP/Contents/MacOS/codeyard-exthost"
