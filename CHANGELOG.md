@@ -16,6 +16,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   app carries only the agents' SHA-256, and an agent with any other hash is never run. Releases now attach
   `codeyard-agent-<triple>` files; `CODEYARD_AGENT_BASE_URL` points the download at a mirror.
 
+### Fixed
+
+- Pull no longer fails with "would clobber existing tag" when a tag exists locally and on the remote as different objects
+  (the remote's tags were recreated): local tags are left alone and the pull goes on without `--tags`. A failure notice
+  skips git's "From <url>" / "To <url>" line and shows the reason after it.
+- Connecting to an SSH host no longer fails with "unsupported server: <text>" when the server's shell startup files print
+  something (a welcome, an `nvm` or `conda` notice) even for a command: the answers to the probe, the agent check and the
+  key install are read between markers, and a command's exit status is kept.
+- The up arrow in a new zsh terminal recalls your earlier commands again. The shell integration made the system's zshrc put
+  `HISTFILE` inside Codeyard's cache folder, so every terminal started with an empty history that was never saved to
+  `~/.zsh_history`. A `HISTFILE` your own `.zshrc` sets still wins.
+- ⌘V in the Explorer pastes files copied in Finder (macOS), into the selected folder: copied locally, uploaded on an SSH
+  host. A file pasted into its own folder gets "copy" in its name instead of overwriting itself, and the Explorer's own
+  copy still pastes when it is the newer one.
+- The other forms of `git.autofetch` (`"all"`) and `editor.quickSuggestions` (an object per context) that a project's
+  `.vscode/settings.json` may hold no longer raise "expected true or false". A settings warning now names the file the value came
+  from instead of always blaming `settings.jsonc`.
+
 ## [0.7.4] - 2026-11-04
 
 ### Changed
