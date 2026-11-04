@@ -1,4 +1,6 @@
 ZDOTDIR="$__cy_user"
+# The system's zshrc ran while ZDOTDIR was this folder and chose the history file in it: back to the user's own (a HISTFILE the user's files set still wins).
+[[ "$HISTFILE" == "$__cy_dir/.zsh_history" ]] && HISTFILE="$ZDOTDIR/.zsh_history"
 [ -f "$ZDOTDIR/.zshrc" ] && . "$ZDOTDIR/.zshrc"
 __cy_user="$ZDOTDIR"
 ZDOTDIR="$__cy_dir"

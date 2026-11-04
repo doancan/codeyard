@@ -251,6 +251,37 @@ mod tests {
         assert!(install_in(&evil).is_err(), "a symlinked folder is not written through");
     }
 
+    /// `$HISTFILE` as an interactive zsh sees it once the integration's files have run. `preset` stands for the system's
+    /// zshrc (macOS sets it from `$ZDOTDIR`, which is the integration folder at that point); `own` is a line in the user's `.zshrc`.
+    fn zsh_histfile(name: &str, preset: bool, own: &str) -> Option<(String, PathBuf)> {
+        let root = temp(name);
+        let dir = install_in(&root).ok()?;
+        let home = root.join("home");
+        std::fs::create_dir_all(&home).ok()?;
+        std::fs::write(home.join(".zshrc"), own).ok()?;
+        let zdotdir = dir.join("zsh");
+        let mut cmd = std::process::Command::new("zsh");
+        cmd.args(["-i", "-c", "print -r -- $HISTFILE"]).env("HOME", &home).env("ZDOTDIR", &zdotdir).env("CODEYARD_USER_ZDOTDIR", &home).env_remove("HISTFILE");
+        if preset {
+            cmd.env("HISTFILE", zdotdir.join(".zsh_history"));
+        }
+        let out = cmd.output().ok()?;
+        Some((String::from_utf8_lossy(&out.stdout).trim().to_string(), home))
+    }
+
+    #[test]
+    fn zsh_history_stays_in_the_users_folder() {
+        // The system zshrc runs while ZDOTDIR is the integration folder: the history must not end up in the cache.
+        let Some((histfile, home)) = zsh_histfile("hist-system", true, "") else { return };
+        assert_eq!(histfile, home.join(".zsh_history").to_string_lossy(), "history went into the integration folder");
+    }
+
+    #[test]
+    fn a_history_file_the_users_zshrc_sets_is_kept() {
+        let Some((histfile, _)) = zsh_histfile("hist-own", true, "HISTFILE=/tmp/my-own-history\n") else { return };
+        assert_eq!(histfile, "/tmp/my-own-history");
+    }
+
     #[test]
     fn each_shell_gets_its_way_in_and_others_are_left_alone() {
         let root = temp("setup");
