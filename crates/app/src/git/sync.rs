@@ -148,6 +148,11 @@ fn pull(host: &dyn Host, root: &str, rebase: bool, opts: SyncOptions, from: Opti
     if out.ok() {
         return Ok(false);
     }
+    // A tag that is on both sides as different objects (the remote's were recreated) fails the whole fetch, however many
+    // commits came in. Local tags are left as they are and the pull goes on without `--tags`.
+    if opts.tags && failure_text(&out).contains("would clobber existing tag") {
+        return pull(host, root, rebase, SyncOptions { tags: false, ..opts }, from);
+    }
     if (merge_in_progress(host, root) || rebase_in_progress(host, root)) && has_unmerged(host, root) {
         return Ok(true);
     }
@@ -351,6 +356,27 @@ mod tests {
         r.push_from_elsewhere("remote3.txt", "remote\n");
         assert_eq!(sync(&host, &root, &SyncOp::Pull, SyncOptions { rebase: true, ..Default::default() }), Ok(SyncStep::Done));
         assert_eq!((r.run)(&["rev-list", "--parents", "-1", "HEAD"]).unwrap().split_whitespace().count(), 2);
+    }
+
+    /// A tag that exists locally and on the remote as different objects fails the whole `git pull --tags` with "would clobber
+    /// existing tag" (the remote's tags were recreated): the pull still has to bring the commits, and local tags stay as they are.
+    #[test]
+    fn a_pull_goes_on_without_tags_when_a_retagged_tag_would_be_clobbered() {
+        let Some(r) = Remote::new("sync-clobber") else { return };
+        let host = host::local();
+        let root = r.root();
+        r.push_from_elsewhere("remote.txt", "remote\n");
+        let git = |args: &[&str], dir: &std::path::Path| {
+            let out = crate::test_git::git().args(args).current_dir(dir).output().unwrap();
+            assert!(out.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&out.stderr));
+        };
+        git(&["tag", "-a", "v1", "-m", "theirs"], &r.other);
+        git(&["push", "-q", "origin", "v1"], &r.other);
+        (r.run)(&["tag", "-a", "v1", "-m", "mine"]).unwrap();
+        let mine = (r.run)(&["rev-parse", "v1"]).unwrap();
+        assert_eq!(sync(&host, &root, &SyncOp::Pull, SyncOptions::default()), Ok(SyncStep::Done));
+        assert!(r.dir.join("remote.txt").exists(), "the commits came in");
+        assert_eq!((r.run)(&["rev-parse", "v1"]).unwrap(), mine, "the local tag is left alone");
     }
 
     #[test]
