@@ -1,6 +1,9 @@
 //! Record the SHA-256 of the remote agents published with a Windows or macOS build. The agents themselves are not shipped:
 //! a server downloads them from this version's GitHub release (or the app does, and copies them over ssh), and they run only
 //! when their hash is the one recorded here. Build scripts never download or compile tools.
+// Included by `tests/agent_build.rs`, where `main` is not called.
+#![cfg_attr(test, allow(dead_code))]
+
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};

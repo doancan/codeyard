@@ -74,8 +74,8 @@ On Windows, `scripts/check-windows.ps1` requires Python 3 for the scripted Rust 
 the workspace (see "Windows" below). It also validates agent inputs and checks that the release EXE contains both Linux
 agents after copying it alone to an empty directory. The check also requires the Windows GUI subsystem and native
 application icon resource, preventing extra console windows and generic EXE icons. `scripts/build-windows.ps1` performs that standalone check for
-local builds too. Build-script validation tests can be run with
-`rustc --edition=2024 --test crates/app/build.rs -o target/agent-build-tests.exe`, then `target/agent-build-tests.exe`.
+local builds too. Build-script validation tests run with
+`cargo test -p app --test agent_build` (and with every other test of the workspace).
 
 `scripts/check.sh` runs all of these in order (`--quick` skips `cargo test`, `--strict` turns a missing `cargo-deny` or
 `cargo-audit` into a failure instead of a skip, `--budgets` adds `scripts/memcheck.sh` on macOS). Run them before every

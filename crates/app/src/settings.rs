@@ -473,7 +473,7 @@ mod scope;
 pub use scope::RESTRICTED_KEYS;
 #[cfg(test)]
 pub use scope::USER_ONLY_KEYS;
-pub use scope::{Scope, ScopedLayer, Sources, is_user_only};
+pub use scope::{Scope, ScopedLayer, Sources, is_user_only, name_layer};
 #[path = "settings_rust.rs"]
 mod rust;
 #[path = "settings_scale.rs"]
@@ -574,18 +574,6 @@ pub fn parse_scoped(user: &str, layers: &[ScopedLayer]) -> Result<(Settings, Vec
     let (s, more) = parse_object(&merged, &quiet);
     warnings.extend(more.into_iter().map(|w| name_layer(w, &origin)));
     Ok((s, warnings, sources))
-}
-
-/// "settings.jsonc: key: …" → "<file the key came from>: key: …"; a key only the user's file sets keeps `settings.jsonc`.
-fn name_layer(warning: String, origin: &std::collections::HashMap<String, &str>) -> String {
-    let Some(rest) = warning.strip_prefix("settings.jsonc: ") else { return warning };
-    let key = rest.split([':', '[']).next().unwrap_or_default();
-    // A nested key (`lsp.servers.python.settings`) belongs to the layer that set its top-level one.
-    let layer = origin.get(key).or_else(|| origin.iter().find(|(k, _)| key.strip_prefix(k.as_str()).is_some_and(|tail| tail.starts_with('.'))).map(|(_, n)| n));
-    match layer {
-        Some(name) => format!("{name}: {rest}"),
-        None => warning,
-    }
 }
 
 /// One `lsp.servers` entry: `Some(None)` turns the language off, `None` is malformed. An object needs at least one of

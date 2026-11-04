@@ -92,3 +92,15 @@ pub struct ScopedLayer<'a> {
 pub fn is_user_only(key: &str) -> bool {
     USER_ONLY_KEYS.contains(&key)
 }
+
+/// "settings.jsonc: key: …" → "<file the key came from>: key: …"; a key only the user's file sets keeps `settings.jsonc`.
+pub fn name_layer(warning: String, origin: &std::collections::HashMap<String, &str>) -> String {
+    let Some(rest) = warning.strip_prefix("settings.jsonc: ") else { return warning };
+    let key = rest.split([':', '[']).next().unwrap_or_default();
+    // A nested key (`lsp.servers.python.settings`) belongs to the layer that set its top-level one.
+    let layer = origin.get(key).or_else(|| origin.iter().find(|(k, _)| key.strip_prefix(k.as_str()).is_some_and(|tail| tail.starts_with('.'))).map(|(_, n)| n));
+    match layer {
+        Some(name) => format!("{name}: {rest}"),
+        None => warning,
+    }
+}

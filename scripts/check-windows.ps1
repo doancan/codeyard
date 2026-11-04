@@ -8,10 +8,6 @@ $pythonVersion = & python --version 2>&1
 if ($LASTEXITCODE -ne 0 -or $pythonVersion -notmatch '^Python 3\.') { throw 'Python 3 is required for the scripted Rust debugger regression.' }
 & "$PSScriptRoot/test-agent-bundle.ps1"
 if (-not $env:AGENTS_DIR) { & "$PSScriptRoot/build-agents.ps1" }
-& rustc --edition=2024 --test crates/app/build.rs -o target/agent-build-tests.exe
-if ($LASTEXITCODE -ne 0) { throw 'Build-script tests did not compile' }
-& ./target/agent-build-tests.exe
-if ($LASTEXITCODE -ne 0) { throw 'Build-script tests failed' }
 
 function Invoke-Cargo {
     param([string[]]$CargoArgs)
