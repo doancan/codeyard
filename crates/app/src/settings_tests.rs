@@ -413,3 +413,53 @@ fn invalid_lsp_server_settings_are_warned_about_in_the_interface_language() {
     assert_eq!(w[0], "settings.jsonc: lsp.servers.rust.settings: bir nesne bekleniyordu");
     assert_eq!(w[1], format!("settings.jsonc: lsp.servers.go: {shape} ya da null bekleniyordu"));
 }
+
+/// A project file shared with other editors is read as it is: `git.autofetch` also takes "all" (every remote), and `editor.quickSuggestions`
+/// takes an object per context, of which code ("other") is what the setting here is about.
+#[test]
+fn other_forms_of_autofetch_and_quick_suggestions_are_accepted() {
+    let layer = |text| [(".vscode/settings.json", text, false)];
+    let (s, w) =
+        parse_layers("{}", &layer(r#"{ "git.autofetch": "all", "editor.quickSuggestions": { "other": "on", "comments": "off", "strings": "off" } }"#)).unwrap();
+    assert!(w.is_empty(), "{w:?}");
+    assert!(s.git_autofetch && s.quick_suggestions);
+
+    let (s, w) = parse_layers("{}", &layer(r#"{ "git.autofetch": false, "editor.quickSuggestions": { "other": "off", "strings": "on" } }"#)).unwrap();
+    assert!(w.is_empty(), "{w:?}");
+    assert!(!s.git_autofetch && !s.quick_suggestions, "code ('other') off turns the setting off");
+
+    let (s, w) = parse_layers("{}", &layer(r#"{ "editor.quickSuggestions": { "strings": "on" }, "editor.tabSize": 2 }"#)).unwrap();
+    assert!(w.is_empty() && s.quick_suggestions, "an object without 'other' leaves code on: {w:?}");
+
+    for (text, key) in [
+        (r#"{ "git.autofetch": "yes" }"#, "git.autofetch"),
+        (r#"{ "git.autofetch": 1 }"#, "git.autofetch"),
+        (r#"{ "editor.quickSuggestions": "sometimes" }"#, "editor.quickSuggestions"),
+        (r#"{ "editor.quickSuggestions": { "other": 3 } }"#, "editor.quickSuggestions"),
+    ] {
+        let (s, w) = parse_layers("{}", &layer(text)).unwrap();
+        assert_eq!(w.len(), 1, "{text}: {w:?}");
+        assert!(w[0].contains(key) && w[0].contains("expected true or false"), "{w:?}");
+        assert!(s.git_autofetch && s.quick_suggestions, "a bad value leaves the default: {text}");
+    }
+}
+
+/// The notice names the file the bad value is in: one from a project's `.vscode/settings.json` is not the user's own
+/// `settings.jsonc`, and blaming that one sends the user to reset a file that is fine.
+#[test]
+fn a_warning_names_the_layer_the_value_came_from() {
+    let project = [(".vscode/settings.json", r#"{ "editor.tabSize": "wide" }"#, false)];
+    let (_, w) = parse_layers(r#"{ "editor.tabSize": 4 }"#, &project).unwrap();
+    assert_eq!(w.len(), 1, "{w:?}");
+    assert!(w[0].starts_with(".vscode/settings.json: editor.tabSize"), "{w:?}");
+
+    // A project value that parses leaves the user's own bad value out of it: the user's file is named.
+    let (_, w) = parse_layers(r#"{ "editor.tabSize": "wide" }"#, &[(".codeyard/settings.jsonc", r#"{ "editor.fontSize": 15 }"#, true)]).unwrap();
+    assert_eq!(w.len(), 1, "{w:?}");
+    assert!(w[0].starts_with("settings.jsonc: editor.tabSize"), "{w:?}");
+
+    // The later layer wins, so it is the one named.
+    let layers = [(".vscode/settings.json", r#"{ "editor.tabSize": "a" }"#, false), (".codeyard/settings.jsonc", r#"{ "editor.tabSize": "b" }"#, true)];
+    let (_, w) = parse_layers("{}", &layers).unwrap();
+    assert!(w.len() == 1 && w[0].starts_with(".codeyard/settings.jsonc: editor.tabSize"), "{w:?}");
+}

@@ -186,7 +186,7 @@ mod tests {
         let src =
             concat!(include_str!("settings.rs"), include_str!("settings_terminal.rs"), include_str!("settings_rust.rs"), include_str!("settings_workbench.rs"));
         let mut parsed = std::collections::BTreeSet::new();
-        for m in ["bool", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale"] {
+        for m in ["bool", "bool_or", "quick_suggestions", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale"] {
             let needle = format!("r.{m}(\"");
             let mut rest = src;
             while let Some(i) = rest.find(&needle) {
@@ -197,7 +197,7 @@ mod tests {
             }
         }
         // A new reader method (`r.something("key")`) that is not in the list above would hide its keys from this test: fail instead.
-        let known = ["bool", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale"];
+        let known = ["bool", "bool_or", "quick_suggestions", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale"];
         let mut unknown_methods = std::collections::BTreeSet::new();
         for (at, _) in src.match_indices("r.") {
             if src[..at].chars().next_back().is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.') {
