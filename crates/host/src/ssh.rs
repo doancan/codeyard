@@ -628,7 +628,7 @@ const RUN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 /// Marks the start and end of a script's own output. The remote user's startup files (`~/.bashrc`, `~/.zshenv`) run even for a
 /// command and may print a welcome, an `nvm` or `conda` notice or a stray `echo` to stdout, which would otherwise be read as the
 /// script's output ("unsupported server: Welcome back"). The script runs in a subshell so its exit status is kept.
-const OUT_MARK: &str = "__CODEYARD_OUT__";
+const OUT_MARK: &str = "__cy_out__";
 
 fn mark_output(script: &str) -> String {
     format!("printf '%s\\n' {OUT_MARK}; ( {script}\n ); rc=$?; printf '\\n%s\\n' {OUT_MARK}; exit $rc")

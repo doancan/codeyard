@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-11-04
+
 ### Changed
 
 - Windows and macOS: the SSH agents are no longer part of the download (Codeyard.exe, the DMG and the tar.gz, whose
@@ -1664,7 +1666,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.4...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.5...HEAD
+[0.7.5]: https://github.com/doancan/codeyard/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/doancan/codeyard/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/doancan/codeyard/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/doancan/codeyard/compare/v0.7.0...v0.7.2
