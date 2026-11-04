@@ -625,10 +625,28 @@ pub fn script_command(alias: &str, script: &str) -> Result<Command> {
 /// Overall timeout for container/WSL commands (ssh has its own `ConnectTimeout`), agent upload included.
 const RUN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
+/// Marks the start and end of a script's own output. The remote user's startup files (`~/.bashrc`, `~/.zshenv`) run even for a
+/// command and may print a welcome, an `nvm` or `conda` notice or a stray `echo` to stdout, which would otherwise be read as the
+/// script's output ("unsupported server: Welcome back"). The script runs in a subshell so its exit status is kept.
+const OUT_MARK: &str = "__CODEYARD_OUT__";
+
+fn mark_output(script: &str) -> String {
+    format!("printf '%s\\n' {OUT_MARK}; ( {script}\n ); rc=$?; printf '\\n%s\\n' {OUT_MARK}; exit $rc")
+}
+
+/// What a marked script printed: the text between the marks, or all of `out` when the marks are not both there.
+fn unmark_output(out: &str) -> &str {
+    let Some(start) = out.find(OUT_MARK) else { return out };
+    let body = &out[start + OUT_MARK.len()..];
+    let Some(end) = body.rfind(OUT_MARK) else { return out };
+    let inner = body[..end].strip_prefix('\n').unwrap_or(&body[..end]);
+    inner.strip_suffix('\n').unwrap_or(inner)
+}
+
 fn run(alias: &str, script: &str, stdin: Option<&[u8]>) -> Result<String> {
     use std::io::{Read, Write};
     check_target(alias)?;
-    let mut cmd = script_command(alias, script)?;
+    let mut cmd = script_command(alias, &mark_output(script))?;
     cmd.stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() }).stdout(Stdio::piped()).stderr(Stdio::piped());
     let program = cmd.get_program().to_string_lossy().into_owned();
     let mut child = cmd.spawn().map_err(|e| HostError::Disconnected(format!("could not start {program}: {e}")))?;
@@ -671,7 +689,7 @@ fn run(alias: &str, script: &str, stdin: Option<&[u8]>) -> Result<String> {
         let err = String::from_utf8_lossy(&stderr).trim().to_string();
         return Err(HostError::Disconnected(if err.is_empty() { format!("{program} exited with {status}") } else { err }));
     }
-    Ok(String::from_utf8_lossy(&stdout).into_owned())
+    Ok(unmark_output(&String::from_utf8_lossy(&stdout)).to_string())
 }
 
 /// Connection steps, used by the UI for progress.
@@ -975,6 +993,40 @@ pub fn spawn_local_agent(bundle: &AgentBundle) -> Result<RemoteHost> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn output_between_marks_ignores_what_a_remote_shell_prints_around_it() {
+        use super::{OUT_MARK, mark_output, unmark_output};
+        let noisy = format!("Welcome back!\nnvm: using node 20\n{OUT_MARK}\nLinux x86_64\n/home/me\n\n{OUT_MARK}\ntrailing banner\n");
+        assert_eq!(unmark_output(&noisy), "Linux x86_64\n/home/me\n", "only the script's own lines, its trailing blank line kept");
+        assert_eq!(unmark_output(&format!("{OUT_MARK}\nadded\n{OUT_MARK}\n")), "added");
+        assert_eq!(unmark_output(&format!("{OUT_MARK}\n\n{OUT_MARK}\n")), "", "a script with no output");
+        // Without both marks (an old server shell that never ran the wrapper) everything is returned as before.
+        assert_eq!(unmark_output("Linux x86_64\n"), "Linux x86_64\n");
+        assert_eq!(unmark_output(&format!("{OUT_MARK}\nhalf")), format!("{OUT_MARK}\nhalf"));
+        assert!(mark_output("true").contains(OUT_MARK));
+    }
+
+    /// Through a real shell: noise printed before the wrapper (a startup file), the script's output and its exit status.
+    #[cfg(unix)]
+    #[test]
+    fn a_marked_script_keeps_its_output_and_its_exit_status_under_shell_noise() {
+        use super::{mark_output, unmark_output};
+        let run = |script: &str| {
+            let out = std::process::Command::new("sh")
+                .args(["-c", &format!("echo 'Last login: yesterday'; echo 'conda: base'; {}", mark_output(script))])
+                .output()
+                .unwrap();
+            (unmark_output(&String::from_utf8_lossy(&out.stdout)).to_string(), out.status.code())
+        };
+        let uname = String::from_utf8(std::process::Command::new("uname").arg("-s").output().unwrap().stdout).unwrap();
+        assert_eq!(run(r#"uname -s; printf '%s\n' "$HOME""#), (format!("{uname}{}\n", std::env::var("HOME").unwrap()), Some(0)));
+        let (out, code) = run("echo partial; exit 3");
+        assert_eq!((out.as_str(), code), ("partial\n", Some(3)), "a failing script still fails");
+        // `set -e` and a `cat` of stdin, as the agent upload does, work inside the wrapper.
+        let (out, code) = run("set -e; t=$(printf abc | cat); echo $t; false; echo not-reached");
+        assert_eq!((out.as_str(), code), ("abc\n", Some(1)));
+    }
     #[test]
     fn agent_protocol_is_checked_before_attach() {
         assert!(super::check_agent_version(&format!("{}\n", proto::VERSION)).is_ok());
