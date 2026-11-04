@@ -22,6 +22,8 @@ pub(super) struct SyncState {
     pub(super) running: Option<Running>,
     /// Why the last background fetch failed; shown as the status bar item's tooltip until a fetch or a sync succeeds.
     autofetch_error: Option<AutofetchError>,
+    /// What the user asked for while a background fetch ran (a sync, or a push after a commit): it starts when the fetch is done.
+    queued: Option<Vec<SyncOp>>,
 }
 
 struct AutofetchError {
@@ -97,7 +99,8 @@ impl Workbench {
                 return;
             }
             Some(Running::Autofetch) => {
-                self.notice = Some(Notice::Info(crate::i18n::t("Fetching in the background: try again in a moment.").into()));
+                self.vcs.sync.queued = Some(ops);
+                self.notice = Some(Notice::Info(crate::i18n::t("Fetching in the background: the sync starts when it is done.").into()));
                 cx.notify();
                 return;
             }
@@ -332,14 +335,18 @@ impl Workbench {
             let result = task.await;
             this.update(cx, |this, cx| {
                 this.vcs.sync.running = None;
+                let queued = this.vcs.sync.queued.take();
                 if !this.git_context_matches(&source_host, &source_root) {
                     cx.notify();
                     return;
                 }
                 match result {
-                    Ok(()) => {
+                    Ok(changed) => {
                         this.vcs.sync.autofetch_error = None;
-                        this.refresh_git(0, cx);
+                        // Nothing new came: the status and the graph on screen are still right, so they are not read again.
+                        if changed {
+                            this.refresh_git(0, cx);
+                        }
                     }
                     Err(e) => {
                         this.vcs.sync.autofetch_error = Some(AutofetchError {
@@ -348,6 +355,9 @@ impl Workbench {
                             message: first_line(&e).to_string().into(),
                         });
                     }
+                }
+                if let Some(ops) = queued {
+                    this.git_sync(ops, cx);
                 }
                 cx.notify();
             })

@@ -546,8 +546,8 @@ through the parent's record in the list. With a workspace file open, trust cover
 whole: the question becomes "Do you trust the authors of this workspace?" and names the file, and the answer (or
 `Workspace: Trust This Folder`) trusts the file's own folder and every folder it lists in one step. A folder the
 workspace does not list is still asked about on its own, and over SSH the trust only holds on that host.
-A folder you open untrusted asks once whether to trust it (**Trust Folder**, **Trust Parent Folder and Subfolders**, or
-**Don't Trust**; `security.workspaceTrust.startupPrompt` can make it ask every time or never), and until you do
+A folder you open untrusted asks once whether to trust it, on a card that says what Restricted Mode keeps off (**Trust Folder**,
+**Trust Parent Folder and Subfolders**, or **Don't Trust**, which Return and Escape answer; `security.workspaceTrust.startupPrompt` can make it ask every time or never), and until you do
 the status bar shows **Restricted Mode**. Click it, or run `Workspace: Manage Workspace Trust…`, to trust the folder or its
 parent, to stop trusting the open folder, or to remove any trusted folder from the list.
 `security.workspaceTrust.enabled: false`

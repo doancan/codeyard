@@ -94,6 +94,7 @@ Already debugging: Shift+F5 stops the session.
 Already formatted	
 Already listed after an update? Remove it with − and add it again.	
 Already minified	
+Also every folder inside “{}”, now and later.	
 Also get its pre-releases, at once and before others get them	
 Always open *.{0} as {1}	
 Amended {}	
@@ -718,6 +719,7 @@ Edit a host
 Edit which SSH host?	
 Edit “{}”: which setting?	
 Edit, test, set up key login, remove	
+Editing, search, Git and themes work as usual.	
 Editor	
 Editor font (empty: built-in monospace)	
 Editor group {}	
@@ -827,6 +829,7 @@ Enter the remote as: name url
 Enter: path branch	
 Error	
 Errors and warnings	
+Esc keeps Restricted Mode. Change it later with Workspace: Manage Workspace Trust…	
 Evaluate	
 Evaluate an expression (↵)	
 Every file of {} matches its package.	
@@ -878,7 +881,7 @@ Fetch from all remotes
 Fetch from the remote in the background while the window is in front	
 Fetch removes remote branches that were deleted on the server	
 Fetched	
-Fetching in the background: try again in a moment.	
+Fetching in the background: the sync starts when it is done.	
 Fetching…	
 Fewer context lines	
 File	
@@ -1202,6 +1205,8 @@ Its folder is deleted. Git refuses when the worktree has uncommitted changes; th
 Its publisher deprecated it and suggests {} instead.	
 Its publisher deprecated it.	
 Its publisher withdrew this version, and there is no earlier one to go back to.	
+Its tasks, language servers and settings run. Nothing outside the workspace's folders is trusted.	
+Its tasks, language servers and settings run. Other folders keep asking.	
 JSON schema for {}	
 JSON: Minify Document	
 Jan	
@@ -1236,6 +1241,7 @@ Language of the menus, command palette, Welcome screen, status bar, Source Contr
 Language of the pattern (click for the next one)	
 Language server	
 Language server: {0} for {1}	
+Language servers	
 Language servers are off in “{}” until you trust it: they can run the project's build scripts. Run “Workspace: Trust This Folder”.	
 Language service setup failed: {}. Check the log and connection, then retry.	
 Language services are ready with Node.js {}.	
@@ -1588,6 +1594,7 @@ Only send it if you trust this file.
 Only the connection is removed; the remote repository itself is untouched.	
 Only the local tag is removed. A copy on a remote stays until you delete it there (Git: Delete Remote Tag…).	
 Only this host's entry is removed. The previous file is kept as config.codeyard-bak.	
+Only trust folders from people you know: what you trust can run programs on the computer that holds it, with your rights.	
 Opacity	
 Open	
 Open Changes	
@@ -1759,6 +1766,7 @@ Progress
 Project	
 Project lifecycle commands will run. Rebuild replaces the container; persistent volumes are kept.	
 Project name	
+Project settings that start programs	
 Projects: Add Folder to Projects…	
 Projects: Edit Projects	
 Projects: Remove from Recent…	
@@ -1978,6 +1986,7 @@ Restored from the last session, only the first {} results were kept: they may be
 Restored from the last session: the results may be out of date. Rerun to refresh.	
 Restored {} file: {}|Restored {} files: {}	
 Restricted Mode	
+Restricted Mode keeps these off until you trust it:	
 Restricted Mode: tasks, debugging, and the project's terminal shell and language servers are switched off until you trust this folder. Click to manage trust.	
 Result	
 Resume updates	
@@ -2298,6 +2307,7 @@ Task “{}” has a variable that cannot be expanded.
 Task “{}” has no command.	
 Task “{}” needs an open file.	
 Task “{}” runs in the background but its problem matcher has no endsPattern, so nothing can wait for it.	
+Tasks, tests and debugging	
 Tasks: Configure Tasks	
 Tasks: Rerun Last Task	
 Tasks: Restart Running Task	
@@ -3372,10 +3382,8 @@ your words
 “{0}” is not a valid regular expression ({1}). Escape special characters with a backslash.	
 “{}” already exists. Replace it?	
 “{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	
-“{}” and its folders can run programs through their tasks, debug configurations and project settings. Without trust the window stays in Restricted Mode: those are switched off.	
 “{}” asks for inputs, which a compound cannot ask for: start it on its own.	
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	
-“{}” can run programs through its tasks, debug configurations and project settings. Without trust the window stays in Restricted Mode: those are switched off.	
 “{}” can't be opened	
 “{}” cannot be used in a key binding	
 “{}” is a built-in shortcut; an extension cannot change it	

@@ -242,3 +242,22 @@ fn an_animated_title_tells_the_window_at_most_every_quarter_second(cx: &mut gpui
     view.update(cx, |t, cx| t.set_title("working".into(), cx));
     assert_eq!(told.get(), 2, "the same title is not news");
 }
+
+/// A program that begins a synchronized update and never ends it must not freeze the screen: after the time limit what it drew
+/// is applied, and until then the parser holds it back.
+#[gpui::test]
+fn a_synchronized_update_that_never_ends_is_shown_after_its_time_limit(cx: &mut gpui::TestAppContext) {
+    cx.update(|cx| cx.set_global(crate::settings::Settings::default()));
+    let view = cx.new(|cx| TerminalView::output_only(std::sync::Arc::new(host::local()), "t".into(), cx));
+    view.update(cx, |t, _| {
+        t.feed(b"\x1b[?2026hdrawn in a frame");
+        assert!(!t.screen_text().contains("drawn in a frame"), "held back while the update is open");
+        let left = t.release_expired_sync().expect("an update is pending");
+        assert!(left <= std::time::Duration::from_millis(150), "{left:?}");
+    });
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    view.update(cx, |t, _| {
+        assert_eq!(t.release_expired_sync(), None, "nothing pending once it is applied");
+        assert!(t.screen_text().contains("drawn in a frame"));
+    });
+}

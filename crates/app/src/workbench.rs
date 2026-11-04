@@ -214,7 +214,7 @@ pub use toggles_glue::{
 };
 #[path = "workbench_trust.rs"]
 mod trust_glue;
-pub use trust_glue::ManageWorkspaceTrust;
+pub use trust_glue::{ManageWorkspaceTrust, TrustDialogConfirm, TrustDialogDismiss, TrustDialogNext, TrustDialogPrev};
 #[cfg(test)]
 #[path = "workbench_testing.rs"]
 mod testing_glue;
@@ -1372,7 +1372,7 @@ impl Workbench {
                 theme_override: false,
                 project: Vec::new(),
                 trusted: Default::default(),
-                trust_prompted: None,
+                trust_ask: Default::default(),
                 dirty: false,
                 folders: Default::default(),
                 folder_texts: Default::default(),
