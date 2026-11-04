@@ -453,6 +453,7 @@ Right-click a folder and choose Find in Folder… to search only inside it.	Yaln
 # ---- Status bar ----
 Local	Yerel
 uploading agent	aracı yükleniyor
+server downloading agent	sunucu aracı indiriyor
 starting	başlatılıyor
 Connecting to {}…	{} sunucusuna bağlanılıyor…
 Reconnecting to {}… (attempt {})	{0} sunucusuna yeniden bağlanılıyor… (deneme {1})

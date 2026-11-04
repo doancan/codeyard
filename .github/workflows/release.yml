@@ -173,7 +173,8 @@ jobs:
           xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
           xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
 
-      # SSH agents: copied to the server on first connect, so they ship inside the app.
+      # SSH agents: only their SHA-256 goes into the app. Servers download them from this release (the publish job
+      # attaches them), so they are not put into the DMG or the tar.gz.
       - name: Download the SSH agents
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
         with:
@@ -192,26 +193,22 @@ jobs:
         run: scripts/macos-signing-keychain.sh setup
 
       - name: Build app, bundle and DMG
-        run: AGENTS_DIR="$PWD/agents" scripts/bundle-macos.sh
+        run: |
+          AGENTS_DIR="$PWD/agents" scripts/bundle-macos.sh
+          # The app must know every Linux agent's hash, or it could not connect to a server.
+          target/release/codeyard --check-agent-bundle
 
       - name: Collect release files
         run: |
           mkdir dist
           NAME="codeyard-$VERSION-macos-arm64"
           cp target/release/Codeyard.dmg "dist/Codeyard-$VERSION-macos-arm64.dmg"
-          # Single runnable binary (agents are looked up in an agents/ folder next to it).
+          # Single runnable binary (SSH agents come from the release, like the app's).
           mkdir "$NAME"
           cp target/release/codeyard "$NAME/"
-          cp -R agents "$NAME/agents"
           scripts/licenses.sh copy "$NAME/licenses"
           if [ "$NOTARIZE_RELEASE" = true ]; then
             codesign --force --timestamp --options runtime --identifier com.codeyard.cli --sign "$SIGN_IDENTITY" "$NAME/codeyard"
-            for agent in "$NAME"/agents/codeyard-agent-*-apple-darwin; do
-              if [ -f "$agent" ]; then
-                codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY" "$agent"
-                codesign --verify --strict "$agent"
-              fi
-            done
             codesign --verify --strict "$NAME/codeyard"
             scripts/notarize-macos.sh "dist/Codeyard-$VERSION-macos-arm64.dmg" "$NAME" target/release/Codeyard.app
           fi
@@ -280,6 +277,7 @@ jobs:
         with:
           shared-key: app-windows
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      # Only their SHA-256 goes into the EXE: servers download the agents from this release (the publish job attaches them).
       - name: Download SSH agents
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
         with:
@@ -334,6 +332,14 @@ jobs:
         with:
           name: release-notes
           path: notes
+      # The SSH agents are release files of their own: the Windows and macOS apps record only their hashes, and a server downloads
+      # them from releases/download/v<version>/codeyard-agent-<triple> (or the app does and copies them over ssh). These are
+      # the same artifacts both app builds hashed, so the recorded hashes match.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
+        with:
+          pattern: agents-*
+          merge-multiple: true
+          path: dist
       # The release body and the signed RELEASE_NOTES.md are the same file: what the app shows is what the release shows.
       - name: Merge checksums and verify every file against them
         working-directory: dist
@@ -341,13 +347,17 @@ jobs:
           cp ../notes/notes.md RELEASE_NOTES.md
           sha256sum RELEASE_NOTES.md > SHA256SUMS-notes.txt
           # Defence in depth: whatever a runner wrote, the signed list is LF only.
-          cat SHA256SUMS.txt SHA256SUMS-windows.txt SHA256SUMS-notes.txt | tr -d '\r' > SHA256SUMS.all
+          for t in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+            [ -s "codeyard-agent-$t" ] || { echo "missing SSH agent codeyard-agent-$t: the apps download it from the release"; exit 1; }
+          done
+          sha256sum codeyard-agent-* > SHA256SUMS-agents.txt
+          cat SHA256SUMS.txt SHA256SUMS-windows.txt SHA256SUMS-notes.txt SHA256SUMS-agents.txt | tr -d '\r' > SHA256SUMS.all
           mv SHA256SUMS.all SHA256SUMS.txt
-          rm SHA256SUMS-windows.txt SHA256SUMS-notes.txt
+          rm SHA256SUMS-windows.txt SHA256SUMS-notes.txt SHA256SUMS-agents.txt
           # A mismatch here means an artifact was corrupted between the build and this job.
           sha256sum -c SHA256SUMS.txt
           ! grep -q "$(printf '\r')" SHA256SUMS.txt || { echo "SHA256SUMS.txt contains CR characters"; exit 1; }
-          [ "$(grep -c . SHA256SUMS.txt)" -ge 5 ] || { echo "expected at least the DMG, tar.gz, ZIP, setup EXE and RELEASE_NOTES.md"; exit 1; }
+          [ "$(grep -c . SHA256SUMS.txt)" -ge 7 ] || { echo "expected at least the DMG, tar.gz, ZIP, setup EXE, RELEASE_NOTES.md and the two Linux agents"; exit 1; }
           ls -l
       # Signs SHA256SUMS.txt (the only thing the in-app updater trusts) and checks the signature before anything is published.
       # A tag gets the real key, which is only in this step's environment. A dry run signs with a key made on the spot and checks

@@ -14,14 +14,17 @@ files, search, terminals, git and language servers goes through that one interfa
   Programs (git, language servers) are found through the login shell so the user's `PATH` applies: `exec "$0" "$@"` in
   POSIX shells, `exec $argv` in fish, and `/bin/sh` for any other shell; the program and its arguments are passed as
   arguments, never inside the script.
-- Agent install: on first connect the app detects the architecture (`uname -sm`), copies the bundled static agent
-  (`codeyard-agent-<triple>`) to `~/.cache/codeyard/agent-v<VERSION>-<sha12>` and verifies its SHA-256 before
-  running it. The server never downloads anything, so offline servers work. The version in the path lets agents of
-  different protocol versions coexist; `proto::VERSION` is checked in the `Hello` handshake.
-- Windows embeds these agents in the EXE and sends the bytes directly over SSH; no separate agent directory,
-  local extraction or extra download is needed. Embedded agents take precedence over old sidecar files; an explicit
-  `CODEYARD_AGENT_DIR` can override them for development. They ship inside the app's normal signed update.
-- `Remote: Test SSH Connection…` reports reachability, architecture and whether a matching agent is bundled.
+- Agent install: on first connect the app detects the architecture (`uname -sm`) and installs the static agent
+  (`codeyard-agent-<triple>`) as `~/.cache/codeyard/agent-v<VERSION>-<sha12>`. Release apps (Windows and macOS) carry only the
+  agents' SHA-256: the server downloads the agent from the app's own release with `curl` or `wget`, and when it cannot (no
+  internet access, no downloader), the app downloads it, keeps it in its cache folder (`codeyard/agents`) and copies it over
+  ssh. Source builds and `CODEYARD_AGENT_DIR` copy a local file. Either way the server verifies the SHA-256 before
+  running it, so a server without internet access still works (the app's computer needs it once per agent version,
+  then the cache serves every server). `CODEYARD_AGENT_BASE_URL` downloads from a mirror instead of GitHub. The version
+  in the path lets agents of different protocol versions coexist; `proto::VERSION` is checked in the `Hello` handshake.
+- Published agents take precedence over old sidecar files; an explicit `CODEYARD_AGENT_DIR` overrides them for
+  development. An app update brings new hashes, so the next connect fetches the matching agent.
+- `Remote: Test SSH Connection…` reports reachability, architecture and whether this app has an agent for it.
 - Workspaces are identified by both host and folder path. Switching servers resets the editor even when their
   absolute folder paths match, and each server keeps its own saved tabs. Disconnect saves that session and clears
   its folders, Git state, language servers and project settings from the window.

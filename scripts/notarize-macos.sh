@@ -31,7 +31,7 @@ submit() {
 }
 codesign --verify --deep --strict "$app"
 codesign --verify --strict "$dmg"
-# DMG submission covers the app and its nested Mach-O agents. The portable binary has
+# DMG submission covers the app and its nested executables. The portable binary has
 # a separate signature, so submit that exact code too; Apple does not accept tar.gz.
 submit "$dmg" dmg
 ditto -c -k --keepParent "$portable" "$tmp/portable.zip"

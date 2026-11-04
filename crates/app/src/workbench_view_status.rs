@@ -14,6 +14,7 @@ impl Workbench {
             Conn::Connecting { alias, step } => {
                 // The separate server panel on the left is gone; the connection step shows here.
                 let phase = match step.load(std::sync::atomic::Ordering::Relaxed) {
+                    s if s == host::ssh::Step::Downloading as u8 => format!(" ({})", crate::i18n::t("server downloading agent")),
                     s if s == host::ssh::Step::Uploading as u8 => format!(" ({})", crate::i18n::t("uploading agent")),
                     s if s == host::ssh::Step::Starting as u8 => format!(" ({})", crate::i18n::t("starting")),
                     _ => String::new(),

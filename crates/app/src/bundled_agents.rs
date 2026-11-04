@@ -1,27 +1,33 @@
-//! Remote agent bytes travel inside the Windows executable and its signed update.
+//! The remote agents of this build: on Windows and macOS only their SHA-256 travels inside the executable (see build.rs);
+//! the bytes come from this version's GitHub release, fetched by the server or, without internet access there, by the app.
 include!(concat!(env!("OUT_DIR"), "/bundled_agents.rs"));
 
-pub fn discover() -> host::ssh::AgentBundle {
-    host::ssh::AgentBundle::discover().with_embedded(AGENTS)
+/// This version's release download folder (`<repository>/releases/download/v<version>`), where the agents are published.
+pub fn release_url() -> String {
+    format!("{}/releases/download/v{}", env!("CARGO_PKG_REPOSITORY"), env!("CARGO_PKG_VERSION"))
 }
 
-/// Packaging smoke test: checks only embedded bytes, never the filesystem or the network.
+pub fn discover() -> host::ssh::AgentBundle {
+    host::ssh::AgentBundle::discover().with_published(release_url(), AGENTS)
+}
+
+/// Packaging smoke test: checks only the recorded hashes, never the filesystem or the network.
 pub fn check() -> Result<(), String> {
-    for (triple, machine) in [("x86_64-unknown-linux-musl", 62_u16), ("aarch64-unknown-linux-musl", 183_u16)] {
-        let agent = AGENTS.iter().find(|a| a.triple == triple).ok_or_else(|| format!("missing embedded SSH agent: {triple}"))?;
-        if agent.bytes.len() < 64 || &agent.bytes[..6] != b"\x7fELF\x02\x01" || u16::from_le_bytes([agent.bytes[18], agent.bytes[19]]) != machine {
-            return Err(format!("invalid embedded SSH agent: {triple}"));
+    for triple in ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"] {
+        let agent = AGENTS.iter().find(|a| a.triple == triple).ok_or_else(|| format!("missing SSH agent hash: {triple}"))?;
+        if agent.sha256.len() != 64 || !agent.sha256.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()) {
+            return Err(format!("invalid SSH agent hash: {triple}"));
         }
     }
     Ok(())
 }
 
-#[cfg(all(test, windows))]
+#[cfg(all(test, any(windows, target_os = "macos")))]
 mod tests {
     use super::*;
 
     #[test]
-    fn windows_embedded_agents_are_complete_and_available_to_connections() {
+    fn published_agents_are_complete_and_available_to_connections() {
         // Ordinary debug cargo builds without assets are supported for UI-only development.
         if AGENTS.is_empty() && cfg!(debug_assertions) {
             return;
@@ -30,7 +36,12 @@ mod tests {
         let bundle = discover();
         for agent in AGENTS {
             assert!(bundle.supports(agent.triple));
-            assert!(!bundle.binary(agent.triple).unwrap().unwrap().is_empty());
+            assert_eq!(bundle.source(agent.triple).unwrap().unwrap().sha256(), agent.sha256);
         }
+    }
+
+    #[test]
+    fn agents_come_from_this_versions_release() {
+        assert_eq!(release_url(), format!("https://github.com/doancan/codeyard/releases/download/v{}", env!("CARGO_PKG_VERSION")));
     }
 }

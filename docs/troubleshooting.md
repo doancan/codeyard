@@ -17,7 +17,8 @@ Windows builds are not code-signed, so SmartScreen may warn on first launch.
 | What you see | What it means and what to do |
 | --- | --- |
 | a prompt for a password, passphrase or host key | `ssh` asked and the app forwarded the question; answer it in the window. Nothing is stored. |
-| "no agent binary bundled for `<triple>`" | The server's architecture has no matching `codeyard-agent-<triple>` next to the app. Only Linux x86_64 / aarch64 and macOS arm64 are bundled. Use **Remote: Test SSH Connection…** to see the detected architecture. When running the bare binary, keep its `agents/` folder beside it (or set `CODEYARD_AGENT_DIR`). |
+| "no agent for `<triple>`" | This app has no `codeyard-agent-<triple>` for the server's architecture. Only Linux x86_64 / aarch64 and macOS arm64 exist. Use **Remote: Test SSH Connection…** to see the detected architecture. A source build needs its agents in `target/agents` (or `CODEYARD_AGENT_DIR`). |
+| "Could not get the Codeyard agent" | Neither the server nor this computer could download the agent from the release (the message has both reasons and the URL). Give one of them access to `github.com` and `release-assets.githubusercontent.com`, or set `CODEYARD_AGENT_BASE_URL` to a mirror holding the release's `codeyard-agent-<triple>` files. A file with another SHA-256 is refused. |
 | "could not start ssh" | `ssh` is not on the app's `PATH`. macOS and Linux ship it; on Windows install OpenSSH. |
 | *Reconnecting* in the status bar | The connection dropped; the agent keeps your terminals and watches alive for 5 minutes. If it gives up you get the reason and a **Reconnect** button; open files and unsaved edits stay in their tabs. |
 | *Permission denied (publickey)* | Add the key to the server (**Remote: Set Up Key Login…**) or point the host at the right `IdentityFile` (**Remote: Edit SSH Host…**). |

@@ -3,16 +3,17 @@
 | | macOS (Apple silicon) | Linux | Windows |
 | --- | --- | --- | --- |
 | App | released, daily use, all gates run | builds; the full workspace is tested by blocking Linux CI; no released installer | builds natively (MSVC) and is checked by `scripts/check-windows.ps1` (library tests, path, terminal and resize regressions); ConPTY terminal, menu bar; SSH needs a key or ssh-agent |
-| Agent (target of SSH) | `aarch64-apple-darwin` bundled | `x86_64` and `aarch64` musl bundled, ≤ 1664 KB | not a target |
+| Agent (target of SSH) | `aarch64-apple-darwin`, a release file | `x86_64` and `aarch64` musl, release files, ≤ 1664 KB | not a target |
 | Installer | `.app` + DMG; Developer ID signing/notarization verified in release CI | none yet | portable ZIP and Inno Setup installer (`scripts/bundle-windows.ps1`), unsigned |
 | CI | `macos-latest` job runs the gates; all gates also run locally with `scripts/check.sh` | `linux` job (GPUI-free crates, musl agent size) is blocking; `linux-app` (whole workspace/GPUI) is blocking after four consecutive successful runs | blocking `windows-2022` job running `scripts/check-windows.ps1` |
 
 ## macOS specifics
 
-- **Bundle layout** (`scripts/bundle-macos.sh`): `Contents/MacOS/codeyard`, SSH agents in `Contents/Resources/agents/`
-  (Linux ELF agents cannot be code-signed and are sealed as data; the app also still finds `MacOS/agents/` and an `agents/`
-  folder next to a bare binary), icon, `Info.plist` (linted with `plutil`; document types for text, source code and
-  folders; developer-tools category). The macOS Mach-O agent is signed explicitly (inside out) with the hardened runtime.
+- **Bundle layout** (`scripts/bundle-macos.sh`): `Contents/MacOS/codeyard`, `cyx` and `codeyard-exthost`, icon,
+  `Info.plist` (linted with `plutil`; document types for text, source code and folders; developer-tools category). The
+  SSH agents are not in the bundle: the app records their SHA-256 and a server downloads them from the release
+  (`releasing.md`). An older or hand-made bundle with `Contents/Resources/agents/`, `MacOS/agents/` or an `agents/` folder
+  next to a bare binary still works.
 - **Signing and notarization.** GitHub tag releases use Developer ID signing and Apple notarization, with credentials in
   Actions Secrets. `scripts/notarize-macos.sh` notarizes the signed DMG and portable binaries, staples the DMG and runs
   `spctl`. A live signed dry run passed on 2026-10-26: Apple accepted both submissions and Gatekeeper reported
@@ -67,9 +68,11 @@ Windows x64 is built and released as a ZIP and a setup EXE (unsigned, so SmartSc
   program received. cmd.exe words keep `%` out of the quotes so a `%NAME%` value is not expanded.
   Windows PowerShell 5.1 cannot pass an empty argument, an embedded quote or a trailing backslash to a program
   unchanged; PowerShell 7 (`pwsh`) can.
-- `./scripts/build-windows.ps1` builds a standalone EXE with Linux x64 and ARM64 SSH agents embedded; use
-  `-Profile Release` for an optimized build. No separate `agents/` folder is needed. The packaging check moves only
-  the EXE to an empty directory and verifies both embedded agents. Release CI also embeds its supplied macOS agents.
+- `./scripts/build-windows.ps1` builds the Linux x64 and ARM64 SSH agents and an EXE that records their SHA-256 (the
+  agents are not embedded); use `-Profile Release` for an optimized build. On first connect the server downloads the agent
+  from the release of the app's version, or, without internet access there, the app downloads it and copies it over ssh
+  (`releasing.md`). The packaging check moves only the EXE to an empty directory and verifies both recorded hashes. Release
+  CI also records its supplied macOS agents.
 - Native OpenSSH has no ControlMaster sockets: SSH needs a key or ssh-agent and an existing known-host entry (the password and
   host-key prompt bridge is Unix-only), and in-app port forwarding is unavailable; use `ssh -L` / `ssh -R` in a terminal.
 - Rust debugging with the MSVC toolchain (`*-pc-windows-msvc`): lldb reads the PDB debug information there, which the
