@@ -198,7 +198,7 @@ status bar reports it.
 | `terminal.persistentSessionTimeout` | number 0–1440 | `5` | Minutes the terminals keep running for the next start after Codeyard quits, crashes or is killed (0: not kept) |
 | `terminal.sanitizePaste` | `auto`, `always`, `off` | `auto` | Remove control characters from pasted text |
 | `terminal.scrollSensitivity` | number 0.1–10 | `2.0` | Mouse wheel and trackpad scroll speed multiplier |
-| `terminal.scrollback` | number 0–50000 | `2000` | Lines kept in terminal history |
+| `terminal.scrollback` | number 0–50000 | `10000` | Lines kept in terminal history |
 | `terminal.shell` | text | empty | Shell for new terminals (empty: login shell) |
 | `terminal.shellIntegration` | `true` / `false` | `true` | Mark prompts, commands and the folder in zsh, bash and fish |
 | `terminal.warnMultilinePaste` | `unbracketed`, `always`, `never` | `unbracketed` | Ask before pasting several lines into the terminal |

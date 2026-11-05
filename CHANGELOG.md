@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-11-05
+
+### Added
+
+- Terminal: *Reset Terminal* (right-click menu, Terminal menu and command palette) switches off a mouse mode, the alternate
+  screen or application keys that a dropped SSH connection or a killed program left on, without touching the text or the
+  history.
+- Terminal: dragging files from the file manager onto a terminal types their quoted paths at the cursor (local shells; a remote
+  shell cannot see this computer's files). A path with a control character is never typed.
+- Terminal: a middle click pastes, and a "Jump to Bottom" button shows while the view is scrolled back into the history.
+- Terminal: ⌥ selects text like Shift does while a program reads the mouse (Terminal.app and iTerm do the same).
+
+### Changed
+
+- Terminal on macOS: ⌘↑ / ⌘↓ scroll to the top and the bottom of the history. Jumping between commands moved to ⌥⌘↑ / ⌥⌘↓.
+  In full-screen programs ⌘← / ⌘→ send Home and End.
+- `terminal.scrollback` keeps 10,000 lines by default (it was 2,000), so a long Claude Code or build session can still be scrolled
+  back to its start.
+
+### Fixed
+
+- Terminal: the right-click menu opens while a program reads the mouse (Claude Code, tmux, htop, also over SSH); before, the
+  program swallowed the click and Shift was needed.
+- Terminal: when the shell ends or the SSH connection drops under a program that read the mouse, the output can be selected and
+  copied again.
+
 ## [0.7.5] - 2026-11-04
 
 ### Changed
@@ -1666,7 +1692,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.5...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.6...HEAD
+[0.7.6]: https://github.com/doancan/codeyard/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/doancan/codeyard/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/doancan/codeyard/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/doancan/codeyard/compare/v0.7.2...v0.7.3

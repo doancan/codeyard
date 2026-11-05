@@ -363,6 +363,7 @@ impl Workbench {
             Command::action("Terminal: Go to Previous Command", crate::terminal::TermPrevCommand),
             Command::action("Terminal: Go to Next Command", crate::terminal::TermNextCommand),
             Command::action("Terminal: Copy Last Command Output", crate::terminal::TermCopyLastOutput),
+            Command::action("Terminal: Reset Terminal", crate::terminal::TermReset),
             Command::action("Debug: Run Without Debugging", RunWithoutDebugging),
             Command::action("Debug: Run to Cursor", RunToCursor),
             Command::action("Debug: Add Configuration…", AddDebugConfiguration),

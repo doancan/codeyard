@@ -1604,14 +1604,15 @@ limited to 32 MiB. The file remains available in the remote `/tmp` directory unt
 **Selecting and copying.** Drag to select, double-click for a word, triple-click for a line. The selection stays on its
 text while a program such as Claude Code or Codex redraws or adds lines below it. While Claude Code or Codex runs, a
 finished selection is copied right away, because those programs keep Ctrl+C for themselves
-(`terminal.copyOnSelection`: `agents`, `always` or `off`). When a program reads the mouse, a drag goes to it. Hold Shift
+(`terminal.copyOnSelection`: `agents`, `always` or `off`). When a program reads the mouse, a drag goes to it. Hold Shift or ⌥
 to select instead; the terminal reminds you the first time.
 
 **Shell integration.** zsh, bash and fish mark each prompt and command, with no setup:
 
 - A dot beside each command shows how it ended: green for success, red for failure.
-- ⌘↑ / ⌘↓ (Ctrl+Shift+↑ / ↓) jump between commands.
+- ⌥⌘↑ / ⌥⌘↓ (Ctrl+Shift+↑ / ↓) jump between commands. ⌘↑ / ⌘↓ scroll to the top and bottom of the history.
 - *Terminal: Copy Last Command Output* copies what the last command printed.
+- *Reset Terminal* (right-click menu) switches off a mouse mode or full-screen mode that a dropped SSH connection or a killed program left on.
 - A split opens in the folder the shell is in.
 
 Your own startup files are still read. `"terminal.shellIntegration": false` turns it off. bash before 4.4 (the macOS

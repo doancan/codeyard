@@ -441,3 +441,84 @@ fn a_drag_into_a_mouse_program_hints_at_shift(cx: &mut TestAppContext) {
     assert!(term.read_with(cx, |t, _| t.shift_hint));
     assert_eq!(term.read_with(cx, |t, _| t.selected_text()), None, "the drag went to the program");
 }
+
+/// ⌥-drag selects while a program reads the mouse, like Shift (Terminal.app and iTerm).
+#[gpui::test]
+fn alt_drag_selects_in_a_mouse_program(cx: &mut TestAppContext) {
+    crate::qa_workbench_tests::globals(cx);
+    let (term, cx) = cx.add_window_view(|_, cx| TerminalView::output_only(Arc::new(host::local()), "test".into(), cx));
+    term.update(cx, |t, _| t.feed(b"\x1b[?1000hhello"));
+    cx.run_until_parked();
+    let (from, to) = term.read_with(cx, |t, _| (t.cell_center(0, 0), t.cell_center(0, 4)));
+    let (from, to) = (point(from.x - px(1.), from.y), point(to.x + px(1.), to.y));
+    let alt = Modifiers { alt: true, ..Modifiers::none() };
+    cx.simulate_mouse_down(from, MouseButton::Left, alt);
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), alt);
+    cx.simulate_mouse_up(to, MouseButton::Left, alt);
+    assert_eq!(term.read_with(cx, |t, _| t.selected_text()).as_deref(), Some("hello"));
+}
+
+/// The right button always opens our menu, also while the program (Claude Code, tmux, htop; over SSH too) reads the mouse.
+#[gpui::test]
+fn right_click_opens_the_menu_in_a_mouse_program(cx: &mut TestAppContext) {
+    crate::qa_workbench_tests::globals(cx);
+    let (term, cx) = cx.add_window_view(|_, cx| TerminalView::output_only(Arc::new(host::local()), "test".into(), cx));
+    let opened = std::rc::Rc::new(std::cell::Cell::new(0));
+    let seen = opened.clone();
+    let _sub = cx.update(|_, cx| {
+        cx.subscribe(&term, move |_, event: &TerminalEvent, _| {
+            if matches!(event, TerminalEvent::ContextMenu(_)) {
+                seen.set(seen.get() + 1);
+            }
+        })
+    });
+    term.update(cx, |t, _| t.feed(b"\x1b[?1000h\x1b[?1006hhello"));
+    cx.run_until_parked();
+    let at = term.read_with(cx, |t, _| t.cell_center(0, 2));
+    cx.simulate_mouse_down(at, MouseButton::Right, Modifiers::none());
+    assert_eq!(opened.get(), 1);
+}
+
+/// A mouse mode a dropped connection left on is switched off by Reset Terminal, and the text stays.
+#[gpui::test]
+fn reset_terminal_switches_off_a_stuck_mouse_mode(cx: &mut TestAppContext) {
+    crate::qa_workbench_tests::globals(cx);
+    let (term, cx) = cx.add_window_view(|_, cx| TerminalView::output_only(Arc::new(host::local()), "test".into(), cx));
+    term.update(cx, |t, _| t.feed(b"kept\x1b[?1049h\x1b[?1000h\x1b[?1006h\x1b[?1h"));
+    let stuck = TermMode::MOUSE_MODE | TermMode::SGR_MOUSE | TermMode::ALT_SCREEN | TermMode::APP_CURSOR;
+    for flag in [TermMode::MOUSE_REPORT_CLICK, TermMode::SGR_MOUSE, TermMode::ALT_SCREEN, TermMode::APP_CURSOR] {
+        assert!(term.read_with(cx, |t, _| t.term.mode().contains(flag)), "{flag:?} is on");
+    }
+    term.update(cx, |t, _| t.reset_modes());
+    assert!(term.read_with(cx, |t, _| !t.term.mode().intersects(stuck)));
+    assert!(term.read_with(cx, |t, _| t.screen_text().contains("kept")), "the text is still there");
+}
+
+/// Dropped files are typed as quoted paths; a remote shell cannot see them.
+#[gpui::test]
+fn dropped_files_are_typed_as_paths(cx: &mut TestAppContext) {
+    crate::qa_workbench_tests::globals(cx);
+    let (term, cx) = cx.add_window_view(|_, cx| TerminalView::output_only(Arc::new(host::local()), "test".into(), cx));
+    term.update(cx, |t, cx| {
+        t.drop_paths(&["/tmp/a b.txt".into(), "/tmp/c.txt".into()], cx);
+    });
+    // An output-only terminal has no shell to type into: the point here is that nothing panics and nothing is selected.
+    assert_eq!(term.read_with(cx, |t, _| t.selected_text()), None);
+}
+
+/// A shell that ends (or an SSH connection that drops) while a program reads the mouse leaves a terminal whose output can
+/// still be selected.
+#[gpui::test]
+fn an_ended_terminal_no_longer_reads_the_mouse(cx: &mut TestAppContext) {
+    crate::qa_workbench_tests::globals(cx);
+    let (term, cx) = cx.add_window_view(|_, cx| TerminalView::output_only(Arc::new(host::local()), "test".into(), cx));
+    term.update(cx, |t, _| t.feed(b"\x1b[?1000h\x1b[?1006hhello"));
+    term.update(cx, |t, cx| t.on_exit(None, cx));
+    assert!(term.read_with(cx, |t, _| !t.term.mode().intersects(TermMode::MOUSE_MODE)));
+    let (from, to) = term.read_with(cx, |t, _| (t.cell_center(0, 0), t.cell_center(0, 4)));
+    let (from, to) = (point(from.x - px(1.), from.y), point(to.x + px(1.), to.y));
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
+    assert_eq!(term.read_with(cx, |t, _| t.selected_text()).as_deref(), Some("hello"));
+}
