@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-11-05
+
 ### Added
 
 - Terminal: *Reset Terminal* (right-click menu, Terminal menu and command palette) switches off a mouse mode, the alternate
@@ -1690,7 +1692,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.5...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.6...HEAD
+[0.7.6]: https://github.com/doancan/codeyard/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/doancan/codeyard/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/doancan/codeyard/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/doancan/codeyard/compare/v0.7.2...v0.7.3
