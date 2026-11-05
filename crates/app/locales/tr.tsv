@@ -2337,6 +2337,9 @@ Previous Match	Önceki Eşleşme
 Next Match	Sonraki Eşleşme
 {}+ results	{}+ sonuç
 Clear Terminal	Terminali Temizle
+Reset Terminal	Terminali Sıfırla
+Jump to Bottom	En Alta Git
+Terminal: Reset Terminal	Terminal: Terminali Sıfırla
 Scroll to Top	En Üste Kaydır
 Scroll to Bottom	En Alta Kaydır
 All Branches	Tüm Dallar
@@ -2500,7 +2503,7 @@ A command finished	Bir komut bitti
 Failed with code {}: {}	{0} koduyla başarısız oldu: {1}
 Finished: {}	Bitti: {}
 Copy text selected with the mouse: while Claude Code or Codex runs, always, or never	Fareyle seçilen metni kopyala: Claude Code veya Codex çalışırken, her zaman ya da hiçbir zaman
-Hold Shift to select text	Metin seçmek için Shift'e basılı tutun
+Hold Shift or ⌥ to select text	Metin seçmek için Shift veya ⌥ tuşuna basılı tutun
 Terminal: Go to Previous Command	Terminal: Önceki Komuta Git
 Terminal: Go to Next Command	Terminal: Sonraki Komuta Git
 Terminal: Copy Last Command Output	Terminal: Son Komutun Çıktısını Kopyala

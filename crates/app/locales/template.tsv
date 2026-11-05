@@ -1119,7 +1119,7 @@ Highlight the line with the cursor
 Highlight the matching bracket	
 History is collected while monitoring is active. CPU can exceed 100% across cores. Rates need two samples; counter resets show no rate.	
 History of {}	
-Hold Shift to select text	
+Hold Shift or ⌥ to select text	
 Host and client id of your {} server, such as git.example.com 3f2a9c	
 Host name (from ~/.ssh/config) or user@host	
 Host name of the server {} may connect to, such as github.example.com	
@@ -1214,6 +1214,7 @@ JavaScript debugger installed: F5 now works for Node.
 JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install an editor that ships it (its copy is used).	
 JavaScript tests can be run here, not debugged: add a launch configuration for the runner.	
 Jul	
+Jump to Bottom	
 Jump to latest and follow	
 Jun	
 Keep	
@@ -1962,6 +1963,7 @@ Reset All Settings…
 Reset Hard to Here…	
 Reset Mixed to Here	
 Reset Soft to Here	
+Reset Terminal	
 Reset Zoom	
 Reset all settings to the defaults?	
 Reset the Rust setup in settings.jsonc?	
@@ -2341,6 +2343,7 @@ Terminal: Move Terminals Back to Panel
 Terminal: New	
 Terminal: New Terminal with Profile…	
 Terminal: Rename…	
+Terminal: Reset Terminal	
 Terminal: Run Selected Text	
 Terminal: Select Default Profile…	
 Terminal: Split	

@@ -936,7 +936,7 @@ impl Workbench {
 
     /// Right click in a terminal: the terminal has focus, so the clipboard and find actions go to it.
     fn open_terminal_menu(&mut self, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
-        use crate::terminal::{TermCopy, TermFind, TermPaste, TermSelectAll};
+        use crate::terminal::{TermCopy, TermFind, TermPaste, TermReset, TermSelectAll};
         let entries: Vec<(&str, Box<dyn gpui::Action>, bool)> = vec![
             (crate::i18n::t("Copy"), Box::new(TermCopy), false),
             (crate::i18n::t("Paste"), Box::new(TermPaste), false),
@@ -944,6 +944,7 @@ impl Workbench {
             (crate::i18n::t("Find"), Box::new(TermFind), true),
             (crate::i18n::t("Copy Last Command Output"), Box::new(crate::terminal::TermCopyLastOutput), false),
             (crate::i18n::t("Clear Terminal"), Box::new(ClearTerminal), true),
+            (crate::i18n::t("Reset Terminal"), Box::new(TermReset), false),
             (crate::i18n::t("New Terminal"), Box::new(NewTerminal), true),
             (crate::i18n::t("Split Terminal"), Box::new(SplitTerminal), false),
             (crate::i18n::t("Move Terminal into Editor Area"), Box::new(MoveTerminalIntoEditorArea), false),

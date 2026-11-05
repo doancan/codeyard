@@ -80,6 +80,19 @@ pub struct Prepared {
     pub truncated: bool,
 }
 
+/// A path as the shell takes it: left alone when it has only safe characters, else quoted (`'…'` for POSIX shells, `"…"` on
+/// Windows, where a file name cannot hold a double quote). A name with a line break or other control character is not
+/// dropped into a prompt as typed text: `None`.
+pub fn quote_path(path: &str, windows: bool) -> Option<String> {
+    if path.is_empty() || path.chars().any(char::is_control) {
+        return None;
+    }
+    if path.chars().all(|c| c.is_alphanumeric() || "/._-+=:@%,~".contains(c)) {
+        return Some(path.to_string());
+    }
+    Some(if windows { format!("\"{path}\"") } else { format!("'{}'", path.replace('\'', "'\\''")) })
+}
+
 const MARKERS: [&str; 4] = ["\x1b[200~", "\x1b[201~", "\u{9b}200~", "\u{9b}201~"];
 
 pub fn prepare(text: &str, bracketed: bool, policy: Sanitize) -> Prepared {
@@ -145,6 +158,16 @@ mod tests {
 
     fn sent(text: &str, bracketed: bool, policy: Sanitize) -> String {
         String::from_utf8(prepare(text, bracketed, policy).data).unwrap()
+    }
+
+    #[test]
+    fn dropped_paths_are_quoted_for_the_shell() {
+        assert_eq!(quote_path("/a/b.txt", false).as_deref(), Some("/a/b.txt"));
+        assert_eq!(quote_path("/a b/it's.txt", false).as_deref(), Some("'/a b/it'\\''s.txt'"));
+        assert_eq!(quote_path("/a;rm -rf ~", false).as_deref(), Some("'/a;rm -rf ~'"));
+        assert_eq!(quote_path("C:\\My Files\\a.txt", true).as_deref(), Some("\"C:\\My Files\\a.txt\""));
+        assert_eq!(quote_path("a\nb", false), None, "a line break is never typed");
+        assert_eq!(quote_path("", false), None);
     }
 
     #[test]

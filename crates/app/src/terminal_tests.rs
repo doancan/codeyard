@@ -124,8 +124,11 @@ fn macos_line_editing_keys_are_readline_keys() {
     for k in ["shift-cmd-left", "alt-shift-left", "ctrl-left", "cmd-c", "cmd-up"] {
         assert_eq!(mac(k, m), None, "{k}");
     }
-    // vim, less: plain xterm keys (Ctrl+A would increment a number in vim).
-    assert_eq!(mac("cmd-left", TermMode::ALT_SCREEN), None);
+    // vim, less: Home / End (Ctrl+A would increment a number in vim); the word keys stay plain xterm keys.
+    assert_eq!(mac("cmd-left", TermMode::ALT_SCREEN), Some(&b"\x1b[H"[..]));
+    assert_eq!(mac("cmd-right", TermMode::ALT_SCREEN), Some(&b"\x1b[F"[..]));
+    assert_eq!(mac("cmd-left", TermMode::ALT_SCREEN | TermMode::APP_CURSOR), Some(&b"\x1bOH"[..]));
+    assert_eq!(mac("cmd-backspace", TermMode::ALT_SCREEN), None);
     assert_eq!(mac("alt-left", TermMode::ALT_SCREEN), None);
 }
 

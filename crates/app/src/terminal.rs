@@ -29,6 +29,7 @@ actions!(
         TermPaste,
         TermCopy,
         TermClear,
+        TermReset,
         TermSelectAll,
         TermFind,
         TermFindNext,
@@ -447,6 +448,10 @@ impl TerminalView {
 
     fn on_exit(&mut self, code: Option<i32>, cx: &mut Context<Self>) {
         if self.exit.is_none() {
+            // Nothing reads the mouse any more (the program is gone, or the SSH connection dropped under it): without this the
+            // clicks go nowhere and the last output cannot be selected and copied.
+            self.feed(b"\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?1l\x1b>");
+            self.selecting = false;
             self.exit = Some(code);
             cx.emit(TerminalEvent::Exited);
             cx.notify();
@@ -735,7 +740,7 @@ impl TerminalView {
             return;
         }
         // The program wants the mouse: the click goes to it (⇧ still selects text, like VS Code).
-        if !ev.modifiers.shift
+        if !selects_text(&ev.modifiers)
             && let Some(bytes) = self.mouse_report(0, true, ev.position, &ev.modifiers)
         {
             self.write(bytes);
@@ -766,7 +771,7 @@ impl TerminalView {
         }
         if !self.selecting || ev.pressed_button != Some(MouseButton::Left) {
             self.selecting = false;
-            if ev.pressed_button == Some(MouseButton::Left) && !ev.modifiers.shift && self.term.mode().intersects(TermMode::MOUSE_MODE) {
+            if ev.pressed_button == Some(MouseButton::Left) && !selects_text(&ev.modifiers) && self.term.mode().intersects(TermMode::MOUSE_MODE) {
                 self.show_shift_hint(cx);
             }
             return;
@@ -779,7 +784,7 @@ impl TerminalView {
     }
 
     fn on_mouse_up(&mut self, ev: &gpui::MouseUpEvent, cx: &mut Context<Self>) {
-        if !ev.modifiers.shift
+        if !selects_text(&ev.modifiers)
             && !self.selecting
             && let Some(bytes) = self.mouse_report(0, false, ev.position, &ev.modifiers)
         {
@@ -838,6 +843,22 @@ impl TerminalView {
             return;
         }
         self.term.scroll_display(Scroll::Delta(lines));
+        cx.notify();
+    }
+
+    /// Files dropped on the terminal: their paths are typed at the cursor, quoted, separated by spaces. A remote shell cannot
+    /// see this machine's files, so there the drop does nothing.
+    fn drop_paths(&mut self, paths: &[std::path::PathBuf], cx: &mut Context<Self>) {
+        if self.host.is_remote() || self.exit.is_some() || self.error.is_some() {
+            return;
+        }
+        let quoted: Vec<String> = paths.iter().filter_map(|p| crate::terminal_paste::quote_path(&p.to_string_lossy(), cfg!(windows))).collect();
+        if quoted.is_empty() {
+            return;
+        }
+        let bracketed = self.term.mode().contains(TermMode::BRACKETED_PASTE);
+        let text = format!("{} ", quoted.join(" "));
+        self.paste_confirmed(crate::terminal_paste::prepare(&text, bracketed, crate::terminal_paste::Sanitize::Always).data);
         cx.notify();
     }
 
@@ -918,6 +939,23 @@ impl TerminalView {
         self.clear_all(cx);
     }
 
+    /// Get out of a mode a program left on: a dropped SSH connection or a killed program (Claude Code, tmux, vim) cannot
+    /// switch off the mouse reporting, the alternate screen or the application keys it had turned on, and the terminal
+    /// then types `^[[<0;12;5M` at every click. Text and history stay; the shell is not told anything.
+    fn reset(&mut self, _: &TermReset, _: &mut Window, cx: &mut Context<Self>) {
+        self.reset_modes();
+        cx.notify();
+    }
+
+    pub(super) fn reset_modes(&mut self) {
+        // Mouse reporting (X10, button, any-motion, focus, UTF-8, SGR, urxvt), alternate screen, application cursor keys
+        // and keypad, shown cursor, default colours and attributes.
+        self.feed(b"\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?1049l\x1b[?1l\x1b>\x1b[?25h\x1b[0m");
+        self.wheel = Default::default();
+        self.selecting = false;
+        self.term.scroll_display(Scroll::Bottom);
+    }
+
     /// Select the screen and the whole scrollback (then ⌘C copies everything).
     fn select_all(&mut self, _: &TermSelectAll, _: &mut Window, cx: &mut Context<Self>) {
         let top = GridPoint::new(self.term.topmost_line(), Column(0));
@@ -952,14 +990,28 @@ impl TerminalView {
     }
 }
 
+/// Shift or ⌥ held: the drag selects text even while the program reads the mouse (Terminal.app and iTerm use ⌥ for this).
+fn selects_text(m: &gpui::Modifiers) -> bool {
+    m.shift || m.alt
+}
+
 /// macOS line editing, as in Terminal.app: ⌘← / ⌘→ go to the start / end of the line, ⌥← / ⌥→ move by word,
 /// ⌘⌫ deletes to the start of the line, ⌘⌦ to its end, ⌥⌦ deletes the next word. They are the readline / zle keys
 /// (Ctrl+A, Ctrl+E, Esc b, Esc f, Ctrl+U, Ctrl+K, Esc d), so they work in bash, zsh, fish and most REPLs. Full-screen programs
 /// (vim, less) get the plain xterm keys instead: Ctrl+A there would mean something else.
 pub fn macos_line_editing(k: &gpui::Keystroke, mode: TermMode) -> Option<&'static [u8]> {
     let m = &k.modifiers;
-    if mode.contains(TermMode::ALT_SCREEN) || m.shift || m.control {
+    if m.shift || m.control {
         return None;
+    }
+    // Full-screen programs get Home / End instead of readline's Ctrl+A / Ctrl+E.
+    if mode.contains(TermMode::ALT_SCREEN) {
+        let app = mode.contains(TermMode::APP_CURSOR);
+        return match (k.key.as_str(), m.platform, m.alt) {
+            ("left", true, false) => Some(if app { b"\x1bOH" } else { b"\x1b[H" }),
+            ("right", true, false) => Some(if app { b"\x1bOF" } else { b"\x1b[F" }),
+            _ => None,
+        };
     }
     Some(match (k.key.as_str(), m.platform, m.alt) {
         ("left", true, false) => b"\x01",
@@ -1330,6 +1382,7 @@ impl Render for TerminalView {
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::clear))
+            .on_action(cx.listener(Self::reset))
             .on_action(cx.listener(Self::select_all))
             .on_action(cx.listener(Self::find))
             .on_action(cx.listener(Self::find_next))
@@ -1356,13 +1409,22 @@ impl Render for TerminalView {
             .on_key_down(cx.listener(Self::on_key_down))
             .on_scroll_wheel(cx.listener(Self::on_scroll))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
+            // Middle click pastes (a program that reads the mouse keeps it; Shift or ⌥ pastes anyway).
+            .on_mouse_down(
+                MouseButton::Middle,
+                cx.listener(|this, ev: &MouseDownEvent, window, cx| {
+                    if selects_text(&ev.modifiers) || !this.term.mode().intersects(TermMode::MOUSE_MODE) {
+                        window.focus(&this.focus_handle);
+                        this.paste(&TermPaste, window, cx);
+                    }
+                }),
+            )
+            .on_drop(cx.listener(|this, d: &gpui::ExternalPaths, _, cx| this.drop_paths(d.paths(), cx)))
             .on_mouse_down(
                 MouseButton::Right,
                 cx.listener(|this, ev: &MouseDownEvent, window, cx| {
-                    // A program that reads the mouse (htop, vim with mouse=a) keeps the right button; Shift still opens the menu.
-                    if this.term.mode().intersects(TermMode::MOUSE_MODE) && !ev.modifiers.shift {
-                        return;
-                    }
+                    // Always ours, also while a program reads the mouse (Claude Code, htop, vim with mouse=a, over SSH too):
+                    // otherwise there is no way to copy or paste with the mouse in those programs.
                     window.focus(&this.focus_handle);
                     cx.emit(TerminalEvent::ContextMenu(ev.position));
                 }),
@@ -1380,6 +1442,31 @@ impl Render for TerminalView {
             .text_color(c(p.text))
             .child(TerminalElement { view: cx.entity(), palette: p, focused })
             .children(find_bar)
+            // Scrolled back into the history: a button to get back to the live screen.
+            .when(self.term.grid().display_offset() > 0 && !self.term.mode().contains(TermMode::ALT_SCREEN), |d| {
+                d.child(
+                    div()
+                        .id("terminal-to-bottom")
+                        .absolute()
+                        .bottom(px(theme::SPACE[3]))
+                        .right(px(theme::SPACE[5]))
+                        .px(px(theme::SPACE[3]))
+                        .py(px(theme::SPACE[1]))
+                        .rounded(px(theme::radius::SM))
+                        .bg(c(p.surface_raised))
+                        .text_color(c(p.text))
+                        .text_size(px(crate::ui::text::XS.0))
+                        .cursor(gpui::CursorStyle::PointingHand)
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _, _, cx| {
+                                cx.stop_propagation();
+                                this.scroll_by(Scroll::Bottom, cx);
+                            }),
+                        )
+                        .child(crate::i18n::t("Jump to Bottom")),
+                )
+            })
             .when(self.shift_hint, |d| {
                 d.child(
                     div()
@@ -1392,7 +1479,7 @@ impl Render for TerminalView {
                         .bg(c(p.surface_raised))
                         .text_color(c(p.text))
                         .text_size(px(crate::ui::text::XS.0))
-                        .child(crate::i18n::t("Hold Shift to select text")),
+                        .child(crate::i18n::t("Hold Shift or ⌥ to select text")),
                 )
             })
             .when_some(self.error.clone().or(exit_line.map(Into::into)), |d, msg| {

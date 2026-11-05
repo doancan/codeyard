@@ -347,7 +347,7 @@ impl Default for Settings {
             terminal_shell: None,
             terminal_font_size: theme::text::CODE.0,
             terminal_line_height: crate::terminal::LINE_HEIGHT,
-            terminal_scrollback: 2000,
+            terminal_scrollback: 10_000,
             terminal_persistent_scrollback: 0,
             terminal_persistent_session_timeout: 5,
             terminal_scroll_sensitivity: 2.,
