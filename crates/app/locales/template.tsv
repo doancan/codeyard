@@ -602,6 +602,7 @@ Debug: Step Over
 Debug: Stop	
 Debug: Stop All	
 Debug: Toggle Breakpoint	
+Debugger	
 Dec	
 Decoded here only: nothing is sent or logged	
 Default terminal profile	
@@ -870,6 +871,7 @@ Extensions: Show Extensions
 External image: open the link to view it.	
 F4 steps through the search results, ⇧F4 goes back.	
 Failed with code {}: {}	
+Failing tests	
 Favorites	
 Favorites: Show Favorites…	
 Favorites: Toggle Active File	

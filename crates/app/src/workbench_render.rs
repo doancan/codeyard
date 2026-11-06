@@ -224,6 +224,8 @@ impl Render for Workbench {
         let remote = self.remote.host.is_remote();
         let project = self.root(cx).map(std::path::PathBuf::from);
         self.chrome.resources.update(cx, |monitor, cx| monitor.set_project(project, remote, cx));
+        let run = self.run_info(cx);
+        self.chrome.resources.update(cx, |monitor, cx| monitor.set_run(run, cx));
         // Whatever had the keyboard went away (a tab closed with the old folder when a workspace opened, for one): the
         // keyboard stays in the window, or no shortcut works until something is clicked.
         if window.focused(cx).is_none() {

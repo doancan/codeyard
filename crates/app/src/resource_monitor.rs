@@ -15,6 +15,31 @@ use crate::ui::{self, c, icon, palette, text};
 
 gpui::actions!(resources, [ToggleResources]);
 
+/// Where the debugger of the project is: it has started, runs, or is stopped at a line.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DebugPhase {
+    Starting,
+    Running,
+    Paused,
+}
+
+/// What runs in the project right now, as the window knows it: the strip shows it beside the machine's own load.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RunInfo {
+    pub debug: Option<DebugPhase>,
+    /// Terminals with a command running, and all terminals.
+    pub commands: usize,
+    pub terminals: usize,
+    pub failed_tests: usize,
+}
+
+impl RunInfo {
+    /// Something is running in the project (the icon says so, even while the strip is closed).
+    pub fn busy(&self) -> bool {
+        self.debug.is_some() || self.commands > 0
+    }
+}
+
 pub struct ResourceMonitor {
     shown: bool,
     closing: bool,
@@ -26,6 +51,7 @@ pub struct ResourceMonitor {
     close_focus: FocusHandle,
     project: Option<PathBuf>,
     remote: bool,
+    run: RunInfo,
     sample: Option<SystemSample>,
     cpu: Option<f32>,
     previous_cpu: Option<CpuTicks>,
@@ -50,6 +76,7 @@ impl ResourceMonitor {
             close_focus: cx.focus_handle(),
             project: None,
             remote: false,
+            run: RunInfo::default(),
             sample: None,
             cpu: None,
             previous_cpu: None,
@@ -76,6 +103,13 @@ impl ResourceMonitor {
             self.scan_project(cx);
         }
         cx.notify();
+    }
+
+    pub fn set_run(&mut self, run: RunInfo, cx: &mut Context<Self>) {
+        if self.run != run {
+            self.run = run;
+            cx.notify();
+        }
     }
 
     pub fn toggle(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -297,6 +331,7 @@ impl ResourceMonitor {
             .child(divider())
             .child(stat(t("CPU"), cpu, p.text))
             .child(meter(self.cpu.map(|n| n / 100.)))
+            .when(self.run != RunInfo::default(), |d| d.child(divider()).child(self.run_section(&p, keyboard)))
             .child(button("resources-pin", "pin", if self.pinned { t("Unpin") } else { t("Pin") }, self.pinned, &self.pin_focus).ml(px(2.)).on_click(
                 cx.listener(|this, _, _, cx| {
                     this.pinned = !this.pinned;
@@ -305,6 +340,85 @@ impl ResourceMonitor {
                 }),
             ))
             .child(button("resources-close", "x", t("Close"), false, &self.close_focus).on_click(cx.listener(|this, _, _, cx| this.close(cx))))
+    }
+}
+
+/// The words for what runs in the project, one entry per fact worth a glance: (label, value, warning).
+pub fn run_facts(run: &RunInfo) -> Vec<(String, String, bool)> {
+    let mut facts = Vec::new();
+    if let Some(phase) = run.debug {
+        let word = match phase {
+            DebugPhase::Starting => t("Starting…"),
+            DebugPhase::Running => t("Running"),
+            DebugPhase::Paused => t("Paused"),
+        };
+        facts.push((t("Debugger").to_string(), word.to_string(), phase == DebugPhase::Paused));
+    }
+    if run.terminals > 0 {
+        facts.push((t("Terminals").to_string(), format!("{} / {}", run.commands, run.terminals), false));
+    }
+    if run.failed_tests > 0 {
+        facts.push((t("Failing tests").to_string(), run.failed_tests.to_string(), true));
+    }
+    facts
+}
+
+impl ResourceMonitor {
+    /// The project's own part of the strip: the debugger with its controls (like a debug toolbar), the commands running
+    /// in terminals, and failing tests.
+    fn run_section(&self, p: &ui::Palette, keyboard: bool) -> impl IntoElement + use<> {
+        let p = *p;
+        let control = |id: &'static str, glyph: &'static str, tip: &'static str, action: fn() -> Box<dyn gpui::Action>| {
+            div()
+                .id(id)
+                .relative()
+                .debug_selector(move || id.into())
+                .child(crate::a11y_controls::control(crate::a11y_controls::Control::button(t("Status bar"), id, tip, |_, _| {})))
+                .flex_none()
+                .size(px(20.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(theme::radius::SM))
+                .cursor_pointer()
+                .when(keyboard, |d| d.border_1().border_color(ui::ca(p.focus_ring, 0.)))
+                .hover(|d| d.bg(c(p.surface_hover)))
+                .active(|d| d.bg(c(p.surface_active)))
+                .child(icon(glyph, 13., p.text))
+                .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.into())).into())
+                .on_click(move |_, window, cx| {
+                    cx.stop_propagation();
+                    window.dispatch_action(action(), cx);
+                })
+        };
+        let mut row = div().flex_none().flex().items_center().gap(px(10.));
+        for (label, value, warn) in run_facts(&self.run) {
+            let read = format!("{label}: {value}");
+            row = row.child(
+                div()
+                    .relative()
+                    .child(crate::a11y_controls::control(crate::a11y_controls::Control::text(t("Status bar"), format!("resources-run-{label}"), accesskit::Role::Label, read)))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .gap(px(5.))
+                    .child(div().text_color(c(p.text_muted)).child(label))
+                    .child(div().text_color(c(if warn { p.warning } else { p.accent })).child(value)),
+            );
+        }
+        match self.run.debug {
+            Some(DebugPhase::Running) => {
+                row = row.child(control("resources-debug-pause", "pause", t("Pause"), || Box::new(crate::workbench::DebugPause)));
+            }
+            Some(DebugPhase::Paused) => {
+                row = row.child(control("resources-debug-continue", "play", t("Continue"), || Box::new(crate::workbench::DebugContinue)));
+            }
+            _ => {}
+        }
+        if self.run.debug.is_some() {
+            row = row.child(control("resources-debug-stop", "square", t("Stop"), || Box::new(crate::workbench::StopDebugging)));
+        }
+        row
     }
 }
 
@@ -397,7 +511,11 @@ impl Render for ResourceMonitor {
                     .when(shown && !closing, |d| d.bg(c(p.surface_active)))
                     .hover(|d| d.bg(c(p.surface_hover)))
                     .active(|d| d.bg(c(p.surface_active)))
-                    .child(icon("activity", 16., if shown && !closing { p.accent } else { p.text_muted }))
+                    .child(icon(
+                        if self.run.debug.is_some() { "bug-play" } else { "gauge" },
+                        16.,
+                        if (shown && !closing) || self.run.busy() { p.accent } else { p.text_muted },
+                    ))
                     .on_hover(cx.listener(|this, hovered, _, cx| this.hover(false, *hovered, cx)))
                     .on_click(cx.listener(|this, _, window, cx| this.toggle(window, cx))),
             )
@@ -447,6 +565,44 @@ mod tests {
         cx.executor().advance_clock(Duration::from_millis(130));
         cx.run_until_parked();
         assert!(monitor.read_with(cx, |m, _| !m.shown && m.poll.is_none()), "real hit testing must dismiss the panel and stop sampling");
+    }
+
+    #[test]
+    fn run_facts_list_only_what_runs() {
+        assert!(run_facts(&RunInfo::default()).is_empty());
+        let facts = run_facts(&RunInfo { debug: Some(DebugPhase::Paused), commands: 1, terminals: 3, failed_tests: 2 });
+        assert_eq!(facts.len(), 3);
+        assert!(facts[0].2, "a paused debugger is flagged");
+        assert_eq!(facts[1].1, "1 / 3");
+        assert_eq!(facts[2].1, "2");
+        assert!(RunInfo { commands: 1, ..Default::default() }.busy());
+        assert!(!RunInfo { terminals: 4, failed_tests: 1, ..Default::default() }.busy());
+    }
+
+    #[gpui::test]
+    fn the_strip_shows_debug_controls_while_a_session_runs(cx: &mut TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        cx.update(|cx| cx.global_mut::<crate::settings::Settings>().reduce_motion = Some(true));
+        let monitor = cx.new(ResourceMonitor::new);
+        let (_fixture, cx) = cx.add_window_view(|_, _| BarFixture(monitor.clone()));
+        monitor.update(cx, |m, cx| m.set_run(RunInfo { debug: Some(DebugPhase::Running), commands: 0, terminals: 1, failed_tests: 0 }, cx));
+        cx.run_until_parked();
+        let trigger = cx.debug_bounds("sb-resources").unwrap().center();
+        cx.simulate_click(trigger, gpui::Modifiers::none());
+        cx.run_until_parked();
+        let strip = cx.debug_bounds("resource-strip").unwrap();
+        for id in ["resources-debug-pause", "resources-debug-stop"] {
+            let b = cx.debug_bounds(id).unwrap_or_else(|| panic!("{id} is drawn"));
+            assert!(strip.contains(&b.center()), "{id} sits inside the strip");
+        }
+        assert!(cx.debug_bounds("resources-debug-continue").is_none(), "Continue only while paused");
+        monitor.update(cx, |m, cx| m.set_run(RunInfo { debug: Some(DebugPhase::Paused), ..Default::default() }, cx));
+        cx.run_until_parked();
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("resources-debug-continue").is_some());
+        monitor.update(cx, |m, cx| m.set_run(RunInfo::default(), cx));
+        assert!(monitor.read_with(cx, |m, _| m.run == RunInfo::default() && !m.run.busy()));
     }
 
     #[gpui::test]

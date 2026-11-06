@@ -1018,3 +1018,19 @@ use super::term_daemon_glue::saved_terminals_key;
 #[cfg(all(test, unix))]
 #[path = "workbench_terminal_restore_tests.rs"]
 mod restore_tests;
+
+impl Workbench {
+    /// What runs in the project, for the resources strip: the debugger, commands running in terminals, failing tests.
+    pub(super) fn run_info(&self, cx: &App) -> crate::resource_monitor::RunInfo {
+        use crate::resource_monitor::{DebugPhase, RunInfo};
+        let debug = self.dbg.cur().and_then(|d| match d.status {
+            super::debug::DebugStatus::Starting => Some(DebugPhase::Starting),
+            super::debug::DebugStatus::Running => Some(DebugPhase::Running),
+            super::debug::DebugStatus::Stopped(_) => Some(DebugPhase::Paused),
+            super::debug::DebugStatus::Ended(_) => None,
+        });
+        let live = self.terminals.iter().filter(|t| !t.read(cx).has_exited());
+        let (terminals, commands) = live.fold((0, 0), |(all, busy), t| (all + 1, busy + usize::from(matches!(t.read(cx).activity(), crate::terminal::Activity::Running(_)))));
+        RunInfo { debug, commands, terminals, failed_tests: self.failed_test_count() }
+    }
+}
