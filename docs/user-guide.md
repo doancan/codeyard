@@ -1031,7 +1031,13 @@ sides are tinted and the `<<<<<<<` line has "Accept Current | Accept Incoming | 
 the palette has accept all and next/previous conflict, and the status bar counts them.
 Staging a file (marking it resolved) is refused while it still has conflict markers.
 
-Click the branch in the status bar to switch or create branches.
+Click the branch in the status bar to switch or create branches. A switch that local changes would block offers
+*Stash & Switch*: the changes (untracked files too) go into a stash first and stay there until *Git: Pop Latest Stash* brings
+them back. In a folder that is not a repository the view offers *Initialize Repository* and *Clone Repository…*. While a merge,
+rebase, cherry-pick or revert is half done, a line under the branch says so with the number of conflicts and an Abort button (and
+Continue for a rebase); the commit button reads *Resolve Conflicts* until none is left, and a merge or cherry-pick can then be
+committed with the message box empty, which keeps the message git prepared. A stash that conflicts when applied leaves the files
+conflicted and keeps the stash. The Graph does not draw stashes, which have their own list.
 
 **Sync Changes:** when the branch has an upstream and differs from it, a full-width button under
 Commit reads "Sync Changes ↓2 ↑1" (↓ commits to pull, ↑ commits to push); a branch with no upstream
@@ -1040,8 +1046,13 @@ does the same, shows a spinner while it runs, and its tooltip names the upstream
 A sync pulls first, then pushes; with nothing pending it only fetches. Only one runs at a time.
 If the pull stops on conflicts they are resolved in Source Control (Abort Merge, or Continue /
 Abort Rebase when pulling with rebase); a dirty tree that the pull would overwrite says to commit
-or stash first. Git never asks for passwords in the app: if the server needs credentials, run the
-command once in the terminal or use an SSH key. A command that hangs is stopped after ten minutes.
+or stash first. When the server wants a login, a window asks for it: the user name as typed and the password masked (an
+HTTPS login), or an SSH key's passphrase or an unknown host's key. The answer goes to git and nowhere else, and git's credential
+helper (the macOS keychain, `gh auth`) keeps it for next time; GitHub no longer takes an account password, so type a personal
+access token. The background fetch never asks (its failure shows in the sync item's tooltip). This is for repositories on this
+computer; on a connected host the host's own SSH keys and credential helper apply. A command that hangs is stopped after ten minutes.
+A rejected push says that the remote has commits you do not have (pull first); *Git: Push (Force)…* then overwrites the remote
+branch after a confirmation, with `--force-with-lease`, so it still refuses when someone pushed since your last fetch.
 
 The "…" menu and the palette also have *Pull (Rebase)*, *Pull from…* (pick a remote branch),
 *Push to…* (pick a remote), *Fetch (All Remotes)* and *Publish Branch*, and the commit variants

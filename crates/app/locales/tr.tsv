@@ -702,7 +702,7 @@ Manage: About, Settings, Color Theme…	Yönet: Hakkında, Ayarlar, Renk Teması
 File Icon Theme…	Dosya Simgesi Teması…
 No folder is open.	Açık klasör yok.
 Open Folder	Klasör Aç
-Open recent, or connect to a host… (⌃R)	Son açılanı aç ya da bir sunucuya bağlan… (⌃R)
+Open recent or connect… (⌃R)	Son açılanlar ya da bağlan… (⌃R)
 New File… (⌘N)	Yeni Dosya… (⌘N)
 Refresh Explorer	Gezgini Yenile
 Expand Folders (the selected one, or the open file's folders)	Klasörleri Genişlet (seçili olanı ya da açık dosyanın klasörlerini)

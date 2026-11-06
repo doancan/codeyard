@@ -346,16 +346,15 @@ impl Workbench {
                                 .child(self.ctl(
                                     crate::i18n::t("Explorer"),
                                     "explorer-recent",
-                                    crate::i18n::t("Open recent, or connect to a host… (⌃R)"),
+                                    crate::i18n::t("Open recent or connect… (⌃R)"),
                                     cx,
                                     |this, w, cx| this.show_project_switcher(w, cx),
                                 ))
                                 .w_full()
-                                .text_ellipsis()
                                 .cursor_pointer()
                                 .text_color(c(p.accent))
                                 .hover(|d| d.underline())
-                                .child(crate::i18n::t("Open recent, or connect to a host… (⌃R)"))
+                                .child(crate::i18n::t("Open recent or connect… (⌃R)"))
                                 .on_click(cx.listener(|this, _, window, cx| this.show_project_switcher(window, cx))),
                         ),
                 )

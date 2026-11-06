@@ -20,9 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   *Reopen with Encoding…* and *Save with Encoding…* (also from the encoding in the status bar), tab shortcuts ⌃1…⌃9
   (Alt+1…9), *Toggle Tab Key Moves Focus* (⌃⇧M), and commands to show or hide the activity bar and the status bar.
 - `editor.wordWrap` accepts `wordWrapColumn` and `bounded`, with `editor.wordWrapColumn`.
+- Git: a login the server asks for (an HTTPS user name and password or token, an SSH key's passphrase, an unknown host's key) is
+  asked in the window instead of failing with "run it in the terminal". The periodic fetch never asks.
+- Git: *Git: Push (Force)…* (with `--force-with-lease`, after a confirmation), *Stash & Switch* when local changes block a branch switch,
+  and *Git: Initialize Repository* (also as a button, with *Clone Repository…*, in the Source Control view of a folder that is not one).
+- Source Control: a half-done merge, rebase, cherry-pick or revert shows a line with its conflicts and Abort (Continue for a rebase),
+  the commit button reads *Resolve Conflicts* while any remain, and a merge can be committed with an empty message box.
 
 ### Fixed
 
+- Source Control: the Graph no longer shows a stash's internal "index on …" and "WIP on …" commits.
+- Keybindings: a mistyped command id suggests the closest command by its shortest match (`editor.sav` means `editor.save`).
+- Opening Codeyard with an empty folder argument no longer shows "not found:" and a trust question about nothing.
 - Terminal: a program that clears the screen and redraws (a coding assistant, a progress display) no longer pushes every old
   frame, with its blank lines, into the history. The screen is erased in place, so scrolling up shows what was printed
   before instead of leftover copies.
@@ -32,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Git failures with a usual cause say what to do: a rejected push (pull first), a stale `index.lock`, an untrusted folder, a blocked switch,
+  a conflicting stash, GitHub's removed password login, an unreachable server. A stash that conflicts no longer reports "git stash failed".
 - Source Control's badge counts up to 999 changes before it reads "999+" (it stopped at 99+).
 - `terminal.scrollback` keeps 50,000 lines by default.
 
