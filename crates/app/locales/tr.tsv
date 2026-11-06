@@ -1171,7 +1171,6 @@ Line height in pixels	Piksel cinsinden satır yüksekliği
 Editor font (empty: built-in monospace)	Düzenleyici yazı tipi (boş: yerleşik eş aralıklı yazı tipi)
 Spaces per indent level (empty: detect per file)	Girinti düzeyi başına boşluk sayısı (boş: dosyaya göre algıla)
 Indent with spaces instead of tabs	Sekme yerine boşlukla girinti ver
-Wrap long lines at the window edge	Uzun satırları pencere kenarında kaydır
 Cursor animation	İmleç animasyonu
 Show the minimap	Mini haritayı göster
 Highlight other uses of the word under the cursor	İmlecin altındaki sözcüğün diğer kullanımlarını vurgula
@@ -2691,7 +2690,6 @@ Restore window	Pencereyi önceki boyutuna getir
 Close window	Pencereyi kapat
 Mouse wheel and trackpad scroll speed multiplier	Fare tekerleği ve izleme dörtgeni kaydırma hızı çarpanı
 Terminal row height, as a multiple of the font size	Terminal satır yüksekliği, yazı boyutunun katı olarak
-Toggle Panel (⌘J)	Paneli Aç/Kapat (⌘J)
 Codeyard memory	Codeyard belleği
 Disk available	Kullanılabilir disk
 Load	Yük
@@ -3595,3 +3593,9 @@ Failing tests	Başarısız testler
 The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	Bir pencerede açılan ilk terminal tüm düzenleyici alanını kaplar; panelin büyüt düğmesiyle eski boyutuna döner
 terminal.scrollback: {} lines can use hundreds of megabytes per terminal and slow down scrolling and search (up to {} is comfortable); applied as set	terminal.scrollback: {0} satır terminal başına yüzlerce megabayt bellek kullanabilir, kaydırmayı ve aramayı yavaşlatabilir ({1} satıra kadar rahattır); verildiği gibi uygulandı
 Lines kept in terminal history. More than 50,000 can use a lot of memory and slow down scrolling and search	Terminal geçmişinde tutulan satır sayısı. 50.000'den fazlası çok bellek kullanabilir, kaydırmayı ve aramayı yavaşlatabilir
+Run a command	Bir komut çalıştır
+Go to a line in this file	Bu dosyada bir satıra git
+Go to a symbol in the workspace	Çalışma alanında bir sembole git
+Go to a symbol in this file	Bu dosyada bir sembole git
+Wrap long lines: at the window edge (on), at a column (wordWrapColumn) or at whichever comes first (bounded)	Uzun satırları sar: pencere kenarında (on), bir sütunda (wordWrapColumn) ya da hangisi önce gelirse orada (bounded)
+Column where lines wrap with wordWrapColumn or bounded	wordWrapColumn veya bounded ile satırların sarıldığı sütun

@@ -633,6 +633,8 @@ pub struct EditorView {
     text_width: Pixels,
     /// Settings at the last paint: (wrap enabled, tab width, width of one column).
     layout_params: (bool, usize, Pixels),
+    /// `editor.wordWrap` at a column: (column, whether the window edge may wrap earlier), as of the last paint.
+    wrap_limit: Option<(usize, bool)>,
 }
 
 type Selections = Vec<Range<usize>>;
@@ -1034,6 +1036,7 @@ impl EditorView {
             fold_lines: Default::default(),
             text_width: px(0.),
             layout_params: (false, 4, px(8.)),
+            wrap_limit: None,
         }
     }
 

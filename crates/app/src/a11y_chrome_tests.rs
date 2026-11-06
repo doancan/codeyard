@@ -139,7 +139,7 @@ fn tabs_breadcrumbs_and_other_groups(cx: &mut TestAppContext) {
     assert_eq!(focused, first, "the first group has the focus");
 }
 
-/// The panel's buttons: New Terminal adds one, which is listed under "Terminals" with its Kill button.
+/// The panel's buttons (the first terminal opens maximized, so the size button offers to restore): New Terminal adds one, which is listed under "Terminals" with its Kill button.
 #[gpui::test]
 fn panel_buttons_and_the_terminal_list(cx: &mut TestAppContext) {
     let _en = crate::i18n::LangGuard::set("en");
@@ -154,7 +154,7 @@ fn panel_buttons_and_the_terminal_list(cx: &mut TestAppContext) {
     let snap = snapshot(&wb, cx);
     let terms = snap.to_tree().nodes.into_iter().find(|(_, n)| n.role() == Role::Group && n.label() == Some("Terminals")).expect("the terminal list");
     assert!(terms.1.children().len() >= 4, "two terminals, each with Kill");
-    for name in ["Split Terminal", "Kill Terminal", "Maximize Panel", "Hide Panel (⌘J)"] {
+    for name in ["Split Terminal", "Kill Terminal", "Restore Panel Size", "Hide Panel (⌘J)"] {
         assert!(find(&snap, Role::Button, name).is_some(), "{name}");
     }
 }

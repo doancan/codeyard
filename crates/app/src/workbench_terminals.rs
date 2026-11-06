@@ -1039,3 +1039,28 @@ impl Workbench {
         RunInfo { debug, commands, terminals, failed_tests: self.failed_test_count() }
     }
 }
+
+#[cfg(test)]
+mod first_terminal_tests {
+    use super::*;
+    use gpui::TestAppContext;
+
+    #[gpui::test]
+    fn the_first_terminal_opens_maximized_and_later_ones_keep_the_size(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        wb.update_in(cx, |wb, window, cx| wb.new_terminal(&NewTerminal, window, cx));
+        assert!(wb.read_with(cx, |wb, _| wb.chrome.panel_max), "the window's first terminal fills the editor area");
+        wb.update_in(cx, |wb, window, cx| wb.toggle_maximized_panel(window, cx));
+        assert!(!wb.read_with(cx, |wb, _| wb.chrome.panel_max));
+        wb.update_in(cx, |wb, window, cx| wb.new_terminal(&NewTerminal, window, cx));
+        assert!(!wb.read_with(cx, |wb, _| wb.chrome.panel_max), "a second terminal does not maximize again");
+    }
+
+    #[gpui::test]
+    fn the_setting_turns_it_off(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        cx.update(|_, cx| cx.global_mut::<Settings>().panel_first_terminal_maximized = false);
+        wb.update_in(cx, |wb, window, cx| wb.new_terminal(&NewTerminal, window, cx));
+        assert!(!wb.read_with(cx, |wb, _| wb.chrome.panel_max));
+    }
+}

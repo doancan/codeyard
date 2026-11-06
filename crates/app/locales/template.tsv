@@ -315,6 +315,7 @@ Color theme of the whole window and the editor
 Color theme: {}	
 Colored file glyphs, folders with only their arrow; names line up	
 Colorful Folders	
+Column where lines wrap with wordWrapColumn or bounded	
 Column {0}: {1}	
 Columns	
 Command Palette	
@@ -1074,6 +1075,9 @@ Go to Symbol in Editor…
 Go to Symbol in File…	
 Go to Symbol in Workspace…	
 Go to Type Definition	
+Go to a line in this file	
+Go to a symbol in the workspace	
+Go to a symbol in this file	
 Go to file	
 Go to line {0}, column {1}	
 Go to line {}	
@@ -2017,6 +2021,7 @@ Run Task…
 Run Test	
 Run Tests in File	
 Run Without Debugging	
+Run a command	
 Run and Debug	
 Run and Debug (⌃⇧D)	
 Run task	
@@ -2763,7 +2768,7 @@ Workspace: Trust This Folder
 Workspace: {} folder in the Explorer.|Workspace: {} folders in the Explorer.	
 Worktree locked: {}	
 Worktrees	
-Wrap long lines at the window edge	
+Wrap long lines: at the window edge (on), at a column (wordWrapColumn) or at whichever comes first (bounded)	
 Wrapped lines	
 Write to the clipboard	
 YAML schema for {}	

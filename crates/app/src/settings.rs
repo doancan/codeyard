@@ -132,6 +132,8 @@ pub struct Settings {
     pub minimap: bool,
     /// Long lines wrap at the window width (⌥Z).
     pub word_wrap: bool,
+    /// With `editor.wordWrap` "wordWrapColumn" or "bounded": the column and whether the window edge may come first.
+    pub word_wrap_limit: Option<(usize, bool)>,
     /// The active file is selected and visible in the tree.
     pub auto_reveal: bool,
     /// Files deleted locally go to the Trash (`files.enableTrash`, off: deletes are permanent and ask first).
@@ -389,6 +391,7 @@ impl Default for Settings {
             diff_inline: false,
             minimap: true,
             word_wrap: false,
+            word_wrap_limit: None,
             auto_reveal: true,
             cursor_blinking: true,
             word_based_suggestions: true,
@@ -723,8 +726,14 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.string("editor.cursorBlinking") {
         s.cursor_blinking = v != "solid";
     }
+    let wrap_column = r.integer("editor.wordWrapColumn", 1, 1000).map_or(80, |v| v as usize);
     if let Some(v) = r.string("editor.wordWrap") {
         s.word_wrap = v != "off";
+        s.word_wrap_limit = match v.as_str() {
+            "wordWrapColumn" => Some((wrap_column, false)),
+            "bounded" => Some((wrap_column, true)),
+            _ => None,
+        };
     }
     if let Some(v) = r.bool("editor.minimap.enabled") {
         s.minimap = v;
@@ -1234,6 +1243,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "diffEditor.renderSideBySide",
         "editor.minimap.enabled",
         "editor.wordWrap",
+        "editor.wordWrapColumn",
         "explorer.autoReveal",
         "files.fallbackEncoding",
         "editor.cursorBlinking",

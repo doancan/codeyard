@@ -60,6 +60,7 @@ impl Render for EditorView {
         let font_id = window.text_system().resolve_font(&gpui::font(font_family.clone()));
         let char_w = window.text_system().advance(font_id, px(font_size), 'm').map_or(px(font_size * 0.6), |s| s.width);
         self.layout_params = (wrap, self.indent_unit().max(1), char_w);
+        self.wrap_limit = settings.word_wrap_limit;
         self.refresh_display();
         let rows = self.display.row_count();
         let banner = self.banner(&p, cx);

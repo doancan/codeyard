@@ -13,6 +13,17 @@ pub(super) fn search_keywords(label: &str) -> &'static str {
     }
 }
 
+/// The modes the palette's first character selects: (the character, what it does). `?` lists them.
+pub(super) fn palette_modes() -> [(&'static str, String); 4] {
+    use crate::i18n::t;
+    [
+        (">", t("Run a command").to_string()),
+        (":", t("Go to a line in this file").to_string()),
+        ("#", t("Go to a symbol in the workspace").to_string()),
+        ("@", t("Go to a symbol in this file").to_string()),
+    ]
+}
+
 impl Workbench {
     pub(super) fn quick_open(&mut self, _: &QuickOpen, window: &mut Window, cx: &mut Context<Self>) {
         self.open_palette("", window, cx);
@@ -531,6 +542,7 @@ impl Workbench {
             PickSource::List { prefix: ">", items },
             PickSource::Line { prefix: ":", max: max_line },
             PickSource::Remote { prefix: "#", items: Vec::new(), status: SYMBOL_HINT.into() },
+            PickSource::List { prefix: "?", items: palette_modes().into_iter().map(|(key, about)| PickItem { label: about.into(), detail: None, keys: Some(key.into()) }).collect() },
         ];
         let picker = cx.new(|cx| Picker::new(sources, placeholder, query, None, cx).with_aliases(1, aliases));
 
@@ -1102,6 +1114,16 @@ impl Workbench {
                 self.remember_command(label);
                 self.close_overlay(window, cx);
                 self.run_command(run, window, cx);
+            }
+            // The help rows: each one names a mode of the palette and takes you into it.
+            (OverlayKind::Palette { .. }, PickerEvent::Confirm(Pick::Item { source: 4, index })) => {
+                let key = palette_modes()[*index].0;
+                if key == "@" {
+                    self.close_overlay(window, cx);
+                    window.dispatch_action(Box::new(GoToSymbol), cx);
+                } else if let Some(Overlay { picker, .. }) = &self.overlay {
+                    picker.update(cx, |p, cx| p.set_query(key.to_string(), cx));
+                }
             }
             (OverlayKind::Palette { .. }, PickerEvent::Query(q)) => {
                 let q = q.clone();
