@@ -766,7 +766,8 @@ fn bind_file(cx: &mut App, text: &str, label: &str) -> Vec<String> {
                     let guess = commands::COMMAND_IDS
                         .iter()
                         .filter_map(|c| fuzzy::score(id, c).map(|(s, _)| (s, *c)))
-                        .max_by_key(|(s, _)| *s)
+                        // On a tie the shortest id wins: `editor.sav` means `editor.save`, not a longer sibling.
+                        .max_by_key(|(s, c)| (*s, std::cmp::Reverse(c.len())))
                         .map(|(_, c)| format!(", did you mean \"{c}\"?"))
                         .unwrap_or_default();
                     warnings.push(format!("{label}: unknown command \"{id}\"{guess}"));
