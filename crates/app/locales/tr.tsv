@@ -3633,7 +3633,6 @@ Stash & Switch	Stash'le ve Geç
 Stash your changes and switch to {}?	Değişiklikleriniz stash'lenip {} dalına geçilsin mi?
 Switched to {}. Your changes are in the stash: Git: Pop Latest Stash brings them back.	{} dalına geçildi. Değişiklikleriniz stash'te: Git: Pop Latest Stash onları geri getirir.
 Switching to {}…	{} dalına geçiliyor…
-The remote branch is replaced by yours, and commits that only exist there are lost for everyone using it. If someone pushed since your last fetch, git refuses.	Uzak dal sizinkiyle değiştirilir ve yalnızca orada bulunan commit'ler onu kullanan herkes için kaybolur. Son fetch'ten beri biri push ettiyse git reddeder.
 The remote has commits you do not have: pull first (Git: Pull), then push. To overwrite them instead, use Git: Push (Force).	Uzakta sizde olmayan commit'ler var: önce Pull (Git: Pull), sonra push edin. Üzerine yazmak istiyorsanız Git: Push (Zorla) kullanın.
 These branches share no history, so git will not merge them. In a terminal, `git merge --allow-unrelated-histories` merges them anyway.	Bu dalların ortak geçmişi yok, bu yüzden git birleştirmez. Terminalde `git merge --allow-unrelated-histories` yine de birleştirir.
 This repository uses Git LFS, but git-lfs is not installed on this host.	Bu depo Git LFS kullanıyor ama bu makinede git-lfs kurulu değil.
@@ -3651,3 +3650,8 @@ This folder is already a git repository.	Bu klasör zaten bir git deposu.
 Abort	İptal
 Initialize Repository	Depoyu Başlat
 Resolve Conflicts	Çakışmaları Çözün
+Cannot tell which remote {} belongs to	{} hangi uzak depoya ait, anlaşılamadı
+Commits that exist only on the remote branch are lost for everyone using it.	Yalnızca uzak dalda bulunan commit'ler onu kullanan herkes için kaybolur.
+If the remote branch moves while this question is open, git refuses.	Bu soru açıkken uzak dal ilerlerse git reddeder.
+The server refused the login: check the account and that the token may push.	Sunucu girişi reddetti: hesabı ve jetonun push yetkisi olduğunu kontrol edin.
+{} commit on the remote branch is not in yours and is lost for everyone using it.|{} commits on the remote branch are not in yours and are lost for everyone using it.	Uzak daldaki {} commit sizde yok ve onu kullanan herkes için kaybolur.

@@ -22,7 +22,7 @@ mod worktree;
 
 pub use branch::*;
 pub use diff::*;
-pub use explain::{explain, is_checkout_blocked, needs_credentials};
+pub use explain::{credentials_rejected, explain, is_checkout_blocked, needs_credentials};
 pub use ignore::*;
 pub use log::*;
 pub use patch::{apply_patch, changes_patch};

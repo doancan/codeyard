@@ -1052,7 +1052,8 @@ helper (the macOS keychain, `gh auth`) keeps it for next time; GitHub no longer 
 access token. The background fetch never asks (its failure shows in the sync item's tooltip). This is for repositories on this
 computer; on a connected host the host's own SSH keys and credential helper apply. A command that hangs is stopped after ten minutes.
 A rejected push says that the remote has commits you do not have (pull first); *Git: Push (Force)…* then overwrites the remote
-branch after a confirmation, with `--force-with-lease`, so it still refuses when someone pushed since your last fetch.
+branch after a confirmation that counts the remote commits you would lose. The push is pinned to the commit the remote branch
+was at when the question opened (`--force-with-lease=<branch>:<commit>`), so a push by someone else meanwhile is never overwritten.
 
 The "…" menu and the palette also have *Pull (Rebase)*, *Pull from…* (pick a remote branch),
 *Push to…* (pick a remote), *Fetch (All Remotes)* and *Publish Branch*, and the commit variants

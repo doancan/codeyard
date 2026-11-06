@@ -3,7 +3,7 @@
 
 use host::Host;
 
-use super::{failure_text, git, git_ok, has_unmerged, merge_in_progress, plain_name, rebase_in_progress, remotes};
+use super::{failure_text, git, git_ok, has_unmerged, merge_in_progress, plain_name, rebase_in_progress, remotes, split_remote_branch};
 
 /// One step of a sync. `Pull` follows `git.rebaseWhenSync`; `PullRebase` always rebases.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,11 +20,30 @@ pub enum SyncOp {
     PushTo {
         remote: String,
     },
-    /// Overwrite the remote branch with this one, but only if nobody pushed since the last fetch (`--force-with-lease`).
-    ForcePush,
+    /// Overwrite the remote branch with this one, but only if it still is where the user saw it (`--force-with-lease`).
+    ForcePush(ForceTarget),
     Fetch,
     FetchAll,
     Publish,
+}
+
+/// What a force push is pinned to: the remote, the branch there, and the commit that branch was at when the user was asked.
+/// The lease names that commit itself: a background fetch moves the remote-tracking ref, so the bare `--force-with-lease` would
+/// accept whatever had been fetched meanwhile, seen or not.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ForceTarget {
+    pub remote: String,
+    pub branch: String,
+    pub seen: String,
+}
+
+/// The upstream of the current branch as a force push target, with the commit it is at now.
+pub fn force_target(host: &dyn Host, root: &str) -> Result<ForceTarget, String> {
+    let upstream = git_ok(host, root, &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])?.trim().to_string();
+    let list = remotes(host, root)?;
+    let (remote, branch) = split_remote_branch(&list, &upstream).ok_or_else(|| crate::i18n::tf("Cannot tell which remote {} belongs to", &[&upstream]))?;
+    let seen = git_ok(host, root, &["rev-parse", "--verify", &format!("refs/remotes/{upstream}")])?.trim().to_string();
+    Ok(ForceTarget { remote: remote.to_string(), branch: branch.to_string(), seen })
 }
 
 /// The settings that change what the commands do (`git.rebaseWhenSync`, `git.pruneOnFetch`, `git.pullTags`, `git.fetchOnPull`).
@@ -206,7 +225,13 @@ pub fn sync(host: &dyn Host, root: &str, op: &SyncOp, opts: SyncOptions) -> Resu
             plain_name(remote)?;
             push(host, root, Some(remote)).map(|_| SyncStep::Done)
         }
-        SyncOp::ForcePush => git_ok(host, root, &["push", "--force-with-lease"]).map(|_| SyncStep::Done),
+        SyncOp::ForcePush(target) => {
+            plain_name(&target.remote)?;
+            plain_name(&target.branch)?;
+            let lease = format!("--force-with-lease={}:{}", target.branch, target.seen);
+            let refspec = format!("HEAD:refs/heads/{}", target.branch);
+            git_ok(host, root, &["push", &lease, "--", &target.remote, &refspec]).map(|_| SyncStep::Done)
+        }
         SyncOp::Fetch => fetch(host, root, false, opts.prune).map(|_| SyncStep::Done),
         SyncOp::FetchAll => fetch(host, root, true, opts.prune).map(|_| SyncStep::Done),
         SyncOp::Publish => publish_branch(host, root).map(SyncStep::Published),
@@ -312,6 +337,36 @@ mod tests {
         assert_eq!(PostCommit::Sync.ops(false), [SyncOp::Publish]);
         assert_eq!(PostCommit::Push.ops(false), [SyncOp::Push]);
         assert_eq!((PostCommit::from_setting("sync"), PostCommit::from_setting("none")), (Some(PostCommit::Sync), None));
+    }
+
+    #[test]
+    fn a_force_push_is_pinned_to_the_commit_the_user_saw() {
+        let Some(r) = Remote::new("sync-force-pin") else { return };
+        let host = host::local();
+        let root = r.root();
+        r.commit("mine.txt", "m\n");
+        let seen = force_target(&host, &root).unwrap();
+        assert_eq!((seen.remote.as_str(), seen.branch.as_str()), ("origin", "main"));
+        // Someone pushes after the question was asked, and a background fetch brings it into the tracking ref.
+        r.push_from_elsewhere("theirs.txt", "t\n");
+        (r.run)(&["fetch", "-q"]).unwrap();
+        let err = sync(&host, &root, &SyncOp::ForcePush(seen), SyncOptions::default()).unwrap_err();
+        assert!(err.contains("stale info") || err.contains("[rejected]"), "the lease refuses: {err}");
+        assert!(
+            crate::test_git::git()
+                .args(["log", "--format=%s", "main"])
+                .current_dir(&r.bare)
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).contains("from elsewhere"))
+                .unwrap_or(false)
+        );
+        // Asked again, with that commit now in view, the push goes through.
+        let fresh = force_target(&host, &root).unwrap();
+        assert_eq!(sync(&host, &root, &SyncOp::ForcePush(fresh), SyncOptions::default()), Ok(SyncStep::Done));
+        let head = |dir: &std::path::Path| {
+            String::from_utf8_lossy(&crate::test_git::git().args(["rev-parse", "main"]).current_dir(dir).output().unwrap().stdout).trim().to_string()
+        };
+        assert_eq!(head(&r.bare), head(&r.dir));
     }
 
     #[test]

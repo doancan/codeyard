@@ -129,6 +129,11 @@ fn a_server_login_is_asked_in_the_window_and_the_answers_reach_git() {
         eprintln!("SKIPPED: python3 or git http-backend is missing");
         return;
     };
+    // The client sits under a path with a space and a parenthesis, which git runs directly (no shell: quoting the path would break it).
+    let spaced = fx.dir.join("Ali Veli (work)");
+    std::fs::create_dir_all(&spaced).unwrap();
+    let askpass_exe = spaced.join("codeyard");
+    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_codeyard"), &askpass_exe).unwrap();
     // The login must not reach the real keychain: no system or user git configuration (osxkeychain would store it).
     let home = fx.dir.join("home");
     std::fs::create_dir_all(&home).unwrap();
@@ -137,7 +142,7 @@ fn a_server_login_is_asked_in_the_window_and_the_answers_reach_git() {
         std::env::set_var("HOME", &home);
         std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
         std::env::set_var("GIT_CONFIG_GLOBAL", "/dev/null");
-        std::env::set_var("CODEYARD_ASKPASS_EXE", env!("CARGO_BIN_EXE_codeyard"));
+        std::env::set_var("CODEYARD_ASKPASS_EXE", &askpass_exe);
     }
     let script = Arc::new(Mutex::new(Script { answer: true, ..Script::default() }));
     let s = script.clone();

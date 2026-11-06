@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `editor.wordWrap` accepts `wordWrapColumn` and `bounded`, with `editor.wordWrapColumn`.
 - Git: a login the server asks for (an HTTPS user name and password or token, an SSH key's passphrase, an unknown host's key) is
   asked in the window instead of failing with "run it in the terminal". The periodic fetch never asks.
-- Git: *Git: Push (Force)…* (with `--force-with-lease`, after a confirmation), *Stash & Switch* when local changes block a branch switch,
+- Git: *Git: Push (Force)…* (pinned to the remote commit you were shown with `--force-with-lease`, after a confirmation), *Stash & Switch* when local changes block a branch switch,
   and *Git: Initialize Repository* (also as a button, with *Clone Repository…*, in the Source Control view of a folder that is not one).
 - Source Control: a half-done merge, rebase, cherry-pick or revert shows a line with its conflicts and Abort (Continue for a rebase),
   the commit button reads *Resolve Conflicts* while any remain, and a merge can be committed with an empty message box.

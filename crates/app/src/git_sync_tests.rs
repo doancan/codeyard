@@ -491,6 +491,7 @@ fn a_rejected_push_says_to_pull_first_and_a_force_push_replaces_the_remote(cx: &
 
     // Without a fetch the lease is stale: git refuses instead of overwriting a commit nobody has seen.
     run(&wb, cx, "Git: Push (Force)…");
+    wait_ticking(cx, "the question", |cx| cx.has_pending_prompt());
     cx.simulate_prompt_answer("Force Push");
     wait_ticking(cx, "lease refuses", |cx| notice(&wb, cx).contains("Push failed"));
     assert!(git_in(&f.bare, &["log", "--format=%s", "main"]).contains("remote theirs.txt"), "their commit is still there");
@@ -498,6 +499,7 @@ fn a_rejected_push_says_to_pull_first_and_a_force_push_replaces_the_remote(cx: &
     git_in(&f.dir, &["fetch", "-q"]);
     refresh(&wb, cx);
     run(&wb, cx, "Git: Push (Force)…");
+    wait_ticking(cx, "the question", |cx| cx.has_pending_prompt());
     cx.simulate_prompt_answer("Force Push");
     wait_ticking(cx, "forced", |cx| notice(&wb, cx) == "Pushed");
     assert_eq!(git_in(&f.bare, &["rev-parse", "main"]), git_in(&f.dir, &["rev-parse", "HEAD"]), "the remote has my commit now");

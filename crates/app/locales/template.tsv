@@ -198,6 +198,7 @@ Cannot parse {} as a number
 Cannot reach the server: check the network connection (and a proxy or VPN, if you use one).	
 Cannot read {0}: {1}	
 Cannot show this extension's details: {}	
+Cannot tell which remote {} belongs to	
 Cannot update {0}: {1}	
 Cannot use {} as an entry	
 Cannot use {} as an object key	
@@ -346,6 +347,7 @@ Commits after it leave this branch and every uncommitted change is lost. This ca
 Commits as {0} <{1}>	
 Commits drawn in the Source Control graph	
 Commits listed in the explorer's Timeline	
+Commits that exist only on the remote branch are lost for everyone using it.	
 Committed {}	
 Common ancestor	
 Commonly Used	
@@ -1147,6 +1149,7 @@ Hover
 Hover an option to preview the result.	
 Hue	
 Identical	
+If the remote branch moves while this question is open, git refuses.	
 Ignore Case	
 Ignore case unless the query has capital letters	
 Ignore line endings	
@@ -2475,7 +2478,6 @@ The query was edited: press Enter or Rerun to search for it.
 The quoted value is not closed	
 The release notes are longer: read the rest at {}	
 The release notes are longer: read the rest on GitHub.	
-The remote branch is replaced by yours, and commits that only exist there are lost for everyone using it. If someone pushed since your last fetch, git refuses.	
 The remote has commits you do not have: pull first (Git: Pull), then push. To overwrite them instead, use Git: Push (Force).	
 The remote is not on a hosting service Codeyard knows (GitHub, GitLab, Bitbucket, Codeberg).	
 The remote “{}” is not reachable as a git repository (it may be private or renamed); check `git remote -v`	
@@ -2491,6 +2493,7 @@ The secondary side bar shows no view.
 The selection is neither a JWT nor a Unix timestamp	
 The server did not answer within 60 seconds.	
 The server no longer accepts an account password: use a personal access token as the password (or sign in with the GitHub CLI: gh auth login).	
+The server refused the login: check the account and that the token may push.	
 The server wants credentials that were not given: try again and enter them when asked, or set up an SSH key.	
 The shell may run each line as soon as it arrives.	
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
@@ -3298,6 +3301,7 @@ your words
 {} changed no files (merge or empty commit).	
 {} change|{} changes	
 {} command|{} commands	
+{} commit on the remote branch is not in yours and is lost for everyone using it.|{} commits on the remote branch are not in yours and are lost for everyone using it.	
 {} commit|{} commits	
 {} conflict left|{} conflicts left	
 {} conflicts with your changes: resolve the conflicts in Source Control. The stash is kept until you drop it.	

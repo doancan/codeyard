@@ -35,6 +35,13 @@ pub fn needs_credentials(err: &str) -> bool {
         || (e.contains("remote: permission to") && e.contains("denied to"))
 }
 
+/// The server was given a login and refused it (a wrong account, a token without the permission), as opposed to not being given one.
+pub fn credentials_rejected(err: &str) -> bool {
+    let e = err.to_lowercase();
+    ["authentication failed", "returned error: 401", "returned error: 403", "invalid username or password"].iter().any(|needle| e.contains(needle))
+        || (e.contains("remote: permission to") && e.contains("denied to"))
+}
+
 /// The text between the first `'` after `marker` and the next `'`: git quotes the path or name it complains about.
 fn quoted_after<'a>(err: &'a str, marker: &str) -> Option<&'a str> {
     let rest = &err[err.find(marker)? + marker.len()..];
@@ -141,6 +148,14 @@ mod tests {
         }
         assert!(!needs_credentials("fatal: unable to access 'https://x/': Could not resolve host: x"));
         assert!(explain("fatal: unable to access 'https://x/': Could not resolve host: x").unwrap().contains("network"));
+    }
+
+    #[test]
+    fn a_refused_login_is_not_a_missing_one() {
+        assert!(credentials_rejected("remote: Permission to x/y.git denied to bob.\nfatal: unable to access: The requested URL returned error: 403"));
+        assert!(credentials_rejected("fatal: Authentication failed for 'https://github.com/x/y.git/'"));
+        assert!(!credentials_rejected("fatal: could not read Username for 'https://github.com': terminal prompts disabled"));
+        assert!(needs_credentials("fatal: could not read Username for 'https://github.com': terminal prompts disabled"));
     }
 
     #[test]

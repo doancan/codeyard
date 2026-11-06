@@ -46,7 +46,7 @@ fn is_pull(op: &SyncOp) -> bool {
 }
 
 fn is_push(op: &SyncOp) -> bool {
-    matches!(op, SyncOp::Push | SyncOp::PushTo { .. } | SyncOp::ForcePush)
+    matches!(op, SyncOp::Push | SyncOp::PushTo { .. } | SyncOp::ForcePush(_))
 }
 
 fn working_text(ops: &[SyncOp]) -> &'static str {
@@ -80,7 +80,9 @@ fn failed_text(op: &SyncOp, e: &str) -> String {
         SyncOp::Publish => crate::i18n::tf("Publish failed: {}", &[&first_line(e)]),
         _ => crate::i18n::tf("Fetch failed: {}", &[&first_line(e)]),
     };
-    if git::needs_credentials(e) {
+    if git::credentials_rejected(e) {
+        format!("{failed} {}", crate::i18n::t("The server refused the login: check the account and that the token may push."))
+    } else if git::needs_credentials(e) {
         format!("{failed} {}", crate::i18n::t("The server wants credentials that were not given: try again and enter them when asked, or set up an SSH key."))
     } else {
         failed
@@ -225,8 +227,9 @@ impl Workbench {
         });
     }
 
-    /// "Git: Push (Force)…": only after a confirmation that names what is lost. `--force-with-lease` still refuses when the remote
-    /// branch moved since the last fetch, so a push by someone else is never overwritten unseen.
+    /// "Git: Push (Force)…": only after a confirmation that names what is lost. The push is pinned to the commit the remote branch
+    /// is at when the question opens (`--force-with-lease=<branch>:<commit>`), so a push by someone else while the question is open
+    /// is never overwritten unseen. What a background fetch already brought in is not "unseen", which is why the question counts it.
     pub(super) fn git_push_force(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(st) = self.git_status() else {
             self.repo_root(cx);
@@ -237,14 +240,51 @@ impl Workbench {
             cx.notify();
             return;
         };
-        self.confirm_git(
-            window,
-            &crate::i18n::tf("Force-push {0} to {1}?", &[&branch, &upstream]),
-            crate::i18n::t("The remote branch is replaced by yours, and commits that only exist there are lost for everyone using it. If someone pushed since your last fetch, git refuses."),
-            crate::i18n::t("Force Push"),
-            cx,
-            |this, cx| this.git_sync(vec![SyncOp::ForcePush], cx),
-        );
+        let behind = st.behind as usize;
+        let host = self.remote.host.clone();
+        let source_host = host.clone();
+        let root = st.root.clone();
+        let task = cx.background_executor().spawn({
+            let root = root.clone();
+            async move { git::force_target(host.as_ref(), &root) }
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let target = task.await;
+            this.update_in(cx, |this, window, cx| {
+                if !this.git_context_matches(&source_host, &root) {
+                    return;
+                }
+                let target = match target {
+                    Ok(target) => target,
+                    Err(e) => {
+                        this.notice = Some(Notice::Error(crate::i18n::tf("Push failed: {}", &[&first_line(&e)]).into()));
+                        cx.notify();
+                        return;
+                    }
+                };
+                let lost = if behind == 0 {
+                    crate::i18n::t("Commits that exist only on the remote branch are lost for everyone using it.").to_string()
+                } else {
+                    crate::i18n::tn(
+                        "{} commit on the remote branch is not in yours and is lost for everyone using it.",
+                        "{} commits on the remote branch are not in yours and are lost for everyone using it.",
+                        behind,
+                        &[],
+                    )
+                };
+                let detail = format!("{lost} {}", crate::i18n::t("If the remote branch moves while this question is open, git refuses."));
+                this.confirm_git(
+                    window,
+                    &crate::i18n::tf("Force-push {0} to {1}?", &[&branch, &upstream]),
+                    &detail,
+                    crate::i18n::t("Force Push"),
+                    cx,
+                    move |this, cx| this.git_sync(vec![SyncOp::ForcePush(target)], cx),
+                );
+            })
+            .ok();
+        })
+        .detach();
     }
 
     pub(super) fn git_publish_branch(&mut self, cx: &mut Context<Self>) {
