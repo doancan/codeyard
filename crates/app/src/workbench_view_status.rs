@@ -176,9 +176,8 @@ impl Workbench {
                         } else {
                             icon(if unpublished { "cloud-upload" } else { "refresh-cw" }, SB_ICON, p.text_muted).into_any_element()
                         })
-                        // The counts are what tell you a sync is due, so they stay at every width; pending commits read in
-                        // the regular text color.
-                        .when(!sync.is_empty(), |d| d.text_color(c(p.text)).child(div().max_w(px(96.)).truncate().child(sync)))
+                        // The counts are what tell you a sync is due, so they stay at every width, in the bar's own color.
+                        .when(!sync.is_empty(), |d| d.child(div().max_w(px(96.)).truncate().child(sync)))
                         .when(labels && unpublished && !running, |d| d.child(crate::i18n::t("Publish Branch")))
                         .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone())).into())
                         .on_click(cx.listener(|this, _, window, cx| this.git_sync_auto(window, cx))),
@@ -207,6 +206,8 @@ impl Workbench {
                     .tooltip(move |_, cx| cx.new(|_| Tooltip(crate::i18n::tf("{0} errors, {1} warnings", &[&errors, &warnings]).into())).into())
                     .on_click(cx.listener(|this, _, w, cx| this.show_problems(&ShowProblems, w, cx)))
             })
+            // A new version waits at the left, beside the problems: always labelled, so it is not missed.
+            .when_some(self.update_status_item(), |d, item| d.child(self.update_status_button(item, width >= 640., p, cx)))
             // `cyx dev`: this window runs an extension straight from the author's folder.
             .when(crate::ext::dev_dir().is_some(), |d| {
                 d.child(
@@ -285,16 +286,6 @@ impl Workbench {
             .children(self.web_preview_status(p, cx))
             .children(self.extension_status_items(p, cx))
             .child(self.chrome.resources.clone())
-            .child(
-                item()
-                    .id("sb-terminal")
-                    .child(ctl("sb-terminal", crate::i18n::t("Toggle Panel (⌘J)").into(), |this, w, cx| this.toggle_panel(&TogglePanel, w, cx)))
-                    .cursor_pointer()
-                    .hover(|d| d.bg(c(p.surface_hover)))
-                    .child(icon("terminal", SB_ICON, if self.chrome.panel_open { p.text } else { p.text_muted }))
-                    .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Toggle Panel (⌘J)").into())).into())
-                    .on_click(cx.listener(|this, _, w, cx| this.toggle_panel(&TogglePanel, w, cx))),
-            )
             .when(conflicts > 0, |d| {
                 d.child(
                     item()
@@ -402,7 +393,6 @@ impl Workbench {
                     )
                 })
             })
-            .when_some(self.update_status_item(), |d, item| d.child(self.update_status_button(item, labels, p, cx)))
     }
 
     /// The status bar's conflict count: the next merge conflict of the editor in front.

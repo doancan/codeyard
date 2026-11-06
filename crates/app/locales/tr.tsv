@@ -3589,3 +3589,5 @@ Restricted Mode keeps these off until you trust it:	Kısıtlı Mod, güvenene ka
 Tasks, tests and debugging	Görevler, testler ve hata ayıklama
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	“{}” klasörü görevleri, hata ayıklama yapılandırmaları ve proje ayarları aracılığıyla program çalıştırabilir. Yalnızca bu klasörün nereden geldiğine güveniyorsanız devam edin.
 “{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	“{}” ve klasörleri, görevleri, hata ayıklama yapılandırmaları ve proje ayarları aracılığıyla program çalıştırabilir. Yalnızca bu çalışma alanının nereden geldiğine güveniyorsanız devam edin.
+Title bar	Başlık çubuğu
+Toggle Secondary Side Bar	İkincil Kenar Çubuğunu Aç/Kapat

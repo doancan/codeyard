@@ -2537,12 +2537,13 @@ This view is not available.
 This window is installing an update. You can close it in a few seconds.	
 Thursday	
 Timeline	
+Title bar	
 To customize Run and Debug, create a launch configuration.	
 Toggle Bookmark	
 Toggle Breakpoint	
 Toggle Line Comment	
 Toggle Panel	
-Toggle Panel (⌘J)	
+Toggle Secondary Side Bar	
 Toggle Sidebar	
 Toggle Terminal	
 Toggle a break-on-exception filter	

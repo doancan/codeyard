@@ -696,6 +696,24 @@ mod resize_tests {
         }
     }
 
+    /// The layout switches at the right end of the title bar open and close what they name.
+    #[cfg(target_os = "macos")]
+    #[gpui::test]
+    fn the_title_bar_switches_toggle_side_bar_and_panel(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        let (bar, switch) = (cx.debug_bounds("title-bar").unwrap(), cx.debug_bounds("tb-panel").unwrap());
+        assert!(switch.left() > bar.center().x, "the switches sit in the right half: {switch:?} {bar:?}");
+        let before = wb.read_with(cx, |wb, _| wb.chrome.panel_open);
+        cx.simulate_click(switch.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_ne!(wb.read_with(cx, |wb, _| wb.chrome.panel_open), before, "the panel switch toggles the panel");
+        let side = wb.read_with(cx, |wb, _| wb.chrome.panel.is_some());
+        let button = cx.debug_bounds("tb-sidebar").unwrap();
+        cx.simulate_click(button.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_ne!(wb.read_with(cx, |wb, _| wb.chrome.panel.is_some()), side, "the side bar switch toggles the side bar");
+    }
+
     // Moving a maximized panel used to flip only the docking side, which a maximized panel ignores: nothing moved.
     #[gpui::test]
     fn moving_a_maximized_panel_restores_its_size(cx: &mut TestAppContext) {
