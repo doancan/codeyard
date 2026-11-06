@@ -136,7 +136,11 @@ pub const CATALOG: &[Entry] = &[
     e("terminal.allowClipboardWrite", crate::i18n::tr("Let programs in the terminal write to the clipboard"), Kind::Bool),
     e("terminal.fontSize", crate::i18n::tr("Font size of the terminal"), Kind::Number { min: 6., max: 48. }),
     e("terminal.lineHeight", crate::i18n::tr("Terminal row height, as a multiple of the font size"), Kind::Number { min: 1., max: 2. }),
-    e("terminal.scrollback", crate::i18n::tr("Lines kept in terminal history"), Kind::Number { min: 0., max: 50_000. }),
+    e(
+        "terminal.scrollback",
+        crate::i18n::tr("Lines kept in terminal history. More than 50,000 can use a lot of memory and slow down scrolling and search"),
+        Kind::Number { min: 0., max: 200_000. },
+    ),
     e(
         "terminal.persistentScrollback",
         crate::i18n::tr("Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)"),
@@ -150,6 +154,11 @@ pub const CATALOG: &[Entry] = &[
     e("terminal.scrollSensitivity", crate::i18n::tr("Mouse wheel and trackpad scroll speed multiplier"), Kind::Number { min: 0.1, max: 10. }),
     e("terminal.shellIntegration", crate::i18n::tr("Mark prompts, commands and the folder in zsh, bash and fish"), Kind::Bool),
     e("terminal.notifications", crate::i18n::tr("Flag a terminal and the taskbar when its program rings the bell or asks for you"), Kind::Bool),
+    e(
+        "workbench.panel.firstTerminalMaximized",
+        crate::i18n::tr("The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button"),
+        Kind::Bool,
+    ),
     e(
         "workbench.panel.openFromMaximized",
         crate::i18n::tr(
@@ -404,6 +413,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "terminal.notifications" => json!(s.terminal_notifications),
         "terminal.copyOnSelection" => json!(s.terminal_copy_on_selection),
         "workbench.panel.openFromMaximized" => json!(s.panel_open_from_maximized),
+        "workbench.panel.firstTerminalMaximized" => json!(s.panel_first_terminal_maximized),
         "terminal.defaultProfile" => json!(s.terminal_default_profile.clone().unwrap_or_default()),
         "terminal.warnMultilinePaste" => json!(s.terminal_warn_multiline.as_str()),
         "terminal.shell" => json!(s.terminal_shell.clone().unwrap_or_default()),

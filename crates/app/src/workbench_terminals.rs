@@ -244,8 +244,13 @@ impl Workbench {
 
     /// New terminal in the given folder running `launch`.
     pub(super) fn new_terminal_launch(&mut self, cwd: Option<String>, launch: Launch, window: &mut Window, cx: &mut Context<Self>) {
+        let first = self.terminals.is_empty() && !self.chrome.panel_max;
         let Some(term) = self.spawn_terminal(cwd, launch, window, cx) else { return };
         self.terminals.push(term);
+        // The window's first terminal opens full size; the panel keeps its own size from the second one on.
+        if first && cx.global::<Settings>().panel_first_terminal_maximized {
+            self.chrome.panel_max = true;
+        }
         // Saved right away: a crash or a killed app must not lose a terminal opened since the last save.
         self.persist_terminals(cx);
         self.active_terminal = self.terminals.len() - 1;

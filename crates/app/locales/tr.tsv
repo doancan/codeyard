@@ -1224,7 +1224,6 @@ Highlight the matching bracket	Eşleşen parantezi vurgula
 Show fold arrows in the gutter	Sol kenarda katlama oklarını göster
 Stop a search after this many matches	Bir aramayı bu kadar eşleşmeden sonra durdur
 Font size of the terminal	Terminalin yazı tipi boyutu
-Lines kept in terminal history	Terminal geçmişinde tutulan satır sayısı
 Shell for new terminals (empty: login shell)	Yeni terminaller için kabuk (boş: oturum açma kabuğu)
 What opens at start: welcome (the start page), continue (where you left off, SSH hosts included) or blank (an empty window)	Başlangıçta ne açılır: welcome (başlangıç sayfası), continue (kaldığınız yer, SSH sunucuları dahil) ya da blank (boş pencere)
 Bring a folder's tabs and unsaved changes back when you open it	Bir klasörü açtığınızda sekmelerini ve kaydedilmemiş değişikliklerini geri getir
@@ -3593,3 +3592,6 @@ Title bar	Başlık çubuğu
 Toggle Secondary Side Bar	İkincil Kenar Çubuğunu Aç/Kapat
 Debugger	Hata ayıklayıcı
 Failing tests	Başarısız testler
+The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	Bir pencerede açılan ilk terminal tüm düzenleyici alanını kaplar; panelin büyüt düğmesiyle eski boyutuna döner
+terminal.scrollback: {} lines can use hundreds of megabytes per terminal and slow down scrolling and search (up to {} is comfortable); applied as set	terminal.scrollback: {0} satır terminal başına yüzlerce megabayt bellek kullanabilir, kaydırmayı ve aramayı yavaşlatabilir ({1} satıra kadar rahattır); verildiği gibi uygulandı
+Lines kept in terminal history. More than 50,000 can use a lot of memory and slow down scrolling and search	Terminal geçmişinde tutulan satır sayısı. 50.000'den fazlası çok bellek kullanabilir, kaydırmayı ve aramayı yavaşlatabilir

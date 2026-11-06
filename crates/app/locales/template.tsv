@@ -1282,7 +1282,7 @@ Line {} changed
 Line {}: not committed yet	
 Line {}: {} · {}, {} · {}	
 Lines deleted above line {}	
-Lines kept in terminal history	
+Lines kept in terminal history. More than 50,000 can use a lot of memory and slow down scrolling and search	
 Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)	
 Link copied.	
 List	
@@ -2407,6 +2407,7 @@ The file is empty.
 The file is not open any more.	
 The file is not tracked by Git.	
 The file is too large for an outline.	
+The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
 The host stopped responding. Installation files were retained because a process may still be running. Reconnect and inspect the destination before retrying.	
@@ -3023,6 +3024,7 @@ syntax error at “{}”
 tag	
 task	
 terminal name	
+terminal.scrollback: {} lines can use hundreds of megabytes per terminal and slow down scrolling and search (up to {} is comfortable); applied as set	
 test failed: {}	
 test panicked: {}	
 the GitHub token contains characters that cannot be sent	

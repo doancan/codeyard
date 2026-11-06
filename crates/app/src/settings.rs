@@ -112,6 +112,8 @@ pub struct Settings {
     /// What a maximized panel does when something opens in the editor area: "half", "restore" or "tab"
     /// (`workbench.panel.openFromMaximized`).
     pub panel_open_from_maximized: String,
+    /// The first terminal opened in a window fills the editor area (`workbench.panel.firstTerminalMaximized`).
+    pub panel_first_terminal_maximized: bool,
     /// Closing a terminal asks first: "running" (a program is in the foreground), "always" or "never".
     pub terminal_confirm_close: String,
     /// Terminal profiles per operating system of the machine (`terminal.profiles.macos` / `.linux` / `.windows`).
@@ -347,7 +349,7 @@ impl Default for Settings {
             terminal_shell: None,
             terminal_font_size: theme::text::CODE.0,
             terminal_line_height: crate::terminal::LINE_HEIGHT,
-            terminal_scrollback: 10_000,
+            terminal_scrollback: 50_000,
             terminal_persistent_scrollback: 0,
             terminal_persistent_session_timeout: 5,
             terminal_scroll_sensitivity: 2.,
@@ -356,6 +358,7 @@ impl Default for Settings {
             terminal_notifications: true,
             terminal_copy_on_selection: "agents".into(),
             panel_open_from_maximized: "half".into(),
+            panel_first_terminal_maximized: true,
             terminal_confirm_close: "never".into(),
             terminal_profiles: Default::default(),
             terminal_default_profile: None,
@@ -1194,6 +1197,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.notifications",
         "terminal.copyOnSelection",
         "workbench.panel.openFromMaximized",
+        "workbench.panel.firstTerminalMaximized",
         "terminal.defaultProfile",
         "terminal.profiles.macos",
         "terminal.profiles.linux",

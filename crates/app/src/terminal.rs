@@ -70,6 +70,10 @@ mod selection;
 #[path = "terminal_scroll_tests.rs"]
 mod scroll_tests;
 
+#[cfg(test)]
+#[path = "terminal_redraw_tests.rs"]
+mod redraw_tests;
+
 pub enum TerminalEvent {
     TitleChanged,
     /// A command started or finished (shell integration): the terminal list shows it.
@@ -99,9 +103,12 @@ pub enum TerminalEvent {
     Kept,
 }
 
-/// Most scrollback lines (`terminal.scrollback`): 50,000 lines of 200 columns already take about 200 MB, times up to
-/// eight terminals.
-pub const SCROLLBACK_MAX: usize = 50_000;
+/// Most scrollback lines (`terminal.scrollback`): 50,000 lines of 200 columns already take about 200 MB per terminal,
+/// times up to eight terminals, so the settings say so above `SCROLLBACK_COMFORT`.
+pub const SCROLLBACK_MAX: usize = 200_000;
+
+/// Scrollback up to here (the default) costs little; more is allowed, with a warning about memory and speed.
+pub const SCROLLBACK_COMFORT: usize = 50_000;
 
 /// What a new terminal runs.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

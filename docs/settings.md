@@ -198,7 +198,7 @@ status bar reports it.
 | `terminal.persistentSessionTimeout` | number 0–1440 | `5` | Minutes the terminals keep running for the next start after Codeyard quits, crashes or is killed (0: not kept) |
 | `terminal.sanitizePaste` | `auto`, `always`, `off` | `auto` | Remove control characters from pasted text |
 | `terminal.scrollSensitivity` | number 0.1–10 | `2.0` | Mouse wheel and trackpad scroll speed multiplier |
-| `terminal.scrollback` | number 0–50000 | `10000` | Lines kept in terminal history |
+| `terminal.scrollback` | number 0–200000 | `50000` | Lines kept in terminal history. More than 50,000 can use hundreds of megabytes per terminal and slow down scrolling and search; Codeyard warns when you set more |
 | `terminal.shell` | text | empty | Shell for new terminals (empty: login shell) |
 | `terminal.shellIntegration` | `true` / `false` | `true` | Mark prompts, commands and the folder in zsh, bash and fish |
 | `terminal.warnMultilinePaste` | `unbracketed`, `always`, `never` | `unbracketed` | Ask before pasting several lines into the terminal |
@@ -242,6 +242,7 @@ status bar reports it.
 | `workbench.editor.showTabs` | `true` / `false` | `true` | Show the editor tab bar |
 | `workbench.fontFamily` | text | empty | UI font of the whole window (empty: system font) |
 | `workbench.iconTheme` | `glyphs`, `minimal`, `codeyard`, `badges`, `colorful`, `apple`, `material`, `none` | `glyphs` | File and folder icons |
+| `workbench.panel.firstTerminalMaximized` | `true`, `false` | `true` | The first terminal opened in a window fills the whole editor area (restore it with the panel's maximize button) |
 | `workbench.panel.openFromMaximized` | `half`, `restore`, `tab` | `half` | When a file, diff or page opens while the panel is maximized: shrink the panel to half, give it back its size, or move the terminal into a tab |
 | `workbench.reduceMotion` | `auto`, `on`, `off` | `auto` | Leave out animations: the blinking cursor, spinners and sliding panels (auto: follow the system setting) |
 | `workbench.statusBar.visible` | `true` / `false` | `true` | Show the status bar |
