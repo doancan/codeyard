@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Windows and Linux: the Toggle Panel button is back in the status bar; the title bar switches exist on macOS only, and the status bar button had left for them on every platform.
 - Source Control: the Graph no longer shows a stash's internal "index on …" and "WIP on …" commits.
 - Keybindings: a mistyped command id suggests the closest command by its shortest match (`editor.sav` means `editor.save`).
 - Opening Codeyard with an empty folder argument no longer shows "not found:" and a trust question about nothing.

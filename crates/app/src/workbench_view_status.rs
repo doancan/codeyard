@@ -298,6 +298,25 @@ impl Workbench {
             .children(self.web_preview_status(p, cx))
             .children(self.extension_status_items(p, cx))
             .child(self.chrome.resources.clone())
+            // macOS has the switches in its title bar; Windows and Linux have none there, so the panel's own button stays here.
+            .when(!cfg!(target_os = "macos"), |d| {
+                let key = Command { label: String::new(), run: Run::Action(Box::new(TogglePanel)) }.shortcut(cx);
+                let tip: gpui::SharedString = match key {
+                    Some(k) => format!("{} ({k})", crate::i18n::t("Toggle Panel")).into(),
+                    None => crate::i18n::t("Toggle Panel").into(),
+                };
+                let tooltip = tip.clone();
+                d.child(
+                    item()
+                        .id("sb-terminal")
+                        .child(ctl("sb-terminal", tip.to_string(), |this, w, cx| this.toggle_panel(&TogglePanel, w, cx)))
+                        .cursor_pointer()
+                        .hover(|d| d.bg(c(p.surface_hover)))
+                        .child(icon("terminal", SB_ICON, if self.chrome.panel_open { p.text } else { p.text_muted }))
+                        .tooltip(move |_, cx| cx.new(|_| Tooltip(tooltip.clone())).into())
+                        .on_click(cx.listener(|this, _, w, cx| this.toggle_panel(&TogglePanel, w, cx))),
+                )
+            })
             .when(conflicts > 0, |d| {
                 d.child(
                     item()
