@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-06
+
 ### Added
 
 - Title bar: switches at the right end for the side bar, the panel and the secondary side bar. The terminal button left the status bar for it.
@@ -1731,7 +1733,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.6...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/doancan/codeyard/compare/v0.7.6...v0.8.0
 [0.7.6]: https://github.com/doancan/codeyard/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/doancan/codeyard/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/doancan/codeyard/compare/v0.7.3...v0.7.4
