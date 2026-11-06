@@ -205,6 +205,9 @@ pub use patch_glue::{ApplyPatchFromClipboard, CopyChangesAsPatch};
 #[path = "workbench_permalink.rs"]
 mod permalink_glue;
 pub use permalink_glue::{CopyGitPermalink, OpenOnGitRemote};
+#[cfg(test)]
+#[path = "workbench_feature_tests.rs"]
+mod feature_tests;
 #[path = "workbench_terminals.rs"]
 mod terminals_glue;
 #[path = "workbench_toggles.rs"]
@@ -308,6 +311,9 @@ actions!(
         CloseEmptyEditorGroup,
         MoveEditorToOtherGroup,
         ToggleWordWrap,
+        ToggleTabFocusMode,
+        ToggleActivityBar,
+        ToggleStatusBar,
         CloseSavedEditors,
         ConvertIndentToSpaces,
         ConvertIndentToTabs,
@@ -317,6 +323,9 @@ actions!(
         GoBack,
         GoForward,
         ReopenClosedEditor,
+        ReopenWithEncoding,
+        OpenRecentFile,
+        SaveWithEncoding,
         NewFile,
         SaveAs,
         SaveLocalCopy,
@@ -611,6 +620,13 @@ pub use host::askpass::{AskKind, AskRequest};
 pub use inspector_glue::ShowExtensionInspector;
 pub use market_glue::{MarketNext, MarketPrevious, ShowMarket};
 pub use providers_glue::RunExtensionCommand;
+
+/// Go to the tab at `index` (0-based) of the front group; an index past the last one means the last tab.
+#[derive(Clone, PartialEq, Debug, gpui::Action)]
+#[action(namespace = workbench, no_json)]
+pub struct OpenEditorAt {
+    pub index: usize,
+}
 pub use remote_glue::ShowRemoteExplorer;
 pub use terminals_glue::{
     ChangeTerminalColor, ConfigureTerminalSettings, FocusNextTerminal, FocusPreviousTerminal, KillAllTerminals, KillOtherTerminals, MoveTerminalDown,
@@ -636,6 +652,10 @@ enum EditorOpt {
     Convert {
         to_tabs: bool,
     },
+    /// Read the active file again as this encoding.
+    Reopen(crate::encoding::Encoding),
+    /// Write the active file in this encoding.
+    SaveIn(crate::encoding::Encoding),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

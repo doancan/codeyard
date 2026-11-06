@@ -18,9 +18,18 @@ pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>, obj: &Map<String, Valu
     }
     if let Some(v) = r.number("terminal.scrollback", 0., crate::terminal::SCROLLBACK_MAX as f64) {
         s.terminal_scrollback = v as usize;
+        if s.terminal_scrollback > crate::terminal::SCROLLBACK_COMFORT {
+            r.warn(crate::i18n::tf(
+                "terminal.scrollback: {} lines can use hundreds of megabytes per terminal and slow down scrolling and search (up to {} is comfortable); applied as set",
+                &[&s.terminal_scrollback, &crate::terminal::SCROLLBACK_COMFORT],
+            ));
+        }
     }
     if let Some(v) = r.number("terminal.scrollSensitivity", 0.1, 10.) {
         s.terminal_scroll_sensitivity = v as f32;
+    }
+    if let Some(v) = r.bool("terminal.allowClearHistory") {
+        s.terminal_allow_clear_history = v;
     }
     if let Some(v) = r.bool("terminal.allowClipboardWrite") {
         s.terminal_allow_clipboard_write = v;
@@ -67,5 +76,32 @@ mod confirm_close_default_tests {
     #[test]
     fn closing_a_terminal_asks_nothing_by_default() {
         assert_eq!(Settings::default().terminal_confirm_close, "never");
+    }
+}
+
+#[cfg(test)]
+mod scrollback_tests {
+    use crate::settings::parse;
+
+    #[test]
+    fn a_long_history_is_applied_with_a_warning_about_memory() {
+        let (s, warnings) = parse(r#"{ "terminal.scrollback": 150000 }"#);
+        assert_eq!(s.terminal_scrollback, 150_000);
+        assert!(warnings.iter().any(|w| w.contains("terminal.scrollback") && w.contains("150000")), "{warnings:?}");
+    }
+
+    #[test]
+    fn the_default_and_comfortable_values_do_not_warn() {
+        assert_eq!(parse("{}").0.terminal_scrollback, 50_000);
+        let (s, warnings) = parse(r#"{ "terminal.scrollback": 50000 }"#);
+        assert_eq!(s.terminal_scrollback, 50_000);
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn more_than_the_maximum_is_refused() {
+        let (s, warnings) = parse(r#"{ "terminal.scrollback": 500000 }"#);
+        assert_eq!(s.terminal_scrollback, 50_000, "the default stays");
+        assert!(!warnings.is_empty());
     }
 }

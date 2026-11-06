@@ -2,11 +2,23 @@
 
 use super::*;
 
+/// Where lines wrap: at the window edge (`edge` columns), at the set column, or at whichever comes first when bounded.
+pub(super) fn wrap_columns(edge: usize, limit: Option<(usize, bool)>) -> usize {
+    match limit {
+        None => edge,
+        Some((column, false)) => column.max(10),
+        Some((column, true)) => edge.min(column.max(10)),
+    }
+}
+
 impl EditorView {
     /// Wrap column (`None` if wrapping is off or the width isn't known yet).
     pub(super) fn wrap_cols(&self) -> Option<usize> {
         let (wrap, _, char_w) = self.layout_params;
-        (wrap && self.text_width > px(0.) && char_w > px(0.)).then(|| ((self.text_width - px(8.)) / char_w).floor().max(10.) as usize)
+        (wrap && self.text_width > px(0.) && char_w > px(0.)).then(|| {
+            let edge = ((self.text_width - px(8.)) / char_w).floor().max(10.) as usize;
+            wrap_columns(edge, self.wrap_limit)
+        })
     }
 
     pub(super) fn tab_width(&self) -> usize {
@@ -410,5 +422,20 @@ impl EditorView {
     pub(super) fn unfold_all(&mut self, _: &UnfoldAll, _: &mut Window, cx: &mut Context<Self>) {
         self.set_all_folds(false);
         self.after_move(cx);
+    }
+}
+
+#[cfg(test)]
+mod wrap_column_tests {
+    use super::wrap_columns;
+
+    #[test]
+    fn wraps_at_the_edge_the_column_or_the_nearer_of_both() {
+        assert_eq!(wrap_columns(120, None), 120);
+        assert_eq!(wrap_columns(120, Some((80, false))), 80);
+        assert_eq!(wrap_columns(60, Some((80, false))), 80, "a plain column ignores the window");
+        assert_eq!(wrap_columns(120, Some((80, true))), 80);
+        assert_eq!(wrap_columns(60, Some((80, true))), 60, "bounded: the window edge comes first");
+        assert_eq!(wrap_columns(120, Some((3, true))), 10, "never narrower than ten columns");
     }
 }

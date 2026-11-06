@@ -35,7 +35,12 @@ pub const CATALOG: &[Entry] = &[
     e("editor.fontFamily", crate::i18n::tr("Editor font (empty: built-in monospace)"), Kind::Text),
     e("editor.tabSize", crate::i18n::tr("Spaces per indent level (empty: detect per file)"), Kind::Number { min: 1., max: 16. }),
     e("editor.insertSpaces", crate::i18n::tr("Indent with spaces instead of tabs"), Kind::Bool),
-    e("editor.wordWrap", crate::i18n::tr("Wrap long lines at the window edge"), Kind::Choice(&["off", "on"])),
+    e(
+        "editor.wordWrap",
+        crate::i18n::tr("Wrap long lines: at the window edge (on), at a column (wordWrapColumn) or at whichever comes first (bounded)"),
+        Kind::Choice(&["off", "on", "wordWrapColumn", "bounded"]),
+    ),
+    e("editor.wordWrapColumn", crate::i18n::tr("Column where lines wrap with wordWrapColumn or bounded"), Kind::Number { min: 1., max: 1000. }),
     e("editor.cursorBlinking", crate::i18n::tr("Cursor animation"), Kind::Choice(&["blink", "solid"])),
     e("editor.minimap.enabled", crate::i18n::tr("Show the minimap"), Kind::Bool),
     e("editor.wordHighlight", crate::i18n::tr("Highlight other uses of the word under the cursor"), Kind::Bool),
@@ -133,10 +138,19 @@ pub const CATALOG: &[Entry] = &[
     e("git.enableSmartCommit", crate::i18n::tr("Commit all tracked changes when nothing is staged"), Kind::Bool),
     // --- structural ---
     e("search.structural.maxFiles", crate::i18n::tr("Most files a structural search reads and parses"), Kind::Number { min: 1., max: 100_000. }),
+    e(
+        "terminal.allowClearHistory",
+        crate::i18n::tr("Let programs in the terminal erase its scrollback (some full-screen tools do on every redraw, and the history is lost)"),
+        Kind::Bool,
+    ),
     e("terminal.allowClipboardWrite", crate::i18n::tr("Let programs in the terminal write to the clipboard"), Kind::Bool),
     e("terminal.fontSize", crate::i18n::tr("Font size of the terminal"), Kind::Number { min: 6., max: 48. }),
     e("terminal.lineHeight", crate::i18n::tr("Terminal row height, as a multiple of the font size"), Kind::Number { min: 1., max: 2. }),
-    e("terminal.scrollback", crate::i18n::tr("Lines kept in terminal history"), Kind::Number { min: 0., max: 50_000. }),
+    e(
+        "terminal.scrollback",
+        crate::i18n::tr("Lines kept in terminal history. More than 50,000 can use a lot of memory and slow down scrolling and search"),
+        Kind::Number { min: 0., max: 200_000. },
+    ),
     e(
         "terminal.persistentScrollback",
         crate::i18n::tr("Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)"),
@@ -150,6 +164,11 @@ pub const CATALOG: &[Entry] = &[
     e("terminal.scrollSensitivity", crate::i18n::tr("Mouse wheel and trackpad scroll speed multiplier"), Kind::Number { min: 0.1, max: 10. }),
     e("terminal.shellIntegration", crate::i18n::tr("Mark prompts, commands and the folder in zsh, bash and fish"), Kind::Bool),
     e("terminal.notifications", crate::i18n::tr("Flag a terminal and the taskbar when its program rings the bell or asks for you"), Kind::Bool),
+    e(
+        "workbench.panel.firstTerminalMaximized",
+        crate::i18n::tr("The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button"),
+        Kind::Bool,
+    ),
     e(
         "workbench.panel.openFromMaximized",
         crate::i18n::tr(
@@ -271,7 +290,13 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "editor.fontFamily" => json!(s.editor_font_family.clone().unwrap_or_default()),
         "editor.tabSize" => s.tab_size.map_or(Value::Null, |n| json!(n)),
         "editor.insertSpaces" => json!(s.insert_spaces.unwrap_or(true)),
-        "editor.wordWrap" => json!(if s.word_wrap { "on" } else { "off" }),
+        "editor.wordWrap" => json!(match (s.word_wrap, s.word_wrap_limit) {
+            (false, _) => "off",
+            (true, None) => "on",
+            (true, Some((_, false))) => "wordWrapColumn",
+            (true, Some((_, true))) => "bounded",
+        }),
+        "editor.wordWrapColumn" => json!(s.word_wrap_limit.map_or(80, |(c, _)| c)),
         "editor.cursorBlinking" => json!(if s.cursor_blinking { "blink" } else { "solid" }),
         "editor.minimap.enabled" => json!(s.minimap),
         "editor.wordHighlight" => json!(s.word_highlight),
@@ -391,6 +416,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         // --- structural ---
         "search.structural.maxFiles" => json!(s.search_structural_max_files),
         "terminal.allowClipboardWrite" => json!(s.terminal_allow_clipboard_write),
+        "terminal.allowClearHistory" => json!(s.terminal_allow_clear_history),
         "terminal.fontSize" => json!(s.terminal_font_size),
         // Through f64 an f32 1.2 would read 1.2000000476837158: two decimals are all the setting means.
         "terminal.lineHeight" => json!((f64::from(s.terminal_line_height) * 100.).round() / 100.),
@@ -404,6 +430,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "terminal.notifications" => json!(s.terminal_notifications),
         "terminal.copyOnSelection" => json!(s.terminal_copy_on_selection),
         "workbench.panel.openFromMaximized" => json!(s.panel_open_from_maximized),
+        "workbench.panel.firstTerminalMaximized" => json!(s.panel_first_terminal_maximized),
         "terminal.defaultProfile" => json!(s.terminal_default_profile.clone().unwrap_or_default()),
         "terminal.warnMultilinePaste" => json!(s.terminal_warn_multiline.as_str()),
         "terminal.shell" => json!(s.terminal_shell.clone().unwrap_or_default()),

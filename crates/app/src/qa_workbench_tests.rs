@@ -369,6 +369,26 @@ fn qa_keyboard_next_previous_tab(cx: &mut TestAppContext) {
     );
 }
 
+/// `?` in the palette lists its modes; choosing one puts its character in the box.
+#[gpui::test]
+fn the_palette_question_mark_lists_its_modes_and_enters_one(cx: &mut TestAppContext) {
+    let dir = project("palette-help");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    cx.simulate_keystrokes("cmd-p");
+    cx.run_until_parked();
+    cx.simulate_input("?");
+    cx.run_until_parked();
+    let labels = wb.read_with(cx, |wb, cx| wb.overlay_labels(cx)).unwrap();
+    for wanted in ["Run a command", "Go to a line in this file", "Go to a symbol in the workspace", "Go to a symbol in this file"] {
+        assert!(labels.iter().any(|l| l == wanted), "{wanted:?} missing from {labels:?}");
+    }
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    let labels = wb.read_with(cx, |wb, cx| wb.overlay_labels(cx)).unwrap();
+    assert!(labels.iter().any(|l| l.contains("Toggle Panel")), "the first row entered the command mode: {labels:?}");
+}
+
 /// The palette should contain the core project/workbench commands VS Code users
 /// reach for. Missing ones are listed in the failure message.
 #[gpui::test]

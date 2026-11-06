@@ -315,6 +315,7 @@ Color theme of the whole window and the editor
 Color theme: {}	
 Colored file glyphs, folders with only their arrow; names line up	
 Colorful Folders	
+Column where lines wrap with wordWrapColumn or bounded	
 Column {0}: {1}	
 Columns	
 Command Palette	
@@ -602,6 +603,7 @@ Debug: Step Over
 Debug: Stop	
 Debug: Stop All	
 Debug: Toggle Breakpoint	
+Debugger	
 Dec	
 Decoded here only: nothing is sent or logged	
 Default terminal profile	
@@ -767,6 +769,7 @@ Editor: Insert Date
 Editor: Insert Date and Time (UTC)	
 Editor: Insert UUID	
 Editor: Join Lines	
+Editor: Move Last Selection to Next Find Match	
 Editor: Move Line Down	
 Editor: Move Line Up	
 Editor: Peek Definition	
@@ -780,6 +783,7 @@ Editor: Replace
 Editor: Reverse Lines	
 Editor: Run Code Lens on This Line	
 Editor: Save	
+Editor: Save without Formatting	
 Editor: Select All	
 Editor: Select All Occurrences of Find Match	
 Editor: Select to Bracket	
@@ -870,6 +874,7 @@ Extensions: Show Extensions
 External image: open the link to view it.	
 F4 steps through the search results, ⇧F4 goes back.	
 Failed with code {}: {}	
+Failing tests	
 Favorites	
 Favorites: Show Favorites…	
 Favorites: Toggle Active File	
@@ -914,10 +919,12 @@ File: New Window
 File: Open Active File With…	
 File: Open Active File as Hex	
 File: Open Active File as Workspace	
+File: Open Recent File…	
 File: Open Workspace from File…	
 File: Refresh Explorer	
 File: Reload Workspace	
 File: Remove Folder from Workspace…	
+File: Reopen with Encoding…	
 File: Reveal Active File in Explorer	
 File: Revert File	
 File: Save All	
@@ -925,6 +932,7 @@ File: Save As…
 File: Save Workspace	
 File: Save Workspace As…	
 File: Save a Copy to This Computer…	
+File: Save with Encoding…	
 File: Toggle Auto Save	
 Files	
 Files are still unsaved. Resolve editor errors, then start debugging again.	
@@ -1072,6 +1080,9 @@ Go to Symbol in Editor…
 Go to Symbol in File…	
 Go to Symbol in Workspace…	
 Go to Type Definition	
+Go to a line in this file	
+Go to a symbol in the workspace	
+Go to a symbol in this file	
 Go to file	
 Go to line {0}, column {1}	
 Go to line {}	
@@ -1258,6 +1269,7 @@ Learn
 Leave out animations: the blinking cursor, spinners and sliding panels (auto: follow the system setting)	
 Left is writable	
 Left ↔ Right	
+Let programs in the terminal erase its scrollback (some full-screen tools do on every redraw, and the history is lost)	
 Let programs in the terminal write to the clipboard	
 Let the language server format while typing }, ; or Enter	
 Let {0} act as your GitHub account {1}?	
@@ -1280,7 +1292,7 @@ Line {} changed
 Line {}: not committed yet	
 Line {}: {} · {}, {} · {}	
 Lines deleted above line {}	
-Lines kept in terminal history	
+Lines kept in terminal history. More than 50,000 can use a lot of memory and slow down scrolling and search	
 Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)	
 Link copied.	
 List	
@@ -1502,6 +1514,7 @@ No profiles or shells were found on this machine.
 No published ports	
 No quick fixes here	
 No recent folders	
+No recently opened files	
 No references found	
 No results	
 No results in {} file.|No results in {} files.	
@@ -1638,6 +1651,7 @@ Open a folder to debug it.
 Open a folder to find its tests.	
 Open a folder to search in it.	
 Open a project, connect to a host, or switch workspace	
+Open a recent file	
 Open a terminal with…	
 Open a view in a side bar first.	
 Open a view in the side bar first.	
@@ -1934,6 +1948,8 @@ Renamed {0} to {1}
 Rename…	
 Renaming {}…	
 Reopen Closed Editor	
+Reopen the active file with encoding…	
+Reopen with Encoding…	
 Replace	
 Replace (↵)	
 Replace All	
@@ -2015,6 +2031,7 @@ Run Task…
 Run Test	
 Run Tests in File	
 Run Without Debugging	
+Run a command	
 Run and Debug	
 Run and Debug (⌃⇧D)	
 Run task	
@@ -2050,7 +2067,9 @@ Save as
 Save copy	
 Save files automatically	
 Save or close the files with unsaved changes first.	
+Save or revert your changes first: reopening reads the file again	
 Save project as	
+Save the active file with encoding…	
 Save the file first: a tab with unsaved changes cannot move to another window.	
 Save the file to finish, then stage it in Source Control.	
 Save theme	
@@ -2079,7 +2098,7 @@ Search commits
 Search commits (message, author, hash)	
 Search containers, images or projects…	
 Search files by name	
-Search files by name (> for commands, : for line, # for symbols)	
+Search files by name (> commands, : line, # symbols, ? help)	
 Search installed extensions	
 Search log messages or timestamps…	
 Search results	
@@ -2289,7 +2308,9 @@ Synced
 Syncing…	
 TOML dates were turned into text.	
 TOML needs a table at the top level, but this document is a {}	
+Tab Moves Focus	
 Tab actions	
+Tab and Shift+Tab move the focus out of the editor. Click to turn off.	
 Tabs	
 Tag name, then an optional message for an annotated tag	
 Tag name, then an optional message for an annotated tag (at HEAD)	
@@ -2405,6 +2426,7 @@ The file is empty.
 The file is not open any more.	
 The file is not tracked by Git.	
 The file is too large for an outline.	
+The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
 The host stopped responding. Installation files were retained because a process may still be running. Reconnect and inspect the destination before retrying.	
@@ -2504,6 +2526,7 @@ This debug adapter has no exception breakpoints.
 This engine runs Windows containers. Editing requires a Linux container; Windows container editing needs a separate Windows agent. Container logs remain available.	
 This extension has no README.	
 This extension is no longer in the registry.	
+This file cannot be read as {}	
 This file has merge conflicts: resolve them first (Source Control marks it resolved when staged)	
 This file has no commits or saved copies yet.	
 This file is already on this computer. Use Save As instead.	
@@ -2537,12 +2560,13 @@ This view is not available.
 This window is installing an update. You can close it in a few seconds.	
 Thursday	
 Timeline	
+Title bar	
 To customize Run and Debug, create a launch configuration.	
 Toggle Bookmark	
 Toggle Breakpoint	
 Toggle Line Comment	
 Toggle Panel	
-Toggle Panel (⌘J)	
+Toggle Secondary Side Bar	
 Toggle Sidebar	
 Toggle Terminal	
 Toggle a break-on-exception filter	
@@ -2692,6 +2716,7 @@ View: Split Editor Left
 View: Split Editor Up	
 View: Switch Editor…	
 View: Testing	
+View: Toggle Activity Bar Visibility	
 View: Toggle Breadcrumbs	
 View: Toggle Full Screen	
 View: Toggle Indent Guides	
@@ -2703,7 +2728,9 @@ View: Toggle Panel
 View: Toggle Render Whitespace	
 View: Toggle Secondary Side Bar	
 View: Toggle Sidebar	
+View: Toggle Status Bar Visibility	
 View: Toggle Sticky Scroll	
+View: Toggle Tab Key Moves Focus	
 View: Toggle Word Wrap	
 View: Toggle Zen Mode	
 View: Zoom In	
@@ -2759,7 +2786,7 @@ Workspace: Trust This Folder
 Workspace: {} folder in the Explorer.|Workspace: {} folders in the Explorer.	
 Worktree locked: {}	
 Worktrees	
-Wrap long lines at the window edge	
+Wrap long lines: at the window edge (on), at a column (wordWrapColumn) or at whichever comes first (bounded)	
 Wrapped lines	
 Write to the clipboard	
 YAML schema for {}	
@@ -3020,6 +3047,7 @@ syntax error at “{}”
 tag	
 task	
 terminal name	
+terminal.scrollback: {} lines can use hundreds of megabytes per terminal and slow down scrolling and search (up to {} is comfortable); applied as set	
 test failed: {}	
 test panicked: {}	
 the GitHub token contains characters that cannot be sent	
@@ -3321,6 +3349,7 @@ your words
 {} removed	
 {} result in 1 file|{} results in 1 file	
 {} result|{} results	
+{} running	
 {} skipped	
 {} space|{} spaces	
 {} still has merge conflict markers. Resolve them (Accept Current / Incoming / Both) and save first.	

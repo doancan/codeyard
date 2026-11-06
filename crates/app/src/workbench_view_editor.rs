@@ -972,6 +972,71 @@ impl Workbench {
         }
     }
 
+    /// The layout switches at the right end of the title bar: side bar, panel (terminal) and secondary side bar. Each
+    /// stays pressed while what it shows is open.
+    pub(super) fn layout_switches(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
+        let switch = |id: &'static str, glyph: &'static str, tip: SharedString, on: bool, cx: &Context<Self>| {
+            div()
+                .id(id)
+                .relative()
+                .debug_selector(move || id.into())
+                .child(a11y::part_frame(a11y::Part::Control(id), cx))
+                .size(px(22.))
+                .flex()
+                .flex_none()
+                .items_center()
+                .justify_center()
+                .rounded(px(theme::radius::MD))
+                .cursor_pointer()
+                .when(on, |d| d.bg(c(p.surface_active)))
+                .hover(|d| d.bg(c(p.surface_hover)))
+                .child(icon(glyph, layout::ICON, if on { p.text } else { p.text_muted }))
+                .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone())).into())
+        };
+        let shortcut = |action: Box<dyn gpui::Action>, cx: &Context<Self>| Command { label: String::new(), run: Run::Action(action) }.shortcut(cx);
+        let tip = |label: &str, key: Option<String>| -> SharedString {
+            match key {
+                Some(k) => format!("{label} ({k})").into(),
+                None => label.to_string().into(),
+            }
+        };
+        let side_tip = tip(crate::i18n::t("Toggle Sidebar"), shortcut(Box::new(ToggleSidebar), cx));
+        let panel_tip = tip(crate::i18n::t("Toggle Panel"), shortcut(Box::new(TogglePanel), cx));
+        let secondary_tip = tip(crate::i18n::t("Toggle Secondary Side Bar"), shortcut(Box::new(ToggleSecondarySideBar), cx));
+        let beside = self.chrome.panel_dock.beside();
+        div()
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_end()
+            .gap(px(2.))
+            .pr(px(theme::SPACE[3]))
+            .child(
+                switch("tb-sidebar", "panel-left", side_tip.clone(), self.chrome.panel.is_some(), cx)
+                    .child(self.ctl(crate::i18n::t("Title bar"), "tb-sidebar", side_tip, cx, |this, w, cx| this.toggle_sidebar(&ToggleSidebar, w, cx)))
+                    .on_click(cx.listener(|this, _, w, cx| {
+                        cx.stop_propagation();
+                        this.toggle_sidebar(&ToggleSidebar, w, cx);
+                    })),
+            )
+            .child(
+                switch("tb-panel", if beside { "panel-right" } else { "panel-bottom" }, panel_tip.clone(), self.chrome.panel_open, cx)
+                    .child(self.ctl(crate::i18n::t("Title bar"), "tb-panel", panel_tip, cx, |this, w, cx| this.toggle_panel(&TogglePanel, w, cx)))
+                    .on_click(cx.listener(|this, _, w, cx| {
+                        cx.stop_propagation();
+                        this.toggle_panel(&TogglePanel, w, cx);
+                    })),
+            )
+            .child(
+                switch("tb-secondary", "panel-right", secondary_tip.clone(), self.chrome.secondary.is_some(), cx)
+                    .child(self.ctl(crate::i18n::t("Title bar"), "tb-secondary", secondary_tip, cx, |this, _, cx| this.toggle_secondary(cx)))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.toggle_secondary(cx);
+                    })),
+            )
+    }
+
     pub(super) fn title_bar(&self, window: &Window, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
         let root = self.roots.primary.read(cx).root().map(|r| ui::file_name(r).to_string());
         let label: SharedString = self.command_center_label(cx).into();
@@ -1001,6 +1066,7 @@ impl Workbench {
         let (can_back, can_forward) = (!self.nav.back.is_empty(), !self.nav.forward.is_empty());
         div()
             .id("title-bar")
+            .debug_selector(|| "title-bar".into())
             .h(px(layout::TITLEBAR_H))
             .flex_none()
             .flex()
@@ -1067,7 +1133,7 @@ impl Workbench {
                             .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label)),
                     ),
             )
-            .child(div().w(px(traffic_light_room(window.ui_scale()))).flex_none())
+            .child(div().min_w(px(traffic_light_room(window.ui_scale()))).flex_none().flex().justify_end().child(self.layout_switches(p, cx)))
     }
 
     /// An action row on the welcome screen: icon, name, shortcut (from the keymap).

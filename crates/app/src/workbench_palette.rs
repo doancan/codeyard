@@ -13,6 +13,17 @@ pub(super) fn search_keywords(label: &str) -> &'static str {
     }
 }
 
+/// The modes the palette's first character selects: (the character, what it does). `?` lists them.
+pub(super) fn palette_modes() -> [(&'static str, String); 4] {
+    use crate::i18n::t;
+    [
+        (">", t("Run a command").to_string()),
+        (":", t("Go to a line in this file").to_string()),
+        ("#", t("Go to a symbol in the workspace").to_string()),
+        ("@", t("Go to a symbol in this file").to_string()),
+    ]
+}
+
 impl Workbench {
     pub(super) fn quick_open(&mut self, _: &QuickOpen, window: &mut Window, cx: &mut Context<Self>) {
         self.open_palette("", window, cx);
@@ -60,6 +71,7 @@ impl Workbench {
             Command::action("View: Toggle Full Screen", ToggleFullScreen),
             Command::action("Files: Open Folder…", OpenFolder),
             Command::action("Editor: Save", editor::Save),
+            Command::action("Editor: Save without Formatting", editor::SaveWithoutFormatting),
             Command::action("Editor: Close", CloseEditor),
             Command::action("Editor: Undo", editor::Undo),
             Command::action("Editor: Redo", editor::Redo),
@@ -75,6 +87,9 @@ impl Workbench {
             Command::action("View: Zoom Out", ZoomOut),
             Command::action("View: Reset Zoom", ZoomReset),
             Command::action("View: Toggle Word Wrap", ToggleWordWrap),
+            Command::action("View: Toggle Tab Key Moves Focus", ToggleTabFocusMode),
+            Command::action("View: Toggle Activity Bar Visibility", ToggleActivityBar),
+            Command::action("View: Toggle Status Bar Visibility", ToggleStatusBar),
             Command::action("Editor: Fold", editor::FoldRegion),
             Command::action("Editor: Fold Level 1", editor::FoldLevel1),
             Command::action("Editor: Fold Level 2", editor::FoldLevel2),
@@ -101,6 +116,7 @@ impl Workbench {
             Command::action("Editor: Add Line Comment", editor::AddLineComment),
             Command::action("Editor: Remove Line Comment", editor::RemoveLineComment),
             Command::action("Editor: Add Selection to Previous Find Match", editor::AddSelectionToPreviousFindMatch),
+            Command::action("Editor: Move Last Selection to Next Find Match", editor::MoveLastSelectionToNextFindMatch),
             Command::action("Go: Next Change", editor::NextChange),
             Command::action("Editor: Peek Definition", editor::PeekDefinition),
             Command::action("Editor: Run Code Lens on This Line", editor::RunCodeLens),
@@ -257,6 +273,9 @@ impl Workbench {
             Command::action("File: Save As…", SaveAs),
             Command::action("File: Save a Copy to This Computer…", SaveLocalCopy),
             Command::action("View: Reopen Closed Editor", ReopenClosedEditor),
+            Command::action("File: Open Recent File…", OpenRecentFile),
+            Command::action("File: Reopen with Encoding…", ReopenWithEncoding),
+            Command::action("File: Save with Encoding…", SaveWithEncoding),
             Command::action("Go: Back", GoBack),
             Command::action("Go: Forward", GoForward),
             Command::action("Editor: Trigger Suggest", editor::TriggerCompletion),
@@ -521,16 +540,17 @@ impl Workbench {
             _ => self.active_editor().map_or(0, |e| e.read(cx).line_count()),
         };
         let root = self.roots.primary.read(cx).root().map(str::to_string);
-        let placeholder = if root.is_some() {
-            crate::i18n::t("Search files by name (> for commands, : for line, # for symbols)")
-        } else {
-            crate::i18n::t("Type > for commands")
-        };
+        let placeholder =
+            if root.is_some() { crate::i18n::t("Search files by name (> commands, : line, # symbols, ? help)") } else { crate::i18n::t("Type > for commands") };
         let sources = vec![
             PickSource::paths(""),
             PickSource::List { prefix: ">", items },
             PickSource::Line { prefix: ":", max: max_line },
             PickSource::Remote { prefix: "#", items: Vec::new(), status: SYMBOL_HINT.into() },
+            PickSource::List {
+                prefix: "?",
+                items: palette_modes().into_iter().map(|(key, about)| PickItem { label: about.into(), detail: None, keys: Some(key.into()) }).collect(),
+            },
         ];
         let picker = cx.new(|cx| Picker::new(sources, placeholder, query, None, cx).with_aliases(1, aliases));
 
@@ -671,6 +691,14 @@ impl Workbench {
                     window,
                     cx,
                 );
+            }
+            (OverlayKind::RecentFiles(paths), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let path = paths[*index].clone();
+                self.close_overlay(window, cx);
+                self.open_file(path, window, cx);
+            }
+            (OverlayKind::RecentFiles(_), PickerEvent::Dismiss) => {
+                self.close_overlay(window, cx);
             }
             (OverlayKind::NewExtensionKind, PickerEvent::Dismiss) => {
                 self.close_overlay(window, cx);
@@ -886,6 +914,8 @@ impl Workbench {
                         EditorOpt::Eol { crlf } => e.set_line_ending(crlf, cx),
                         EditorOpt::Indent(n) => e.set_indent(n, cx),
                         EditorOpt::Convert { to_tabs } => e.convert_indentation(to_tabs, cx),
+                        EditorOpt::Reopen(enc) => e.reopen_with_encoding(enc, cx),
+                        EditorOpt::SaveIn(enc) => e.save_with_encoding(enc, cx),
                     });
                 }
             }
@@ -1102,6 +1132,16 @@ impl Workbench {
                 self.remember_command(label);
                 self.close_overlay(window, cx);
                 self.run_command(run, window, cx);
+            }
+            // The help rows: each one names a mode of the palette and takes you into it.
+            (OverlayKind::Palette { .. }, PickerEvent::Confirm(Pick::Item { source: 4, index })) => {
+                let key = palette_modes()[*index].0;
+                if key == "@" {
+                    self.close_overlay(window, cx);
+                    window.dispatch_action(Box::new(GoToSymbol), cx);
+                } else if let Some(Overlay { picker, .. }) = &self.overlay {
+                    picker.update(cx, |p, cx| p.set_query(key.to_string(), cx));
+                }
             }
             (OverlayKind::Palette { .. }, PickerEvent::Query(q)) => {
                 let q = q.clone();

@@ -263,6 +263,11 @@ fn an_extension_formatter_formats_on_save(cx: &mut TestAppContext) {
     wait_for(cx, "the formatted file on disk", |_| std::fs::read_to_string(&file).unwrap_or_default() == "# top\na = 1\nb = 2\n");
     assert!(!ed.read_with(cx, |e, _| e.is_dirty()));
 
+    // "Save without Formatting" writes the text as typed: the line below would be changed by the formatter.
+    ed.update(cx, |e, cx| e.insert_at_for_test(0, "x   =3  \n", cx));
+    ed.update(cx, |e, cx| e.save_without_formatting(cx));
+    wait_for(cx, "the unformatted file on disk", |_| std::fs::read_to_string(&file).unwrap_or_default() == "x   =3  \n# top\na = 1\nb = 2\n");
+
     // `editor.formatters` can hand the language back to the language server: then the extension is not asked.
     std::fs::write(cfg.join("settings.jsonc"), r#"{ "editor.formatOnSave": true, "editor.formatters": { "toml": "lsp" } }"#).unwrap();
     wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));

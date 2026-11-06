@@ -244,8 +244,13 @@ impl Workbench {
 
     /// New terminal in the given folder running `launch`.
     pub(super) fn new_terminal_launch(&mut self, cwd: Option<String>, launch: Launch, window: &mut Window, cx: &mut Context<Self>) {
+        let first = self.terminals.is_empty() && !self.chrome.panel_max;
         let Some(term) = self.spawn_terminal(cwd, launch, window, cx) else { return };
         self.terminals.push(term);
+        // The window's first terminal opens full size; the panel keeps its own size from the second one on.
+        if first && cx.global::<Settings>().panel_first_terminal_maximized {
+            self.chrome.panel_max = true;
+        }
         // Saved right away: a crash or a killed app must not lose a terminal opened since the last save.
         self.persist_terminals(cx);
         self.active_terminal = self.terminals.len() - 1;
@@ -1018,3 +1023,45 @@ use super::term_daemon_glue::saved_terminals_key;
 #[cfg(all(test, unix))]
 #[path = "workbench_terminal_restore_tests.rs"]
 mod restore_tests;
+
+impl Workbench {
+    /// What runs in the project, for the resources strip: the debugger, commands running in terminals, failing tests.
+    pub(super) fn run_info(&self, cx: &App) -> crate::resource_monitor::RunInfo {
+        use crate::resource_monitor::{DebugPhase, RunInfo};
+        let debug = self.dbg.cur().and_then(|d| match d.status {
+            super::debug::DebugStatus::Starting => Some(DebugPhase::Starting),
+            super::debug::DebugStatus::Running => Some(DebugPhase::Running),
+            super::debug::DebugStatus::Stopped(_) => Some(DebugPhase::Paused),
+            super::debug::DebugStatus::Ended(_) => None,
+        });
+        let live = self.terminals.iter().filter(|t| !t.read(cx).has_exited());
+        let (terminals, commands) =
+            live.fold((0, 0), |(all, busy), t| (all + 1, busy + usize::from(matches!(t.read(cx).activity(), crate::terminal::Activity::Running(_)))));
+        RunInfo { debug, commands, terminals, failed_tests: self.failed_test_count() }
+    }
+}
+
+#[cfg(test)]
+mod first_terminal_tests {
+    use super::*;
+    use gpui::TestAppContext;
+
+    #[gpui::test]
+    fn the_first_terminal_opens_maximized_and_later_ones_keep_the_size(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        wb.update_in(cx, |wb, window, cx| wb.new_terminal(&NewTerminal, window, cx));
+        assert!(wb.read_with(cx, |wb, _| wb.chrome.panel_max), "the window's first terminal fills the editor area");
+        wb.update_in(cx, |wb, window, cx| wb.toggle_maximized_panel(window, cx));
+        assert!(!wb.read_with(cx, |wb, _| wb.chrome.panel_max));
+        wb.update_in(cx, |wb, window, cx| wb.new_terminal(&NewTerminal, window, cx));
+        assert!(!wb.read_with(cx, |wb, _| wb.chrome.panel_max), "a second terminal does not maximize again");
+    }
+
+    #[gpui::test]
+    fn the_setting_turns_it_off(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        cx.update(|_, cx| cx.global_mut::<Settings>().panel_first_terminal_maximized = false);
+        wb.update_in(cx, |wb, window, cx| wb.new_terminal(&NewTerminal, window, cx));
+        assert!(!wb.read_with(cx, |wb, _| wb.chrome.panel_max));
+    }
+}

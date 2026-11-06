@@ -46,6 +46,8 @@ actions!(
 
 #[path = "terminal_attach.rs"]
 mod attach;
+#[path = "terminal_clear.rs"]
+mod clear;
 #[path = "terminal_colors.rs"]
 mod colors;
 #[path = "terminal_find.rs"]
@@ -69,6 +71,10 @@ mod selection;
 #[cfg(test)]
 #[path = "terminal_scroll_tests.rs"]
 mod scroll_tests;
+
+#[cfg(test)]
+#[path = "terminal_redraw_tests.rs"]
+mod redraw_tests;
 
 pub enum TerminalEvent {
     TitleChanged,
@@ -99,9 +105,12 @@ pub enum TerminalEvent {
     Kept,
 }
 
-/// Most scrollback lines (`terminal.scrollback`): 50,000 lines of 200 columns already take about 200 MB, times up to
-/// eight terminals.
-pub const SCROLLBACK_MAX: usize = 50_000;
+/// Most scrollback lines (`terminal.scrollback`): 50,000 lines of 200 columns already take about 200 MB per terminal,
+/// times up to eight terminals, so the settings say so above `SCROLLBACK_COMFORT`.
+pub const SCROLLBACK_MAX: usize = 200_000;
+
+/// Scrollback up to here (the default) costs little; more is allowed, with a warning about memory and speed.
+pub const SCROLLBACK_COMFORT: usize = 50_000;
 
 /// What a new terminal runs.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -229,6 +238,10 @@ pub struct TerminalView {
     /// Grid origin and cell width from the last paint (for mouse → cell).
     grid: (Point<Pixels>, Pixels),
     selecting: bool,
+    /// Programs may erase the scrollback (`terminal.allowClearHistory`).
+    allow_clear_history: bool,
+    /// The start of an erase sequence that a read ended in the middle of (terminal_clear.rs).
+    clear_carry: Vec<u8>,
     /// "Hold Shift to select": shown for a moment when a drag went to a program that reads the mouse; when it last showed.
     shift_hint: bool,
     shift_hint_last: Option<std::time::Instant>,
@@ -300,7 +313,9 @@ impl TerminalView {
 
     /// Clears an output-only terminal for a new run.
     pub fn reset_output(&mut self, cx: &mut Context<Self>) {
-        self.feed(b"\x1b[3J\x1b[H\x1b[2J");
+        // Our own clear, not a program's: it takes the history along.
+        // Screen first, then the history: the other way round the cleared screen would end up in it.
+        self.feed_chunk(b"\x1b[H\x1b[2J\x1b[3J");
         cx.notify();
     }
 
@@ -334,6 +349,8 @@ impl TerminalView {
             size,
             grid: (Point::default(), px(8.)),
             selecting: false,
+            allow_clear_history: cx.global::<crate::settings::Settings>().terminal_allow_clear_history,
+            clear_carry: Vec::new(),
             shift_hint: false,
             shift_hint_last: None,
             find: None,
@@ -351,7 +368,9 @@ impl TerminalView {
         }
     }
 
-    fn feed(&mut self, data: &[u8]) {
+    /// Bytes from the program. A full-screen clear (`CSI 2 J`) wipes the screen without pushing it into the history
+    /// (terminal_clear.rs); everything else goes to the parser as it comes.
+    fn feed_chunk(&mut self, data: &[u8]) {
         // TUIs that redraw in place erase the selected lines; the selection follows its text (terminal_selection.rs).
         let kept = self.keep_selection();
         // Each shell-integration sequence is noted where it ends, with the cursor where the parser left it.
@@ -1331,6 +1350,7 @@ impl Render for TerminalView {
             let s = cx.global::<crate::settings::Settings>();
             metrics(s.terminal_font_size, s.terminal_line_height)
         };
+        self.allow_clear_history = cx.global::<crate::settings::Settings>().terminal_allow_clear_history;
         // A changed `terminal.scrollback` applies to open terminals too.
         let scrollback = cx.global::<crate::settings::Settings>().terminal_scrollback.min(SCROLLBACK_MAX);
         if scrollback != self.scrollback {

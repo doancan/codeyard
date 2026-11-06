@@ -46,6 +46,7 @@ Guides**, **Inlay Hints** and **File: Toggle Auto Save**, which change the runni
 | --- | --- | --- |
 | Go to file | ⌘P | Ctrl+P |
 | Command palette | ⇧⌘P | Ctrl+Shift+P |
+| Palette modes: `>` commands, `:` line, `#` symbol in the workspace, `@` symbol in the file, `?` lists them | ⌘P, then the character | Ctrl+P, then the character |
 | Go to line | ⌃G | Ctrl+G |
 | Color theme | ⌘K ⌘T | Ctrl+K Ctrl+T |
 | Toggle sidebar | ⌘B | Ctrl+B |
@@ -88,11 +89,15 @@ Guides**, **Inlay Hints** and **File: Toggle Auto Save**, which change the runni
 | Quick fix | ⌘. | Ctrl+. |
 | Format document | ⇧⌥F | Shift+Alt+F |
 | Save all | ⌥⌘S | Ctrl+Alt+S |
+| Save without formatting (no format on save, no code actions on save) | ⌘K S | Ctrl+K S |
 | Interface zoom in / out / reset to 100% | ⌘= / ⌘- / ⌘0 | Ctrl+= / Ctrl+- / Ctrl+0 |
 | Back / forward | ⌃- / ⌃⇧- | Ctrl+Alt+- / Ctrl+Shift+- |
 | Reopen closed tab | ⇧⌘T | Ctrl+Shift+T |
 | New file / save as / new window | ⌘N / ⇧⌘S / ⇧⌘N | Ctrl+N / Ctrl+Shift+S / Ctrl+Shift+N |
 | Word wrap | ⌥Z | Alt+Z |
+| Go to tab 1 / the last tab (⌃1 … ⌃8 for tabs 1 to 8) | ⌃1 / ⌃9 | Alt+1 / Alt+9 |
+| Tab key moves focus (accessibility; shown in the status bar while on) | ⌃⇧M | Ctrl+Shift+M |
+| Move the last selection to the next match | ⌘K ⇧⌘D | Ctrl+K Ctrl+Shift+D |
 | Fold / unfold / fold all / unfold all | ⌥⌘[ / ⌥⌘] / ⌘K ⌘0 / ⌘K ⌘J | Ctrl+Alt+[ / ] / Ctrl+K Ctrl+0 / J |
 | Select all occurrences | ⇧⌘L | Ctrl+Shift+L |
 | Expand / shrink selection | ⌃⇧⌘→ / ⌃⇧⌘← | (rebind) |
@@ -288,7 +293,7 @@ scroll sideways (trackpad or ⇧+wheel). The minimap on the right is on by defau
 
 **Folding** is by indentation (works in every language): hover the gutter for the arrows.
 Folds belong to the view, so groups displaying the same document can fold differently. **Word wrap**
-breaks at spaces at the window edge; ↑↓ move by screen row. Sort lines, upper/lower case,
+breaks at spaces at the window edge, or at a column with `"editor.wordWrap": "wordWrapColumn"` / `"bounded"` and `editor.wordWrapColumn`; ↑↓ move by screen row. Sort lines, upper/lower case,
 change line endings and indentation (click them in the status bar) are in the palette.
 With the same file open in several groups, each group has its own cursors, scroll and find bar.
 Edits and undo belong to the shared document.
@@ -408,6 +413,11 @@ A file that isn't valid UTF-8 is read as Windows-1254 (Turkish) by default; chan
 `"files.fallbackEncoding": "iso88599"` or `"iso88591"`. Files are saved in the encoding
 they were opened with (shown in the status bar). If you type a character that encoding
 can't hold, saving stops with a message instead of writing a broken file.
+Click the encoding in the status bar (or run *File: Reopen with Encoding…*) when a file shows
+the wrong letters: the same bytes are read again as the encoding you pick, and a file that is
+not valid in it stays as it is. *File: Save with Encoding…* writes the text in another encoding
+right away, and refuses if a character has no equivalent there. Reopening needs the file to be
+unchanged, so nothing you typed is lost.
 
 **Large files:** files over 32 MB open read-only, a few hundred lines at a time (the line
 index lives in the agent), so a 500 MB log opens in about the memory of a small one.
@@ -1596,6 +1606,12 @@ Variables: `@name = value`, `{{$guid}}`, `{{$timestamp}}`, `{{$randomInt min max
 server** (so `localhost` services work); `"http.runOn": "local"` sends it from your computer instead.
 
 ## Terminal
+
+**History.** Each terminal keeps `terminal.scrollback` lines (50,000 by default; up to 200,000, with a warning above 50,000
+because every line costs memory and slows scrolling and search). A program that clears the screen to redraw it does not push
+the old frames into the history, and it cannot erase the history with `CSI 3 J` unless `terminal.allowClearHistory` is on.
+*Terminal: Clear* empties the history on purpose. The first terminal of a window opens maximized
+(`workbench.panel.firstTerminalMaximized`); the panel's size button restores it.
 
 **Images over SSH.** Copy an image and press Ctrl+V in a remote terminal (⌘V on macOS). Codeyard saves it as a
 private temporary file on the remote host and pastes its path, so programs running there, such as command-line assistants, can attach it. Images are
