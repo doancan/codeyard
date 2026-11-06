@@ -507,6 +507,7 @@ actions!(
         ShowWelcome,
         OpenSettingsPage,
         CloneRepository,
+        GitInitRepository,
         OpenMarkdownPreview,
         CompareWithClipboard,
         CompareWithSaved,
@@ -1110,6 +1111,8 @@ impl Workbench {
                     }
                 }
                 crate::scm::ScmEvent::AddWorktree => this.git_add_worktree(window, cx),
+                crate::scm::ScmEvent::InitRepository => this.git_init(cx),
+                crate::scm::ScmEvent::CloneRepository => this.clone_repository(&crate::workbench::CloneRepository, window, cx),
                 crate::scm::ScmEvent::MoreActions(position) => this.open_scm_menu(*position, window, cx),
                 crate::scm::ScmEvent::GraphMenu(position) => this.open_graph_menu(*position, window, cx),
                 // --- git-sync ---

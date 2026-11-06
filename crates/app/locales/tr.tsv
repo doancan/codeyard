@@ -3641,3 +3641,13 @@ Your changes are in the stash, but the switch failed: {}	Değişiklikleriniz sta
 Your uncommitted changes would be overwritten by the switch. They go into a stash first; Git: Pop Latest Stash brings them back.	Commit edilmemiş değişikliklerinizin üzerine geçişte yazılırdı. Önce stash'e alınırlar; Git: Pop Latest Stash onları geri getirir.
 The server no longer accepts an account password: use a personal access token as the password (or sign in with the GitHub CLI: gh auth login).	Sunucu artık hesap parolasını kabul etmiyor: parola yerine kişisel erişim jetonu kullanın (ya da GitHub CLI ile giriş yapın: gh auth login).
 Username	Kullanıcı adı
+{} conflicts with your changes: resolve the conflicts in Source Control. The stash is kept until you drop it.	{} değişikliklerinizle çakışıyor: çatışmaları Kaynak Denetimi'nde çözün. Stash siz silene kadar saklanır.
+There is nothing to commit: no change is staged.	Commit edilecek bir şey yok: hazırlanmış (staged) değişiklik bulunmuyor.
+Git: Initialize Repository	Git: Depoyu Başlat
+Initialized an empty Git repository	Boş bir Git deposu oluşturuldu
+Initializing repository…	Depo başlatılıyor…
+This folder is already a git repository.	Bu klasör zaten bir git deposu.
+{} file still has conflicts: resolve it and stage it first|{} files still have conflicts: resolve them and stage them first	{} dosyada hâlâ çatışma var: çözüp stage'leyin
+Abort	İptal
+Initialize Repository	Depoyu Başlat
+Resolve Conflicts	Çakışmaları Çözün

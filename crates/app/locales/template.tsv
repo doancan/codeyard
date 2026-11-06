@@ -29,6 +29,7 @@ A sign-in answer for {0} carried the code of {1}'s sign-in; it was ignored.
 A sync is already running.	
 A transfer is already running. Wait for it to finish or click it in the status bar to cancel.	
 A window supports up to {} editor groups.	
+Abort	
 Abort Merge	
 Abort Rebase	
 Abort the merge?	
@@ -1035,6 +1036,7 @@ Git: Drop Stash…
 Git: Edit Remote URL…	
 Git: Fetch	
 Git: Fetch (All Remotes)	
+Git: Initialize Repository	
 Git: Merge Branch…	
 Git: Open Changes	
 Git: Open File (HEAD)	
@@ -1176,6 +1178,9 @@ Indexing files…
 Indexing lines…	
 Info	
 Information	
+Initialize Repository	
+Initialized an empty Git repository	
+Initializing repository…	
 Inline	
 Insert a snippet (or type its prefix in the editor and press Tab)	
 Insert the closing bracket or quote	
@@ -1993,6 +1998,7 @@ Reset Zoom
 Reset all settings to the defaults?	
 Reset the Rust setup in settings.jsonc?	
 Reset to {0} ({1})	
+Resolve Conflicts	
 Resolve the file conflict before debugging.	
 Resolved {} conflict|Resolved {} conflicts	
 Resources	
@@ -2528,6 +2534,7 @@ There is no replacement to undo.
 There is no request here. Write METHOD URL on a line, separate requests with ###.	
 There is no task called “{}”.	
 There is no terminal to move.	
+There is nothing to commit: no change is staged.	
 There is nothing to copy.	
 There is nothing to ignore here	
 There isn't enough free disk space for the download. Free some space and try again.	
@@ -2555,6 +2562,7 @@ This file is {0} MB; Data: Query handles files up to {1} MB.
 This file mixes line endings; saving writes all of them as {}, like its first line. Change it in the status bar.	
 This file was deleted on disk. Save it explicitly before debugging.	
 This file was deleted on disk. Saving will create it again.	
+This folder is already a git repository.	
 This folder is not a git repository.	
 This frame cannot be restarted.	
 This image is {0} × {1} pixels, too large to preview.	
@@ -3292,6 +3300,7 @@ your words
 {} command|{} commands	
 {} commit|{} commits	
 {} conflict left|{} conflicts left	
+{} conflicts with your changes: resolve the conflicts in Source Control. The stash is kept until you drop it.	
 {} conflict|{} conflicts	
 {} contains a request that:	
 {} contains code, but codeyard-exthost is missing beside Codeyard	
@@ -3311,6 +3320,7 @@ your words
 {} failed	
 {} file skipped, binary or too large|{} files skipped, binary or too large	
 {} file skipped, parse errors|{} files skipped, parse errors	
+{} file still has conflicts: resolve it and stage it first|{} files still have conflicts: resolve them and stage them first	
 {} files	
 {} forwarded	
 {} gets pre-releases from now on.	

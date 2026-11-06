@@ -1004,6 +1004,23 @@ impl Workbench {
         .detach();
     }
 
+    /// "Git: Initialize Repository": `git init` in the folder that is open, when it is not a repository yet.
+    pub(super) fn git_init(&mut self, cx: &mut Context<Self>) {
+        let Some(root) = self.all_roots(cx).into_iter().next() else {
+            self.notice = Some(Notice::Info(crate::i18n::t("Open a folder first.").into()));
+            cx.notify();
+            return;
+        };
+        if self.git_status().is_some() {
+            self.notice = Some(Notice::Info(crate::i18n::t("This folder is already a git repository.").into()));
+            cx.notify();
+            return;
+        }
+        self.git_task(&crate::i18n::t("Initializing repository…"), cx, move |h| {
+            git::init(h, &root).map(|_| crate::i18n::t("Initialized an empty Git repository").to_string())
+        });
+    }
+
     pub(super) fn git_abort_merge(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
         self.confirm_git(

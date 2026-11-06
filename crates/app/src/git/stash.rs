@@ -65,7 +65,15 @@ pub fn stash_list(host: &dyn Host, root: &str) -> Result<Vec<(String, String)>, 
 
 /// `pop`: apply and drop from the list; otherwise just apply.
 pub fn stash_apply(host: &dyn Host, root: &str, stash: &str, pop: bool) -> Result<(), String> {
-    git_ok(host, root, &["stash", if pop { "pop" } else { "apply" }, "-q", stash]).map(|_| ())
+    let out = super::git(host, root, &["stash", if pop { "pop" } else { "apply" }, "-q", stash])?;
+    if out.ok() {
+        return Ok(());
+    }
+    // Git reports the conflicts on stdout and exits with a bare failure; the files are left conflicted and the stash is kept.
+    if super::has_unmerged(host, root) {
+        return Err(crate::i18n::tf("{} conflicts with your changes: resolve the conflicts in Source Control. The stash is kept until you drop it.", &[&stash]));
+    }
+    Err(super::failure_text(&out))
 }
 
 pub fn stash_drop(host: &dyn Host, root: &str, stash: &str) -> Result<(), String> {
@@ -81,6 +89,36 @@ mod tests {
     fn git_has_staged_stash() -> bool {
         let out = crate::test_git::git().args(["stash", "push", "-h"]).output().unwrap();
         String::from_utf8_lossy(&out.stdout).contains("--staged") || String::from_utf8_lossy(&out.stderr).contains("--staged")
+    }
+
+    #[test]
+    fn a_stash_that_conflicts_says_so_and_is_kept() {
+        let Some((dir, run)) = repo("stashconflict") else { return };
+        let host = host::local();
+        let root = dir.to_string_lossy().into_owned();
+        std::fs::write(dir.join("f.txt"), "stashed\n").unwrap();
+        stash(&host, &root, false).unwrap();
+        std::fs::write(dir.join("f.txt"), "committed after\n").unwrap();
+        run(&["commit", "-q", "-am", "after"]).unwrap();
+        let err = stash_apply(&host, &root, "stash@{0}", true).unwrap_err();
+        assert!(err.starts_with("stash@{0} conflicts with your changes") && err.contains("Source Control"), "{err}");
+        assert_eq!(run(&["stash", "list"]).unwrap().lines().count(), 1, "a conflicted pop keeps the stash");
+        assert!(run(&["status", "--short"]).unwrap().contains("UU f.txt"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_stash_blocked_by_local_edits_says_why() {
+        let Some((dir, run)) = repo("stashblocked") else { return };
+        let host = host::local();
+        let root = dir.to_string_lossy().into_owned();
+        std::fs::write(dir.join("f.txt"), "stashed\n").unwrap();
+        stash(&host, &root, false).unwrap();
+        std::fs::write(dir.join("f.txt"), "local edit\n").unwrap();
+        let err = stash_apply(&host, &root, "stash@{0}", false).unwrap_err();
+        assert!(crate::git::explain(&err).is_some_and(|t| t.contains("commit or stash")), "{err}");
+        assert!(run(&["status", "--short"]).unwrap().contains(" M f.txt"), "the local edit is untouched");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

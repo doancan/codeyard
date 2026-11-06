@@ -46,8 +46,14 @@ pub fn explain(err: &str) -> Option<String> {
         let path = quoted_after(err, "in repository at").unwrap_or("this folder");
         return Some(tf("Git does not trust this folder because another user owns it. If you trust it, run: git config --global --add safe.directory {}", &[&path]));
     }
-    if is_checkout_blocked(err) {
+    if is_checkout_blocked(err) || e.contains("would be overwritten by merge") {
         return Some(t("Local changes would be overwritten: commit or stash them first.").into());
+    }
+    if e.contains("nothing to commit") || e.contains("no changes added to commit") {
+        return Some(t("There is nothing to commit: no change is staged.").into());
+    }
+    if e.contains("no configured push destination") {
+        return Some(t("This repository has no remote. Add one with Git: Add Remote…").into());
     }
     if e.contains("password authentication was removed") {
         return Some(t("The server no longer accepts an account password: use a personal access token as the password (or sign in with the GitHub CLI: gh auth login).").into());
@@ -115,6 +121,13 @@ mod tests {
         }
         assert!(!needs_credentials("fatal: unable to access 'https://x/': Could not resolve host: x"));
         assert!(explain("fatal: unable to access 'https://x/': Could not resolve host: x").unwrap().contains("network"));
+    }
+
+    #[test]
+    fn an_empty_commit_and_a_missing_remote_are_said_in_one_sentence() {
+        assert!(explain("On branch main\n\nnothing to commit, working tree clean").unwrap().starts_with("There is nothing to commit"));
+        assert!(explain("no changes added to commit (use \"git add\" and/or \"git commit -a\")").is_some());
+        assert!(explain("fatal: No configured push destination.\nEither specify the URL").unwrap().contains("Git: Add Remote"));
     }
 
     #[test]

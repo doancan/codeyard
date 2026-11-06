@@ -53,11 +53,11 @@ fn git_stdin(host: &dyn Host, cwd: &str, args: &[&str], stdin: Option<Vec<u8>>) 
 pub(crate) fn git_ok(host: &dyn Host, cwd: &str, args: &[&str]) -> Result<String, String> {
     let out = git(host, cwd, args)?;
     if out.ok() {
-        Ok(out.stdout_str())
-    } else {
-        let err = out.stderr_str();
-        Err(if err.is_empty() { crate::i18n::tf("git {} failed", &[args.first().unwrap_or(&"")]) } else { err })
+        return Ok(out.stdout_str());
     }
+    // Some commands explain a failure on stdout (a stash that conflicts): the text is there when stderr is empty.
+    let text = failure_text(&out);
+    Err(if text.is_empty() { crate::i18n::tf("git {} failed", &[args.first().unwrap_or(&"")]) } else { text })
 }
 
 /// Error message: stderr first (the real cause is there), otherwise stdout.
@@ -68,7 +68,12 @@ fn failure_text(out: &host::ExecOutput) -> String {
 }
 
 /// A fresh repository with one commit, and a runner for git commands in it; `None` without a git binary.
-/// Shared by the tests of every submodule.
+/// Shared by the tests of every submodule (and by the graph's).
+#[cfg(test)]
+pub(crate) fn repo_for_test(name: &str) -> Option<(std::path::PathBuf, impl Fn(&[&str]) -> Option<String>)> {
+    repo(name)
+}
+
 #[cfg(test)]
 fn repo(name: &str) -> Option<(std::path::PathBuf, impl Fn(&[&str]) -> Option<String>)> {
     let dir = std::env::temp_dir().join(format!("codeyard-{name}-{}", std::process::id()));

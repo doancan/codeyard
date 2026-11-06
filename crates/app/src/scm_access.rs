@@ -128,6 +128,10 @@ pub(crate) struct AccessRepo {
 
 impl ScmPanel {
     pub(super) fn commit_state(&self, status: &Status, cx: &App) -> (String, bool) {
+        // Unresolved conflicts: git refuses any commit, so the button says what is left to do instead of "Commit All (2)".
+        if status.changes.iter().any(|c| c.unstaged == Some(Mark::Conflict)) {
+            return (crate::i18n::t("Resolve Conflicts").into(), false);
+        }
         let staged = status.staged().count();
         let changed = status.unstaged().filter(|c| c.unstaged != Some(Mark::Untracked)).count();
         let smart = cx.global::<crate::settings::Settings>().git_smart_commit;

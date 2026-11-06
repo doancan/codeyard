@@ -377,13 +377,21 @@ impl ScmPanel {
     pub(super) fn commit_with(&mut self, flags: git::CommitOptions, then: Option<git::PostCommit>, cx: &mut Context<Self>) {
         let message = self.message.read(cx).text().trim().to_string();
         let Some(st) = &self.status else { return };
-        if message.is_empty() {
+        let conflicts = st.changes.iter().filter(|c| c.unstaged == Some(Mark::Conflict)).count();
+        if conflicts > 0 {
+            self.result = Some((crate::i18n::tn("{} file still has conflicts: resolve it and stage it first", "{} files still have conflicts: resolve them and stage them first", conflicts, &[]).into(), true));
+            cx.notify();
+            return;
+        }
+        // Git has a message ready for a half-done merge, cherry-pick or revert: the box may stay empty.
+        let prepared = matches!(st.op, crate::repos::OpState::Merging | crate::repos::OpState::CherryPicking | crate::repos::OpState::Reverting);
+        if message.is_empty() && !prepared {
             self.result = Some((crate::i18n::t("Type a commit message first").to_string().into(), true));
             cx.notify();
             return;
         }
         let nothing_staged = st.staged().next().is_none();
-        if nothing_staged && !st.unstaged().any(|c| c.unstaged != Some(Mark::Untracked)) {
+        if !prepared && nothing_staged && !st.unstaged().any(|c| c.unstaged != Some(Mark::Untracked)) {
             self.result = Some((crate::i18n::t("Nothing to commit").to_string().into(), true));
             cx.notify();
             return;
@@ -395,7 +403,7 @@ impl ScmPanel {
             return;
         }
         let then = then.or_else(|| git::PostCommit::from_setting(&cx.global::<crate::settings::Settings>().git_post_commit));
-        let opts = git::CommitOptions { all: nothing_staged, ..flags };
+        let opts = git::CommitOptions { all: nothing_staged && !prepared, prepared, ..flags };
         let root = st.root.clone();
         // The message is cleared only when the commit succeeds (if a hook rejects, the user fixes it and retries).
         self.run_then(

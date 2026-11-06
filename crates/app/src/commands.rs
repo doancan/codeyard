@@ -502,6 +502,7 @@ registry! {
     "data.decodeSelection" => wb::DataDecode,
     "workbench.openSettingsPage" => wb::OpenSettingsPage,
     "git.cloneRepository" => wb::CloneRepository,
+    "git.init" => wb::GitInitRepository,
     "workbench.togglePanel" => wb::TogglePanel,
     "workbench.openSettings" => wb::OpenSettings,
     "workbench.openKeybindings" => wb::OpenKeybindings,

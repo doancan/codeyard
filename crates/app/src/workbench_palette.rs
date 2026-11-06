@@ -336,6 +336,7 @@ impl Workbench {
             Command::action("Terminal: Run Selected Text", RunSelectedText),
             Command::action("Go: Last Edit Location", GoToLastEdit),
             Command::action("Git: Clone Repository…", CloneRepository),
+            Command::action("Git: Initialize Repository", GitInitRepository),
             Command::action("Preferences: Open Keyboard Shortcuts", OpenKeybindings),
             Command::action("Preferences: Import Settings and Shortcuts from Another Editor", ImportVsCode),
             Command::action("Preferences: Apply Rust Setup…", settings_ui::ApplyRustSetup),
