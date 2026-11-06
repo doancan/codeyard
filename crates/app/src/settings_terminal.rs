@@ -28,6 +28,9 @@ pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>, obj: &Map<String, Valu
     if let Some(v) = r.number("terminal.scrollSensitivity", 0.1, 10.) {
         s.terminal_scroll_sensitivity = v as f32;
     }
+    if let Some(v) = r.bool("terminal.allowClearHistory") {
+        s.terminal_allow_clear_history = v;
+    }
     if let Some(v) = r.bool("terminal.allowClipboardWrite") {
         s.terminal_allow_clipboard_write = v;
     }

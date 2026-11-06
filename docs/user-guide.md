@@ -1607,6 +1607,12 @@ server** (so `localhost` services work); `"http.runOn": "local"` sends it from y
 
 ## Terminal
 
+**History.** Each terminal keeps `terminal.scrollback` lines (50,000 by default; up to 200,000, with a warning above 50,000
+because every line costs memory and slows scrolling and search). A program that clears the screen to redraw it does not push
+the old frames into the history, and it cannot erase the history with `CSI 3 J` unless `terminal.allowClearHistory` is on.
+*Terminal: Clear* empties the history on purpose. The first terminal of a window opens maximized
+(`workbench.panel.firstTerminalMaximized`); the panel's size button restores it.
+
 **Images over SSH.** Copy an image and press Ctrl+V in a remote terminal (⌘V on macOS). Codeyard saves it as a
 private temporary file on the remote host and pastes its path, so programs running there, such as command-line assistants, can attach it. Images are
 limited to 32 MiB. The file remains available in the remote `/tmp` directory until the host cleans it up.

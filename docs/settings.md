@@ -188,6 +188,7 @@ status bar reports it.
 
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
+| `terminal.allowClearHistory` | `true` / `false` | `false` | Let programs in the terminal erase its scrollback (some full-screen tools do on every redraw, and the history is lost) |
 | `terminal.allowClipboardWrite` | `true` / `false` | `false` | Let programs in the terminal write to the clipboard |
 | `terminal.confirmOnClose` | `running`, `always`, `never` | `never` | Ask before closing a terminal |
 | `terminal.copyOnSelection` | `agents`, `always`, `off` | `agents` | Copy text selected with the mouse: while Claude Code or Codex runs, always, or never |

@@ -95,6 +95,8 @@ pub struct Settings {
     /// Row height as a multiple of the terminal's font size.
     pub terminal_line_height: f32,
     pub terminal_scrollback: usize,
+    /// A program may erase the whole history with `CSI 3 J` (`terminal.allowClearHistory`); off: it cannot.
+    pub terminal_allow_clear_history: bool,
     /// Lines of each terminal's history saved for the next start (`terminal.persistentScrollback`; 0: none).
     pub terminal_persistent_scrollback: usize,
     /// Minutes a window's terminals keep running for the next start after Codeyard quits, crashes or is killed
@@ -354,6 +356,7 @@ impl Default for Settings {
             terminal_font_size: theme::text::CODE.0,
             terminal_line_height: crate::terminal::LINE_HEIGHT,
             terminal_scrollback: 50_000,
+            terminal_allow_clear_history: false,
             terminal_persistent_scrollback: 0,
             terminal_persistent_session_timeout: 5,
             terminal_scroll_sensitivity: 2.,
@@ -1215,6 +1218,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.profiles.linux",
         "terminal.profiles.windows",
         "terminal.allowClipboardWrite",
+        "terminal.allowClearHistory",
         "window.restoreSession",
         "window.startup",
         "lsp.enabled",

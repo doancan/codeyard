@@ -138,6 +138,11 @@ pub const CATALOG: &[Entry] = &[
     e("git.enableSmartCommit", crate::i18n::tr("Commit all tracked changes when nothing is staged"), Kind::Bool),
     // --- structural ---
     e("search.structural.maxFiles", crate::i18n::tr("Most files a structural search reads and parses"), Kind::Number { min: 1., max: 100_000. }),
+    e(
+        "terminal.allowClearHistory",
+        crate::i18n::tr("Let programs in the terminal erase its scrollback (some full-screen tools do on every redraw, and the history is lost)"),
+        Kind::Bool,
+    ),
     e("terminal.allowClipboardWrite", crate::i18n::tr("Let programs in the terminal write to the clipboard"), Kind::Bool),
     e("terminal.fontSize", crate::i18n::tr("Font size of the terminal"), Kind::Number { min: 6., max: 48. }),
     e("terminal.lineHeight", crate::i18n::tr("Terminal row height, as a multiple of the font size"), Kind::Number { min: 1., max: 2. }),
@@ -411,6 +416,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         // --- structural ---
         "search.structural.maxFiles" => json!(s.search_structural_max_files),
         "terminal.allowClipboardWrite" => json!(s.terminal_allow_clipboard_write),
+        "terminal.allowClearHistory" => json!(s.terminal_allow_clear_history),
         "terminal.fontSize" => json!(s.terminal_font_size),
         // Through f64 an f32 1.2 would read 1.2000000476837158: two decimals are all the setting means.
         "terminal.lineHeight" => json!((f64::from(s.terminal_line_height) * 100.).round() / 100.),

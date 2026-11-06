@@ -21,6 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (Alt+1…9), *Toggle Tab Key Moves Focus* (⌃⇧M), and commands to show or hide the activity bar and the status bar.
 - `editor.wordWrap` accepts `wordWrapColumn` and `bounded`, with `editor.wordWrapColumn`.
 
+### Fixed
+
+- Terminal: a program that clears the screen and redraws (a coding assistant, a progress display) no longer pushes every old
+  frame, with its blank lines, into the history. The screen is erased in place, so scrolling up shows what was printed
+  before instead of leftover copies.
+- Terminal: a program can no longer erase the whole scrollback with `CSI 3 J` (several full-screen tools send it on every
+  redraw, which lost the start of a long session). `terminal.allowClearHistory` turns the old behaviour back on; *Terminal: Clear*
+  still empties the history.
+
 ### Changed
 
 - Source Control's badge counts up to 999 changes before it reads "999+" (it stopped at 99+).

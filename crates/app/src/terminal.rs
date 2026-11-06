@@ -46,6 +46,8 @@ actions!(
 
 #[path = "terminal_attach.rs"]
 mod attach;
+#[path = "terminal_clear.rs"]
+mod clear;
 #[path = "terminal_colors.rs"]
 mod colors;
 #[path = "terminal_find.rs"]
@@ -236,6 +238,8 @@ pub struct TerminalView {
     /// Grid origin and cell width from the last paint (for mouse → cell).
     grid: (Point<Pixels>, Pixels),
     selecting: bool,
+    /// Programs may erase the scrollback (`terminal.allowClearHistory`).
+    allow_clear_history: bool,
     /// "Hold Shift to select": shown for a moment when a drag went to a program that reads the mouse; when it last showed.
     shift_hint: bool,
     shift_hint_last: Option<std::time::Instant>,
@@ -307,7 +311,8 @@ impl TerminalView {
 
     /// Clears an output-only terminal for a new run.
     pub fn reset_output(&mut self, cx: &mut Context<Self>) {
-        self.feed(b"\x1b[3J\x1b[H\x1b[2J");
+        // Our own clear, not a program's: it takes the history along.
+        self.feed_chunk(b"\x1b[3J\x1b[H\x1b[2J");
         cx.notify();
     }
 
@@ -341,6 +346,7 @@ impl TerminalView {
             size,
             grid: (Point::default(), px(8.)),
             selecting: false,
+            allow_clear_history: cx.global::<crate::settings::Settings>().terminal_allow_clear_history,
             shift_hint: false,
             shift_hint_last: None,
             find: None,
@@ -358,7 +364,9 @@ impl TerminalView {
         }
     }
 
-    fn feed(&mut self, data: &[u8]) {
+    /// Bytes from the program. A full-screen clear (`CSI 2 J`) wipes the screen without pushing it into the history
+    /// (terminal_clear.rs); everything else goes to the parser as it comes.
+    fn feed_chunk(&mut self, data: &[u8]) {
         // TUIs that redraw in place erase the selected lines; the selection follows its text (terminal_selection.rs).
         let kept = self.keep_selection();
         // Each shell-integration sequence is noted where it ends, with the cursor where the parser left it.
@@ -1338,6 +1346,7 @@ impl Render for TerminalView {
             let s = cx.global::<crate::settings::Settings>();
             metrics(s.terminal_font_size, s.terminal_line_height)
         };
+        self.allow_clear_history = cx.global::<crate::settings::Settings>().terminal_allow_clear_history;
         // A changed `terminal.scrollback` applies to open terminals too.
         let scrollback = cx.global::<crate::settings::Settings>().terminal_scrollback.min(SCROLLBACK_MAX);
         if scrollback != self.scrollback {

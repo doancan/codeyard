@@ -3616,3 +3616,4 @@ Tab Moves Focus	Tab Odağı Taşır
 Tab and Shift+Tab move the focus out of the editor. Click to turn off.	Tab ve Shift+Tab odağı düzenleyiciden çıkarır. Kapatmak için tıklayın.
 View: Toggle Activity Bar Visibility	Görünüm: Etkinlik Çubuğunu Göster/Gizle
 View: Toggle Status Bar Visibility	Görünüm: Durum Çubuğunu Göster/Gizle
+Let programs in the terminal erase its scrollback (some full-screen tools do on every redraw, and the history is lost)	Terminaldeki programların geçmişi silmesine izin ver (bazı tam ekran araçlar her yeniden çizimde yapar ve geçmiş kaybolur)
