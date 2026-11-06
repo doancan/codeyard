@@ -74,6 +74,8 @@ pub(crate) struct AccessView {
     pub revision: Option<Arc<Status>>,
     pub root: Option<String>,
     pub branch: String,
+    /// "Merge in progress · 2 conflicts" while an operation is half done.
+    pub operation: Option<String>,
     pub message: String,
     pub message_focused: bool,
     pub repos_focused: bool,
@@ -186,6 +188,7 @@ impl ScmPanel {
             revision: self.status.clone(),
             root: git.map(|s| s.root.clone()),
             branch,
+            operation: git.and_then(|s| self.operation_summary(s)),
             repos,
 
             message: self.message.read(cx).text().to_string(),

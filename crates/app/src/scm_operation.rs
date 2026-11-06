@@ -40,6 +40,13 @@ impl ScmPanel {
             .child(button("scm-clone", "git-branch", t("Clone Repository…"), false, || ScmEvent::CloneRepository))
     }
 
+    /// "Merge in progress · 2 conflicts"; `None` when git is not in the middle of anything.
+    pub(super) fn operation_summary(&self, st: &Status) -> Option<String> {
+        let label = st.op.label()?;
+        let conflicts = st.changes.iter().filter(|c| c.unstaged == Some(Mark::Conflict)).count();
+        Some(if conflicts == 0 { label.to_string() } else { format!("{label} · {}", conflict_count(conflicts)) })
+    }
+
     pub fn commit_button_for_test(&self, cx: &gpui::App) -> Option<(String, bool)> {
         self.status.as_ref().map(|st| self.commit_state(st, cx))
     }
@@ -51,10 +58,8 @@ impl ScmPanel {
     /// "Merge in progress · 2 conflicts" with what to do next: abort, or (a rebase) continue or abort. A half-done operation is
     /// easy to forget about, and the way out used to be a palette command only.
     pub(super) fn operation_banner(&self, st: &Status, p: &ui::Palette) -> Option<impl IntoElement + use<>> {
-        let label = st.op.label()?;
+        let summary: SharedString = self.operation_summary(st)?.into();
         let p = *p;
-        let conflicts = st.changes.iter().filter(|c| c.unstaged == Some(Mark::Conflict)).count();
-        let summary: SharedString = if conflicts == 0 { label.into() } else { format!("{label} · {}", conflict_count(conflicts)).into() };
         let dispatch = |action: Box<dyn gpui::Action>| {
             move |_: &gpui::ClickEvent, window: &mut Window, cx: &mut gpui::App| {
                 cx.stop_propagation();
