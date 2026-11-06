@@ -14,6 +14,19 @@ mod job;
 /// Cap on one command's output (a huge `git diff`).
 const MAX_OUTPUT: u64 = 32 * 1024 * 1024;
 
+/// Extra environment for every `git` this process starts (the app sets the askpass bridge here, so a server that wants a login can
+/// ask in the window). Only the local agent shares the process with the app; an agent on another machine never sees it.
+static GIT_ENV: std::sync::OnceLock<Vec<(String, std::ffi::OsString)>> = std::sync::OnceLock::new();
+
+/// Set once; later calls are ignored.
+pub fn set_git_env(env: Vec<(String, std::ffi::OsString)>) {
+    let _ = GIT_ENV.set(env);
+}
+
+fn is_git(program: &str) -> bool {
+    std::path::Path::new(program).file_stem().is_some_and(|name| name == "git")
+}
+
 /// If `cwd` is given it must exist: otherwise silently running the command in the agent's own directory (`$HOME` over ssh) would, for example, run `git`
 /// against a different repository.
 pub fn command(program: &str, args: &[String], cwd: Option<&str>) -> std::io::Result<Command> {
@@ -52,6 +65,9 @@ pub fn command(program: &str, args: &[String], cwd: Option<&str>) -> std::io::Re
     }
     // Keep git's own pager/colors/prompts from kicking in.
     cmd.env("GIT_TERMINAL_PROMPT", "0").env("GIT_PAGER", "cat").env("LC_ALL", "C");
+    if let Some(env) = GIT_ENV.get().filter(|_| is_git(program)) {
+        cmd.envs(env.iter().map(|(key, value)| (key, value)));
+    }
     Ok(cmd)
 }
 

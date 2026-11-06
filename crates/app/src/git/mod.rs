@@ -7,6 +7,7 @@ use host::Host;
 
 mod branch;
 mod diff;
+mod explain;
 mod ignore;
 mod log;
 mod patch;
@@ -21,6 +22,7 @@ mod worktree;
 
 pub use branch::*;
 pub use diff::*;
+pub use explain::{explain, is_checkout_blocked, needs_credentials};
 pub use ignore::*;
 pub use log::*;
 pub use patch::{apply_patch, changes_patch};

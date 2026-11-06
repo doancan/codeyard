@@ -770,10 +770,10 @@ fn an_old_checkout_result_cannot_replace_the_new_context_notice(cx: &mut TestApp
             git_in(&root, &["branch", "feature/context"]);
             let original = git_in(&root, &["branch", "--show-current"]);
             let (wb, cx) = crate::qa_workbench_tests::setup(cx);
-            wb.update(cx, |wb, cx| {
+            wb.update_in(cx, |wb, window, cx| {
                 let root = crate::ui::local_path(&root);
                 wb.vcs.status = Some(Arc::new(git::Status { root: root.clone(), ..Default::default() }));
-                wb.git_checkout(root, if failed_checkout { "missing-branch" } else { "feature/context" }.into(), false, false, cx);
+                wb.git_checkout(root, if failed_checkout { "missing-branch" } else { "feature/context" }.into(), false, false, window, cx);
                 if change_host {
                     wb.remote.host = Arc::new(host::local());
                 } else {

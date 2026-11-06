@@ -695,8 +695,8 @@ impl Workbench {
             BranchChoice::Create => self.start_create_branch(root, window, cx),
             BranchChoice::CreateFrom => self.show_branch_op_picker(BranchOp::CreateFrom, window, cx),
             BranchChoice::Detached => self.show_branch_op_picker(BranchOp::CheckoutDetached, window, cx),
-            BranchChoice::Local(b) => self.git_checkout(root, b, false, false, cx),
-            BranchChoice::Remote(b) => self.git_checkout(root, b, true, false, cx),
+            BranchChoice::Local(b) => self.git_checkout(root, b, false, false, window, cx),
+            BranchChoice::Remote(b) => self.git_checkout(root, b, true, false, window, cx),
         }
     }
 
@@ -717,28 +717,51 @@ impl Workbench {
         }
     }
 
-    pub(super) fn git_checkout(&mut self, root: String, branch: String, remote: bool, create: bool, cx: &mut Context<Self>) {
+    pub(super) fn git_checkout(&mut self, root: String, branch: String, remote: bool, create: bool, window: &mut Window, cx: &mut Context<Self>) {
         let host = self.remote.host.clone();
         let source_host = host.clone();
         let source_root = root.clone();
         let b = branch.clone();
         let task = cx.background_executor().spawn(async move { git::checkout(host.as_ref(), &root, &b, remote, create) });
-        cx.spawn(async move |this, cx| {
+        cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
-            this.update(cx, |this, cx| {
+            this.update_in(cx, |this, window, cx| {
                 if !this.git_context_matches(&source_host, &source_root) {
                     return;
                 }
-                this.notice = Some(match result {
-                    Ok(()) => Notice::Info(crate::i18n::tf("Switched to {}", &[&branch]).into()),
-                    Err(e) => Notice::Error(crate::i18n::tf("Could not switch to {0}: {1}", &[&branch, &first_line(&e)]).into()),
-                });
+                match result {
+                    // Changes in the way: offer what VS Code offers, to put them in a stash and switch.
+                    Err(e) if git::is_checkout_blocked(&e) && !create => this.confirm_stash_and_switch(source_root, branch, remote, window, cx),
+                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not switch to {0}: {1}", &[&branch, &first_line(&e)]).into())),
+                    Ok(()) => this.notice = Some(Notice::Info(crate::i18n::tf("Switched to {}", &[&branch]).into())),
+                }
                 this.refresh_git(0, cx);
                 cx.notify();
             })
             .ok();
         })
         .detach();
+    }
+
+    /// The switch was refused because of local changes: stash them (untracked files too) and switch, on request. Nothing is
+    /// applied on the other branch by itself: the stash stays until the user pops it.
+    fn confirm_stash_and_switch(&mut self, root: String, branch: String, remote: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.confirm_git(
+            window,
+            &crate::i18n::tf("Stash your changes and switch to {}?", &[&branch]),
+            crate::i18n::t("Your uncommitted changes would be overwritten by the switch. They go into a stash first; Git: Pop Latest Stash brings them back."),
+            crate::i18n::t("Stash & Switch"),
+            cx,
+            move |this, cx| {
+                this.git_task(&crate::i18n::tf("Switching to {}…", &[&branch]), cx, move |h| {
+                    let options = git::StashOptions { untracked: true, message: Some(crate::i18n::tf("Before switching to {}", &[&branch])), ..Default::default() };
+                    git::stash_push(h, &root, &options)?;
+                    git::checkout(h, &root, &branch, remote, false)
+                        .map_err(|e| crate::i18n::tf("Your changes are in the stash, but the switch failed: {}", &[&first_line(&e)]))?;
+                    Ok(crate::i18n::tf("Switched to {}. Your changes are in the stash: Git: Pop Latest Stash brings them back.", &[&branch]))
+                });
+            },
+        );
     }
 
     /// Delayed Git UI must still belong to the host and repository that produced it.
@@ -1062,9 +1085,13 @@ impl Workbench {
     }
 }
 
-/// The line of a git failure to show: git opens its fetch and push output with "From <url>" / "To <url>", which says nothing
-/// about what went wrong, so the first line after those is used.
-pub(super) fn first_line(e: &str) -> &str {
+/// What to show of a git failure: the explanation when the cause is a usual one, otherwise the line that says what went wrong.
+/// Git opens its fetch and push output with "From <url>" / "To <url>", so the first line after those is used.
+pub(super) fn first_line(e: &str) -> String {
+    git::explain(e).unwrap_or_else(|| headline(e).to_string())
+}
+
+fn headline(e: &str) -> &str {
     let mut lines = e.lines().map(str::trim).filter(|l| !l.is_empty());
     let first = lines.clone().next();
     lines.find(|l| !l.starts_with("From ") && !l.starts_with("To ")).or(first).unwrap_or(e.trim())
@@ -1078,7 +1105,8 @@ mod first_line_tests {
     fn a_failure_headline_skips_the_from_and_to_lines_of_git() {
         let clobber = "From https://github.com/x/y\n ! [rejected] v1 -> v1  (would clobber existing tag)";
         assert_eq!(first_line(clobber), "! [rejected] v1 -> v1  (would clobber existing tag)");
-        assert_eq!(first_line("To github.com:x/y.git\n ! [rejected] main -> main (fetch first)"), "! [rejected] main -> main (fetch first)");
+        assert_eq!(first_line("To github.com:x/y.git\n ! [remote rejected] main -> main (protected branch hook declined)"), "! [remote rejected] main -> main (protected branch hook declined)");
+        assert!(first_line("To github.com:x/y.git\n ! [rejected] main -> main (fetch first)").starts_with("The remote has commits you do not have"), "a known cause is explained");
         assert_eq!(first_line("remote: Permission denied\nfatal: unable to access"), "remote: Permission denied", "a remote's own words stay");
         assert_eq!(first_line("fatal: not a git repository"), "fatal: not a git repository");
         assert_eq!(first_line("From https://x/y"), "From https://x/y", "nothing else to show: the line itself");

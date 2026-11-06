@@ -46,7 +46,7 @@ fn is_pull(op: &SyncOp) -> bool {
 }
 
 fn is_push(op: &SyncOp) -> bool {
-    matches!(op, SyncOp::Push | SyncOp::PushTo { .. })
+    matches!(op, SyncOp::Push | SyncOp::PushTo { .. } | SyncOp::ForcePush)
 }
 
 fn working_text(ops: &[SyncOp]) -> &'static str {
@@ -80,8 +80,8 @@ fn failed_text(op: &SyncOp, e: &str) -> String {
         SyncOp::Publish => crate::i18n::tf("Publish failed: {}", &[&first_line(e)]),
         _ => crate::i18n::tf("Fetch failed: {}", &[&first_line(e)]),
     };
-    if e.contains("could not read Username") || e.contains("Permission denied") || e.contains("terminal prompts disabled") {
-        format!("{failed} {}", crate::i18n::t("The server wants credentials: run the command once in the terminal (or set up an SSH key)."))
+    if git::needs_credentials(e) {
+        format!("{failed} {}", crate::i18n::t("The server wants credentials that were not given: try again and enter them when asked, or set up an SSH key."))
     } else {
         failed
     }
@@ -225,6 +225,28 @@ impl Workbench {
         });
     }
 
+    /// "Git: Push (Force)…": only after a confirmation that names what is lost. `--force-with-lease` still refuses when the remote
+    /// branch moved since the last fetch, so a push by someone else is never overwritten unseen.
+    pub(super) fn git_push_force(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(st) = self.git_status() else {
+            self.repo_root(cx);
+            return;
+        };
+        let (Some(branch), Some(upstream)) = (st.branch.clone(), st.upstream.clone()) else {
+            self.notice = Some(Notice::Info(crate::i18n::t("Only a published branch can be force-pushed: use Publish Branch first.").into()));
+            cx.notify();
+            return;
+        };
+        self.confirm_git(
+            window,
+            &crate::i18n::tf("Force-push {0} to {1}?", &[&branch, &upstream]),
+            crate::i18n::t("The remote branch is replaced by yours, and commits that only exist there are lost for everyone using it. If someone pushed since your last fetch, git refuses."),
+            crate::i18n::t("Force Push"),
+            cx,
+            |this, cx| this.git_sync(vec![SyncOp::ForcePush], cx),
+        );
+    }
+
     pub(super) fn git_publish_branch(&mut self, cx: &mut Context<Self>) {
         self.git_sync(vec![SyncOp::Publish], cx);
     }
@@ -330,7 +352,11 @@ impl Workbench {
         let source_host = host.clone();
         let source_root = root.clone();
         let opts = options(cx.global::<Settings>());
-        let task = cx.background_executor().spawn(async move { git::autofetch(host.as_ref(), &root, opts) });
+        let task = cx.background_executor().spawn(async move {
+            // A prompt that arrives during the periodic fetch is declined: nobody asked for it, and the error says why.
+            let _quiet = host::askpass::Quiet::begin();
+            git::autofetch(host.as_ref(), &root, opts)
+        });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {

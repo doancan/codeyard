@@ -20,6 +20,8 @@ pub enum SyncOp {
     PushTo {
         remote: String,
     },
+    /// Overwrite the remote branch with this one, but only if nobody pushed since the last fetch (`--force-with-lease`).
+    ForcePush,
     Fetch,
     FetchAll,
     Publish,
@@ -204,6 +206,7 @@ pub fn sync(host: &dyn Host, root: &str, op: &SyncOp, opts: SyncOptions) -> Resu
             plain_name(remote)?;
             push(host, root, Some(remote)).map(|_| SyncStep::Done)
         }
+        SyncOp::ForcePush => git_ok(host, root, &["push", "--force-with-lease"]).map(|_| SyncStep::Done),
         SyncOp::Fetch => fetch(host, root, false, opts.prune).map(|_| SyncStep::Done),
         SyncOp::FetchAll => fetch(host, root, true, opts.prune).map(|_| SyncStep::Done),
         SyncOp::Publish => publish_branch(host, root).map(SyncStep::Published),

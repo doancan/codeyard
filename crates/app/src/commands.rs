@@ -325,6 +325,7 @@ registry! {
     "git.sync" => wb::GitSync,
     // --- git-sync ---
     "git.pullRebase" => wb::GitPullRebase,
+    "git.pushForce" => wb::GitPushForce,
     "git.pullFrom" => wb::GitPullFrom,
     "git.pushTo" => wb::GitPushTo,
     "git.fetchAll" => wb::GitFetchAll,

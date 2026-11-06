@@ -1779,7 +1779,7 @@ Pulled	Pull edildi
 Pushed	Push edildi
 Fetched	Fetch edildi
 Synced	Eşitlendi
-The server wants credentials: run the command once in the terminal (or set up an SSH key).	Sunucu kimlik bilgisi istiyor: komutu bir kez terminalde çalıştırın (ya da bir SSH anahtarı kurun).
+The server wants credentials that were not given: try again and enter them when asked, or set up an SSH key.	Sunucu verilmeyen kimlik bilgilerini istiyor: yeniden deneyip sorulduğunda girin ya da bir SSH anahtarı kurun.
 Pull failed: {}	Pull başarısız: {}
 Push failed: {}	Push başarısız: {}
 Fetch failed: {}	Fetch başarısız: {}
@@ -3619,3 +3619,25 @@ Let programs in the terminal erase its scrollback (some full-screen tools do on 
 
 Search files by name (> commands, : line, # symbols, ? help)	Dosyaları adla ara (> komutlar, : satır, # semboller, ? yardım)
 {} running	{} çalışıyor
+Another git process is using this repository. If none is running, a crash left {} behind: delete it and try again.	Bu depoyu başka bir git işlemi kullanıyor. Çalışan yoksa bir çökme {} dosyasını bırakmıştır: silip yeniden deneyin.
+Before switching to {}	{} dalına geçmeden önce
+Cannot reach the server: check the network connection (and a proxy or VPN, if you use one).	Sunucuya ulaşılamıyor: ağ bağlantısını (varsa proxy veya VPN'i) kontrol edin.
+Force Push	Zorla Push
+Force-push {0} to {1}?	{0}, {1} üzerine zorla push edilsin mi?
+Git does not trust this folder because another user owns it. If you trust it, run: git config --global --add safe.directory {}	Git bu klasöre güvenmiyor çünkü başka bir kullanıcıya ait. Güveniyorsanız şunu çalıştırın: git config --global --add safe.directory {}
+Git: Push (Force)…	Git: Push (Zorla)…
+Local changes would be overwritten: commit or stash them first.	Yerel değişikliklerin üzerine yazılacak: önce commit edin veya stash'leyin.
+Only a published branch can be force-pushed: use Publish Branch first.	Yalnızca yayımlanmış bir dal zorla push edilebilir: önce Publish Branch kullanın.
+Signing the commit failed: gpg could not sign it. Check that the key is available and that gpg-agent can ask for its passphrase, or turn commit.gpgsign off.	Commit imzalanamadı: gpg imzalayamadı. Anahtarın kullanılabilir olduğunu ve gpg-agent'ın parolayı sorabildiğini kontrol edin ya da commit.gpgsign'ı kapatın.
+Stash & Switch	Stash'le ve Geç
+Stash your changes and switch to {}?	Değişiklikleriniz stash'lenip {} dalına geçilsin mi?
+Switched to {}. Your changes are in the stash: Git: Pop Latest Stash brings them back.	{} dalına geçildi. Değişiklikleriniz stash'te: Git: Pop Latest Stash onları geri getirir.
+Switching to {}…	{} dalına geçiliyor…
+The remote branch is replaced by yours, and commits that only exist there are lost for everyone using it. If someone pushed since your last fetch, git refuses.	Uzak dal sizinkiyle değiştirilir ve yalnızca orada bulunan commit'ler onu kullanan herkes için kaybolur. Son fetch'ten beri biri push ettiyse git reddeder.
+The remote has commits you do not have: pull first (Git: Pull), then push. To overwrite them instead, use Git: Push (Force).	Uzakta sizde olmayan commit'ler var: önce Pull (Git: Pull), sonra push edin. Üzerine yazmak istiyorsanız Git: Push (Zorla) kullanın.
+These branches share no history, so git will not merge them. In a terminal, `git merge --allow-unrelated-histories` merges them anyway.	Bu dalların ortak geçmişi yok, bu yüzden git birleştirmez. Terminalde `git merge --allow-unrelated-histories` yine de birleştirir.
+This repository uses Git LFS, but git-lfs is not installed on this host.	Bu depo Git LFS kullanıyor ama bu makinede git-lfs kurulu değil.
+Your changes are in the stash, but the switch failed: {}	Değişiklikleriniz stash'te, ama geçiş başarısız oldu: {}
+Your uncommitted changes would be overwritten by the switch. They go into a stash first; Git: Pop Latest Stash brings them back.	Commit edilmemiş değişikliklerinizin üzerine geçişte yazılırdı. Önce stash'e alınırlar; Git: Pop Latest Stash onları geri getirir.
+The server no longer accepts an account password: use a personal access token as the password (or sign in with the GitHub CLI: gh auth login).	Sunucu artık hesap parolasını kabul etmiyor: parola yerine kişisel erişim jetonu kullanın (ya da GitHub CLI ile giriş yapın: gh auth login).
+Username	Kullanıcı adı

@@ -439,6 +439,7 @@ actions!(
         GitSync,
         // --- git-sync ---
         GitPullRebase,
+        GitPushForce,
         GitPullFrom,
         GitPushTo,
         GitFetchAll,

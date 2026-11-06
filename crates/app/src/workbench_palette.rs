@@ -421,6 +421,7 @@ impl Workbench {
             Command::action("Git: Sync", GitSync),
             // --- git-sync ---
             Command::action("Git: Pull (Rebase)", GitPullRebase),
+            Command::action("Git: Push (Force)…", GitPushForce),
             Command::action("Git: Pull from…", GitPullFrom),
             Command::action("Git: Push to…", GitPushTo),
             Command::action("Git: Fetch (All Remotes)", GitFetchAll),

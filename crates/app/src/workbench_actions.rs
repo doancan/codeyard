@@ -212,6 +212,7 @@ impl Workbench {
             .on_action(cx.listener(|this, _: &GitPull, _, cx| this.git_sync(vec![crate::git::SyncOp::Pull], cx)))
             .on_action(cx.listener(|this, _: &GitPush, _, cx| this.git_sync(vec![crate::git::SyncOp::Push], cx)))
             .on_action(cx.listener(|this, _: &GitFetch, _, cx| this.git_sync(vec![crate::git::SyncOp::Fetch], cx)))
+            .on_action(cx.listener(|this, _: &GitPushForce, window, cx| this.git_push_force(window, cx)))
             .on_action(cx.listener(|this, _: &GitSync, window, cx| this.git_sync_auto(window, cx)))
             // --- git-sync ---
             .on_action(cx.listener(|this, _: &GitPullRebase, _, cx| this.git_sync(vec![crate::git::SyncOp::PullRebase], cx)))

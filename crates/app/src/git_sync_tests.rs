@@ -477,3 +477,72 @@ fn a_patch_copied_from_the_changes_applies_from_the_clipboard(cx: &mut TestAppCo
     run(&wb, cx, "Git: Apply Patch from Clipboard");
     wait_ticking(cx, "the refusal", |cx| notice(&wb, cx).contains("was not applied"));
 }
+
+#[gpui::test]
+fn a_rejected_push_says_to_pull_first_and_a_force_push_replaces_the_remote(cx: &mut TestAppContext) {
+    let f = Fixture::new("sync-rejected");
+    let (wb, cx) = opened(cx, &f, quiet());
+    f.push_elsewhere("theirs.txt", "t\n");
+    f.commit_here("mine.txt", "m\n");
+    refresh(&wb, cx);
+    run(&wb, cx, "Git: Push");
+    wait_ticking(cx, "rejected", |cx| notice(&wb, cx).contains("Push failed: The remote has commits you do not have: pull first"));
+    assert!(notice(&wb, cx).contains("Git: Push (Force)"), "the way out is named: {}", notice(&wb, cx));
+
+    // Without a fetch the lease is stale: git refuses instead of overwriting a commit nobody has seen.
+    run(&wb, cx, "Git: Push (Force)…");
+    cx.simulate_prompt_answer("Force Push");
+    wait_ticking(cx, "lease refuses", |cx| notice(&wb, cx).contains("Push failed"));
+    assert!(git_in(&f.bare, &["log", "--format=%s", "main"]).contains("remote theirs.txt"), "their commit is still there");
+
+    git_in(&f.dir, &["fetch", "-q"]);
+    refresh(&wb, cx);
+    run(&wb, cx, "Git: Push (Force)…");
+    cx.simulate_prompt_answer("Force Push");
+    wait_ticking(cx, "forced", |cx| notice(&wb, cx) == "Pushed");
+    assert_eq!(git_in(&f.bare, &["rev-parse", "main"]), git_in(&f.dir, &["rev-parse", "HEAD"]), "the remote has my commit now");
+}
+
+#[gpui::test]
+fn a_switch_blocked_by_local_changes_offers_to_stash_them(cx: &mut TestAppContext) {
+    let f = Fixture::new("switch-stash");
+    let (wb, cx) = opened(cx, &f, quiet());
+    git_in(&f.dir, &["checkout", "-q", "-b", "other"]);
+    std::fs::write(f.dir.join("README.md"), "other\n").unwrap();
+    git_in(&f.dir, &["commit", "-qam", "other"]);
+    git_in(&f.dir, &["checkout", "-q", "main"]);
+    std::fs::write(f.dir.join("README.md"), "unsaved\n").unwrap();
+    std::fs::write(f.dir.join("new.txt"), "untracked\n").unwrap();
+    refresh(&wb, cx);
+
+    let root = f.dir.to_string_lossy().into_owned();
+    wb.update_in(cx, |wb, window, cx| wb.checkout_for_test(root.clone(), "other", window, cx));
+    cx.run_until_parked();
+    cx.simulate_prompt_answer("Stash & Switch");
+    wait_ticking(cx, "switched", |cx| notice(&wb, cx).starts_with("Switched to other. Your changes are in the stash"));
+    assert_eq!(git_in(&f.dir, &["branch", "--show-current"]).trim(), "other");
+    assert_eq!(std::fs::read_to_string(f.dir.join("README.md")).unwrap(), "other\n");
+    assert!(!f.dir.join("new.txt").exists(), "untracked files went into the stash too");
+    assert!(git_in(&f.dir, &["stash", "list"]).contains("Before switching to other"));
+}
+
+#[gpui::test]
+fn declining_the_stash_leaves_the_changes_and_the_branch_alone(cx: &mut TestAppContext) {
+    let f = Fixture::new("switch-decline");
+    let (wb, cx) = opened(cx, &f, quiet());
+    git_in(&f.dir, &["checkout", "-q", "-b", "other"]);
+    std::fs::write(f.dir.join("README.md"), "other\n").unwrap();
+    git_in(&f.dir, &["commit", "-qam", "other"]);
+    git_in(&f.dir, &["checkout", "-q", "main"]);
+    std::fs::write(f.dir.join("README.md"), "unsaved\n").unwrap();
+    refresh(&wb, cx);
+
+    let root = f.dir.to_string_lossy().into_owned();
+    wb.update_in(cx, |wb, window, cx| wb.checkout_for_test(root, "other", window, cx));
+    cx.run_until_parked();
+    cx.simulate_prompt_answer("Cancel");
+    cx.run_until_parked();
+    assert_eq!(git_in(&f.dir, &["branch", "--show-current"]).trim(), "main");
+    assert_eq!(std::fs::read_to_string(f.dir.join("README.md")).unwrap(), "unsaved\n");
+    assert!(git_in(&f.dir, &["stash", "list"]).trim().is_empty());
+}

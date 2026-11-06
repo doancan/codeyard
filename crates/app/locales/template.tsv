@@ -101,6 +101,7 @@ Amended {}
 An existing file with the same name is never overwritten.	
 Anchors and aliases were expanded.	
 Another debug adapter	
+Another git process is using this repository. If none is running, a crash left {} behind: delete it and try again.	
 Another publisher now: {0}. The version you have came from {1}.	
 Answer the install sheet first.	
 App: Quit	
@@ -137,6 +138,7 @@ Back to SSH workspace and container details
 Back to the default (removes the value from settings.jsonc)	
 Back to this computer; files with unsaved changes must be saved or closed first	
 Bare repository	
+Before switching to {}	
 Binary file: not changed.	
 Bisect in progress	
 Blame Line	
@@ -192,6 +194,7 @@ Cannot iterate over {}
 Cannot join {}	
 Cannot open this link: {}	
 Cannot parse {} as a number	
+Cannot reach the server: check the network connection (and a proxy or VPN, if you use one).	
 Cannot read {0}: {1}	
 Cannot show this extension's details: {}	
 Cannot update {0}: {1}	
@@ -976,6 +979,8 @@ Follow the end of the file as it grows (tail -f). Scrolling up pauses.
 Following latest logs	
 Font size of the editor	
 Font size of the terminal	
+Force Push	
+Force-push {0} to {1}?	
 Format Document	
 Format Selection	
 Format pasted text with the language server	
@@ -993,6 +998,7 @@ From the {0} registry, published by {1}
 Get Pre-releases	
 Get only releases of this extension from now on	
 Git could not sign in to {}. Set up credentials (credential helper, SSH key or `gh auth login`) and try again	
+Git does not trust this folder because another user owns it. If you trust it, run: git config --global --add safe.directory {}	
 Git doesn't know who you are on this host. Run these in the terminal: {0} and {1}	
 Git identity is not set on this host: commits will be refused. Set user.name and user.email (git config --global …).	
 Git is paused in this folder: its repository settings run programs ({}). Trust the folder to use Git here.	
@@ -1042,6 +1048,7 @@ Git: Pull
 Git: Pull (Rebase)	
 Git: Pull from…	
 Git: Push	
+Git: Push (Force)…	
 Git: Push Tags	
 Git: Push Tag…	
 Git: Push to…	
@@ -1311,6 +1318,7 @@ Loading pull requests…
 Loading {}…	
 Loading…	
 Local	
+Local changes would be overwritten: commit or stash them first.	
 Local history	
 Local port {} is busy	
 Local time is not available on this system	
@@ -1600,6 +1608,7 @@ On this computer
 One quiet color, outline glyphs	
 Only My Commits	
 Only When I Ask	
+Only a published branch can be force-pushed: use Publish Branch first.	
 Only left	
 Only on the left	
 Only on the right	
@@ -2212,6 +2221,7 @@ Sign In…
 Sign Out	
 Signature help	
 Signature not verified: the token is only decoded, not checked	
+Signing the commit failed: gpg could not sign it. Check that the key is available and that gpg-agent can ask for its passphrase, or turn commit.gpgsign off.	
 Skip This Version	
 Skip Those Files	
 Small colored badges with the language's letters	
@@ -2264,9 +2274,11 @@ Starting preview…
 Starting the download…	
 Starting “{}”…	
 Starting…	
+Stash & Switch	
 Stash (Include Untracked)	
 Stash Staged Changes	
 Stash with Name…	
+Stash your changes and switch to {}?	
 Stashed changes	
 Stashes	
 Stashing…	
@@ -2301,6 +2313,8 @@ Suggestions pop up while typing (off: only Ctrl+Space)
 Sunday	
 Switch Workspace or Connect to Host…	
 Switched to {}	
+Switched to {}. Your changes are in the stash: Git: Pop Latest Stash brings them back.	
+Switching to {}…	
 Sync	
 Sync Changes {}	
 Sync changes?	
@@ -2455,6 +2469,8 @@ The query was edited: press Enter or Rerun to search for it.
 The quoted value is not closed	
 The release notes are longer: read the rest at {}	
 The release notes are longer: read the rest on GitHub.	
+The remote branch is replaced by yours, and commits that only exist there are lost for everyone using it. If someone pushed since your last fetch, git refuses.	
+The remote has commits you do not have: pull first (Git: Pull), then push. To overwrite them instead, use Git: Push (Force).	
 The remote is not on a hosting service Codeyard knows (GitHub, GitLab, Bitbucket, Codeberg).	
 The remote “{}” is not reachable as a git repository (it may be private or renamed); check `git remote -v`	
 The repeated string would be too long	
@@ -2468,7 +2484,8 @@ The search or the connection changed while the preview was being made. Preview a
 The secondary side bar shows no view.	
 The selection is neither a JWT nor a Unix timestamp	
 The server did not answer within 60 seconds.	
-The server wants credentials: run the command once in the terminal (or set up an SSH key).	
+The server no longer accepts an account password: use a personal access token as the password (or sign in with the GitHub CLI: gh auth login).	
+The server wants credentials that were not given: try again and enter them when asked, or set up an SSH key.	
 The shell may run each line as soon as it arrives.	
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
 The string is not closed	
@@ -2514,6 +2531,7 @@ There is no terminal to move.
 There is nothing to copy.	
 There is nothing to ignore here	
 There isn't enough free disk space for the download. Free some space and try again.	
+These branches share no history, so git will not merge them. In a terminal, `git merge --allow-unrelated-histories` merges them anyway.	
 They were not found.	
 This branch is not published yet. Click to publish it.	
 This can't be undone.	
@@ -2554,6 +2572,7 @@ This release has no installer for this system. Download it from the release page
 This replacement is too large to preview. Narrow the search (fewer files or matches).	
 This repository has no remote.	
 This repository has no remote. Add one with Git: Add Remote…	
+This repository uses Git LFS, but git-lfs is not installed on this host.	
 This search belongs to {0} on {1}, which this window does not show. Results cannot be opened or replaced here.	
 This tab cannot move to that window: its folder is on another machine.	
 This view is not available.	
@@ -2658,6 +2677,7 @@ Uploading needs the connection to {}, which failed: use Reconnect first.
 Uploading works with a connected SSH host: connect first (⌃R).	
 User Forwarded	
 User: {}	
+Username	
 Variables	
 Variables are not supported	
 Verify Files	
@@ -2797,11 +2817,13 @@ You have {}
 You have {}, the latest version.	
 You · Uncommitted changes	
 Your answer holds until Codeyard quits.	
+Your changes are in the stash, but the switch failed: {}	
 Your changes will be lost if you don't save them.	
 Your commits on this branch are rewritten on top of it (their hashes change). Conflicts stop the rebase; resolve them and use Git: Continue Rebase, or Git: Abort Rebase.	
 Your open files and unsaved changes come back after the restart.	
 Your open files come back after the restart.	
 Your public key (~/.ssh/id_ed25519.pub; created if you have none) is added to the server's authorized_keys, so later connections need no password. You may be asked for the server's password once.	
+Your uncommitted changes would be overwritten by the switch. They go into a stash first; Git: Pop Latest Stash brings them back.	
 Zoom	
 Zoom In	
 Zoom Out	
