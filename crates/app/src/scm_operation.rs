@@ -10,7 +10,7 @@ use crate::repos::OpState;
 use crate::ui::{self, c, icon, text};
 
 impl ScmPanel {
-    /// A folder that is not a repository: the two ways to get one, like the Source Control view of VS Code.
+    /// A folder that is not a repository: the two ways to get one.
     pub(super) fn not_a_repository_actions(&self, p: &ui::Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let p = *p;
         let button = |id: &'static str, glyph: &'static str, label: &'static str, primary: bool, event: fn() -> ScmEvent| {

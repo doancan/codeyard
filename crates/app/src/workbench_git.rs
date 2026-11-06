@@ -730,7 +730,7 @@ impl Workbench {
                     return;
                 }
                 match result {
-                    // Changes in the way: offer what VS Code offers, to put them in a stash and switch.
+                    // Changes in the way: offer to put them in a stash and switch.
                     Err(e) if git::is_checkout_blocked(&e) && !create => this.confirm_stash_and_switch(source_root, branch, remote, window, cx),
                     Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not switch to {0}: {1}", &[&branch, &first_line(&e)]).into())),
                     Ok(()) => this.notice = Some(Notice::Info(crate::i18n::tf("Switched to {}", &[&branch]).into())),
