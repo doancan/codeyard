@@ -157,7 +157,11 @@ fn a_server_login_is_asked_in_the_window_and_the_answers_reach_git() {
     assert_eq!(out.code, Some(0), "stderr: {}", out.stderr_str());
     assert!(out.stdout_str().contains("refs/heads/main"), "{}", out.stdout_str());
     let asked = script.lock().unwrap().asked.clone();
-    assert_eq!(asked.iter().map(|a| a.kind).collect::<Vec<_>>(), [AskKind::Text, AskKind::Secret], "the name first, shown as typed; then the password: {asked:?}");
+    assert_eq!(
+        asked.iter().map(|a| a.kind).collect::<Vec<_>>(),
+        [AskKind::Text, AskKind::Secret],
+        "the name first, shown as typed; then the password: {asked:?}"
+    );
     assert!(asked[0].prompt.starts_with("Username for 'http://127.0.0.1:"), "{:?}", asked[0].prompt);
 
     // Cancelling the question fails the command: git is not left waiting.

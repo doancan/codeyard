@@ -583,7 +583,11 @@ fn a_half_done_merge_blocks_the_commit_until_resolved_and_then_needs_no_message(
     refresh(&wb, cx);
     wait_ticking(cx, "merging", |cx| status(&wb, cx).is_some_and(|s| s.op == crate::repos::OpState::Merging));
 
-    assert_eq!(scm.read_with(cx, |s, cx| s.commit_button_for_test(cx)), Some(("Resolve Conflicts".into(), false)), "the button does not offer a commit git would refuse");
+    assert_eq!(
+        scm.read_with(cx, |s, cx| s.commit_button_for_test(cx)),
+        Some(("Resolve Conflicts".into(), false)),
+        "the button does not offer a commit git would refuse"
+    );
     // Committing with the conflict still there says what is missing instead of failing inside git.
     commit_with_message(&wb, cx, "", |s, cx| s.commit(cx));
     cx.run_until_parked();

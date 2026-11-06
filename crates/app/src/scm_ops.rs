@@ -379,7 +379,16 @@ impl ScmPanel {
         let Some(st) = &self.status else { return };
         let conflicts = st.changes.iter().filter(|c| c.unstaged == Some(Mark::Conflict)).count();
         if conflicts > 0 {
-            self.result = Some((crate::i18n::tn("{} file still has conflicts: resolve it and stage it first", "{} files still have conflicts: resolve them and stage them first", conflicts, &[]).into(), true));
+            self.result = Some((
+                crate::i18n::tn(
+                    "{} file still has conflicts: resolve it and stage it first",
+                    "{} files still have conflicts: resolve them and stage them first",
+                    conflicts,
+                    &[],
+                )
+                .into(),
+                true,
+            ));
             cx.notify();
             return;
         }

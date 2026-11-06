@@ -12,15 +12,26 @@ pub fn is_push_rejected(err: &str) -> bool {
 /// A switch that would overwrite local changes (tracked files, or untracked ones the other branch has).
 pub fn is_checkout_blocked(err: &str) -> bool {
     let e = err.to_lowercase();
-    e.contains("would be overwritten by checkout") || e.contains("would be overwritten by switch") || e.contains("please commit your changes or stash them before you switch")
+    e.contains("would be overwritten by checkout")
+        || e.contains("would be overwritten by switch")
+        || e.contains("please commit your changes or stash them before you switch")
 }
 
 /// The server wants a login this command could not give (git never asks on its own here).
 pub fn needs_credentials(err: &str) -> bool {
     let e = err.to_lowercase();
-    ["could not read username", "could not read password", "terminal prompts disabled", "authentication failed", "permission denied (publickey", "password authentication was removed", "returned error: 401", "returned error: 403"]
-        .iter()
-        .any(|needle| e.contains(needle))
+    [
+        "could not read username",
+        "could not read password",
+        "terminal prompts disabled",
+        "authentication failed",
+        "permission denied (publickey",
+        "password authentication was removed",
+        "returned error: 401",
+        "returned error: 403",
+    ]
+    .iter()
+    .any(|needle| e.contains(needle))
         || (e.contains("remote: permission to") && e.contains("denied to"))
 }
 
@@ -44,7 +55,10 @@ pub fn explain(err: &str) -> Option<String> {
     }
     if e.contains("detected dubious ownership") {
         let path = quoted_after(err, "in repository at").unwrap_or("this folder");
-        return Some(tf("Git does not trust this folder because another user owns it. If you trust it, run: git config --global --add safe.directory {}", &[&path]));
+        return Some(tf(
+            "Git does not trust this folder because another user owns it. If you trust it, run: git config --global --add safe.directory {}",
+            &[&path],
+        ));
     }
     if is_checkout_blocked(err) || e.contains("would be overwritten by merge") {
         return Some(t("Local changes would be overwritten: commit or stash them first.").into());
@@ -56,10 +70,15 @@ pub fn explain(err: &str) -> Option<String> {
         return Some(t("This repository has no remote. Add one with Git: Add Remote…").into());
     }
     if e.contains("password authentication was removed") {
-        return Some(t("The server no longer accepts an account password: use a personal access token as the password (or sign in with the GitHub CLI: gh auth login).").into());
+        return Some(
+            t("The server no longer accepts an account password: use a personal access token as the password (or sign in with the GitHub CLI: gh auth login).")
+                .into(),
+        );
     }
     if e.contains("refusing to merge unrelated histories") {
-        return Some(t("These branches share no history, so git will not merge them. In a terminal, `git merge --allow-unrelated-histories` merges them anyway.").into());
+        return Some(
+            t("These branches share no history, so git will not merge them. In a terminal, `git merge --allow-unrelated-histories` merges them anyway.").into(),
+        );
     }
     if e.contains("gpg failed to sign the data") {
         return Some(t("Signing the commit failed: gpg could not sign it. Check that the key is available and that gpg-agent can ask for its passphrase, or turn commit.gpgsign off.").into());
@@ -67,7 +86,8 @@ pub fn explain(err: &str) -> Option<String> {
     if e.contains("git-lfs") && (e.contains("not found") || e.contains("command not found")) {
         return Some(t("This repository uses Git LFS, but git-lfs is not installed on this host.").into());
     }
-    if ["could not resolve host", "failed to connect to", "connection timed out", "network is unreachable", "operation timed out"].iter().any(|n| e.contains(n)) {
+    if ["could not resolve host", "failed to connect to", "connection timed out", "network is unreachable", "operation timed out"].iter().any(|n| e.contains(n))
+    {
         return Some(t("Cannot reach the server: check the network connection (and a proxy or VPN, if you use one).").into());
     }
     None

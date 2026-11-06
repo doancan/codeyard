@@ -207,10 +207,10 @@ pub(crate) use history_access::{AccessGraphRow, AccessHistory, AccessWorktree, A
 
 #[path = "scm_changes.rs"]
 mod changes_ui;
-#[path = "scm_ops.rs"]
-mod ops;
 #[path = "scm_operation.rs"]
 mod operation_ui;
+#[path = "scm_ops.rs"]
+mod ops;
 #[path = "scm_repos.rs"]
 mod repos_ui;
 

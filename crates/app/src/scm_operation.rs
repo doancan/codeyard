@@ -47,10 +47,12 @@ impl ScmPanel {
         Some(if conflicts == 0 { label.to_string() } else { format!("{label} · {}", conflict_count(conflicts)) })
     }
 
+    #[cfg(test)]
     pub fn commit_button_for_test(&self, cx: &gpui::App) -> Option<(String, bool)> {
         self.status.as_ref().map(|st| self.commit_state(st, cx))
     }
 
+    #[cfg(test)]
     pub fn result_for_test(&self) -> Option<String> {
         self.result.as_ref().map(|(message, _)| message.to_string())
     }

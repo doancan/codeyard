@@ -754,7 +754,8 @@ impl Workbench {
             cx,
             move |this, cx| {
                 this.git_task(&crate::i18n::tf("Switching to {}…", &[&branch]), cx, move |h| {
-                    let options = git::StashOptions { untracked: true, message: Some(crate::i18n::tf("Before switching to {}", &[&branch])), ..Default::default() };
+                    let options =
+                        git::StashOptions { untracked: true, message: Some(crate::i18n::tf("Before switching to {}", &[&branch])), ..Default::default() };
                     git::stash_push(h, &root, &options)?;
                     git::checkout(h, &root, &branch, remote, false)
                         .map_err(|e| crate::i18n::tf("Your changes are in the stash, but the switch failed: {}", &[&first_line(&e)]))?;
@@ -1016,7 +1017,7 @@ impl Workbench {
             cx.notify();
             return;
         }
-        self.git_task(&crate::i18n::t("Initializing repository…"), cx, move |h| {
+        self.git_task(crate::i18n::t("Initializing repository…"), cx, move |h| {
             git::init(h, &root).map(|_| crate::i18n::t("Initialized an empty Git repository").to_string())
         });
     }
@@ -1122,8 +1123,14 @@ mod first_line_tests {
     fn a_failure_headline_skips_the_from_and_to_lines_of_git() {
         let clobber = "From https://github.com/x/y\n ! [rejected] v1 -> v1  (would clobber existing tag)";
         assert_eq!(first_line(clobber), "! [rejected] v1 -> v1  (would clobber existing tag)");
-        assert_eq!(first_line("To github.com:x/y.git\n ! [remote rejected] main -> main (protected branch hook declined)"), "! [remote rejected] main -> main (protected branch hook declined)");
-        assert!(first_line("To github.com:x/y.git\n ! [rejected] main -> main (fetch first)").starts_with("The remote has commits you do not have"), "a known cause is explained");
+        assert_eq!(
+            first_line("To github.com:x/y.git\n ! [remote rejected] main -> main (protected branch hook declined)"),
+            "! [remote rejected] main -> main (protected branch hook declined)"
+        );
+        assert!(
+            first_line("To github.com:x/y.git\n ! [rejected] main -> main (fetch first)").starts_with("The remote has commits you do not have"),
+            "a known cause is explained"
+        );
         assert_eq!(first_line("remote: Permission denied\nfatal: unable to access"), "remote: Permission denied", "a remote's own words stay");
         assert_eq!(first_line("fatal: not a git repository"), "fatal: not a git repository");
         assert_eq!(first_line("From https://x/y"), "From https://x/y", "nothing else to show: the line itself");

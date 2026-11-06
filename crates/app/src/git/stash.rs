@@ -71,7 +71,10 @@ pub fn stash_apply(host: &dyn Host, root: &str, stash: &str, pop: bool) -> Resul
     }
     // Git reports the conflicts on stdout and exits with a bare failure; the files are left conflicted and the stash is kept.
     if super::has_unmerged(host, root) {
-        return Err(crate::i18n::tf("{} conflicts with your changes: resolve the conflicts in Source Control. The stash is kept until you drop it.", &[&stash]));
+        return Err(crate::i18n::tf(
+            "{} conflicts with your changes: resolve the conflicts in Source Control. The stash is kept until you drop it.",
+            &[&stash],
+        ));
     }
     Err(super::failure_text(&out))
 }

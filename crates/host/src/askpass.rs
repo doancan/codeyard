@@ -155,7 +155,7 @@ fn answer(mut stream: UnixStream, handler: &(dyn Fn(AskRequest) -> Option<String
     let text = String::from_utf8_lossy(&buf);
     let (head, prompt) = text.split_once('\n').unwrap_or(("ask", &text));
     let request = AskRequest { kind: classify(head == "confirm", prompt), prompt: prompt.trim_end().to_string() };
-    let reply = match Some(()).filter(|_| !is_quiet()).and_then(|_| handler(request)) {
+    let reply = match if is_quiet() { None } else { handler(request) } {
         Some(answer) => format!("ok\n{answer}"),
         None => "cancel\n".to_string(),
     };

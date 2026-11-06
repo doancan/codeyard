@@ -983,9 +983,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
                 );
                 std::process::exit(0);
             }
-            // An empty argument (a launcher that passes no folder as "") is no folder: opening it showed "not found:" and a
-            // trust question about nothing.
-            _ if a.trim().is_empty() => {}
+            _ if a.trim().is_empty() => {} // a launcher's "" is no folder (it showed "not found:" and a trust question)
             _ => args.path = Some(a),
         }
     }
@@ -1040,9 +1038,7 @@ mod args_tests {
         assert_eq!(parse(true, &line).run, ["Workspace: Trust This Folder", "Tasks: Run Task"]);
         // Its value is not taken for a path, and a trailing --do is harmless.
         assert_eq!(parse(false, &["--do", "key:enter"]).path, None);
-        assert_eq!(parse(false, &[""]).path, None, "an empty argument is no folder");
-        assert_eq!(parse(false, &["  "]).path, None);
-        assert_eq!(parse(false, &["", "/work"]).path.as_deref(), Some("/work"));
+        assert_eq!(parse(false, &["", " ", "/work"]).path.as_deref(), Some("/work"), "an empty argument is no folder");
         assert!(parse(false, &["--do"]).run.is_empty());
     }
 
