@@ -540,11 +540,8 @@ impl Workbench {
             _ => self.active_editor().map_or(0, |e| e.read(cx).line_count()),
         };
         let root = self.roots.primary.read(cx).root().map(str::to_string);
-        let placeholder = if root.is_some() {
-            crate::i18n::t("Search files by name (> commands, : line, # symbols, ? help)")
-        } else {
-            crate::i18n::t("Type > for commands")
-        };
+        let placeholder =
+            if root.is_some() { crate::i18n::t("Search files by name (> commands, : line, # symbols, ? help)") } else { crate::i18n::t("Type > for commands") };
         let sources = vec![
             PickSource::paths(""),
             PickSource::List { prefix: ">", items },

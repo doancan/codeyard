@@ -36,9 +36,35 @@ fn find_clear(data: &[u8]) -> Option<usize> {
     data.windows(CLEAR_SCREEN.len()).position(|w| w == CLEAR_SCREEN)
 }
 
+/// How many bytes at the end of `data` start an erase sequence (`ESC [`, `ESC [ 2`, `ESC [ 3`) that the next read completes.
+/// A lone ESC is not held: an incomplete sequence is held by the parser anyway, so nothing shows later for it.
+fn partial_erase_at_end(data: &[u8]) -> usize {
+    match data {
+        [.., 0x1b, b'[', b'2' | b'3'] => 3,
+        [.., 0x1b, b'['] => 2,
+        _ => 0,
+    }
+}
+
+/// Erase the screen in place, with the cursor where it is: home, erase below, back (inside a synchronized update, where the
+/// parser applies it in order).
+const CLEAR_IN_PLACE: &[u8] = b"\x1b7\x1b[H\x1b[J\x1b8";
+
 impl TerminalView {
     /// Bytes from the program: full-screen clears are carried out here, the rest goes to the parser (`feed_chunk`).
     pub(super) fn feed(&mut self, data: &[u8]) {
+        let mut joined;
+        let mut data = data;
+        if !self.clear_carry.is_empty() {
+            joined = std::mem::take(&mut self.clear_carry);
+            joined.extend_from_slice(data);
+            data = &joined;
+        }
+        let held = partial_erase_at_end(data);
+        if held > 0 {
+            self.clear_carry = data[data.len() - held..].to_vec();
+            data = &data[..data.len() - held];
+        }
         let kept;
         let data = if self.allow_clear_history {
             data
@@ -52,10 +78,10 @@ impl TerminalView {
         let mut rest = data;
         while let Some(at) = find_clear(rest) {
             self.feed_chunk(&rest[..at]);
-            // Inside a synchronized update the parser holds what came before back: erasing now would run ahead of it.
-            // The parser then gets the clear along with the rest, in order.
+            // Inside a synchronized update the parser holds what came before back: erasing now would run ahead of it, so
+            // the parser gets an erase that leaves the history alone, in order with the rest.
             if self.parser.sync_timeout().sync_timeout().is_some() {
-                self.feed_chunk(CLEAR_SCREEN);
+                self.feed_chunk(CLEAR_IN_PLACE);
             } else {
                 self.erase_screen();
             }
@@ -64,10 +90,14 @@ impl TerminalView {
         self.feed_chunk(rest);
     }
 
-    /// Every visible row becomes blank (in the current background); the cursor, the history and the modes stay.
+    /// Every visible row becomes blank (in the current background); the cursor, the history and the modes stay. What pointed
+    /// at the rows (a selection, the prompt marks) goes with them, as it did when the rows moved into the history.
     fn erase_screen(&mut self) {
         let template = self.term.grid().cursor.template.clone();
         let rows = self.term.screen_lines();
+        let first_visible = self.term.grid().history_size() as i64 + self.marks.shift;
+        self.marks.list.retain(|m| m.prompt < first_visible);
+        self.term.selection = None;
         let grid = self.term.grid_mut();
         for line in 0..rows {
             grid[Line(line as i32)].reset(&template);
@@ -171,6 +201,76 @@ mod tests {
         let lines = term.read_with(cx, |t, _| t.screen_text());
         assert!(lines.starts_with("frame 1\nframe 2\nframe 3"), "{lines:?}");
         assert!(!lines.contains("stale"));
+    }
+
+    #[test]
+    fn an_incomplete_erase_at_the_end_of_a_read_is_held_back() {
+        assert_eq!(partial_erase_at_end(b"abc\x1b["), 2);
+        assert_eq!(partial_erase_at_end(b"abc\x1b[3"), 3);
+        assert_eq!(partial_erase_at_end(b"\x1b[2"), 3);
+        assert_eq!(partial_erase_at_end(b"abc\x1b"), 0, "a lone ESC is passed on");
+        assert_eq!(partial_erase_at_end(b"\x1b[1"), 0, "another sequence is not ours");
+        assert_eq!(partial_erase_at_end(b"abc"), 0);
+    }
+
+    #[gpui::test]
+    fn an_erase_split_between_two_reads_still_counts(cx: &mut TestAppContext) {
+        let (term, cx) = setup(cx);
+        let rows = term.read_with(cx, |t, _| t.term.screen_lines());
+        term.update(cx, |t, _| t.feed("line\r\n".repeat(rows + 20).as_bytes()));
+        let history = term.update(cx, |t, _| {
+            t.feed(b"\x1b[");
+            t.feed(b"3J");
+            t.a11y_scroll().1
+        });
+        assert!(history >= 20, "the history clear split in two is still refused: {history}");
+        let history = term.update(cx, |t, _| {
+            t.feed(b"\x1b[2");
+            t.feed(b"Jx");
+            t.a11y_scroll().1
+        });
+        assert!(history >= 20, "and a split screen clear does not push the screen up either: {history}");
+        let lines = term.read_with(cx, |t, _| t.screen_text());
+        assert!(lines.contains('x') && !lines.contains("line"), "{lines:?}");
+    }
+
+    #[gpui::test]
+    fn a_synchronized_clear_leaves_the_history_alone(cx: &mut TestAppContext) {
+        let (term, cx) = setup(cx);
+        let history = term.update(cx, |t, _| {
+            t.feed(b"stale\r\n");
+            for _ in 0..10 {
+                t.feed(format!("\x1b[?2026h\x1b[2J\x1b[H{}\x1b[?2026l", frame(5)).as_bytes());
+            }
+            t.a11y_scroll().1
+        });
+        assert_eq!(history, 0, "ten synchronized redraws added nothing to the history");
+    }
+
+    #[gpui::test]
+    fn a_clear_drops_the_selection_and_the_marks_of_the_rows_it_erased(cx: &mut TestAppContext) {
+        let (term, cx) = setup(cx);
+        term.update_in(cx, |t, window, cx| {
+            t.feed(b"\x1b]133;A\x07$ ls\r\n\x1b]133;C\x07out\r\n\x1b]133;D;0\x07");
+            t.select_all(&TermSelectAll, window, cx);
+        });
+        assert!(term.read_with(cx, |t, _| t.selected_text()).is_some(), "something is selected before the clear");
+        assert_eq!(term.read_with(cx, |t, _| t.command_count_for_test()), 1);
+        term.update(cx, |t, _| t.feed(b"\x1b[2J"));
+        assert_eq!(term.read_with(cx, |t, _| t.command_count_for_test()), 0, "the erased prompt is not marked any more");
+        assert_eq!(term.read_with(cx, |t, _| t.selected_text()), None, "nothing stays selected over blank rows");
+    }
+
+    #[gpui::test]
+    fn resetting_an_output_terminal_leaves_no_history_behind(cx: &mut TestAppContext) {
+        let (term, cx) = setup(cx);
+        let rows = term.read_with(cx, |t, _| t.term.screen_lines());
+        term.update(cx, |t, _| t.feed("run one\r\n".repeat(rows + 10).as_bytes()));
+        let history = term.update_in(cx, |t, _, cx| {
+            t.reset_output(cx);
+            t.a11y_scroll().1
+        });
+        assert_eq!(history, 0, "a new run starts with an empty history");
     }
 
     #[gpui::test]

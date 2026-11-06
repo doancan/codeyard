@@ -240,6 +240,8 @@ pub struct TerminalView {
     selecting: bool,
     /// Programs may erase the scrollback (`terminal.allowClearHistory`).
     allow_clear_history: bool,
+    /// The start of an erase sequence that a read ended in the middle of (terminal_clear.rs).
+    clear_carry: Vec<u8>,
     /// "Hold Shift to select": shown for a moment when a drag went to a program that reads the mouse; when it last showed.
     shift_hint: bool,
     shift_hint_last: Option<std::time::Instant>,
@@ -312,7 +314,8 @@ impl TerminalView {
     /// Clears an output-only terminal for a new run.
     pub fn reset_output(&mut self, cx: &mut Context<Self>) {
         // Our own clear, not a program's: it takes the history along.
-        self.feed_chunk(b"\x1b[3J\x1b[H\x1b[2J");
+        // Screen first, then the history: the other way round the cleared screen would end up in it.
+        self.feed_chunk(b"\x1b[H\x1b[2J\x1b[3J");
         cx.notify();
     }
 
@@ -347,6 +350,7 @@ impl TerminalView {
             grid: (Point::default(), px(8.)),
             selecting: false,
             allow_clear_history: cx.global::<crate::settings::Settings>().terminal_allow_clear_history,
+            clear_carry: Vec::new(),
             shift_hint: false,
             shift_hint_last: None,
             find: None,
