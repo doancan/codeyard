@@ -355,7 +355,11 @@ pub fn run_facts(run: &RunInfo) -> Vec<(String, String, bool)> {
         facts.push((t("Debugger").to_string(), word.to_string(), phase == DebugPhase::Paused));
     }
     if run.terminals > 0 {
-        facts.push((t("Terminals").to_string(), format!("{} / {}", run.commands, run.terminals), false));
+        let value = match run.commands {
+            0 => run.terminals.to_string(),
+            n => format!("{} · {}", run.terminals, crate::i18n::tf("{} running", &[&n])),
+        };
+        facts.push((t("Terminals").to_string(), value, false));
     }
     if run.failed_tests > 0 {
         facts.push((t("Failing tests").to_string(), run.failed_tests.to_string(), true));
@@ -578,7 +582,8 @@ mod tests {
         let facts = run_facts(&RunInfo { debug: Some(DebugPhase::Paused), commands: 1, terminals: 3, failed_tests: 2 });
         assert_eq!(facts.len(), 3);
         assert!(facts[0].2, "a paused debugger is flagged");
-        assert_eq!(facts[1].1, "1 / 3");
+        assert_eq!(facts[1].1, "3 · 1 running");
+        assert_eq!(run_facts(&RunInfo { terminals: 2, ..Default::default() })[0].1, "2", "nothing running: just the count");
         assert_eq!(facts[2].1, "2");
         assert!(RunInfo { commands: 1, ..Default::default() }.busy());
         assert!(!RunInfo { terminals: 4, failed_tests: 1, ..Default::default() }.busy());

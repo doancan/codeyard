@@ -2098,7 +2098,7 @@ Search commits
 Search commits (message, author, hash)	
 Search containers, images or projects…	
 Search files by name	
-Search files by name (> for commands, : for line, # for symbols)	
+Search files by name (> commands, : line, # symbols, ? help)	
 Search installed extensions	
 Search log messages or timestamps…	
 Search results	
@@ -3349,6 +3349,7 @@ your words
 {} removed	
 {} result in 1 file|{} results in 1 file	
 {} result|{} results	
+{} running	
 {} skipped	
 {} space|{} spaces	
 {} still has merge conflict markers. Resolve them (Accept Current / Incoming / Both) and save first.	

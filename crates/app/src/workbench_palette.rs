@@ -541,7 +541,7 @@ impl Workbench {
         };
         let root = self.roots.primary.read(cx).root().map(str::to_string);
         let placeholder = if root.is_some() {
-            crate::i18n::t("Search files by name (> for commands, : for line, # for symbols)")
+            crate::i18n::t("Search files by name (> commands, : line, # symbols, ? help)")
         } else {
             crate::i18n::t("Type > for commands")
         };

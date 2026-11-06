@@ -128,7 +128,6 @@ Welcome	Hoş Geldiniz
 
 # ---- Command palette ----
 recently used	son kullanılan
-Search files by name (> for commands, : for line, # for symbols)	Dosyaları adla ara (komutlar için >, satır için :, semboller için #)
 Type > for commands	Komutlar için > yazın
 Remote: Connect to {}	Uzak: {} Sunucusuna Bağlan
 Remote: Disconnect	Uzak: Bağlantıyı Kes
@@ -3617,3 +3616,6 @@ Tab and Shift+Tab move the focus out of the editor. Click to turn off.	Tab ve Sh
 View: Toggle Activity Bar Visibility	Görünüm: Etkinlik Çubuğunu Göster/Gizle
 View: Toggle Status Bar Visibility	Görünüm: Durum Çubuğunu Göster/Gizle
 Let programs in the terminal erase its scrollback (some full-screen tools do on every redraw, and the history is lost)	Terminaldeki programların geçmişi silmesine izin ver (bazı tam ekran araçlar her yeniden çizimde yapar ve geçmiş kaybolur)
+
+Search files by name (> commands, : line, # symbols, ? help)	Dosyaları adla ara (> komutlar, : satır, # semboller, ? yardım)
+{} running	{} çalışıyor
