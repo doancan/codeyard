@@ -132,6 +132,8 @@ pub struct Settings {
     pub minimap: bool,
     /// Long lines wrap at the window width (⌥Z).
     pub word_wrap: bool,
+    /// Tab and Shift+Tab move the focus out of the editor instead of indenting (⌃⇧M); not saved, it is a switch for now.
+    pub tab_focus_mode: bool,
     /// With `editor.wordWrap` "wordWrapColumn" or "bounded": the column and whether the window edge may come first.
     pub word_wrap_limit: Option<(usize, bool)>,
     /// The active file is selected and visible in the tree.
@@ -391,6 +393,7 @@ impl Default for Settings {
             diff_inline: false,
             minimap: true,
             word_wrap: false,
+            tab_focus_mode: false,
             word_wrap_limit: None,
             auto_reveal: true,
             cursor_blinking: true,

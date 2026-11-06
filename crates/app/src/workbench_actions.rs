@@ -290,6 +290,9 @@ impl Workbench {
             .on_action(cx.listener(Self::split_terminal))
             .on_action(cx.listener(Self::go_forward))
             .on_action(cx.listener(Self::reopen_closed_editor))
+            .on_action(cx.listener(|this, _: &OpenRecentFile, window, cx| this.show_recent_files(window, cx)))
+            .on_action(cx.listener(|this, _: &ReopenWithEncoding, window, cx| this.show_encoding_picker(false, window, cx)))
+            .on_action(cx.listener(|this, _: &SaveWithEncoding, window, cx| this.show_encoding_picker(true, window, cx)))
             .on_action(cx.listener(Self::new_file))
             .on_action(cx.listener(Self::save_as))
             .on_action(cx.listener(Self::save_local_copy))
@@ -320,6 +323,22 @@ impl Workbench {
             .on_action(cx.listener(|_, _: &ToggleRenderWhitespace, _, cx| {
                 let s = cx.global_mut::<Settings>();
                 s.render_whitespace = if s.render_whitespace == "none" { "all".into() } else { "none".into() };
+                cx.refresh_windows();
+            }))
+            .on_action(cx.listener(|this, a: &OpenEditorAt, window, cx| this.open_editor_at(a.index, window, cx)))
+            .on_action(cx.listener(|_, _: &ToggleActivityBar, _, cx| {
+                let s = cx.global_mut::<Settings>();
+                s.activity_bar = !s.activity_bar;
+                cx.refresh_windows();
+            }))
+            .on_action(cx.listener(|_, _: &ToggleStatusBar, _, cx| {
+                let s = cx.global_mut::<Settings>();
+                s.status_bar = !s.status_bar;
+                cx.refresh_windows();
+            }))
+            .on_action(cx.listener(|_, _: &ToggleTabFocusMode, _, cx| {
+                let s = cx.global_mut::<Settings>();
+                s.tab_focus_mode = !s.tab_focus_mode;
                 cx.refresh_windows();
             }))
             .on_action(cx.listener(|_, _: &ToggleWordWrap, _, cx| {

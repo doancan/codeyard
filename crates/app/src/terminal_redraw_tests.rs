@@ -17,7 +17,7 @@ fn replace_frame(lines: usize, next: &str) -> String {
             out.push_str("\x1b[1A");
         }
     }
-    out.push_str("\r");
+    out.push('\r');
     out.push_str(next);
     out
 }

@@ -769,6 +769,7 @@ Editor: Insert Date
 Editor: Insert Date and Time (UTC)	
 Editor: Insert UUID	
 Editor: Join Lines	
+Editor: Move Last Selection to Next Find Match	
 Editor: Move Line Down	
 Editor: Move Line Up	
 Editor: Peek Definition	
@@ -782,6 +783,7 @@ Editor: Replace
 Editor: Reverse Lines	
 Editor: Run Code Lens on This Line	
 Editor: Save	
+Editor: Save without Formatting	
 Editor: Select All	
 Editor: Select All Occurrences of Find Match	
 Editor: Select to Bracket	
@@ -917,10 +919,12 @@ File: New Window
 File: Open Active File With…	
 File: Open Active File as Hex	
 File: Open Active File as Workspace	
+File: Open Recent File…	
 File: Open Workspace from File…	
 File: Refresh Explorer	
 File: Reload Workspace	
 File: Remove Folder from Workspace…	
+File: Reopen with Encoding…	
 File: Reveal Active File in Explorer	
 File: Revert File	
 File: Save All	
@@ -928,6 +932,7 @@ File: Save As…
 File: Save Workspace	
 File: Save Workspace As…	
 File: Save a Copy to This Computer…	
+File: Save with Encoding…	
 File: Toggle Auto Save	
 Files	
 Files are still unsaved. Resolve editor errors, then start debugging again.	
@@ -1508,6 +1513,7 @@ No profiles or shells were found on this machine.
 No published ports	
 No quick fixes here	
 No recent folders	
+No recently opened files	
 No references found	
 No results	
 No results in {} file.|No results in {} files.	
@@ -1644,6 +1650,7 @@ Open a folder to debug it.
 Open a folder to find its tests.	
 Open a folder to search in it.	
 Open a project, connect to a host, or switch workspace	
+Open a recent file	
 Open a terminal with…	
 Open a view in a side bar first.	
 Open a view in the side bar first.	
@@ -1940,6 +1947,8 @@ Renamed {0} to {1}
 Rename…	
 Renaming {}…	
 Reopen Closed Editor	
+Reopen the active file with encoding…	
+Reopen with Encoding…	
 Replace	
 Replace (↵)	
 Replace All	
@@ -2057,7 +2066,9 @@ Save as
 Save copy	
 Save files automatically	
 Save or close the files with unsaved changes first.	
+Save or revert your changes first: reopening reads the file again	
 Save project as	
+Save the active file with encoding…	
 Save the file first: a tab with unsaved changes cannot move to another window.	
 Save the file to finish, then stage it in Source Control.	
 Save theme	
@@ -2296,7 +2307,9 @@ Synced
 Syncing…	
 TOML dates were turned into text.	
 TOML needs a table at the top level, but this document is a {}	
+Tab Moves Focus	
 Tab actions	
+Tab and Shift+Tab move the focus out of the editor. Click to turn off.	
 Tabs	
 Tag name, then an optional message for an annotated tag	
 Tag name, then an optional message for an annotated tag (at HEAD)	
@@ -2512,6 +2525,7 @@ This debug adapter has no exception breakpoints.
 This engine runs Windows containers. Editing requires a Linux container; Windows container editing needs a separate Windows agent. Container logs remain available.	
 This extension has no README.	
 This extension is no longer in the registry.	
+This file cannot be read as {}	
 This file has merge conflicts: resolve them first (Source Control marks it resolved when staged)	
 This file has no commits or saved copies yet.	
 This file is already on this computer. Use Save As instead.	
@@ -2701,6 +2715,7 @@ View: Split Editor Left
 View: Split Editor Up	
 View: Switch Editor…	
 View: Testing	
+View: Toggle Activity Bar Visibility	
 View: Toggle Breadcrumbs	
 View: Toggle Full Screen	
 View: Toggle Indent Guides	
@@ -2712,7 +2727,9 @@ View: Toggle Panel
 View: Toggle Render Whitespace	
 View: Toggle Secondary Side Bar	
 View: Toggle Sidebar	
+View: Toggle Status Bar Visibility	
 View: Toggle Sticky Scroll	
+View: Toggle Tab Key Moves Focus	
 View: Toggle Word Wrap	
 View: Toggle Zen Mode	
 View: Zoom In	

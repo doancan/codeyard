@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Title bar: switches at the right end for the side bar, the panel and the secondary side bar. The terminal button left the status bar for it.
+- Status bar: a new version shows as a labelled button beside the problem counts; the sync count reads in the bar's own color.
+- Resources: a gauge icon (a bug while a debug session runs) and a project section with the debugger's state and its pause,
+  continue and stop buttons, the commands running in terminals and the failing tests.
+- The first terminal of a window opens maximized (`workbench.panel.firstTerminalMaximized`).
+- `terminal.scrollback` accepts up to 200,000 lines and warns above 50,000 (memory, scrolling and search speed).
+- Command palette: `?` lists its modes (`>` commands, `:` line, `#` workspace symbols, `@` symbols in the file).
+- *Save without Formatting* (⌘K S), *Move Last Selection to Next Find Match* (⌘K ⇧⌘D), *Open Recent File…*,
+  *Reopen with Encoding…* and *Save with Encoding…* (also from the encoding in the status bar), tab shortcuts ⌃1…⌃9
+  (Alt+1…9), *Toggle Tab Key Moves Focus* (⌃⇧M), and commands to show or hide the activity bar and the status bar.
+- `editor.wordWrap` accepts `wordWrapColumn` and `bounded`, with `editor.wordWrapColumn`.
+
+### Changed
+
+- Source Control's badge counts up to 999 changes before it reads "999+" (it stopped at 99+).
+- `terminal.scrollback` keeps 50,000 lines by default.
+
 ## [0.7.6] - 2026-11-05
 
 ### Added

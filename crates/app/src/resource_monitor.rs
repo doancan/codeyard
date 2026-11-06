@@ -397,7 +397,12 @@ impl ResourceMonitor {
             row = row.child(
                 div()
                     .relative()
-                    .child(crate::a11y_controls::control(crate::a11y_controls::Control::text(t("Status bar"), format!("resources-run-{label}"), accesskit::Role::Label, read)))
+                    .child(crate::a11y_controls::control(crate::a11y_controls::Control::text(
+                        t("Status bar"),
+                        format!("resources-run-{label}"),
+                        accesskit::Role::Label,
+                        read,
+                    )))
                     .flex_none()
                     .flex()
                     .items_center()

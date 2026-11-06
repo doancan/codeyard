@@ -1035,7 +1035,8 @@ impl Workbench {
             super::debug::DebugStatus::Ended(_) => None,
         });
         let live = self.terminals.iter().filter(|t| !t.read(cx).has_exited());
-        let (terminals, commands) = live.fold((0, 0), |(all, busy), t| (all + 1, busy + usize::from(matches!(t.read(cx).activity(), crate::terminal::Activity::Running(_)))));
+        let (terminals, commands) =
+            live.fold((0, 0), |(all, busy), t| (all + 1, busy + usize::from(matches!(t.read(cx).activity(), crate::terminal::Activity::Running(_)))));
         RunInfo { debug, commands, terminals, failed_tests: self.failed_test_count() }
     }
 }

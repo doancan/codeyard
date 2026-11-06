@@ -13,6 +13,9 @@ pub enum Encoding {
 }
 
 impl Encoding {
+    /// Every encoding, in the order the pickers list them.
+    pub const ALL: [Encoding; 6] = [Encoding::Utf8, Encoding::Utf16Le, Encoding::Utf16Be, Encoding::Windows1254, Encoding::Iso8859_9, Encoding::Iso8859_1];
+
     pub fn label(self) -> &'static str {
         match self {
             Encoding::Utf8 => "UTF-8",
@@ -113,6 +116,16 @@ pub fn decode(data: &[u8], fallback: Encoding) -> Option<(String, Encoding)> {
     Some((data.iter().map(|&b| decode_byte(enc, b)).collect(), enc))
 }
 
+/// Text from bytes read as `enc`, whatever they look like ("Reopen with Encoding"). `None` when the bytes are not valid in `enc`.
+pub fn decode_as(data: &[u8], enc: Encoding) -> Option<String> {
+    match enc {
+        Encoding::Utf8 => std::str::from_utf8(data).ok().map(str::to_string),
+        Encoding::Utf16Le => utf16(data.strip_prefix(&[0xFF, 0xFE]).unwrap_or(data), u16::from_le_bytes),
+        Encoding::Utf16Be => utf16(data.strip_prefix(&[0xFE, 0xFF]).unwrap_or(data), u16::from_be_bytes),
+        _ => Some(data.iter().map(|&b| decode_byte(enc, b)).collect()),
+    }
+}
+
 fn utf16(rest: &[u8], f: fn([u8; 2]) -> u16) -> Option<String> {
     let (pairs, odd) = rest.as_chunks::<2>();
     if !odd.is_empty() {
@@ -154,6 +167,23 @@ mod tests {
         assert_eq!(encode("€", Encoding::Iso8859_9), Err('€'));
         assert_eq!(encode("ğ", Encoding::Iso8859_1), Err('ğ'), "no ğ in Latin-1");
         assert_eq!(encode("😀", Encoding::Windows1254), Err('😀'));
+    }
+
+    #[test]
+    fn decode_as_reads_the_bytes_in_the_chosen_encoding() {
+        // "ş" is 0xFE in Windows-1254 and an invalid byte alone in UTF-8; as Latin-1 it is "þ".
+        assert_eq!(decode_as(&[b'a', 0xFE], Encoding::Windows1254).as_deref(), Some("aş"));
+        assert_eq!(decode_as(&[b'a', 0xFE], Encoding::Iso8859_1).as_deref(), Some("aþ"));
+        assert_eq!(decode_as(&[b'a', 0xFE], Encoding::Utf8), None, "invalid UTF-8 is refused, not mangled");
+        assert_eq!(decode_as("ğ".as_bytes(), Encoding::Utf8).as_deref(), Some("ğ"));
+        // UTF-16 with or without its BOM; an odd byte count is refused.
+        assert_eq!(decode_as(&[b'a', 0, b'b', 0], Encoding::Utf16Le).as_deref(), Some("ab"));
+        assert_eq!(decode_as(&[0xFE, 0xFF, 0, b'a'], Encoding::Utf16Be).as_deref(), Some("a"));
+        assert_eq!(decode_as(&[b'a', 0, b'b'], Encoding::Utf16Le), None);
+        for enc in Encoding::ALL {
+            let bytes = encode("abc", enc).unwrap();
+            assert_eq!(decode_as(&bytes, enc).as_deref(), Some("abc"), "{}", enc.label());
+        }
     }
 
     #[test]

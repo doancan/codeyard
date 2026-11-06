@@ -36,7 +36,10 @@ impl EditorView {
     }
 
     /// Indent if the selection spans several lines, otherwise insert an indent.
-    pub(super) fn tab(&mut self, _: &Tab, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
+        if cx.global::<Settings>().tab_focus_mode {
+            return window.focus_next();
+        }
         if self.snippet_jump(true) {
             return self.after_move(cx);
         }
@@ -55,7 +58,10 @@ impl EditorView {
         self.after_edit(cx);
     }
 
-    pub(super) fn outdent(&mut self, _: &Outdent, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn outdent(&mut self, _: &Outdent, window: &mut Window, cx: &mut Context<Self>) {
+        if cx.global::<Settings>().tab_focus_mode {
+            return window.focus_prev();
+        }
         if self.snippet_jump(false) {
             return self.after_move(cx);
         }
@@ -376,6 +382,12 @@ impl EditorView {
 
     pub(super) fn add_selection_to_previous_find_match(&mut self, _: &AddSelectionToPreviousFindMatch, _: &mut Window, cx: &mut Context<Self>) {
         if self.buffer.select_previous_occurrence() {
+            self.after_move(cx);
+        }
+    }
+
+    pub(super) fn move_last_selection_to_next_find_match(&mut self, _: &MoveLastSelectionToNextFindMatch, _: &mut Window, cx: &mut Context<Self>) {
+        if self.buffer.move_last_selection_to_next_occurrence() {
             self.after_move(cx);
         }
     }

@@ -3599,3 +3599,20 @@ Go to a symbol in the workspace	Çalışma alanında bir sembole git
 Go to a symbol in this file	Bu dosyada bir sembole git
 Wrap long lines: at the window edge (on), at a column (wordWrapColumn) or at whichever comes first (bounded)	Uzun satırları sar: pencere kenarında (on), bir sütunda (wordWrapColumn) ya da hangisi önce gelirse orada (bounded)
 Column where lines wrap with wordWrapColumn or bounded	wordWrapColumn veya bounded ile satırların sarıldığı sütun
+Editor: Save without Formatting	Düzenleyici: Biçimlendirmeden Kaydet
+Editor: Move Last Selection to Next Find Match	Düzenleyici: Son Seçimi Sonraki Eşleşmeye Taşı
+File: Reopen with Encoding…	Dosya: Kodlamayla Yeniden Aç…
+File: Save with Encoding…	Dosya: Kodlamayla Kaydet…
+Save the active file with encoding…	Etkin dosyayı şu kodlamayla kaydet…
+Reopen the active file with encoding…	Etkin dosyayı şu kodlamayla yeniden aç…
+Reopen with Encoding…	Kodlamayla Yeniden Aç…
+Save or revert your changes first: reopening reads the file again	Önce değişikliklerinizi kaydedin ya da geri alın: yeniden açmak dosyayı baştan okur
+This file cannot be read as {}	Bu dosya {} olarak okunamıyor
+File: Open Recent File…	Dosya: Son Açılan Dosyayı Aç…
+No recently opened files	Son açılan dosya yok
+Open a recent file	Son açılan bir dosyayı aç
+View: Toggle Tab Key Moves Focus	Görünüm: Tab Tuşu Odağı Taşısın
+Tab Moves Focus	Tab Odağı Taşır
+Tab and Shift+Tab move the focus out of the editor. Click to turn off.	Tab ve Shift+Tab odağı düzenleyiciden çıkarır. Kapatmak için tıklayın.
+View: Toggle Activity Bar Visibility	Görünüm: Etkinlik Çubuğunu Göster/Gizle
+View: Toggle Status Bar Visibility	Görünüm: Durum Çubuğunu Göster/Gizle

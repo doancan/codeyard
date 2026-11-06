@@ -11,6 +11,8 @@ pub(super) enum OverlayKind {
     },
     /// "Insert Snippet…": snippets for the active file's language.
     Snippets(Vec<crate::snippets::Snippet>),
+    /// "Open Recent File…": the files listed, most recent first.
+    RecentFiles(Vec<String>),
     /// "Extensions: New Extension…": which kind to scaffold.
     NewExtensionKind,
     /// File icon theme picker; the theme to revert to on Esc.

@@ -206,6 +206,18 @@ impl Workbench {
                     .tooltip(move |_, cx| cx.new(|_| Tooltip(crate::i18n::tf("{0} errors, {1} warnings", &[&errors, &warnings]).into())).into())
                     .on_click(cx.listener(|this, _, w, cx| this.show_problems(&ShowProblems, w, cx)))
             })
+            .when(cx.global::<Settings>().tab_focus_mode, |d| {
+                d.child(
+                    item()
+                        .id("sb-tab-focus")
+                        .child(text("sb-tab-focus", crate::i18n::t("Tab Moves Focus").into()))
+                        .cursor_pointer()
+                        .hover(|d| d.bg(c(p.surface_hover)))
+                        .child(crate::i18n::t("Tab Moves Focus"))
+                        .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Tab and Shift+Tab move the focus out of the editor. Click to turn off.").into())).into())
+                        .on_click(cx.listener(|this, _, w, cx| this.dispatch_now(&ToggleTabFocusMode, w, cx))),
+                )
+            })
             // A new version waits at the left, beside the problems: always labelled, so it is not missed.
             .when_some(self.update_status_item(), |d, item| d.child(self.update_status_button(item, width >= 640., p, cx)))
             // `cyx dev`: this window runs an extension straight from the author's folder.
@@ -367,7 +379,17 @@ impl Workbench {
                             .child(indent)
                             .on_click(cx.listener(|this, _, window, cx| this.show_indent_picker(window, cx))),
                     )
-                    .child(item().relative().child(a11y::part_frame(a11y::Part::Status(a11y::StatusPart::Encoding), cx)).child(encoding))
+                    .child(
+                        item()
+                            .id("sb-encoding")
+                            .relative()
+                            .child(a11y::part_frame(a11y::Part::Status(a11y::StatusPart::Encoding), cx))
+                            .cursor_pointer()
+                            .hover(|d| d.bg(c(p.surface_hover)))
+                            .child(encoding)
+                            .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Reopen with Encoding…").into())).into())
+                            .on_click(cx.listener(|this, _, window, cx| this.show_encoding_picker(false, window, cx))),
+                    )
                     .child(
                         item()
                             .id("sb-eol")
