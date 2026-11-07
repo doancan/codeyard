@@ -186,6 +186,9 @@ pub struct ContextMenu {
     scroll: gpui::ScrollHandle,
     /// Where each item was painted in the last frame (accessibility).
     bounds: crate::painted::RowBounds<usize>,
+    /// The menu stays below this line (an application menu under its bar): a longer one scrolls instead of being pushed up
+    /// over the bar to fit the window.
+    stay_below: Option<gpui::Pixels>,
 }
 
 impl EventEmitter<MenuEvent> for ContextMenu {}
@@ -206,7 +209,18 @@ impl ContextMenu {
             flavor: Flavor::detect(),
             scroll: gpui::ScrollHandle::new(),
             bounds: Default::default(),
+            stay_below: None,
         }
+    }
+
+    /// Keep the menu below `y` (see `stay_below`).
+    pub fn stay_below(&mut self, y: gpui::Pixels) {
+        self.stay_below = Some(y);
+    }
+
+    /// The tallest the menu may be in a window `viewport` high: the window less a margin, or the room under `stay_below`.
+    pub fn max_height(&self, viewport: gpui::Pixels) -> gpui::Pixels {
+        (viewport - self.stay_below.unwrap_or(px(0.)) - px(16.)).max(px(24.))
     }
 
     /// The painted, visible bounds of the first `count` items (physical pixels; `None` while scrolled out of view).
@@ -328,7 +342,7 @@ impl Render for ContextMenu {
             .on_action(cx.listener(Self::right))
             .occlude()
             .min_w(px(m.min_w))
-            .max_h((window.viewport_size().height - px(16.)).max(px(24.)))
+            .max_h(self.max_height(window.viewport_size().height))
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
             .p(px(m.pad))
