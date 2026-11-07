@@ -59,6 +59,9 @@ mod modes;
 
 pub use marks::{Activity, Finished};
 
+#[path = "terminal_mouse.rs"]
+mod mouse;
+use mouse::selects_text;
 #[path = "terminal_restore.rs"]
 mod restore;
 #[path = "terminal_revival.rs"]
@@ -245,6 +248,8 @@ pub struct TerminalView {
     /// "Hold Shift to select": shown for a moment when a drag went to a program that reads the mouse; when it last showed.
     shift_hint: bool,
     shift_hint_last: Option<std::time::Instant>,
+    /// The left button as a program that reads the mouse sees it (terminal_mouse.rs).
+    program_mouse: mouse::ProgramMouse,
     /// Link hovered while ⌘ is held: (screen row, columns).
     hover_link: Option<(usize, std::ops::Range<usize>)>,
     /// The find bar, while it is open.
@@ -353,6 +358,7 @@ impl TerminalView {
             clear_carry: Vec::new(),
             shift_hint: false,
             shift_hint_last: None,
+            program_mouse: Default::default(),
             find: None,
             hover_link: None,
             metrics: {
@@ -442,9 +448,9 @@ impl TerminalView {
                 TermEvent::Title(_) | TermEvent::ResetTitle if self.title_locked => {}
                 TermEvent::Title(t) => self.set_title(t.into(), cx),
                 TermEvent::ResetTitle => self.set_title("terminal".into(), cx),
-                // OSC 52: only when the setting allows it (a program could otherwise replace what the user copied).
+                // OSC 52: as the setting says; by default right after a copy in the program (terminal_mouse.rs).
                 TermEvent::ClipboardStore(..) => {
-                    let allowed = cx.global::<crate::settings::Settings>().terminal_allow_clipboard_write;
+                    let allowed = self.takes_clipboard_write(&cx.global::<crate::settings::Settings>().terminal_allow_clipboard_write);
                     if let Some(s) = clipboard_text(ev, allowed) {
                         cx.write_to_clipboard(ClipboardItem::new_string(s))
                     }
@@ -675,6 +681,10 @@ impl TerminalView {
             return;
         }
         let Some(bytes) = key_to_bytes(&ev.keystroke, *self.term.mode()) else { return };
+        // Ctrl+C with a selection inside the program copies it there (Claude Code), over SSH through OSC 52.
+        if k.key == "c" && k.modifiers.control && !k.modifiers.alt && !k.modifiers.platform {
+            self.program_mouse.note_copy_key();
+        }
         cx.stop_propagation();
         self.term.selection = None;
         self.term.scroll_display(Scroll::Bottom);
@@ -697,36 +707,6 @@ impl TerminalView {
         let side = if x.fract() < 0.5 { Side::Left } else { Side::Right };
         let offset = self.term.grid().display_offset() as i32;
         (GridPoint::new(Line(row - offset), Column(col)), side)
-    }
-
-    /// xterm sequence if the program wants the mouse (htop, vim `mouse=a`, tmux): SGR or the legacy
-    /// format. `button`: 0 left, 64/65 wheel up/down. `None` if it doesn't.
-    fn mouse_report(&self, button: u8, pressed: bool, pos: Point<Pixels>, mods: &gpui::Modifiers) -> Option<Vec<u8>> {
-        let mode = *self.term.mode();
-        if !mode.intersects(TermMode::MOUSE_MODE) {
-            return None;
-        }
-        let (origin, cell_w) = self.grid;
-        let line_h = self.line_h();
-        let col = (((pos.x - origin.x) / cell_w).max(0.).floor() as usize).min(self.size.cols.saturating_sub(1)) + 1;
-        let row = ((pos.y - origin.y) / line_h).max(0.).floor().min((self.size.rows - 1) as f32) as usize + 1;
-        let mut b = button;
-        if mods.shift {
-            b += 4;
-        }
-        if mods.alt {
-            b += 8;
-        }
-        if mods.control {
-            b += 16;
-        }
-        Some(if mode.contains(TermMode::SGR_MOUSE) {
-            format!("\x1b[<{b};{col};{row}{}", if pressed { 'M' } else { 'm' }).into_bytes()
-        } else {
-            // Legacy format: release is "3", coordinates are bytes offset by 32 (at most 223).
-            let b = if pressed { b } else { 3 };
-            vec![0x1b, b'[', b'M', 32 + b, (32 + col.min(223)) as u8, (32 + row.min(223)) as u8]
-        })
     }
 
     /// Link at the position: (screen row, columns, link). The row is read cell by cell.
@@ -761,10 +741,7 @@ impl TerminalView {
             return;
         }
         // The program wants the mouse: the click goes to it (⇧ still selects text, like VS Code).
-        if !selects_text(&ev.modifiers)
-            && let Some(bytes) = self.mouse_report(0, true, ev.position, &ev.modifiers)
-        {
-            self.write(bytes);
+        if !selects_text(&ev.modifiers) && self.report_press(ev.position, &ev.modifiers, ev.click_count) {
             return;
         }
         let (at, side) = self.grid_point(ev.position);
@@ -790,6 +767,10 @@ impl TerminalView {
             self.hover_link = hover;
             cx.notify();
         }
+        // Drags and moves the program follows (Claude Code selects text this way).
+        if !self.selecting && self.report_motion(ev) {
+            return;
+        }
         if !self.selecting || ev.pressed_button != Some(MouseButton::Left) {
             self.selecting = false;
             if ev.pressed_button == Some(MouseButton::Left) && !selects_text(&ev.modifiers) && self.term.mode().intersects(TermMode::MOUSE_MODE) {
@@ -805,11 +786,7 @@ impl TerminalView {
     }
 
     fn on_mouse_up(&mut self, ev: &gpui::MouseUpEvent, cx: &mut Context<Self>) {
-        if !selects_text(&ev.modifiers)
-            && !self.selecting
-            && let Some(bytes) = self.mouse_report(0, false, ev.position, &ev.modifiers)
-        {
-            self.write(bytes);
+        if !selects_text(&ev.modifiers) && !self.selecting && self.report_release(ev.position, &ev.modifiers) {
             return;
         }
         let was_selecting = std::mem::take(&mut self.selecting);
@@ -976,11 +953,6 @@ impl TerminalView {
         self.write(b"\x0c".to_vec());
         cx.notify();
     }
-}
-
-/// Shift or ⌥ held: the drag selects text even while the program reads the mouse (Terminal.app and iTerm use ⌥ for this).
-fn selects_text(m: &gpui::Modifiers) -> bool {
-    m.shift || m.alt
 }
 
 /// macOS line editing, as in Terminal.app: ⌘← / ⌘→ go to the start / end of the line, ⌥← / ⌥→ move by word,
