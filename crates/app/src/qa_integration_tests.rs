@@ -24,7 +24,7 @@ fn base_dir() -> PathBuf {
     crate::ui::canonical_for_test(base)
 }
 
-fn qa_dir(name: &str) -> PathBuf {
+pub(crate) fn qa_dir(name: &str) -> PathBuf {
     let dir = base_dir().join(format!("{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();

@@ -56,6 +56,20 @@ impl Workbench {
         self.navigate_to(target, window, cx);
     }
 
+    /// ⌃1…⌃8 (Alt+1…Alt+8): the tab at that place in the group; ⌃9 (Alt+9): the last tab.
+    pub(super) fn open_editor_at(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let count = self.tabs.editors.len();
+        if count == 0 {
+            return;
+        }
+        let ix = index.min(count - 1);
+        if self.tabs.active == Some(ix) && !self.tabs.page_active && !self.tabs.diff_active && !self.tabs.large_active {
+            return;
+        }
+        self.record_nav(cx);
+        self.activate(ix, window, cx);
+    }
+
     pub(super) fn reopen_closed_editor(&mut self, _: &ReopenClosedEditor, window: &mut Window, cx: &mut Context<Self>) {
         let Some(target) = self.nav.closed.pop() else { return };
         self.record_nav(cx);

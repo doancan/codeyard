@@ -45,6 +45,7 @@ impl Workbench {
                     };
                     Picker::new(vec![PickSource::Secret { verb: crate::i18n::t("Send") }], what, "", None, cx)
                 }
+                AskKind::Text => Picker::new(vec![PickSource::Input { verb: crate::i18n::t("Send"), path: false }], crate::i18n::t("Username"), "", None, cx),
                 AskKind::HostKey | AskKind::Confirm => {
                     let (yes, no) = if request.kind == AskKind::HostKey {
                         (crate::i18n::t("Trust this host and connect"), crate::i18n::t("Cancel"))
@@ -215,7 +216,7 @@ impl Workbench {
             }
             InputPurpose::SaveAs { from } => self.save_as_to(from, name, window, cx),
             InputPurpose::SaveLocalCopy { from } => self.save_local_copy_to(from, name, cx),
-            InputPurpose::CreateBranch { root } => self.git_checkout(root, name, false, true, cx),
+            InputPurpose::CreateBranch { root } => self.git_checkout(root, name, false, true, window, cx),
             InputPurpose::RenameBranch { root, old } => {
                 let n = name.trim().to_string();
                 self.git_task(&crate::i18n::tf("Renaming {}…", &[&old]), cx, move |h| {

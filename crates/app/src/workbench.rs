@@ -29,6 +29,12 @@ use crate::ui::{self, ActiveTheme, Palette, c, icon, layout, palette, text};
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[path = "a11y.rs"]
 pub mod a11y;
+#[path = "workbench_bounds.rs"]
+mod bounds;
+#[cfg(test)]
+pub(crate) use bounds::parse_bounds;
+pub use bounds::saved_window_bounds;
+pub(crate) use bounds::{WINDOW_BOUNDS_KEY, format_bounds, visible_enough};
 // --- compare ---
 #[path = "workbench_compare.rs"]
 mod compare_glue;
@@ -205,6 +211,9 @@ pub use patch_glue::{ApplyPatchFromClipboard, CopyChangesAsPatch};
 #[path = "workbench_permalink.rs"]
 mod permalink_glue;
 pub use permalink_glue::{CopyGitPermalink, OpenOnGitRemote};
+#[cfg(test)]
+#[path = "workbench_feature_tests.rs"]
+mod feature_tests;
 #[path = "workbench_terminals.rs"]
 mod terminals_glue;
 #[path = "workbench_toggles.rs"]
@@ -308,6 +317,9 @@ actions!(
         CloseEmptyEditorGroup,
         MoveEditorToOtherGroup,
         ToggleWordWrap,
+        ToggleTabFocusMode,
+        ToggleActivityBar,
+        ToggleStatusBar,
         CloseSavedEditors,
         ConvertIndentToSpaces,
         ConvertIndentToTabs,
@@ -317,6 +329,9 @@ actions!(
         GoBack,
         GoForward,
         ReopenClosedEditor,
+        ReopenWithEncoding,
+        OpenRecentFile,
+        SaveWithEncoding,
         NewFile,
         SaveAs,
         SaveLocalCopy,
@@ -424,6 +439,7 @@ actions!(
         GitSync,
         // --- git-sync ---
         GitPullRebase,
+        GitPushForce,
         GitPullFrom,
         GitPushTo,
         GitFetchAll,
@@ -491,6 +507,7 @@ actions!(
         ShowWelcome,
         OpenSettingsPage,
         CloneRepository,
+        GitInitRepository,
         OpenMarkdownPreview,
         CompareWithClipboard,
         CompareWithSaved,
@@ -611,6 +628,13 @@ pub use host::askpass::{AskKind, AskRequest};
 pub use inspector_glue::ShowExtensionInspector;
 pub use market_glue::{MarketNext, MarketPrevious, ShowMarket};
 pub use providers_glue::RunExtensionCommand;
+
+/// Go to the tab at `index` (0-based) of the front group; an index past the last one means the last tab.
+#[derive(Clone, PartialEq, Debug, gpui::Action)]
+#[action(namespace = workbench, no_json)]
+pub struct OpenEditorAt {
+    pub index: usize,
+}
 pub use remote_glue::ShowRemoteExplorer;
 pub use terminals_glue::{
     ChangeTerminalColor, ConfigureTerminalSettings, FocusNextTerminal, FocusPreviousTerminal, KillAllTerminals, KillOtherTerminals, MoveTerminalDown,
@@ -636,6 +660,10 @@ enum EditorOpt {
     Convert {
         to_tabs: bool,
     },
+    /// Read the active file again as this encoding.
+    Reopen(crate::encoding::Encoding),
+    /// Write the active file in this encoding.
+    SaveIn(crate::encoding::Encoding),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -867,50 +895,6 @@ impl Focusable for Workbench {
 /// A refresh is abandoned if `git status` doesn't finish in this time (the next one retries).
 const GIT_STATUS_TIMEOUT: Duration = Duration::from_secs(20);
 
-const WINDOW_BOUNDS_KEY: &str = "window.bounds";
-
-/// `"windowed x y w h"`, `"maximized …"`, `"fullscreen …"` (the bounds are the size to restore to).
-pub(crate) fn format_bounds(b: gpui::WindowBounds) -> String {
-    let (kind, r) = match b {
-        gpui::WindowBounds::Windowed(r) => ("windowed", r),
-        gpui::WindowBounds::Maximized(r) => ("maximized", r),
-        gpui::WindowBounds::Fullscreen(r) => ("fullscreen", r),
-    };
-    let f = |p: gpui::Pixels| f32::from(p).round();
-    format!("{kind} {} {} {} {}", f(r.origin.x), f(r.origin.y), f(r.size.width), f(r.size.height))
-}
-
-pub(crate) fn parse_bounds(s: &str) -> Option<gpui::WindowBounds> {
-    let mut it = s.split_whitespace();
-    let kind = it.next()?;
-    let n: Vec<f32> = it.map(|x| x.parse().ok()).collect::<Option<_>>()?;
-    let [x, y, w, h] = n[..] else { return None };
-    if w < 200. || h < 150. {
-        return None;
-    }
-    let r = gpui::Bounds::new(gpui::point(px(x), px(y)), gpui::size(px(w), px(h)));
-    Some(match kind {
-        "windowed" => gpui::WindowBounds::Windowed(r),
-        "maximized" => gpui::WindowBounds::Maximized(r),
-        "fullscreen" => gpui::WindowBounds::Fullscreen(r),
-        _ => return None,
-    })
-}
-
-/// Whether the saved window is usable on this screen: if the display was unplugged or the resolution
-/// changed, the window must not open as a sliver at the screen edge. A grabbable part
-/// of the title bar (200×100 px) has to be visible.
-pub(crate) fn visible_enough(display: gpui::Bounds<gpui::Pixels>, window: gpui::Bounds<gpui::Pixels>) -> bool {
-    let top = gpui::Bounds::new(window.origin, gpui::size(window.size.width, px(100.).min(window.size.height)));
-    let seen = display.intersect(&top);
-    seen.size.width >= px(200.) && seen.size.height >= px(30.) && display.intersect(&window).size.height >= px(100.)
-}
-
-/// Last saved window bounds (the first window opens with these).
-pub fn saved_window_bounds() -> Option<gpui::WindowBounds> {
-    State::open(&state_path()?).ok()?.get(WINDOW_BOUNDS_KEY).as_deref().and_then(parse_bounds)
-}
-
 /// Can be redirected with `CODEYARD_STATE_DIR` (so measurement scripts and
 /// experiments don't pollute the user's recents list).
 /// The app's old name: config and state folders are moved to the new name on first launch.
@@ -1127,6 +1111,8 @@ impl Workbench {
                     }
                 }
                 crate::scm::ScmEvent::AddWorktree => this.git_add_worktree(window, cx),
+                crate::scm::ScmEvent::InitRepository => this.git_init(cx),
+                crate::scm::ScmEvent::CloneRepository => this.clone_repository(&crate::workbench::CloneRepository, window, cx),
                 crate::scm::ScmEvent::MoreActions(position) => this.open_scm_menu(*position, window, cx),
                 crate::scm::ScmEvent::GraphMenu(position) => this.open_graph_menu(*position, window, cx),
                 // --- git-sync ---

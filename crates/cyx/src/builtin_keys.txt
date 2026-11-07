@@ -1,3 +1,12 @@
+alt-1
+alt-2
+alt-3
+alt-4
+alt-5
+alt-6
+alt-7
+alt-8
+alt-9
 alt-backspace
 alt-c
 alt-cmd-down
@@ -60,6 +69,15 @@ cmd-up
 cmd-v
 cmd-w
 ctrl--
+ctrl-1
+ctrl-2
+ctrl-3
+ctrl-4
+ctrl-5
+ctrl-6
+ctrl-7
+ctrl-8
+ctrl-9
 ctrl-`
 ctrl-alt--
 ctrl-alt-down
@@ -98,6 +116,7 @@ ctrl-shift-g
 ctrl-shift-home
 ctrl-shift-k
 ctrl-shift-left
+ctrl-shift-m
 ctrl-shift-right
 ctrl-shift-secondary-left
 ctrl-shift-secondary-right
@@ -156,6 +175,7 @@ secondary-f
 secondary-f12
 secondary-j
 secondary-k f
+secondary-k s
 secondary-k secondary-0
 secondary-k secondary-1
 secondary-k secondary-2
@@ -174,6 +194,7 @@ secondary-k secondary-i
 secondary-k secondary-j
 secondary-k secondary-k
 secondary-k secondary-q
+secondary-k secondary-shift-d
 secondary-k secondary-t
 secondary-k secondary-u
 secondary-k secondary-w

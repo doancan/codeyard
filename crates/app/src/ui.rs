@@ -258,6 +258,7 @@ const ICONS: &[(&str, &[u8])] = icons![
     "file-terminal",
     "file-text",
     "folder",
+    "gauge",
     "folder-open",
     "git-branch",
     "git-compare",

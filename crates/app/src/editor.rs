@@ -51,6 +51,7 @@ actions!(
         Undo,
         Redo,
         Save,
+        SaveWithoutFormatting,
         Escape,
         AddCursorAbove,
         AddCursorBelow,
@@ -149,6 +150,7 @@ actions!(
         AddLineComment,
         RemoveLineComment,
         AddSelectionToPreviousFindMatch,
+        MoveLastSelectionToNextFindMatch,
         NextChange,
         PreviousChange,
         FoldLevel1,
@@ -394,8 +396,16 @@ pub fn syntax_path(path: &str) -> std::borrow::Cow<'_, str> {
 /// Read in the background, convert to a buffer, do the first parse (without blocking the UI thread).
 /// If not UTF-8, decoded with the `fallback` encoding (UTF-16 with a BOM is recognized automatically).
 pub fn load(host: &dyn Host, path: &str, fallback: Encoding) -> Result<Loaded, OpenError> {
+    load_as(host, path, fallback, None)
+}
+
+/// `load`, reading the bytes as `forced` when it is given (Reopen with Encoding).
+pub fn load_as(host: &dyn Host, path: &str, fallback: Encoding, forced: Option<Encoding>) -> Result<Loaded, OpenError> {
     let (data, hash) = host.read(path).map_err(OpenError::Host)?;
-    let (text, encoding) = crate::encoding::decode(&data, fallback).ok_or(OpenError::Binary)?;
+    let (text, encoding) = match forced {
+        Some(enc) => (crate::encoding::decode_as(&data, enc).ok_or(OpenError::Binary)?, enc),
+        None => crate::encoding::decode(&data, fallback).ok_or(OpenError::Binary)?,
+    };
     drop(data);
     let buffer = Buffer::from_str(&text);
     let syntax =
@@ -633,6 +643,8 @@ pub struct EditorView {
     text_width: Pixels,
     /// Settings at the last paint: (wrap enabled, tab width, width of one column).
     layout_params: (bool, usize, Pixels),
+    /// `editor.wordWrap` at a column: (column, whether the window edge may wrap earlier), as of the last paint.
+    wrap_limit: Option<(usize, bool)>,
 }
 
 type Selections = Vec<Range<usize>>;
@@ -1034,6 +1046,7 @@ impl EditorView {
             fold_lines: Default::default(),
             text_width: px(0.),
             layout_params: (false, 4, px(8.)),
+            wrap_limit: None,
         }
     }
 

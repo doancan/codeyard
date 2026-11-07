@@ -31,6 +31,9 @@ pub enum ScmEvent {
         path: String,
     },
     AddWorktree,
+    /// The buttons of an empty Source Control view, for a folder that is not a repository.
+    InitRepository,
+    CloneRepository,
     /// The "…" in the header: more git operations (window coordinates).
     MoreActions(gpui::Point<gpui::Pixels>),
     /// The "…" in the GRAPH header: view, filters and history actions (window coordinates).
@@ -204,6 +207,8 @@ pub(crate) use history_access::{AccessGraphRow, AccessHistory, AccessWorktree, A
 
 #[path = "scm_changes.rs"]
 mod changes_ui;
+#[path = "scm_operation.rs"]
+mod operation_ui;
 #[path = "scm_ops.rs"]
 mod ops;
 #[path = "scm_repos.rs"]
@@ -769,6 +774,7 @@ impl Render for ScmPanel {
                             .child(note),
                     )
                 })
+                .when(!has_ext && !multi, |d| d.child(self.not_a_repository_actions(&p, cx)))
                 .when(has_ext, |d| d.child(div().id("scm-ext-list").flex_1().min_h_0().overflow_y_scroll().children(ext)))
                 .when(multi, |d| d.child(self.repo_list(self.repo_focus.is_focused(window), cx)));
         };
@@ -875,6 +881,7 @@ impl Render for ScmPanel {
                                 ),
                             }),
                     )
+                    .children(self.operation_banner(&st, &p))
                     .when_some(last, |d, lc| {
                         d.child(
                             div()

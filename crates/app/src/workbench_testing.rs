@@ -375,6 +375,10 @@ impl Workbench {
         self.run_command(run, window, cx);
     }
 
+    pub fn checkout_for_test(&mut self, root: String, branch: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.git_checkout(root, branch.into(), false, false, window, cx);
+    }
+
     pub fn focus_tree(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.roots.primary.focus_handle(cx));
     }

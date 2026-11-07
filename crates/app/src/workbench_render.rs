@@ -224,6 +224,8 @@ impl Render for Workbench {
         let remote = self.remote.host.is_remote();
         let project = self.root(cx).map(std::path::PathBuf::from);
         self.chrome.resources.update(cx, |monitor, cx| monitor.set_project(project, remote, cx));
+        let run = self.run_info(cx);
+        self.chrome.resources.update(cx, |monitor, cx| monitor.set_run(run, cx));
         // Whatever had the keyboard went away (a tab closed with the old folder when a workspace opened, for one): the
         // keyboard stays in the window, or no shortcut works until something is clicked.
         if window.focused(cx).is_none() {
@@ -694,6 +696,24 @@ mod resize_tests {
             assert!(wb.read_with(cx, |wb, _| !wb.chrome.resizing_sidebar && !wb.chrome.resizing_panel && !wb.chrome.resizing_split));
             assert_eq!(wb.read_with(cx, |wb, _| (wb.chrome.sidebar_w, wb.chrome.panel_h, wb.chrome.panel_w)), sizes);
         }
+    }
+
+    /// The layout switches at the right end of the title bar open and close what they name.
+    #[cfg(target_os = "macos")]
+    #[gpui::test]
+    fn the_title_bar_switches_toggle_side_bar_and_panel(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        let (bar, switch) = (cx.debug_bounds("title-bar").unwrap(), cx.debug_bounds("tb-panel").unwrap());
+        assert!(switch.left() > bar.center().x, "the switches sit in the right half: {switch:?} {bar:?}");
+        let before = wb.read_with(cx, |wb, _| wb.chrome.panel_open);
+        cx.simulate_click(switch.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_ne!(wb.read_with(cx, |wb, _| wb.chrome.panel_open), before, "the panel switch toggles the panel");
+        let side = wb.read_with(cx, |wb, _| wb.chrome.panel.is_some());
+        let button = cx.debug_bounds("tb-sidebar").unwrap();
+        cx.simulate_click(button.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_ne!(wb.read_with(cx, |wb, _| wb.chrome.panel.is_some()), side, "the side bar switch toggles the side bar");
     }
 
     // Moving a maximized panel used to flip only the docking side, which a maximized panel ignores: nothing moved.

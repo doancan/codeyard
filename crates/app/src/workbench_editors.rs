@@ -373,6 +373,45 @@ impl Workbench {
         self.show_options(crate::i18n::t("Line endings for this file (applied on save)"), opts, window, cx);
     }
 
+    /// "Open Recent File…": the files opened most recently that still matter (not the ones open in the front tab), the folder
+    /// they are in beside each name.
+    pub(super) fn show_recent_files(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let front = self.active_editor().map(|e| e.read(cx).path.clone());
+        let paths: Vec<String> = self.nav.recent_files.iter().filter(|p| front.as_deref() != Some(p.as_str())).take(50).cloned().collect();
+        if paths.is_empty() {
+            self.notice = Some(Notice::Info(crate::i18n::t("No recently opened files").into()));
+            return cx.notify();
+        }
+        if self.overlay.is_some() {
+            self.close_overlay(window, cx);
+        }
+        let root = self.root(cx);
+        let items = paths
+            .iter()
+            .map(|p| {
+                let shown = root.as_deref().and_then(|r| p.strip_prefix(&format!("{}/", r.trim_end_matches('/')))).unwrap_or(p);
+                PickItem { label: ui::file_name(p).to_string().into(), detail: Some(shown.to_string().into()), keys: None }
+            })
+            .collect();
+        let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Open a recent file"), "", None, cx));
+        self.show_overlay(picker, OverlayKind::RecentFiles(paths), window, cx);
+    }
+
+    /// "Reopen with Encoding…" / "Save with Encoding…": the encodings, the file's own marked.
+    pub(super) fn show_encoding_picker(&mut self, save: bool, window: &mut Window, cx: &mut Context<Self>) {
+        use crate::encoding::Encoding;
+        let Some(current) = self.active_editor().map(|e| e.read(cx).encoding()) else { return };
+        let opts = Encoding::ALL
+            .into_iter()
+            .map(|enc| {
+                let option = if save { EditorOpt::SaveIn(enc) } else { EditorOpt::Reopen(enc) };
+                (option, enc.label().to_string(), (enc == current).then(|| crate::i18n::t("current").to_string()))
+            })
+            .collect();
+        let title = if save { crate::i18n::t("Save the active file with encoding…") } else { crate::i18n::t("Reopen the active file with encoding…") };
+        self.show_options(title, opts, window, cx);
+    }
+
     pub(super) fn show_indent_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let current = self.active_editor().map(|e| e.read(cx).indent_key());
         let mark = |l: &str| (current.as_deref() == Some(l)).then(|| crate::i18n::t("current").to_string());

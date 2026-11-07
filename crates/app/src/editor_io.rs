@@ -10,6 +10,19 @@ impl EditorView {
         self.save_now(cx);
     }
 
+    /// "Save without Formatting": the text goes to disk as it is, without the code actions and the formatter of a save.
+    pub(super) fn save_without_formatting_action(&mut self, _: &SaveWithoutFormatting, _: &mut Window, cx: &mut Context<Self>) {
+        self.save_without_formatting(cx);
+    }
+
+    pub fn save_without_formatting(&mut self, cx: &mut Context<Self>) {
+        if self.conflict && self.conflict_at.is_some_and(|at| at.elapsed() < CONFLICT_GRACE) {
+            return;
+        }
+        let force = self.conflict;
+        self.write_to_disk(force, cx);
+    }
+
     /// Save. With a language server, first the `editor.codeActionsOnSave` actions (one request per
     /// kind, syncing the document in between), then `editor.formatOnSave` runs: with the extension chosen to format
     /// the file (`editor.formatters`), else with the language server. Each step is skipped if it does not answer in
@@ -539,16 +552,52 @@ impl EditorView {
         self.encoded().map_err(|ch| crate::i18n::tf("Not saved: {0} cannot be written in {1}.", &[&format!("\"{ch}\""), &self.encoding.label()]))
     }
 
+    /// The message the editor shows above the text, if any (tests).
+    #[cfg(test)]
+    pub fn error_for_test(&self) -> Option<String> {
+        self.error.as_ref().map(ToString::to_string)
+    }
+
     pub fn encoding(&self) -> Encoding {
         self.encoding
     }
 
     /// Discard local changes, load the on-disk version.
     pub(crate) fn reload(&mut self, cx: &mut Context<Self>) {
+        self.reload_as(None, cx);
+    }
+
+    /// "Reopen with Encoding": the file is read again, its bytes taken as `enc`. Edits that were not saved would be lost, so
+    /// the file must be unchanged; a file that is not valid in `enc` stays as it is, with a message.
+    pub fn reopen_with_encoding(&mut self, enc: Encoding, cx: &mut Context<Self>) {
+        if self.is_dirty() {
+            self.error = Some(crate::i18n::t("Save or revert your changes first: reopening reads the file again").into());
+            cx.notify();
+            return;
+        }
+        self.reload_as(Some(enc), cx);
+    }
+
+    /// "Save with Encoding": the text is written to disk in `enc` now, and the file keeps that encoding. Nothing changes if a
+    /// character has no equivalent in it.
+    pub fn save_with_encoding(&mut self, enc: Encoding, cx: &mut Context<Self>) {
+        let before = self.encoding;
+        self.encoding = enc;
+        if let Err(message) = self.encoded_bytes() {
+            self.encoding = before;
+            self.error = Some(message.into());
+            cx.notify();
+            return;
+        }
+        let force = self.conflict;
+        self.write_to_disk(force, cx);
+    }
+
+    fn reload_as(&mut self, forced: Option<Encoding>, cx: &mut Context<Self>) {
         let host = self.host.clone();
         let path = self.path.clone();
         let fallback = cx.global::<Settings>().fallback_encoding;
-        let task = cx.background_executor().spawn(async move { load(host.as_ref(), &path, fallback) });
+        let task = cx.background_executor().spawn(async move { load_as(host.as_ref(), &path, fallback, forced) });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
@@ -575,6 +624,10 @@ impl EditorView {
                         this.resync_lsp();
                         this.schedule_lsp_extras(300, cx);
                         this.schedule_git_marks(0, Some(cx));
+                    }
+                    Err(_) if forced.is_some() => {
+                        let label = forced.map_or("", Encoding::label);
+                        this.error = Some(crate::i18n::tf("This file cannot be read as {}", &[&label]).into());
                     }
                     Err(e) => this.error = Some(crate::i18n::tf("Could not load: {}", &[&e]).into()),
                 }

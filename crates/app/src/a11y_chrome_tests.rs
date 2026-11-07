@@ -72,7 +72,13 @@ fn the_activity_bar_and_status_bar_act_like_their_clicks(cx: &mut TestAppContext
     press(&wb, cx, &snap, problems);
     assert!(wb.read_with(cx, |wb, _| wb.chrome.panel_open && wb.chrome.bottom == Bottom::Problems));
     let snap = snapshot(&wb, cx);
-    let (toggle, _) = get(&snap, Role::Button, "Toggle Panel (⌘J)");
+    // The shortcut in the label is written for the platform (⌘J, Ctrl+J): the button is found by its name.
+    let (toggle, _) = snap
+        .to_tree()
+        .nodes
+        .into_iter()
+        .find(|(_, n)| n.role() == Role::Button && n.label().is_some_and(|l| l.starts_with("Toggle Panel (")))
+        .expect("the Toggle Panel button is in the tree");
     hit(&snap, toggle);
     press(&wb, cx, &snap, toggle);
     assert!(!wb.read_with(cx, |wb, _| wb.chrome.panel_open), "the panel is hidden");
@@ -139,7 +145,7 @@ fn tabs_breadcrumbs_and_other_groups(cx: &mut TestAppContext) {
     assert_eq!(focused, first, "the first group has the focus");
 }
 
-/// The panel's buttons: New Terminal adds one, which is listed under "Terminals" with its Kill button.
+/// The panel's buttons (the first terminal opens maximized, so the size button offers to restore): New Terminal adds one, which is listed under "Terminals" with its Kill button.
 #[gpui::test]
 fn panel_buttons_and_the_terminal_list(cx: &mut TestAppContext) {
     let _en = crate::i18n::LangGuard::set("en");
@@ -154,7 +160,7 @@ fn panel_buttons_and_the_terminal_list(cx: &mut TestAppContext) {
     let snap = snapshot(&wb, cx);
     let terms = snap.to_tree().nodes.into_iter().find(|(_, n)| n.role() == Role::Group && n.label() == Some("Terminals")).expect("the terminal list");
     assert!(terms.1.children().len() >= 4, "two terminals, each with Kill");
-    for name in ["Split Terminal", "Kill Terminal", "Maximize Panel", "Hide Panel (⌘J)"] {
+    for name in ["Split Terminal", "Kill Terminal", "Restore Panel Size", "Hide Panel (⌘J)"] {
         assert!(find(&snap, Role::Button, name).is_some(), "{name}");
     }
 }

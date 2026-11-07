@@ -217,7 +217,9 @@ pub fn log(host: &dyn Host, root: &str, limit: usize, scope: Scope) -> Result<Ve
     let n = format!("-n{limit}");
     let mut args = vec!["log", "--date-order", "--decorate=full", "--date=format:%Y-%m-%d %H:%M", &n, FORMAT];
     if scope == Scope::All {
-        args.insert(1, "--all");
+        // A stash is a commit with an "index on …" parent (and one for untracked files): the Stashes section lists them, the
+        // graph is for history. `--exclude` applies to the `--all` that follows.
+        args.splice(1..1, ["--exclude=refs/stash", "--all"]);
     }
     let out = host.exec("git", &args, Some(root), None).map_err(|e| e.to_string())?;
     if !out.ok() {
@@ -1026,5 +1028,26 @@ mod view_tests {
         for v in GraphView::ALL {
             assert!(v.row_height() >= 20., "{v:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod stash_tests {
+    use super::*;
+
+    /// A stash is not history: its "WIP on" commit and the internal "index on" commit stay out of the graph.
+    #[test]
+    fn stashes_do_not_show_up_in_the_graph() {
+        let Some((dir, run)) = crate::git::repo_for_test("graph-stash") else { return };
+        let host = host::local();
+        let root = dir.to_string_lossy().into_owned();
+        std::fs::write(dir.join("f.txt"), "changed\n").unwrap();
+        std::fs::write(dir.join("new.txt"), "untracked\n").unwrap();
+        run(&["add", "f.txt"]).unwrap();
+        run(&["stash", "push", "-q", "-u"]).unwrap();
+        assert!(!run(&["stash", "list"]).unwrap().is_empty(), "the stash exists");
+        let subjects: Vec<String> = log(&host, &root, 50, Scope::All).unwrap().into_iter().map(|c| c.subject).collect();
+        assert_eq!(subjects, ["base"], "only history is drawn: {subjects:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

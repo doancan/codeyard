@@ -60,6 +60,7 @@ impl Render for EditorView {
         let font_id = window.text_system().resolve_font(&gpui::font(font_family.clone()));
         let char_w = window.text_system().advance(font_id, px(font_size), 'm').map_or(px(font_size * 0.6), |s| s.width);
         self.layout_params = (wrap, self.indent_unit().max(1), char_w);
+        self.wrap_limit = settings.word_wrap_limit;
         self.refresh_display();
         let rows = self.display.row_count();
         let banner = self.banner(&p, cx);
@@ -192,6 +193,7 @@ impl Render for EditorView {
                             .on_action(cx.on(Self::delete_all_right))
                             .on_action(cx.on(Self::select_to_bracket))
                             .on_action(cx.on(Self::add_selection_to_previous_find_match))
+                            .on_action(cx.on(Self::move_last_selection_to_next_find_match))
                             .on_action(cx.on(Self::add_line_comment))
                             .on_action(cx.on(Self::remove_line_comment))
                             .on_action(cx.on(Self::next_change))
@@ -274,6 +276,7 @@ impl Render for EditorView {
                             .on_action(cx.on(Self::cut))
                             .on_action(cx.on(Self::paste))
                             .on_action(cx.on(Self::save))
+                            .on_action(cx.on(Self::save_without_formatting_action))
                             .relative()
                             .flex_1()
                             .min_h_0()

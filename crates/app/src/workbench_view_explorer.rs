@@ -8,6 +8,14 @@ fn activity_hints(scroll: &gpui::ScrollHandle) -> (bool, bool) {
     (offset < px(-0.5), max > px(0.5) && offset > -max + px(0.5))
 }
 
+/// Largest count an activity bar badge shows in full; a bigger one reads "999+".
+const BADGE_MAX: usize = 999;
+
+/// A badge's text: the count itself up to three digits, then "999+".
+fn badge_label(count: usize) -> String {
+    if count > BADGE_MAX { format!("{BADGE_MAX}+") } else { count.to_string() }
+}
+
 impl Workbench {
     /// The activity bar's own views in the order drawn: (view, label, badge, shown).
     pub(super) fn activity_items(&self, cx: &App) -> Vec<(Panel, &'static str, usize, bool)> {
@@ -115,7 +123,7 @@ impl Workbench {
                             .text_color(c(p.on_accent))
                             .text_size(px(text::BADGE.0))
                             .font_weight(gpui::FontWeight::BOLD)
-                            .child(if badge > 99 { "99+".to_string() } else { badge.to_string() }),
+                            .child(badge_label(badge)),
                     )
                 })
                 .tooltip(move |_, cx| cx.new(|_| Tooltip(label.into())).into())
@@ -338,16 +346,15 @@ impl Workbench {
                                 .child(self.ctl(
                                     crate::i18n::t("Explorer"),
                                     "explorer-recent",
-                                    crate::i18n::t("Open recent, or connect to a host… (⌃R)"),
+                                    crate::i18n::t("Open recent or connect… (⌃R)"),
                                     cx,
                                     |this, w, cx| this.show_project_switcher(w, cx),
                                 ))
                                 .w_full()
-                                .text_ellipsis()
                                 .cursor_pointer()
                                 .text_color(c(p.accent))
                                 .hover(|d| d.underline())
-                                .child(crate::i18n::t("Open recent, or connect to a host… (⌃R)"))
+                                .child(crate::i18n::t("Open recent or connect… (⌃R)"))
                                 .on_click(cx.listener(|this, _, window, cx| this.show_project_switcher(window, cx))),
                         ),
                 )
@@ -1031,5 +1038,20 @@ impl Workbench {
                     .into_any_element()
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod badge_tests {
+    use super::badge_label;
+
+    #[test]
+    fn counts_show_up_to_three_digits_then_cap() {
+        assert_eq!(badge_label(1), "1");
+        assert_eq!(badge_label(99), "99");
+        assert_eq!(badge_label(100), "100");
+        assert_eq!(badge_label(999), "999");
+        assert_eq!(badge_label(1000), "999+");
+        assert_eq!(badge_label(usize::MAX), "999+");
     }
 }

@@ -873,3 +873,28 @@ fn editing_bytes_keeps_the_endings_of_untouched_lines() {
     assert!(Buffer::edit_bytes(b"a\nb\r\n", |_| Vec::new()).unwrap().is_none());
     assert!(Buffer::edit_bytes(&[0xff, 0xfe], |_| Vec::new()).is_err());
 }
+
+#[test]
+fn move_last_selection_skips_ahead_and_keeps_the_others() {
+    let mut b = Buffer::from_str("ab x ab y ab z ab");
+    b.set_cursor(1, false);
+    assert!(b.select_next_occurrence()); // the word at the cursor: the first ab
+    assert!(b.select_next_occurrence()); // adds the second
+    assert_eq!(b.selected_texts(), vec!["ab", "ab"]);
+    assert!(b.move_last_selection_to_next_occurrence()); // the second moves on to the third
+    assert_eq!(b.selections(), vec![0..2, 10..12], "the first stays, the last one moved");
+}
+
+#[test]
+fn move_last_selection_wraps_and_stops_when_nothing_is_free() {
+    let mut b = Buffer::from_str("ab ab");
+    b.set_cursor(0, false);
+    assert!(b.select_next_occurrence());
+    assert!(b.move_last_selection_to_next_occurrence(), "from the first ab to the second");
+    assert!(b.move_last_selection_to_next_occurrence(), "and around to the first");
+    let single = Buffer::from_str("only ab here");
+    let mut single = single;
+    single.set_cursor(6, false);
+    assert!(single.select_next_occurrence());
+    assert!(!single.move_last_selection_to_next_occurrence(), "no other match");
+}

@@ -373,3 +373,51 @@ fn scm_controls_and_rows_have_their_painted_frames(cx: &mut TestAppContext) {
             .all(|(_, n)| n.bounds().is_none())
     );
 }
+
+#[gpui::test]
+fn a_folder_without_a_repository_offers_two_buttons_that_work(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let dir = crate::qa_integration_tests::qa_dir("a11y-scm-plain");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    cx.simulate_keystrokes("ctrl-shift-g");
+    cx.run_until_parked();
+    let snap = snapshot(&wb, cx);
+    let (_, init) = node(&snap, "Initialize Repository").expect("the init button");
+    assert_eq!(init.role(), Role::Button);
+    assert!(init.supports_action(Action::Click));
+    assert!(node(&snap, "Clone Repository…").is_some_and(|(_, n)| n.supports_action(Action::Click)));
+
+    act(&wb, cx, &snap, "Initialize Repository", Action::Click);
+    wait_ticking(cx, "initialized", |cx| wb.read_with(cx, |wb, _| wb.git_status().is_some()));
+    assert!(dir.join(".git").is_dir());
+    assert!(node(&snapshot(&wb, cx), "Initialize Repository").is_none(), "the buttons go once there is a repository");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[gpui::test]
+fn a_half_done_merge_is_announced_with_its_conflicts(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let Some(dir) = crate::tests::git_repo("a11y-scm-merge") else { return };
+    std::fs::write(dir.join("a.txt"), "base\n").unwrap();
+    git_in(&dir, &["add", "a.txt"]);
+    git_in(&dir, &["commit", "-qm", "base"]);
+    let main = git_in(&dir, &["branch", "--show-current"]).trim().to_string();
+    git_in(&dir, &["checkout", "-q", "-b", "feature"]);
+    std::fs::write(dir.join("a.txt"), "feature\n").unwrap();
+    git_in(&dir, &["commit", "-qam", "feature"]);
+    git_in(&dir, &["checkout", "-q", &main]);
+    std::fs::write(dir.join("a.txt"), "main\n").unwrap();
+    git_in(&dir, &["commit", "-qam", "main"]);
+    let _ = crate::test_git::git().args(["merge", "feature"]).current_dir(&dir).output();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    cx.simulate_keystrokes("ctrl-shift-g");
+    idle(&wb, cx, "the merge", |s| s.scm.as_ref().is_some_and(|v| v.view.operation.is_some()));
+    let snap = snapshot(&wb, cx);
+    let (_, operation) = snap.to_tree().nodes.into_iter().find(|(id, _)| *id == SCM_OPERATION).expect("the operation is in the tree");
+    assert_eq!(operation.value(), Some("Merge in progress · 1 conflict"));
+    let (_, commit) = snap.to_tree().nodes.into_iter().find(|(id, _)| *id == SCM_COMMIT).unwrap();
+    assert_eq!((commit.label(), commit.is_disabled()), (Some("Resolve Conflicts"), true));
+    let _ = std::fs::remove_dir_all(&dir);
+}

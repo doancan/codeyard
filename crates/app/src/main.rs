@@ -326,6 +326,15 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("ctrl-secondary-right", MoveEditorToOtherGroup, None),
         KeyBinding::new("ctrl-secondary-left", MoveEditorToOtherGroup, None),
         KeyBinding::new("secondary-1", FocusLeftGroup, None),
+        KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-1" } else { "alt-1" }, workbench::OpenEditorAt { index: 0 }, None),
+        KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-2" } else { "alt-2" }, workbench::OpenEditorAt { index: 1 }, None),
+        KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-3" } else { "alt-3" }, workbench::OpenEditorAt { index: 2 }, None),
+        KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-4" } else { "alt-4" }, workbench::OpenEditorAt { index: 3 }, None),
+        KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-5" } else { "alt-5" }, workbench::OpenEditorAt { index: 4 }, None),
+        KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-6" } else { "alt-6" }, workbench::OpenEditorAt { index: 5 }, None),
+        KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-7" } else { "alt-7" }, workbench::OpenEditorAt { index: 6 }, None),
+        KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-8" } else { "alt-8" }, workbench::OpenEditorAt { index: 7 }, None),
+        KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-9" } else { "alt-9" }, workbench::OpenEditorAt { index: usize::MAX }, None),
         KeyBinding::new("secondary-2", FocusRightGroup, None),
         KeyBinding::new("secondary-shift-m", ShowProblems, None),
         KeyBinding::new("secondary-alt-r", SendRequest, None),
@@ -437,6 +446,7 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-k secondary-]", UnfoldRecursively, ed),
         KeyBinding::new("secondary-k secondary-j", UnfoldAll, ed),
         KeyBinding::new("alt-z", ToggleWordWrap, None),
+        KeyBinding::new("ctrl-shift-m", ToggleTabFocusMode, None),
         // macOS: ⌃- / ⌃⇧-. Elsewhere Ctrl+- is zoom out: like VS Code, Ctrl+Alt+-.
         KeyBinding::new(if cfg!(target_os = "macos") { "ctrl--" } else { "ctrl-alt--" }, GoBack, None),
         KeyBinding::new("ctrl-shift--", GoForward, None),
@@ -487,6 +497,7 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-shift-z", merge::RedoMerge, Some("MergeView")),
         KeyBinding::new("secondary-shift-z", Redo, ed),
         KeyBinding::new("secondary-s", Save, ed),
+        KeyBinding::new("secondary-k s", SaveWithoutFormatting, ed),
         KeyBinding::new("secondary-d", SelectNextOccurrence, ed),
         // Find / replace (should work while the bar is focused too).
         KeyBinding::new("secondary-f", Find, ed),
@@ -521,6 +532,7 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-k secondary-c", AddLineComment, ed),
         KeyBinding::new("secondary-k secondary-u", RemoveLineComment, ed),
         KeyBinding::new("secondary-k secondary-d", AddSelectionToPreviousFindMatch, ed),
+        KeyBinding::new("secondary-k secondary-shift-d", MoveLastSelectionToNextFindMatch, ed),
         KeyBinding::new("alt-f3", NextChange, ed),
         KeyBinding::new("alt-f12", PeekDefinition, ed),
         KeyBinding::new("shift-alt-h", ShowIncomingCalls, ed),
@@ -754,7 +766,8 @@ fn bind_file(cx: &mut App, text: &str, label: &str) -> Vec<String> {
                     let guess = commands::COMMAND_IDS
                         .iter()
                         .filter_map(|c| fuzzy::score(id, c).map(|(s, _)| (s, *c)))
-                        .max_by_key(|(s, _)| *s)
+                        // On a tie the shortest id wins: `editor.sav` means `editor.save`, not a longer sibling.
+                        .max_by_key(|(s, c)| (*s, std::cmp::Reverse(c.len())))
                         .map(|(_, c)| format!(", did you mean \"{c}\"?"))
                         .unwrap_or_default();
                     warnings.push(format!("{label}: unknown command \"{id}\"{guess}"));
@@ -970,6 +983,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
                 );
                 std::process::exit(0);
             }
+            _ if a.trim().is_empty() => {} // a launcher's "" is no folder (it showed "not found:" and a trust question)
             _ => args.path = Some(a),
         }
     }
@@ -1024,6 +1038,7 @@ mod args_tests {
         assert_eq!(parse(true, &line).run, ["Workspace: Trust This Folder", "Tasks: Run Task"]);
         // Its value is not taken for a path, and a trailing --do is harmless.
         assert_eq!(parse(false, &["--do", "key:enter"]).path, None);
+        assert_eq!(parse(false, &["", " ", "/work"]).path.as_deref(), Some("/work"), "an empty argument is no folder");
         assert!(parse(false, &["--do"]).run.is_empty());
     }
 

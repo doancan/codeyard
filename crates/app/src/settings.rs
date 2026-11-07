@@ -95,6 +95,8 @@ pub struct Settings {
     /// Row height as a multiple of the terminal's font size.
     pub terminal_line_height: f32,
     pub terminal_scrollback: usize,
+    /// A program may erase the whole history with `CSI 3 J` (`terminal.allowClearHistory`); off: it cannot.
+    pub terminal_allow_clear_history: bool,
     /// Lines of each terminal's history saved for the next start (`terminal.persistentScrollback`; 0: none).
     pub terminal_persistent_scrollback: usize,
     /// Minutes a window's terminals keep running for the next start after Codeyard quits, crashes or is killed
@@ -112,6 +114,8 @@ pub struct Settings {
     /// What a maximized panel does when something opens in the editor area: "half", "restore" or "tab"
     /// (`workbench.panel.openFromMaximized`).
     pub panel_open_from_maximized: String,
+    /// The first terminal opened in a window fills the editor area (`workbench.panel.firstTerminalMaximized`).
+    pub panel_first_terminal_maximized: bool,
     /// Closing a terminal asks first: "running" (a program is in the foreground), "always" or "never".
     pub terminal_confirm_close: String,
     /// Terminal profiles per operating system of the machine (`terminal.profiles.macos` / `.linux` / `.windows`).
@@ -130,6 +134,10 @@ pub struct Settings {
     pub minimap: bool,
     /// Long lines wrap at the window width (⌥Z).
     pub word_wrap: bool,
+    /// Tab and Shift+Tab move the focus out of the editor instead of indenting (⌃⇧M); not saved, it is a switch for now.
+    pub tab_focus_mode: bool,
+    /// With `editor.wordWrap` "wordWrapColumn" or "bounded": the column and whether the window edge may come first.
+    pub word_wrap_limit: Option<(usize, bool)>,
     /// The active file is selected and visible in the tree.
     pub auto_reveal: bool,
     /// Files deleted locally go to the Trash (`files.enableTrash`, off: deletes are permanent and ask first).
@@ -347,7 +355,8 @@ impl Default for Settings {
             terminal_shell: None,
             terminal_font_size: theme::text::CODE.0,
             terminal_line_height: crate::terminal::LINE_HEIGHT,
-            terminal_scrollback: 10_000,
+            terminal_scrollback: 50_000,
+            terminal_allow_clear_history: false,
             terminal_persistent_scrollback: 0,
             terminal_persistent_session_timeout: 5,
             terminal_scroll_sensitivity: 2.,
@@ -356,6 +365,7 @@ impl Default for Settings {
             terminal_notifications: true,
             terminal_copy_on_selection: "agents".into(),
             panel_open_from_maximized: "half".into(),
+            panel_first_terminal_maximized: true,
             terminal_confirm_close: "never".into(),
             terminal_profiles: Default::default(),
             terminal_default_profile: None,
@@ -386,6 +396,8 @@ impl Default for Settings {
             diff_inline: false,
             minimap: true,
             word_wrap: false,
+            tab_focus_mode: false,
+            word_wrap_limit: None,
             auto_reveal: true,
             cursor_blinking: true,
             word_based_suggestions: true,
@@ -474,6 +486,8 @@ pub use scope::RESTRICTED_KEYS;
 #[cfg(test)]
 pub use scope::USER_ONLY_KEYS;
 pub use scope::{Scope, ScopedLayer, Sources, is_user_only, name_layer};
+#[path = "settings_keybindings.rs"]
+mod keybindings;
 #[path = "settings_rust.rs"]
 mod rust;
 #[path = "settings_scale.rs"]
@@ -482,6 +496,7 @@ mod scale;
 mod terminal;
 #[path = "settings_workbench.rs"]
 mod workbench;
+pub use keybindings::parse_keybindings;
 #[cfg(test)]
 pub use scale::UI_SCALE_STEPS;
 pub use scale::{SessionScale, UI_SCALE_ERROR, UI_SCALE_MAX, UI_SCALE_MIN, UnsavedScale, parse_ui_scale, step_ui_scale, ui_scale_percent, ui_scale_value};
@@ -720,8 +735,14 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.string("editor.cursorBlinking") {
         s.cursor_blinking = v != "solid";
     }
+    let wrap_column = r.integer("editor.wordWrapColumn", 1, 1000).map_or(80, |v| v as usize);
     if let Some(v) = r.string("editor.wordWrap") {
         s.word_wrap = v != "off";
+        s.word_wrap_limit = match v.as_str() {
+            "wordWrapColumn" => Some((wrap_column, false)),
+            "bounded" => Some((wrap_column, true)),
+            _ => None,
+        };
     }
     if let Some(v) = r.bool("editor.minimap.enabled") {
         s.minimap = v;
@@ -1194,11 +1215,13 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.notifications",
         "terminal.copyOnSelection",
         "workbench.panel.openFromMaximized",
+        "workbench.panel.firstTerminalMaximized",
         "terminal.defaultProfile",
         "terminal.profiles.macos",
         "terminal.profiles.linux",
         "terminal.profiles.windows",
         "terminal.allowClipboardWrite",
+        "terminal.allowClearHistory",
         "window.restoreSession",
         "window.startup",
         "lsp.enabled",
@@ -1230,6 +1253,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "diffEditor.renderSideBySide",
         "editor.minimap.enabled",
         "editor.wordWrap",
+        "editor.wordWrapColumn",
         "explorer.autoReveal",
         "files.fallbackEncoding",
         "editor.cursorBlinking",
@@ -1455,40 +1479,6 @@ impl Reader<'_> {
             }
         }
     }
-}
-
-/// User shortcut: (keys, command id or disable, context).
-#[derive(Debug, Clone, PartialEq)]
-pub struct UserBinding {
-    pub key: String,
-    /// `None`: disable this key.
-    pub command: Option<String>,
-    pub when: Option<String>,
-}
-
-pub fn parse_keybindings(text: &str) -> (Vec<UserBinding>, Vec<String>) {
-    let mut warnings = Vec::new();
-    let value: Value = match serde_json::from_str(&theme::themes::strip_jsonc(text)) {
-        Ok(v) => v,
-        Err(e) => return (Vec::new(), vec![format!("keybindings.jsonc: {e}")]),
-    };
-    let Some(items) = value.as_array() else {
-        return (Vec::new(), vec![format!("keybindings.jsonc: {}", crate::i18n::t("expected a list [ … ]"))]);
-    };
-    let mut out = Vec::new();
-    for (i, item) in items.iter().enumerate() {
-        // VS Code syntax ("cmd+shift+p", "cmd+k cmd+t") is accepted too: converted to ours.
-        let converted = item.get("key").and_then(Value::as_str).filter(|k| k.contains('+')).and_then(crate::vscode::map_key);
-        let key = converted.as_deref().or_else(|| item.get("key").and_then(Value::as_str));
-        let command = item.get("command");
-        let when = item.get("when").and_then(Value::as_str).map(str::to_string);
-        match (key, command) {
-            (Some(k), Some(Value::String(c))) => out.push(UserBinding { key: k.into(), command: Some(c.clone()), when }),
-            (Some(k), Some(Value::Null)) => out.push(UserBinding { key: k.into(), command: None, when }),
-            _ => warnings.push(format!("keybindings.jsonc: {}", crate::i18n::tf("entry {0} needs {1} and {2}", &[&(i + 1), &"\"key\"", &"\"command\""]))),
-        }
-    }
-    (out, warnings)
 }
 
 #[cfg(test)]

@@ -477,3 +477,132 @@ fn a_patch_copied_from_the_changes_applies_from_the_clipboard(cx: &mut TestAppCo
     run(&wb, cx, "Git: Apply Patch from Clipboard");
     wait_ticking(cx, "the refusal", |cx| notice(&wb, cx).contains("was not applied"));
 }
+
+#[gpui::test]
+fn a_rejected_push_says_to_pull_first_and_a_force_push_replaces_the_remote(cx: &mut TestAppContext) {
+    let f = Fixture::new("sync-rejected");
+    let (wb, cx) = opened(cx, &f, quiet());
+    f.push_elsewhere("theirs.txt", "t\n");
+    f.commit_here("mine.txt", "m\n");
+    refresh(&wb, cx);
+    run(&wb, cx, "Git: Push");
+    wait_ticking(cx, "rejected", |cx| notice(&wb, cx).contains("Push failed: The remote has commits you do not have: pull first"));
+    assert!(notice(&wb, cx).contains("Git: Push (Force)"), "the way out is named: {}", notice(&wb, cx));
+
+    // Without a fetch the lease is stale: git refuses instead of overwriting a commit nobody has seen.
+    run(&wb, cx, "Git: Push (Force)…");
+    wait_ticking(cx, "the question", |cx| cx.has_pending_prompt());
+    cx.simulate_prompt_answer("Force Push");
+    wait_ticking(cx, "lease refuses", |cx| notice(&wb, cx).contains("Push failed"));
+    assert!(git_in(&f.bare, &["log", "--format=%s", "main"]).contains("remote theirs.txt"), "their commit is still there");
+
+    git_in(&f.dir, &["fetch", "-q"]);
+    refresh(&wb, cx);
+    run(&wb, cx, "Git: Push (Force)…");
+    wait_ticking(cx, "the question", |cx| cx.has_pending_prompt());
+    cx.simulate_prompt_answer("Force Push");
+    wait_ticking(cx, "forced", |cx| notice(&wb, cx) == "Pushed");
+    assert_eq!(git_in(&f.bare, &["rev-parse", "main"]), git_in(&f.dir, &["rev-parse", "HEAD"]), "the remote has my commit now");
+}
+
+#[gpui::test]
+fn a_switch_blocked_by_local_changes_offers_to_stash_them(cx: &mut TestAppContext) {
+    let f = Fixture::new("switch-stash");
+    let (wb, cx) = opened(cx, &f, quiet());
+    git_in(&f.dir, &["checkout", "-q", "-b", "other"]);
+    std::fs::write(f.dir.join("README.md"), "other\n").unwrap();
+    git_in(&f.dir, &["commit", "-qam", "other"]);
+    git_in(&f.dir, &["checkout", "-q", "main"]);
+    std::fs::write(f.dir.join("README.md"), "unsaved\n").unwrap();
+    std::fs::write(f.dir.join("new.txt"), "untracked\n").unwrap();
+    refresh(&wb, cx);
+
+    let root = f.dir.to_string_lossy().into_owned();
+    wb.update_in(cx, |wb, window, cx| wb.checkout_for_test(root.clone(), "other", window, cx));
+    cx.run_until_parked();
+    cx.simulate_prompt_answer("Stash & Switch");
+    wait_ticking(cx, "switched", |cx| notice(&wb, cx).starts_with("Switched to other. Your changes are in the stash"));
+    assert_eq!(git_in(&f.dir, &["branch", "--show-current"]).trim(), "other");
+    assert_eq!(std::fs::read_to_string(f.dir.join("README.md")).unwrap(), "other\n");
+    assert!(!f.dir.join("new.txt").exists(), "untracked files went into the stash too");
+    assert!(git_in(&f.dir, &["stash", "list"]).contains("Before switching to other"));
+}
+
+#[gpui::test]
+fn declining_the_stash_leaves_the_changes_and_the_branch_alone(cx: &mut TestAppContext) {
+    let f = Fixture::new("switch-decline");
+    let (wb, cx) = opened(cx, &f, quiet());
+    git_in(&f.dir, &["checkout", "-q", "-b", "other"]);
+    std::fs::write(f.dir.join("README.md"), "other\n").unwrap();
+    git_in(&f.dir, &["commit", "-qam", "other"]);
+    git_in(&f.dir, &["checkout", "-q", "main"]);
+    std::fs::write(f.dir.join("README.md"), "unsaved\n").unwrap();
+    refresh(&wb, cx);
+
+    let root = f.dir.to_string_lossy().into_owned();
+    wb.update_in(cx, |wb, window, cx| wb.checkout_for_test(root, "other", window, cx));
+    cx.run_until_parked();
+    cx.simulate_prompt_answer("Cancel");
+    cx.run_until_parked();
+    assert_eq!(git_in(&f.dir, &["branch", "--show-current"]).trim(), "main");
+    assert_eq!(std::fs::read_to_string(f.dir.join("README.md")).unwrap(), "unsaved\n");
+    assert!(git_in(&f.dir, &["stash", "list"]).trim().is_empty());
+}
+
+#[gpui::test]
+fn initialize_repository_turns_a_plain_folder_into_a_repository(cx: &mut TestAppContext) {
+    let dir = crate::qa_integration_tests::qa_dir("git-init-plain");
+    std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+    let (wb, cx) = setup_with(cx, quiet());
+    open(&wb, &dir, cx);
+    cx.run_until_parked();
+    assert!(status(&wb, cx).is_none(), "a plain folder has no repository");
+
+    run(&wb, cx, "Git: Initialize Repository");
+    wait_ticking(cx, "initialized", |cx| status(&wb, cx).is_some());
+    assert!(dir.join(".git").is_dir());
+    assert_eq!(notice(&wb, cx), "Initialized an empty Git repository");
+    assert_eq!(status(&wb, cx).unwrap().changes.len(), 1, "the file shows up as a change");
+
+    run(&wb, cx, "Git: Initialize Repository");
+    cx.run_until_parked();
+    assert_eq!(notice(&wb, cx), "This folder is already a git repository.", "never initializes twice");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[gpui::test]
+fn a_half_done_merge_blocks_the_commit_until_resolved_and_then_needs_no_message(cx: &mut TestAppContext) {
+    let f = Fixture::new("sync-merge");
+    let (wb, cx) = opened(cx, &f, quiet());
+    let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
+    git_in(&f.dir, &["checkout", "-q", "-b", "feature"]);
+    std::fs::write(f.dir.join("README.md"), "feature\n").unwrap();
+    git_in(&f.dir, &["commit", "-qam", "feature"]);
+    git_in(&f.dir, &["checkout", "-q", "main"]);
+    std::fs::write(f.dir.join("README.md"), "main\n").unwrap();
+    git_in(&f.dir, &["commit", "-qam", "main"]);
+    assert!(!crate::test_git::git().args(["merge", "feature"]).current_dir(&f.dir).output().unwrap().status.success(), "the merge conflicts");
+    refresh(&wb, cx);
+    wait_ticking(cx, "merging", |cx| status(&wb, cx).is_some_and(|s| s.op == crate::repos::OpState::Merging));
+
+    assert_eq!(
+        scm.read_with(cx, |s, cx| s.commit_button_for_test(cx)),
+        Some(("Resolve Conflicts".into(), false)),
+        "the button does not offer a commit git would refuse"
+    );
+    // Committing with the conflict still there says what is missing instead of failing inside git.
+    commit_with_message(&wb, cx, "", |s, cx| s.commit(cx));
+    cx.run_until_parked();
+    let result = scm.read_with(cx, |s, _| s.result_for_test()).unwrap_or_default();
+    assert!(result.starts_with("1 file still has conflicts"), "{result}");
+
+    // Resolved and staged: the box may stay empty, git's own "Merge branch" message is used.
+    std::fs::write(f.dir.join("README.md"), "resolved\n").unwrap();
+    git_in(&f.dir, &["add", "README.md"]);
+    refresh(&wb, cx);
+    wait_ticking(cx, "staged", |cx| status(&wb, cx).is_some_and(|s| s.staged().count() == 1));
+    commit_with_message(&wb, cx, "", |s, cx| s.commit(cx));
+    wait_ticking(cx, "merge committed", |cx| head_subject(&f.dir) == "Merge branch 'feature'" && !scm.read_with(cx, |s, _| s.is_busy()));
+    assert_eq!(git_in(&f.dir, &["rev-list", "--parents", "-n1", "HEAD"]).split_whitespace().count(), 3, "a merge commit with two parents");
+    wait_ticking(cx, "idle again", |cx| status(&wb, cx).is_some_and(|s| s.op == crate::repos::OpState::Idle));
+}

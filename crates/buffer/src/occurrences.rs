@@ -64,6 +64,24 @@ impl Buffer {
         }
     }
 
+    /// ⌘K ⇧⌘D: the last added selection skips to the next occurrence of its text; the other selections stay. Without a
+    /// selection it selects the word like ⌘D. Wraps around at the end; false when no other occurrence is free.
+    pub fn move_last_selection_to_next_occurrence(&mut self) -> bool {
+        let sel = *self.sel();
+        let Some(range) = sel.selection() else { return self.select_next_occurrence() };
+        let needle = self.rope.slice(range.clone()).to_string();
+        let all = self.occurrences(&needle, self.word_search);
+        let others: Vec<Sel> = self.sels.iter().enumerate().filter(|(i, _)| *i != self.primary).map(|(_, s)| *s).collect();
+        let free = |r: &Range<usize>| *r != range && !others.iter().any(|s| s.start() < r.end && r.start < s.end());
+        let next = all.iter().find(|r| r.start >= range.end && free(r)).or_else(|| all.iter().find(|r| free(r))).cloned();
+        let Some(r) = next else { return false };
+        let word = self.word_search;
+        self.sels[self.primary] = Sel { cursor: r.end, anchor: Some(r.start), goal: None };
+        self.normalize();
+        self.word_search = word;
+        true
+    }
+
     /// ⇧⌘L: select all occurrences of the selected text (the word at the cursor if no selection).
     pub fn select_all_occurrences(&mut self) {
         let sel = *self.sel();

@@ -94,6 +94,8 @@ pub struct Status {
     /// Fingerprint of every ref (branches, remote branches, tags, stash): changes when one is created, moved or deleted,
     /// even if HEAD stays where it is (the graph's labels depend on it).
     pub refs_stamp: u64,
+    /// A merge, rebase, cherry-pick or revert that stopped half-way.
+    pub op: crate::repos::OpState,
 }
 
 impl Status {
@@ -240,6 +242,7 @@ pub fn status_for(host: &dyn Host, dir: &str, trusted: bool) -> Result<Option<St
     args.extend(["status", "--porcelain=v1", "-z", "--branch", "--untracked-files=all"]);
     let out = git_ok(host, &root, &args)?;
     let mut st = parse_status(&root, out.as_bytes());
+    st.op = git_dir.as_deref().map_or_else(Default::default, |dir| crate::repos::OpState::read(host, dir));
     st.git_dir = git_dir;
     // One process for HEAD and all refs. Exit code 1 only means "no refs yet" (a repository without commits).
     let refs = git(host, &root, &["show-ref", "--head"]).ok().filter(|o| o.ok() || o.code == Some(1)).map(|o| o.stdout_str()).unwrap_or_default();
@@ -323,12 +326,14 @@ pub struct CommitOptions {
     pub amend: bool,
     pub signoff: bool,
     pub no_verify: bool,
+    /// A merge, cherry-pick or revert is half done and git has its message ready (`MERGE_MSG`): an empty message keeps it.
+    pub prepared: bool,
 }
 
 /// The message goes through stdin (`-F -`): no quoting or line-ending trouble.
 pub fn commit(host: &dyn Host, root: &str, message: &str, opts: CommitOptions) -> Result<String, String> {
     let mut args = vec!["commit", "-q"];
-    let keep_message = opts.amend && message.trim().is_empty();
+    let keep_message = (opts.amend || opts.prepared) && message.trim().is_empty();
     args.extend(if keep_message { ["--no-edit"].as_slice() } else { ["-F", "-"].as_slice() });
     for (on, flag) in [(opts.all, "-a"), (opts.amend, "--amend"), (opts.signoff, "--signoff"), (opts.no_verify, "--no-verify")] {
         if on {

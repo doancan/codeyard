@@ -105,6 +105,12 @@ impl ScmSnap {
             branch.set_value(view.branch.clone());
             nodes.push((SCM_BRANCH, branch));
             children.push(SCM_BRANCH);
+            if let Some(operation) = &view.operation {
+                let mut node = Node::new(Role::Label);
+                node.set_value(operation.clone());
+                nodes.push((SCM_OPERATION, node));
+                children.push(SCM_OPERATION);
+            }
 
             let mut message = Node::new(Role::MultilineTextInput);
             message.set_label(t("Message (↵ to commit)"));
@@ -141,6 +147,15 @@ impl ScmSnap {
             empty.set_value(t("This folder is not a git repository."));
             nodes.push((SCM_EMPTY, empty));
             children.push(SCM_EMPTY);
+            if view.repos.is_empty() {
+                for (id, label) in [(SCM_INIT, t("Initialize Repository")), (SCM_CLONE, t("Clone Repository…"))] {
+                    let mut button = Node::new(Role::Button);
+                    button.set_label(label);
+                    button.add_action(Action::Click);
+                    nodes.push((id, button));
+                    children.push(id);
+                }
+            }
         }
         ext::append(&view.ext, nodes, &mut children);
         children.extend(history);
@@ -244,6 +259,17 @@ impl Workbench {
         }
         let id = req.target_node;
         let is_repo = (SCM_REPO..SCM_REPO + BLOCK).contains(&id.0);
+        // The buttons of a folder that is not a repository: they act on the folder, so no repository state is compared.
+        if matches!(id, SCM_INIT | SCM_CLONE) {
+            if req.action == Action::Click && self.view_shown(Panel::Scm) && self.git_status().is_none() {
+                if id == SCM_INIT {
+                    self.git_init(cx);
+                } else {
+                    self.clone_repository(&crate::workbench::CloneRepository, window, cx);
+                }
+            }
+            return true;
+        }
         let is_scm =
             [SCM_MESSAGE, SCM_COMMIT, SCM_CHANGES].contains(&id) || (SCM_GROUP..SCM_FILE + BLOCK).contains(&id.0) || is_repo || history::is_history(id);
         if !is_scm {

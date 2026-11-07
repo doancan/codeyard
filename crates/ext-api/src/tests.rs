@@ -173,18 +173,19 @@ fn every_api_version_has_its_codeyard_release() {
     assert!(RELEASES.windows(2).all(|w| w[0].0 < w[1].0));
 }
 
-/// This build has API `VERSION`, so its own version is that API's release, a preview of it or a patch release of it
-/// (same major and minor), never a later minor that would make `cyx` name the wrong minimum.
+/// This build has API `VERSION`, so its own version is that API's first release, a preview of it, or a later release that did
+/// not change the API (a release that does adds a line to `RELEASES`, which `every_api_version_has_its_codeyard_release`
+/// checks). It is never older than the release `cyx` names as the minimum.
 #[test]
-fn this_build_is_the_release_of_its_api_or_a_preview_or_a_patch_of_it() {
+fn this_build_is_the_release_of_its_api_or_a_preview_or_a_later_release_of_it() {
     let release = codeyard_for(VERSION).unwrap();
     let build = env!("CARGO_PKG_VERSION");
-    let patch_of = |b: &str, r: &str| matches!((Version::parse(b), Version::parse(r)), (Some(b), Some(r)) if (b.0, b.1) == (r.0, r.1) && b.2 >= r.2);
+    let at_or_after = |b: &str, r: &str| matches!((Version::parse(b), Version::parse(r)), (Some(b), Some(r)) if b >= r);
     assert!(
-        build == release || is_preview_of(build, release) || patch_of(build, release),
+        build == release || is_preview_of(build, release) || at_or_after(build, release),
         "Codeyard {build} implements API {VERSION}, first released in {release}: fix RELEASES"
     );
-    assert!(patch_of("0.7.2", "0.7.0") && !patch_of("0.8.0", "0.7.0") && !patch_of("0.6.9", "0.7.0"));
+    assert!(at_or_after("0.7.2", "0.7.0") && at_or_after("0.8.0", "0.7.0") && !at_or_after("0.6.9", "0.7.0"));
     assert!(is_preview_of("0.6.0", "0.7.0") && !is_preview_of("0.7.0", "0.7.0") && !is_preview_of("0.8.1", "0.7.0"));
     assert!(!is_preview_of("dev", "0.7.0"));
 }

@@ -189,6 +189,11 @@ pub fn parse_remotes(out: &str) -> Vec<(String, String)> {
     entries
 }
 
+/// Make `dir` a repository (`git init`; the first branch is named by `init.defaultBranch`).
+pub fn init(host: &dyn Host, dir: &str) -> Result<(), String> {
+    git_ok(host, dir, &["init", "-q"]).map(|_| ())
+}
+
 pub fn add_remote(host: &dyn Host, root: &str, name: &str, url: &str) -> Result<(), String> {
     git_ok(host, root, &["remote", "add", "--", name, url]).map(|_| ())
 }

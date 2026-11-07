@@ -128,7 +128,6 @@ Welcome	Hoş Geldiniz
 
 # ---- Command palette ----
 recently used	son kullanılan
-Search files by name (> for commands, : for line, # for symbols)	Dosyaları adla ara (komutlar için >, satır için :, semboller için #)
 Type > for commands	Komutlar için > yazın
 Remote: Connect to {}	Uzak: {} Sunucusuna Bağlan
 Remote: Disconnect	Uzak: Bağlantıyı Kes
@@ -703,7 +702,7 @@ Manage: About, Settings, Color Theme…	Yönet: Hakkında, Ayarlar, Renk Teması
 File Icon Theme…	Dosya Simgesi Teması…
 No folder is open.	Açık klasör yok.
 Open Folder	Klasör Aç
-Open recent, or connect to a host… (⌃R)	Son açılanı aç ya da bir sunucuya bağlan… (⌃R)
+Open recent or connect… (⌃R)	Son açılanlar ya da bağlan… (⌃R)
 New File… (⌘N)	Yeni Dosya… (⌘N)
 Refresh Explorer	Gezgini Yenile
 Expand Folders (the selected one, or the open file's folders)	Klasörleri Genişlet (seçili olanı ya da açık dosyanın klasörlerini)
@@ -1171,7 +1170,6 @@ Line height in pixels	Piksel cinsinden satır yüksekliği
 Editor font (empty: built-in monospace)	Düzenleyici yazı tipi (boş: yerleşik eş aralıklı yazı tipi)
 Spaces per indent level (empty: detect per file)	Girinti düzeyi başına boşluk sayısı (boş: dosyaya göre algıla)
 Indent with spaces instead of tabs	Sekme yerine boşlukla girinti ver
-Wrap long lines at the window edge	Uzun satırları pencere kenarında kaydır
 Cursor animation	İmleç animasyonu
 Show the minimap	Mini haritayı göster
 Highlight other uses of the word under the cursor	İmlecin altındaki sözcüğün diğer kullanımlarını vurgula
@@ -1224,7 +1222,6 @@ Highlight the matching bracket	Eşleşen parantezi vurgula
 Show fold arrows in the gutter	Sol kenarda katlama oklarını göster
 Stop a search after this many matches	Bir aramayı bu kadar eşleşmeden sonra durdur
 Font size of the terminal	Terminalin yazı tipi boyutu
-Lines kept in terminal history	Terminal geçmişinde tutulan satır sayısı
 Shell for new terminals (empty: login shell)	Yeni terminaller için kabuk (boş: oturum açma kabuğu)
 What opens at start: welcome (the start page), continue (where you left off, SSH hosts included) or blank (an empty window)	Başlangıçta ne açılır: welcome (başlangıç sayfası), continue (kaldığınız yer, SSH sunucuları dahil) ya da blank (boş pencere)
 Bring a folder's tabs and unsaved changes back when you open it	Bir klasörü açtığınızda sekmelerini ve kaydedilmemiş değişikliklerini geri getir
@@ -1782,7 +1779,7 @@ Pulled	Pull edildi
 Pushed	Push edildi
 Fetched	Fetch edildi
 Synced	Eşitlendi
-The server wants credentials: run the command once in the terminal (or set up an SSH key).	Sunucu kimlik bilgisi istiyor: komutu bir kez terminalde çalıştırın (ya da bir SSH anahtarı kurun).
+The server wants credentials that were not given: try again and enter them when asked, or set up an SSH key.	Sunucu verilmeyen kimlik bilgilerini istiyor: yeniden deneyip sorulduğunda girin ya da bir SSH anahtarı kurun.
 Pull failed: {}	Pull başarısız: {}
 Push failed: {}	Push başarısız: {}
 Fetch failed: {}	Fetch başarısız: {}
@@ -2692,7 +2689,6 @@ Restore window	Pencereyi önceki boyutuna getir
 Close window	Pencereyi kapat
 Mouse wheel and trackpad scroll speed multiplier	Fare tekerleği ve izleme dörtgeni kaydırma hızı çarpanı
 Terminal row height, as a multiple of the font size	Terminal satır yüksekliği, yazı boyutunun katı olarak
-Toggle Panel (⌘J)	Paneli Aç/Kapat (⌘J)
 Codeyard memory	Codeyard belleği
 Disk available	Kullanılabilir disk
 Load	Yük
@@ -3589,3 +3585,73 @@ Restricted Mode keeps these off until you trust it:	Kısıtlı Mod, güvenene ka
 Tasks, tests and debugging	Görevler, testler ve hata ayıklama
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	“{}” klasörü görevleri, hata ayıklama yapılandırmaları ve proje ayarları aracılığıyla program çalıştırabilir. Yalnızca bu klasörün nereden geldiğine güveniyorsanız devam edin.
 “{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	“{}” ve klasörleri, görevleri, hata ayıklama yapılandırmaları ve proje ayarları aracılığıyla program çalıştırabilir. Yalnızca bu çalışma alanının nereden geldiğine güveniyorsanız devam edin.
+Title bar	Başlık çubuğu
+Toggle Secondary Side Bar	İkincil Kenar Çubuğunu Aç/Kapat
+Debugger	Hata ayıklayıcı
+Failing tests	Başarısız testler
+The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	Bir pencerede açılan ilk terminal tüm düzenleyici alanını kaplar; panelin büyüt düğmesiyle eski boyutuna döner
+terminal.scrollback: {} lines can use hundreds of megabytes per terminal and slow down scrolling and search (up to {} is comfortable); applied as set	terminal.scrollback: {0} satır terminal başına yüzlerce megabayt bellek kullanabilir, kaydırmayı ve aramayı yavaşlatabilir ({1} satıra kadar rahattır); verildiği gibi uygulandı
+Lines kept in terminal history. More than 50,000 can use a lot of memory and slow down scrolling and search	Terminal geçmişinde tutulan satır sayısı. 50.000'den fazlası çok bellek kullanabilir, kaydırmayı ve aramayı yavaşlatabilir
+Run a command	Bir komut çalıştır
+Go to a line in this file	Bu dosyada bir satıra git
+Go to a symbol in the workspace	Çalışma alanında bir sembole git
+Go to a symbol in this file	Bu dosyada bir sembole git
+Wrap long lines: at the window edge (on), at a column (wordWrapColumn) or at whichever comes first (bounded)	Uzun satırları sar: pencere kenarında (on), bir sütunda (wordWrapColumn) ya da hangisi önce gelirse orada (bounded)
+Column where lines wrap with wordWrapColumn or bounded	wordWrapColumn veya bounded ile satırların sarıldığı sütun
+Editor: Save without Formatting	Düzenleyici: Biçimlendirmeden Kaydet
+Editor: Move Last Selection to Next Find Match	Düzenleyici: Son Seçimi Sonraki Eşleşmeye Taşı
+File: Reopen with Encoding…	Dosya: Kodlamayla Yeniden Aç…
+File: Save with Encoding…	Dosya: Kodlamayla Kaydet…
+Save the active file with encoding…	Etkin dosyayı şu kodlamayla kaydet…
+Reopen the active file with encoding…	Etkin dosyayı şu kodlamayla yeniden aç…
+Reopen with Encoding…	Kodlamayla Yeniden Aç…
+Save or revert your changes first: reopening reads the file again	Önce değişikliklerinizi kaydedin ya da geri alın: yeniden açmak dosyayı baştan okur
+This file cannot be read as {}	Bu dosya {} olarak okunamıyor
+File: Open Recent File…	Dosya: Son Açılan Dosyayı Aç…
+No recently opened files	Son açılan dosya yok
+Open a recent file	Son açılan bir dosyayı aç
+View: Toggle Tab Key Moves Focus	Görünüm: Tab Tuşu Odağı Taşısın
+Tab Moves Focus	Tab Odağı Taşır
+Tab and Shift+Tab move the focus out of the editor. Click to turn off.	Tab ve Shift+Tab odağı düzenleyiciden çıkarır. Kapatmak için tıklayın.
+View: Toggle Activity Bar Visibility	Görünüm: Etkinlik Çubuğunu Göster/Gizle
+View: Toggle Status Bar Visibility	Görünüm: Durum Çubuğunu Göster/Gizle
+Let programs in the terminal erase its scrollback (some full-screen tools do on every redraw, and the history is lost)	Terminaldeki programların geçmişi silmesine izin ver (bazı tam ekran araçlar her yeniden çizimde yapar ve geçmiş kaybolur)
+
+Search files by name (> commands, : line, # symbols, ? help)	Dosyaları adla ara (> komutlar, : satır, # semboller, ? yardım)
+{} running	{} çalışıyor
+Another git process is using this repository. If none is running, a crash left {} behind: delete it and try again.	Bu depoyu başka bir git işlemi kullanıyor. Çalışan yoksa bir çökme {} dosyasını bırakmıştır: silip yeniden deneyin.
+Before switching to {}	{} dalına geçmeden önce
+Cannot reach the server: check the network connection (and a proxy or VPN, if you use one).	Sunucuya ulaşılamıyor: ağ bağlantısını (varsa proxy veya VPN'i) kontrol edin.
+Force Push	Zorla Push
+Force-push {0} to {1}?	{0}, {1} üzerine zorla push edilsin mi?
+Git does not trust this folder because another user owns it. If you trust it, run: git config --global --add safe.directory {}	Git bu klasöre güvenmiyor çünkü başka bir kullanıcıya ait. Güveniyorsanız şunu çalıştırın: git config --global --add safe.directory {}
+Git: Push (Force)…	Git: Push (Zorla)…
+Local changes would be overwritten: commit or stash them first.	Yerel değişikliklerin üzerine yazılacak: önce commit edin veya stash'leyin.
+Only a published branch can be force-pushed: use Publish Branch first.	Yalnızca yayımlanmış bir dal zorla push edilebilir: önce Publish Branch kullanın.
+Signing the commit failed: gpg could not sign it. Check that the key is available and that gpg-agent can ask for its passphrase, or turn commit.gpgsign off.	Commit imzalanamadı: gpg imzalayamadı. Anahtarın kullanılabilir olduğunu ve gpg-agent'ın parolayı sorabildiğini kontrol edin ya da commit.gpgsign'ı kapatın.
+Stash & Switch	Stash'le ve Geç
+Stash your changes and switch to {}?	Değişiklikleriniz stash'lenip {} dalına geçilsin mi?
+Switched to {}. Your changes are in the stash: Git: Pop Latest Stash brings them back.	{} dalına geçildi. Değişiklikleriniz stash'te: Git: Pop Latest Stash onları geri getirir.
+Switching to {}…	{} dalına geçiliyor…
+The remote has commits you do not have: pull first (Git: Pull), then push. To overwrite them instead, use Git: Push (Force).	Uzakta sizde olmayan commit'ler var: önce Pull (Git: Pull), sonra push edin. Üzerine yazmak istiyorsanız Git: Push (Zorla) kullanın.
+These branches share no history, so git will not merge them. In a terminal, `git merge --allow-unrelated-histories` merges them anyway.	Bu dalların ortak geçmişi yok, bu yüzden git birleştirmez. Terminalde `git merge --allow-unrelated-histories` yine de birleştirir.
+This repository uses Git LFS, but git-lfs is not installed on this host.	Bu depo Git LFS kullanıyor ama bu makinede git-lfs kurulu değil.
+Your changes are in the stash, but the switch failed: {}	Değişiklikleriniz stash'te, ama geçiş başarısız oldu: {}
+Your uncommitted changes would be overwritten by the switch. They go into a stash first; Git: Pop Latest Stash brings them back.	Commit edilmemiş değişikliklerinizin üzerine geçişte yazılırdı. Önce stash'e alınırlar; Git: Pop Latest Stash onları geri getirir.
+The server no longer accepts an account password: use a personal access token as the password (or sign in with the GitHub CLI: gh auth login).	Sunucu artık hesap parolasını kabul etmiyor: parola yerine kişisel erişim jetonu kullanın (ya da GitHub CLI ile giriş yapın: gh auth login).
+Username	Kullanıcı adı
+{} conflicts with your changes: resolve the conflicts in Source Control. The stash is kept until you drop it.	{} değişikliklerinizle çakışıyor: çatışmaları Kaynak Denetimi'nde çözün. Stash siz silene kadar saklanır.
+There is nothing to commit: no change is staged.	Commit edilecek bir şey yok: hazırlanmış (staged) değişiklik bulunmuyor.
+Git: Initialize Repository	Git: Depoyu Başlat
+Initialized an empty Git repository	Boş bir Git deposu oluşturuldu
+Initializing repository…	Depo başlatılıyor…
+This folder is already a git repository.	Bu klasör zaten bir git deposu.
+{} file still has conflicts: resolve it and stage it first|{} files still have conflicts: resolve them and stage them first	{} dosyada hâlâ çatışma var: çözüp stage'leyin
+Abort	İptal
+Initialize Repository	Depoyu Başlat
+Resolve Conflicts	Çakışmaları Çözün
+Cannot tell which remote {} belongs to	{} hangi uzak depoya ait, anlaşılamadı
+Commits that exist only on the remote branch are lost for everyone using it.	Yalnızca uzak dalda bulunan commit'ler onu kullanan herkes için kaybolur.
+If the remote branch moves while this question is open, git refuses.	Bu soru açıkken uzak dal ilerlerse git reddeder.
+The server refused the login: check the account and that the token may push.	Sunucu girişi reddetti: hesabı ve jetonun push yetkisi olduğunu kontrol edin.
+{} commit on the remote branch is not in yours and is lost for everyone using it.|{} commits on the remote branch are not in yours and are lost for everyone using it.	Uzak daldaki {} commit sizde yok ve onu kullanan herkes için kaybolur.

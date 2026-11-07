@@ -74,6 +74,8 @@ pub(crate) struct AccessView {
     pub revision: Option<Arc<Status>>,
     pub root: Option<String>,
     pub branch: String,
+    /// "Merge in progress · 2 conflicts" while an operation is half done.
+    pub operation: Option<String>,
     pub message: String,
     pub message_focused: bool,
     pub repos_focused: bool,
@@ -128,6 +130,10 @@ pub(crate) struct AccessRepo {
 
 impl ScmPanel {
     pub(super) fn commit_state(&self, status: &Status, cx: &App) -> (String, bool) {
+        // Unresolved conflicts: git refuses any commit, so the button says what is left to do instead of "Commit All (2)".
+        if status.changes.iter().any(|c| c.unstaged == Some(Mark::Conflict)) {
+            return (crate::i18n::t("Resolve Conflicts").into(), false);
+        }
         let staged = status.staged().count();
         let changed = status.unstaged().filter(|c| c.unstaged != Some(Mark::Untracked)).count();
         let smart = cx.global::<crate::settings::Settings>().git_smart_commit;
@@ -182,6 +188,7 @@ impl ScmPanel {
             revision: self.status.clone(),
             root: git.map(|s| s.root.clone()),
             branch,
+            operation: git.and_then(|s| self.operation_summary(s)),
             repos,
 
             message: self.message.read(cx).text().to_string(),

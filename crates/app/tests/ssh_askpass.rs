@@ -111,7 +111,7 @@ fn ssh_questions_reach_the_window_and_answers_reach_ssh() {
         match req.kind {
             AskKind::HostKey => s.host_key.clone(),
             AskKind::Secret => s.secret.clone(),
-            AskKind::Confirm => None,
+            AskKind::Confirm | AskKind::Text => None,
         }
     }))
     .expect("askpass bridge");

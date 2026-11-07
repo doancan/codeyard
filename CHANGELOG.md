@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-06
+
+### Added
+
+- Title bar: switches at the right end for the side bar, the panel and the secondary side bar. The terminal button left the status bar for it.
+- Status bar: a new version shows as a labelled button beside the problem counts; the sync count reads in the bar's own color.
+- Resources: a gauge icon (a bug while a debug session runs) and a project section with the debugger's state and its pause,
+  continue and stop buttons, the commands running in terminals and the failing tests.
+- The first terminal of a window opens maximized (`workbench.panel.firstTerminalMaximized`).
+- `terminal.scrollback` accepts up to 200,000 lines and warns above 50,000 (memory, scrolling and search speed).
+- Command palette: `?` lists its modes (`>` commands, `:` line, `#` workspace symbols, `@` symbols in the file).
+- *Save without Formatting* (⌘K S), *Move Last Selection to Next Find Match* (⌘K ⇧⌘D), *Open Recent File…*,
+  *Reopen with Encoding…* and *Save with Encoding…* (also from the encoding in the status bar), tab shortcuts ⌃1…⌃9
+  (Alt+1…9), *Toggle Tab Key Moves Focus* (⌃⇧M), and commands to show or hide the activity bar and the status bar.
+- `editor.wordWrap` accepts `wordWrapColumn` and `bounded`, with `editor.wordWrapColumn`.
+- Git: a login the server asks for (an HTTPS user name and password or token, an SSH key's passphrase, an unknown host's key) is
+  asked in the window instead of failing with "run it in the terminal". The periodic fetch never asks.
+- Git: *Git: Push (Force)…* (pinned to the remote commit you were shown with `--force-with-lease`, after a confirmation), *Stash & Switch* when local changes block a branch switch,
+  and *Git: Initialize Repository* (also as a button, with *Clone Repository…*, in the Source Control view of a folder that is not one).
+- Source Control: a half-done merge, rebase, cherry-pick or revert shows a line with its conflicts and Abort (Continue for a rebase),
+  the commit button reads *Resolve Conflicts* while any remain, and a merge can be committed with an empty message box.
+
+### Fixed
+
+- Windows and Linux: the Toggle Panel button is back in the status bar; the title bar switches exist on macOS only, and the status bar button had left for them on every platform.
+- Source Control: the Graph no longer shows a stash's internal "index on …" and "WIP on …" commits.
+- Keybindings: a mistyped command id suggests the closest command by its shortest match (`editor.sav` means `editor.save`).
+- Opening Codeyard with an empty folder argument no longer shows "not found:" and a trust question about nothing.
+- Terminal: a program that clears the screen and redraws (a coding assistant, a progress display) no longer pushes every old
+  frame, with its blank lines, into the history. The screen is erased in place, so scrolling up shows what was printed
+  before instead of leftover copies.
+- Terminal: a program can no longer erase the whole scrollback with `CSI 3 J` (several full-screen tools send it on every
+  redraw, which lost the start of a long session). `terminal.allowClearHistory` turns the old behaviour back on; *Terminal: Clear*
+  still empties the history.
+
+### Changed
+
+- Git failures with a usual cause say what to do: a rejected push (pull first), a stale `index.lock`, an untrusted folder, a blocked switch,
+  a conflicting stash, GitHub's removed password login, an unreachable server. A stash that conflicts no longer reports "git stash failed".
+- Source Control's badge counts up to 999 changes before it reads "999+" (it stopped at 99+).
+- `terminal.scrollback` keeps 50,000 lines by default.
+
 ## [0.7.6] - 2026-11-05
 
 ### Added
@@ -1692,7 +1734,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.7.6...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/doancan/codeyard/compare/v0.7.6...v0.8.0
 [0.7.6]: https://github.com/doancan/codeyard/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/doancan/codeyard/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/doancan/codeyard/compare/v0.7.3...v0.7.4
