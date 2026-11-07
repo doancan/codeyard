@@ -540,7 +540,9 @@ fn recording_terminal<'a>(cx: &'a mut TestAppContext, setup: &'static [u8]) -> (
 /// release, and a plain drag must not ask for Shift.
 #[gpui::test]
 fn a_program_that_follows_drags_gets_every_cell_of_the_drag(cx: &mut TestAppContext) {
-    let (host, term, cx) = recording_terminal(cx, b"\x1b[?1002h\x1b[?1006hhello world");
+    // What Claude Code sends: the terminal keeps only the last of 1000 / 1002 / 1003, so its drags arrive in any-motion mode.
+    let (host, term, cx) = recording_terminal(cx, b"\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006hhello world");
+    assert!(term.read_with(cx, |t, _| t.term.mode().contains(TermMode::MOUSE_MOTION)));
     let cells: Vec<_> = term.read_with(cx, |t, _| (0..5).map(|c| t.cell_center(0, c)).collect());
     cx.simulate_mouse_down(cells[0], MouseButton::Left, Modifiers::none());
     for at in &cells[1..] {
