@@ -143,7 +143,11 @@ pub const CATALOG: &[Entry] = &[
         crate::i18n::tr("Let programs in the terminal erase its scrollback (some full-screen tools do on every redraw, and the history is lost)"),
         Kind::Bool,
     ),
-    e("terminal.allowClipboardWrite", crate::i18n::tr("Let programs in the terminal write to the clipboard"), Kind::Bool),
+    e(
+        "terminal.allowClipboardWrite",
+        crate::i18n::tr("Let programs in the terminal write to the clipboard: right after you copy in them, always, or never"),
+        Kind::Choice(&["copy", "always", "off"]),
+    ),
     e("terminal.fontSize", crate::i18n::tr("Font size of the terminal"), Kind::Number { min: 6., max: 48. }),
     e("terminal.lineHeight", crate::i18n::tr("Terminal row height, as a multiple of the font size"), Kind::Number { min: 1., max: 2. }),
     e(

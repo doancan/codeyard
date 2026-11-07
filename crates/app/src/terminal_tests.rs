@@ -73,7 +73,7 @@ fn a_flood_behind_a_stalled_terminal_is_capped_and_the_exit_is_kept() {
 }
 
 #[test]
-fn osc_52_reaches_the_clipboard_only_when_the_setting_allows_it() {
+fn osc_52_reaches_the_clipboard_only_when_allowed() {
     let events = Listener::default();
     let mut term = Term::new(Config::default(), &TermSize { cols: 80, rows: 24 }, events.clone());
     let mut parser = Processor::<StdSyncHandler>::default();
@@ -81,9 +81,8 @@ fn osc_52_reaches_the_clipboard_only_when_the_setting_allows_it() {
     let queued = std::mem::take(&mut *events.0.borrow_mut());
     assert!(queued.iter().any(|e| matches!(e, TermEvent::ClipboardStore(..))), "the terminal reports the store request");
     let texts = |allowed| queued.iter().cloned().filter_map(|e| clipboard_text(e, allowed)).collect::<Vec<_>>();
-    assert!(texts(false).is_empty(), "off by default: nothing is written");
+    assert!(texts(false).is_empty(), "refused: nothing is written");
     assert_eq!(texts(true), ["foo"]);
-    assert!(!crate::settings::Settings::default().terminal_allow_clipboard_write);
 }
 
 #[test]
@@ -263,4 +262,18 @@ fn a_synchronized_update_that_never_ends_is_shown_after_its_time_limit(cx: &mut 
         assert_eq!(t.release_expired_sync(), None, "nothing pending once it is applied");
         assert!(t.screen_text().contains("drawn in a frame"));
     });
+}
+
+#[test]
+fn clipboard_writes_follow_the_setting_and_the_copy_gesture() {
+    use super::mouse::clipboard_write_allowed;
+    let now = std::time::Instant::now();
+    let just = Some(now);
+    let stale = now.checked_sub(std::time::Duration::from_secs(6));
+    assert!(clipboard_write_allowed("copy", just, now));
+    assert!(!clipboard_write_allowed("copy", stale, now), "a copy long ago does not open the clipboard");
+    assert!(!clipboard_write_allowed("copy", None, now));
+    assert!(clipboard_write_allowed("always", None, now));
+    assert!(!clipboard_write_allowed("off", just, now));
+    assert_eq!(crate::settings::Settings::default().terminal_allow_clipboard_write, "copy");
 }

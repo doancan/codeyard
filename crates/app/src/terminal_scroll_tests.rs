@@ -522,3 +522,82 @@ fn an_ended_terminal_no_longer_reads_the_mouse(cx: &mut TestAppContext) {
     cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
     assert_eq!(term.read_with(cx, |t, _| t.selected_text()).as_deref(), Some("hello"));
 }
+
+/// A terminal whose program input is recorded, with `setup` already parsed (mouse modes the program turned on).
+fn recording_terminal<'a>(cx: &'a mut TestAppContext, setup: &'static [u8]) -> (Arc<ImagePasteHost>, Entity<TerminalView>, &'a mut VisualTestContext) {
+    crate::qa_workbench_tests::globals(cx);
+    let host = ImagePasteHost::new(false);
+    let (term, cx) = cx.add_window_view(|_, cx| TerminalView::output_only(host.clone(), "test".into(), cx));
+    term.update(cx, |t, _| {
+        t.pty = Some(7);
+        t.feed(setup);
+    });
+    cx.run_until_parked();
+    (host, term, cx)
+}
+
+/// Claude Code's fullscreen view (and tmux, vim) select text themselves: they need the drag, not only the press and the
+/// release, and a plain drag must not ask for Shift.
+#[gpui::test]
+fn a_program_that_follows_drags_gets_every_cell_of_the_drag(cx: &mut TestAppContext) {
+    let (host, term, cx) = recording_terminal(cx, b"\x1b[?1002h\x1b[?1006hhello world");
+    let cells: Vec<_> = term.read_with(cx, |t, _| (0..5).map(|c| t.cell_center(0, c)).collect());
+    cx.simulate_mouse_down(cells[0], MouseButton::Left, Modifiers::none());
+    for at in &cells[1..] {
+        cx.simulate_mouse_move(*at, Some(MouseButton::Left), Modifiers::none());
+        cx.simulate_mouse_move(point(at.x + px(1.), at.y), Some(MouseButton::Left), Modifiers::none());
+    }
+    cx.simulate_mouse_up(cells[4], MouseButton::Left, Modifiers::none());
+    let sent: Vec<String> = host.inputs.lock().unwrap().iter().map(|b| String::from_utf8_lossy(b).into_owned()).collect();
+    assert_eq!(sent, ["\x1b[<0;1;1M", "\x1b[<32;2;1M", "\x1b[<32;3;1M", "\x1b[<32;4;1M", "\x1b[<32;5;1M", "\x1b[<0;5;1m"], "one report per cell");
+    assert!(term.read_with(cx, |t, _| !t.shift_hint && t.selected_text().is_none()), "the program selects, not the terminal");
+}
+
+/// With `?1003h` the program also hears the mouse move with no button held (Claude Code highlights what it hovers).
+#[gpui::test]
+fn any_motion_mode_reports_hover_moves(cx: &mut TestAppContext) {
+    let (host, term, cx) = recording_terminal(cx, b"\x1b[?1003h\x1b[?1006hhello");
+    let at = term.read_with(cx, |t, _| t.cell_center(0, 2));
+    cx.simulate_mouse_move(at, None, Modifiers::none());
+    cx.simulate_mouse_move(point(at.x + px(1.), at.y), None, Modifiers::none());
+    assert_eq!(*host.inputs.lock().unwrap(), vec![b"\x1b[<35;3;1M".to_vec()]);
+}
+
+/// Over SSH, Claude Code copies its selection with OSC 52. By default that write is taken right after a copy in the program
+/// (a drag let go, or Ctrl+C), never from output on its own, such as a file printed with `cat`.
+#[gpui::test]
+fn a_program_may_copy_right_after_a_copy_in_it(cx: &mut TestAppContext) {
+    let (_host, term, cx) = recording_terminal(cx, b"\x1b[?1002h\x1b[?1006hhello");
+    let clipboard = |cx: &mut VisualTestContext| cx.read_from_clipboard().and_then(|c| c.text());
+    let osc52 = |cx: &mut VisualTestContext, text: &'static [u8]| {
+        term.update(cx, |t, cx| t.feed_and_report_for_test(text, cx));
+        cx.run_until_parked();
+    };
+    cx.write_to_clipboard(gpui::ClipboardItem::new_string("mine".into()));
+    osc52(cx, b"\x1b]52;c;Y2F0\x07");
+    assert_eq!(clipboard(cx).as_deref(), Some("mine"), "output on its own cannot replace the clipboard");
+
+    let (from, to) = term.read_with(cx, |t, _| (t.cell_center(0, 0), t.cell_center(0, 4)));
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_up(from, MouseButton::Left, Modifiers::none());
+    osc52(cx, b"\x1b]52;c;Y2F0\x07");
+    assert_eq!(clipboard(cx).as_deref(), Some("mine"), "a plain click is not a copy");
+
+    cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
+    cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
+    osc52(cx, b"\x1b]52;c;aGVsbG8=\x07");
+    assert_eq!(clipboard(cx).as_deref(), Some("hello"), "the drag's copy arrives");
+
+    term.update(cx, |t, _| t.program_mouse = Default::default());
+    cx.update(|window, cx| {
+        term.update(cx, |t, cx| t.on_key_down(&KeyDownEvent { keystroke: gpui::Keystroke::parse("ctrl-c").unwrap(), is_held: false }, window, cx))
+    });
+    osc52(cx, b"\x1b]52;c;d29ybGQ=\x07");
+    assert_eq!(clipboard(cx).as_deref(), Some("world"), "Ctrl+C in the program copies too");
+
+    term.update(cx, |t, _| t.program_mouse = Default::default());
+    cx.update(|_, cx| cx.update_global::<crate::settings::Settings, _>(|s, _| s.terminal_allow_clipboard_write = "always".into()));
+    osc52(cx, b"\x1b]52;c;Y2F0\x07");
+    assert_eq!(clipboard(cx).as_deref(), Some("cat"), "\"always\" takes every write");
+}

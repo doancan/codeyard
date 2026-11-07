@@ -1632,8 +1632,10 @@ limited to 32 MiB. The file remains available in the remote `/tmp` directory unt
 **Selecting and copying.** Drag to select, double-click for a word, triple-click for a line. The selection stays on its
 text while a program such as Claude Code or Codex redraws or adds lines below it. While Claude Code or Codex runs, a
 finished selection is copied right away, because those programs keep Ctrl+C for themselves
-(`terminal.copyOnSelection`: `agents`, `always` or `off`). When a program reads the mouse, a drag goes to it. Hold Shift or ⌥
-to select instead; the terminal reminds you the first time.
+(`terminal.copyOnSelection`: `agents`, `always` or `off`). When a program reads the mouse, a drag goes to it: Claude Code's
+fullscreen view, tmux and vim then select the text themselves and copy it when you let go, also over SSH, where the copy
+arrives as OSC 52 (see `terminal.allowClipboardWrite`). Hold Shift or ⌥ to make the terminal's own selection instead; a
+program that only reads clicks gets a reminder the first time.
 
 **Shell integration.** zsh, bash and fish mark each prompt and command, with no setup:
 
@@ -1684,8 +1686,10 @@ the bottom or the right restores its size.
 - Pasted text cannot end bracketed paste early. Control characters are removed when the shell does not use bracketed
   paste (`terminal.sanitizePaste`).
 - A paste of several lines asks before it runs (`terminal.warnMultilinePaste`).
-- Programs may write to the clipboard only with `terminal.allowClipboardWrite`. This setting and the two paste settings
-  above are read only from your own settings, never from a project's.
+- Programs may write to the clipboard (OSC 52) only right after you copy in them: let go of a drag or a double-click, or
+  press Ctrl+C (`terminal.allowClipboardWrite`: `copy`, `always` or `off`). Output on its own, such as a file printed with
+  `cat`, cannot replace the clipboard. This setting and the two paste settings above are read only from your own
+  settings, never from a project's.
 - Links that programs mark (OSC 8) show and open their real target.
 - The history is capped at 50,000 lines (`terminal.scrollback`).
 - A maximized panel hides the editor area. When a file, a diff or a page opens meanwhile,

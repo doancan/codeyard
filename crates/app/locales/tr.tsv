@@ -2190,7 +2190,7 @@ Data: Query…	Veri: Sorgula…
 Data: Copy Path at Cursor	Veri: İmlecin Yolunu Kopyala
 Data: Decode Selection…	Veri: Seçimi Çöz…
 debug output was dropped: the debugger could not keep up	Hata ayıklama çıktısı atıldı: hata ayıklayıcı yetişemedi
-Let programs in the terminal write to the clipboard	Terminaldeki programların panoya yazmasına izin ver
+Let programs in the terminal write to the clipboard: right after you copy in them, always, or never	Terminaldeki programların panoya yazmasına izin ver: onlarda kopyaladıktan hemen sonra, her zaman ya da hiçbir zaman
 # --- git-sync ---
 Sync Changes {}	Değişiklikleri Eşitle {}
 Publish Branch	Dalı Yayımla
