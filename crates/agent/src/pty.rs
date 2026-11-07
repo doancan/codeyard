@@ -97,6 +97,10 @@ pub struct Pty {
 }
 
 #[cfg(windows)]
+#[path = "pty_job.rs"]
+mod job;
+
+#[cfg(windows)]
 mod windows {
     use super::*;
     use portable_pty::{CommandBuilder, PtySize, native_pty_system};
@@ -107,7 +111,10 @@ mod windows {
 
     pub fn spawn_with(spec: Spawn) -> io::Result<(Pty, Box<dyn io::Read + Send>)> {
         let Spawn { cols, rows, cwd, shell, args, env, .. } = spec;
+        // The console host the pseudo console starts, and the shell, end with this process (pty_job.rs).
+        let hosts = super::job::console_hosts();
         let pair = native_pty_system().openpty(size(cols, rows)).map_err(io::Error::other)?;
+        super::job::adopt_new_console_hosts(&hosts);
         let shell = shell.filter(|s| !s.is_empty()).map(std::ffi::OsString::from).or_else(|| std::env::var_os("COMSPEC")).unwrap_or_else(|| "cmd.exe".into());
         let mut cmd = CommandBuilder::new(shell);
         for a in args.unwrap_or_default() {
@@ -130,7 +137,11 @@ mod windows {
         // with CREATE_NEW_PROCESS_GROUP, or the relaunch after an update), no program in the terminal would stop on
         // Ctrl+C. Take it normally again before the shell starts.
         unsafe { windows_sys::Win32::System::Console::SetConsoleCtrlHandler(None, 0) };
-        let child = std::sync::Arc::new(std::sync::Mutex::new(pair.slave.spawn_command(cmd).map_err(io::Error::other)?));
+        let child = pair.slave.spawn_command(cmd).map_err(io::Error::other)?;
+        if let Some(pid) = child.process_id() {
+            super::job::adopt(pid);
+        }
+        let child = std::sync::Arc::new(std::sync::Mutex::new(child));
         drop(pair.slave);
         let master = std::sync::Arc::new(std::sync::Mutex::new(Some(pair.master)));
         let (monitor_child, monitor_master) = (child.clone(), master.clone());

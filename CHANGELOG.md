@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   program's clipboard write right after you copy in it (let go of a drag or a double-click, or press Ctrl+C). Output on
   its own, such as a file printed with `cat`, still cannot replace the clipboard. `always` and `off` (and the old
   `true` / `false`) still work.
+- Windows 10 and Windows Server: quitting or crashing with terminals open no longer leaves their console hosts
+  (`conhost.exe`) running at a full CPU core each. A terminal's console host and shell now end with the process that
+  opened them; terminals kept for the next start live in the terminal daemon and end with it.
 
 ## [0.8.0] - 2026-11-06
 
