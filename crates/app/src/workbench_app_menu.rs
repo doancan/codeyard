@@ -59,7 +59,8 @@ impl Workbench {
                             let same = this.menu.as_ref().and_then(|m| m.app_path.as_ref()).is_some_and(|p| p.first() == Some(&index));
                             this.close_menu(window, cx);
                             if !same {
-                                this.open_application_menu(vec![index], gpui::point(ev.position.x, px(this.application_menu_bottom(window))), window, cx);
+                                let at = this.application_menu_left(index, ev.position.x, window, cx);
+                                this.open_application_menu(vec![index], gpui::point(at, px(this.application_menu_bottom(window))), window, cx);
                             }
                             cx.stop_propagation();
                         }),
@@ -68,10 +69,16 @@ impl Workbench {
                         let current = this.menu.as_ref().and_then(|m| m.app_path.as_ref()).and_then(|p| p.first()).copied();
                         if current.is_some_and(|i| i != index) {
                             this.close_menu(window, cx);
-                            this.open_application_menu(vec![index], gpui::point(ev.position.x, px(this.application_menu_bottom(window))), window, cx);
+                            let at = this.application_menu_left(index, ev.position.x, window, cx);
+                            this.open_application_menu(vec![index], gpui::point(at, px(this.application_menu_bottom(window))), window, cx);
                         }
                     }))
             }))
+    }
+
+    /// A menu opens under the left edge of its title, wherever on the title the click was (`fallback`: no painted title yet).
+    fn application_menu_left(&self, index: usize, fallback: gpui::Pixels, window: &Window, cx: &App) -> gpui::Pixels {
+        crate::a11y_controls::bounds_of(cx, window, "Menu bar", &format!("menu-{index}")).map_or(fallback, |b| b.left())
     }
 
     pub(super) fn open_application_menu(&mut self, path: Vec<usize>, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
@@ -111,7 +118,11 @@ impl Workbench {
         }
         let target = MenuTarget { path: String::new(), is_dir: false, tab: None };
         self.show_menu(items, commands, actions, target, position, window, cx);
-        self.menu.as_mut().unwrap().app_path = Some(path);
+        // Under the bar, not over it: a menu taller than the room below scrolls.
+        let below = px(self.application_menu_bottom(window));
+        let state = self.menu.as_mut().unwrap();
+        state.app_path = Some(path);
+        state.menu.update(cx, |menu, _| menu.stay_below(below));
     }
 
     pub(super) fn open_application_menu_by_index(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -155,6 +166,24 @@ mod tests {
         assert_eq!(wb.read_with(cx, |w, _| w.menu.as_ref().unwrap().app_path.clone()), Some(vec![4]));
         cx.simulate_keystrokes("escape");
         assert!(wb.read_with(cx, |w, _| w.menu.is_none()));
+    }
+
+    /// A menu opens under the left edge of its title wherever the title is clicked, and stays under the bar in a window too
+    /// short for it (it scrolls) instead of being pushed up over the bar and the title bar.
+    #[gpui::test]
+    fn windows_application_menu_opens_under_its_title_and_never_over_the_bar(cx: &mut TestAppContext) {
+        let (wb, cx) = setup(cx);
+        cx.simulate_resize(gpui::size(px(900.), px(420.)));
+        cx.run_until_parked();
+        let view = cx.debug_bounds("application-menu-3").unwrap();
+        cx.simulate_click(gpui::point(view.right() - px(3.), view.center().y), Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(wb.read_with(cx, |w, _| w.menu.as_ref().unwrap().app_path.clone()), Some(vec![3]));
+        let menu = cx.debug_bounds("context-menu").unwrap();
+        let bar = cx.debug_bounds("application-menu-bar").unwrap();
+        assert_eq!(menu.left(), view.left(), "under the title's left edge, not under the pointer");
+        assert!(menu.top() >= bar.bottom(), "the menu ({menu:?}) stays under the bar ({bar:?})");
+        assert!(menu.bottom() <= px(420.), "and inside the window: {menu:?}");
     }
 
     #[gpui::test]

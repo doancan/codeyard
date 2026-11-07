@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Windows and Linux: a menu of the menu bar opens under the left edge of its title wherever the title is clicked, and stays
+  under the bar in a window too short for it (it scrolls). A long menu such as View was pushed up over the bar and the
+  title bar, and could close at once as the click was let go over it.
 - Selecting and copying in Claude Code's fullscreen view, tmux and vim, over SSH too. A drag in a program that reads the
   mouse now reaches it cell by cell (`?1002h`, `?1003h`), so the program can select text without Shift, and the copy it
   makes over SSH (OSC 52) reaches the clipboard: `terminal.allowClipboardWrite` is now `copy` by default, which takes a

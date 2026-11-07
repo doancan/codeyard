@@ -643,7 +643,10 @@ fn compare_last_edit_scratch_and_run_selected_text(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("cmd-up");
     run(cx, "Terminal: Run Selected Text");
     let term = wait_term(cx, &wb);
-    wait_ticking(cx, "terminal çıktısı", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == "run-42")));
+    // A line sent before the shell printed its prompt is echoed by the terminal at once; the prompt then comes in front of
+    // the output (`$ run-42`). The echoed command itself never ends in `run-42` outside cmd, and says `echo` there.
+    let output = |l: &str| l.trim_end().ends_with("run-42") && !l.contains("echo");
+    wait_ticking(cx, "terminal çıktısı", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(output)));
 }
 
 fn wait_term(cx: &mut VisualTestContext, wb: &Entity<Workbench>) -> Entity<crate::terminal::TerminalView> {
