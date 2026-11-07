@@ -1285,7 +1285,7 @@ Leave out animations: the blinking cursor, spinners and sliding panels (auto: fo
 Left is writable	
 Left ↔ Right	
 Let programs in the terminal erase its scrollback (some full-screen tools do on every redraw, and the history is lost)	
-Let programs in the terminal write to the clipboard	
+Let programs in the terminal write to the clipboard: right after you copy in them, always, or never	
 Let the language server format while typing }, ; or Enter	
 Let {0} act as your GitHub account {1}?	
 Let {0} connect to {1}?	

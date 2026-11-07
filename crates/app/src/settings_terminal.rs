@@ -31,8 +31,15 @@ pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>, obj: &Map<String, Valu
     if let Some(v) = r.bool("terminal.allowClearHistory") {
         s.terminal_allow_clear_history = v;
     }
-    if let Some(v) = r.bool("terminal.allowClipboardWrite") {
-        s.terminal_allow_clipboard_write = v;
+    // Before "copy" existed this was true / false.
+    match obj.get("terminal.allowClipboardWrite") {
+        Some(Value::Bool(b)) => s.terminal_allow_clipboard_write = if *b { "always" } else { "off" }.into(),
+        Some(_) => {
+            if let Some(v) = r.choice("terminal.allowClipboardWrite", &["copy", "always", "off"]) {
+                s.terminal_allow_clipboard_write = v;
+            }
+        }
+        None => {}
     }
     if let Some(v) = r.bool("terminal.shellIntegration") {
         s.terminal_shell_integration = v;
