@@ -72,7 +72,13 @@ fn the_activity_bar_and_status_bar_act_like_their_clicks(cx: &mut TestAppContext
     press(&wb, cx, &snap, problems);
     assert!(wb.read_with(cx, |wb, _| wb.chrome.panel_open && wb.chrome.bottom == Bottom::Problems));
     let snap = snapshot(&wb, cx);
-    let (toggle, _) = get(&snap, Role::Button, "Toggle Panel (⌘J)");
+    // The shortcut in the label is written for the platform (⌘J, Ctrl+J): the button is found by its name.
+    let (toggle, _) = snap
+        .to_tree()
+        .nodes
+        .into_iter()
+        .find(|(_, n)| n.role() == Role::Button && n.label().is_some_and(|l| l.starts_with("Toggle Panel (")))
+        .expect("the Toggle Panel button is in the tree");
     hit(&snap, toggle);
     press(&wb, cx, &snap, toggle);
     assert!(!wb.read_with(cx, |wb, _| wb.chrome.panel_open), "the panel is hidden");
