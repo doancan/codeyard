@@ -697,12 +697,12 @@ mod tests {
         std::fs::create_dir(&destination).unwrap();
         let ready = root.join("extractor-ready");
         let stopped = root.join("extractor-stopped");
-        let ready_name = sh_quote(&ready.to_string_lossy().replace('\\', "/"));
-        let stopped_name = sh_quote(&stopped.to_string_lossy().replace('\\', "/"));
+        let ready_name = sh_quote(&remote(&ready));
+        let stopped_name = sh_quote(&remote(&stopped));
         let stop_trap = sh_quote(&format!("printf stopped > {stopped_name}; exit 99"));
         let cancel = std::sync::Arc::new(AtomicBool::new(false));
         let worker_cancel = cancel.clone();
-        let destination_name = destination.to_string_lossy().replace('\\', "/");
+        let destination_name = remote(&destination);
         let worker = std::thread::spawn(move || {
             let server = |script: &str| {
                 if script.contains("sender-status") {
@@ -743,7 +743,7 @@ mod tests {
                 portable_shell(script)
             }
         };
-        let result = upload(&server, &source, &destination.to_string_lossy().replace('\\', "/"), &AtomicBool::new(false), |_| {});
+        let result = upload(&server, &source, &remote(&destination), &AtomicBool::new(false), |_| {});
         assert!(matches!(result, Err(HostError::Uncertain(_))), "{result:?}");
         assert_eq!(std::fs::read_dir(destination).unwrap().count(), 1);
     }
@@ -768,7 +768,7 @@ mod tests {
                 }
                 portable_shell(script)
             };
-            upload(&server, &source, &destination.to_string_lossy().replace('\\', "/"), &AtomicBool::new(false), |_| {}).unwrap();
+            upload(&server, &source, &remote(&destination), &AtomicBool::new(false), |_| {}).unwrap();
             assert_eq!(std::fs::read_to_string(target.join("file 'ğ'.txt")).unwrap(), "new data");
             assert!(target.join("empty").is_dir());
             if existing {
@@ -788,7 +788,7 @@ mod tests {
         std::fs::create_dir_all(destination.join("project")).unwrap();
         std::fs::write(destination.join("project/precious.txt"), "keep").unwrap();
         let server = |script: &str| portable_shell(if script.contains("sender-status") { "echo 'disk full' >&2; exit 1" } else { script });
-        let result = upload(&server, &source, &destination.to_string_lossy().replace('\\', "/"), &AtomicBool::new(false), |_| {});
+        let result = upload(&server, &source, &remote(&destination), &AtomicBool::new(false), |_| {});
         assert!(matches!(result, Err(HostError::Uncertain(ref message)) if message.contains("disk full")), "{result:?}");
         assert_eq!(std::fs::read_to_string(destination.join("project/precious.txt")).unwrap(), "keep");
         assert_eq!(std::fs::read_dir(destination).unwrap().count(), 1);
@@ -802,11 +802,11 @@ mod tests {
         std::fs::write(source.join("file.txt"), "new data").unwrap();
         let destination = root.join("server");
         std::fs::create_dir(&destination).unwrap();
-        let release_path = root.join("release").to_string_lossy().replace('\\', "/");
+        let release_path = remote(&root.join("release"));
         let (started, ready) = std::sync::mpsc::channel();
         let cancel = std::sync::Arc::new(AtomicBool::new(false));
         let worker_cancel = cancel.clone();
-        let destination_string = destination.to_string_lossy().replace('\\', "/");
+        let destination_string = remote(&destination);
         let release_script = format!("while [ ! -e {} ]; do sleep 0.05; done", sh_quote(&release_path));
         let (done, result) = std::sync::mpsc::channel();
         let worker = std::thread::spawn(move || {
@@ -842,7 +842,7 @@ mod tests {
         std::fs::write(destination.join("project/precious.txt"), "keep existing data").unwrap();
         let server = |script: &str| portable_shell(if script.starts_with("test -e ") { "exit 255" } else { script });
         let cancel = AtomicBool::new(false);
-        assert!(upload(&server, &source, &destination.to_string_lossy().replace('\\', "/"), &cancel, |_| cancel.store(true, Ordering::Relaxed)).is_err());
+        assert!(upload(&server, &source, &remote(&destination), &cancel, |_| cancel.store(true, Ordering::Relaxed)).is_err());
         assert_eq!(std::fs::read_to_string(destination.join("project/precious.txt")).unwrap(), "keep existing data");
         assert_eq!(std::fs::read_dir(destination).unwrap().count(), 1);
     }
@@ -867,7 +867,7 @@ mod tests {
             portable_shell(script)
         };
         let cancel = AtomicBool::new(false);
-        assert!(upload(&server, &source, &destination.to_string_lossy().replace('\\', "/"), &cancel, |_| cancel.store(true, Ordering::Relaxed)).is_err());
+        assert!(upload(&server, &source, &remote(&destination), &cancel, |_| cancel.store(true, Ordering::Relaxed)).is_err());
         assert_eq!(std::fs::read_to_string(destination.join("project/precious.txt")).unwrap(), "another operation's data");
         assert_eq!(std::fs::read_dir(destination).unwrap().count(), 1);
     }
@@ -877,15 +877,13 @@ mod tests {
         path.to_string_lossy().replace('\\', "/")
     }
 
-    /// Whether `portable_shell` has a shell to run: always on Unix; on Windows, Git Bash from Git for Windows. When not,
-    /// prints a SKIPPED line (`CODEYARD_REQUIRE_TOOLS=1` or a list naming `bash` makes it a failure) and returns `false`.
+    /// Whether `portable_shell` can run (on Windows: Git Bash); if not, a SKIPPED line (`CODEYARD_REQUIRE_TOOLS` with `bash`: a failure).
     fn server_shell() -> bool {
         #[cfg(windows)]
         if !git_bash().is_file() {
-            let test = std::thread::current().name().unwrap_or("?").to_string();
-            let required = std::env::var("CODEYARD_REQUIRE_TOOLS").is_ok_and(|r| r == "1" || r.split(',').any(|t| t == "bash"));
-            assert!(!required, "{test}: needs Git Bash ({}), and CODEYARD_REQUIRE_TOOLS asks for it", git_bash().display());
-            eprintln!("SKIPPED {test}: needs Git Bash ({}) to emulate the server (set CODEYARD_REQUIRE_TOOLS=1 to make this an error)", git_bash().display());
+            let why = format!("{}: needs Git Bash ({}) to emulate the server", std::thread::current().name().unwrap_or("?"), git_bash().display());
+            assert!(!std::env::var("CODEYARD_REQUIRE_TOOLS").is_ok_and(|r| r == "1" || r.split(',').any(|t| t == "bash")), "{why}");
+            eprintln!("SKIPPED {why} (set CODEYARD_REQUIRE_TOOLS=1 to make this an error)");
             return false;
         }
         true
@@ -920,8 +918,7 @@ mod tests {
         let unrelated = target_dir.join("report.bin.codeyard-part.other-upload");
         std::fs::write(&unrelated, "other upload data").unwrap();
         let cancel = AtomicBool::new(false);
-        let error =
-            upload(&portable_shell, &source, &target_dir.to_string_lossy().replace('\\', "/"), &cancel, |_| cancel.store(true, Ordering::Relaxed)).unwrap_err();
+        let error = upload(&portable_shell, &source, &remote(&target_dir), &cancel, |_| cancel.store(true, Ordering::Relaxed)).unwrap_err();
         assert!(error.to_string().contains("cancelled"), "{error}");
         assert_eq!(std::fs::read_to_string(unrelated).unwrap(), "other upload data");
         assert_eq!(std::fs::read_to_string(target).unwrap(), "original");
@@ -946,7 +943,7 @@ mod tests {
             }
             portable_shell(script)
         };
-        let uploaded = upload(&server, &source, &target_dir.to_string_lossy().replace('\\', "/"), &AtomicBool::new(false), |_| {}).unwrap();
+        let uploaded = upload(&server, &source, &remote(&target_dir), &AtomicBool::new(false), |_| {}).unwrap();
         assert_eq!(std::fs::read(uploaded).unwrap(), data);
         assert_eq!(commits.load(Ordering::Relaxed), 1);
         assert_eq!(std::fs::read_dir(target_dir).unwrap().count(), 1);
@@ -962,7 +959,7 @@ mod tests {
         std::fs::write(target_dir.join("report.txt"), "original").unwrap();
         std::fs::write(target_dir.join("report.txt.codeyard-part.other"), "unrelated").unwrap();
         let server = |script: &str| portable_shell(if script.contains("mv -f --") { "echo 'commit denied' >&2; exit 1" } else { script });
-        let error = upload(&server, &source, &target_dir.to_string_lossy().replace('\\', "/"), &AtomicBool::new(false), |_| {}).unwrap_err();
+        let error = upload(&server, &source, &remote(&target_dir), &AtomicBool::new(false), |_| {}).unwrap_err();
         assert!(error.to_string().contains("commit denied"), "{error}");
         assert_eq!(std::fs::read_to_string(target_dir.join("report.txt")).unwrap(), "original");
         assert_eq!(std::fs::read_to_string(target_dir.join("report.txt.codeyard-part.other")).unwrap(), "unrelated");
@@ -982,7 +979,7 @@ mod tests {
         let expected = vec![2u8; CHUNK * 3];
         std::fs::write(&second, &expected).unwrap();
         let run = |source: PathBuf, cancel_after_chunk: bool| {
-            let destination = target_dir.to_string_lossy().replace('\\', "/");
+            let destination = remote(&target_dir);
             let (entered, ready) = std::sync::mpsc::channel();
             let (release, wait) = std::sync::mpsc::channel();
             let worker = std::thread::spawn(move || {
