@@ -458,7 +458,7 @@ fn alt_drag_selects_in_a_mouse_program(cx: &mut TestAppContext) {
     assert_eq!(term.read_with(cx, |t, _| t.selected_text()).as_deref(), Some("hello"));
 }
 
-/// The right button always opens our menu, also while the program (Claude Code, tmux, htop; over SSH too) reads the mouse.
+/// By default the right button opens our menu, also while the program (Claude Code, tmux, htop; over SSH too) reads the mouse.
 #[gpui::test]
 fn right_click_opens_the_menu_in_a_mouse_program(cx: &mut TestAppContext) {
     crate::qa_workbench_tests::globals(cx);
@@ -563,6 +563,58 @@ fn any_motion_mode_reports_hover_moves(cx: &mut TestAppContext) {
     cx.simulate_mouse_move(at, None, Modifiers::none());
     cx.simulate_mouse_move(point(at.x + px(1.), at.y), None, Modifiers::none());
     assert_eq!(*host.inputs.lock().unwrap(), vec![b"\x1b[<35;3;1M".to_vec()]);
+}
+
+/// The middle button goes to a program that reads the mouse (press, drag and release), not to a paste; Shift keeps it ours.
+#[gpui::test]
+fn a_mouse_program_gets_the_middle_button(cx: &mut TestAppContext) {
+    let (host, term, cx) = recording_terminal(cx, b"[?1002h[?1006hhello");
+    let (from, to) = term.read_with(cx, |t, _| (t.cell_center(0, 1), t.cell_center(0, 3)));
+    cx.simulate_mouse_down(from, MouseButton::Middle, Modifiers::none());
+    cx.simulate_mouse_move(to, Some(MouseButton::Middle), Modifiers::none());
+    cx.simulate_mouse_up(to, MouseButton::Middle, Modifiers::none());
+    let sent = |host: &ImagePasteHost| host.inputs.lock().unwrap().iter().map(|b| String::from_utf8_lossy(b).into_owned()).collect::<Vec<_>>();
+    assert_eq!(sent(&host), ["[<1;2;1M", "[<33;4;1M", "[<1;4;1m"]);
+    host.inputs.lock().unwrap().clear();
+    cx.simulate_mouse_down(from, MouseButton::Middle, Modifiers::shift());
+    cx.simulate_mouse_up(from, MouseButton::Middle, Modifiers::shift());
+    assert!(sent(&host).iter().all(|s| !s.starts_with("[<")), "Shift pastes instead: {:?}", sent(&host));
+}
+
+/// `terminal.rightClick: "program"` gives the right button to a program that reads the mouse; Shift still opens the menu,
+/// and so does a right click where no program reads the mouse.
+#[gpui::test]
+fn right_click_can_go_to_the_program(cx: &mut TestAppContext) {
+    let (host, term, cx) = recording_terminal(cx, b"[?1000h[?1006hhello");
+    let menus = std::rc::Rc::new(std::cell::Cell::new(0));
+    let seen = menus.clone();
+    let _sub = cx.update(|_, cx| {
+        cx.subscribe(&term, move |_, event: &TerminalEvent, _| {
+            if matches!(event, TerminalEvent::ContextMenu(_)) {
+                seen.set(seen.get() + 1);
+            }
+        })
+    });
+    let at = term.read_with(cx, |t, _| t.cell_center(0, 2));
+    let click = |cx: &mut VisualTestContext, mods: Modifiers| {
+        cx.simulate_mouse_down(at, MouseButton::Right, mods);
+        cx.simulate_mouse_up(at, MouseButton::Right, mods);
+    };
+    click(cx, Modifiers::none());
+    assert_eq!((menus.get(), host.inputs.lock().unwrap().len()), (1, 0), "the menu by default");
+
+    cx.update(|_, cx| cx.update_global::<crate::settings::Settings, _>(|s, _| s.terminal_right_click = "program".into()));
+    click(cx, Modifiers::none());
+    assert_eq!(menus.get(), 1, "no menu");
+    assert_eq!(*host.inputs.lock().unwrap(), vec![b"[<2;3;1M".to_vec(), b"[<2;3;1m".to_vec()]);
+
+    host.inputs.lock().unwrap().clear();
+    click(cx, Modifiers::shift());
+    assert_eq!((menus.get(), host.inputs.lock().unwrap().len()), (2, 0), "Shift opens the menu");
+
+    term.update(cx, |t, _| t.feed(b"[?1000l"));
+    click(cx, Modifiers::none());
+    assert_eq!((menus.get(), host.inputs.lock().unwrap().len()), (3, 0), "no program reads the mouse: the menu");
 }
 
 /// Over SSH, Claude Code copies its selection with OSC 52. By default that write is taken right after a copy in the program

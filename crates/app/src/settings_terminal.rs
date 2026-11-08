@@ -41,6 +41,9 @@ pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>, obj: &Map<String, Valu
         }
         None => {}
     }
+    if let Some(v) = r.choice("terminal.rightClick", &["menu", "program"]) {
+        s.terminal_right_click = v;
+    }
     if let Some(v) = r.bool("terminal.shellIntegration") {
         s.terminal_shell_integration = v;
     }

@@ -1635,7 +1635,9 @@ finished selection is copied right away, because those programs keep Ctrl+C for 
 (`terminal.copyOnSelection`: `agents`, `always` or `off`). When a program reads the mouse, a drag goes to it: Claude Code's
 fullscreen view, tmux and vim then select the text themselves and copy it when you let go, also over SSH, where the copy
 arrives as OSC 52 (see `terminal.allowClipboardWrite`). Hold Shift or ⌥ to make the terminal's own selection instead; a
-program that only reads clicks gets a reminder the first time.
+program that only reads clicks gets a reminder the first time. Such a program also gets the middle button (Shift or ⌥
+pastes instead). A right click opens the terminal's menu there too; `terminal.rightClick: "program"` gives it to the
+program, and Shift or ⌥ then opens the menu.
 
 **Shell integration.** zsh, bash and fish mark each prompt and command, with no setup:
 

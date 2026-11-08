@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Terminal: a program that reads the mouse (vim, tmux, htop, Midnight Commander) gets the middle button, with its drags,
+  instead of the click being lost. `terminal.rightClick: "program"` gives it the right button too; by default a right
+  click still opens the terminal's menu, and with the setting Shift or ⌥ opens it.
+
 ### Fixed
 
 - Windows and Linux: a menu of the menu bar opens under the left edge of its title wherever the title is clicked, and stays
