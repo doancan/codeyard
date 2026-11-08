@@ -15,12 +15,12 @@ pub fn write_atomic(path: &Path, data: impl AsRef<[u8]>) -> std::io::Result<()> 
 }
 
 /// `write_atomic` for files other users have no business reading (crash reports, hand-over files): a new file is owner-only
-/// instead of following the umask. Windows has no such bits; the profile folder's own ACL applies there.
+/// instead of following the umask (on Windows a protected ACL: this user, SYSTEM and Administrators, as in the profile folder).
 pub fn write_private(path: &Path, data: impl AsRef<[u8]>) -> std::io::Result<()> {
     write_atomic_with(path, data.as_ref(), 0o600)
 }
 
-/// New file for writing (fails if it exists), owner-only on unix.
+/// New file for writing (fails if it exists), owner-only (on Windows: the protected ACL of `write_private`).
 pub fn create_private(path: &Path) -> std::io::Result<std::fs::File> {
     let mut opts = std::fs::OpenOptions::new();
     opts.write(true).create_new(true);
@@ -29,11 +29,19 @@ pub fn create_private(path: &Path) -> std::io::Result<std::fs::File> {
         use std::os::unix::fs::OpenOptionsExt;
         opts.mode(0o600);
     }
-    opts.open(path)
+    let file = opts.open(path)?;
+    #[cfg(windows)]
+    if let Err(e) = acl::protect(path, false) {
+        let _ = std::fs::remove_file(path);
+        return Err(e);
+    }
+    Ok(file)
 }
 
 /// `create_dir_all` for a folder of private files: what is created is owner-only on unix, and a folder that already existed
-/// with looser permissions (an earlier version used the umask) is tightened.
+/// with looser permissions (an earlier version used the umask) is tightened. On Windows the folder gets a protected ACL
+/// that its files inherit (this user, SYSTEM and Administrators), so a folder outside the profile (`CODEYARD_CONFIG_DIR`
+/// on a shared disk) is as private as `%APPDATA%`.
 pub fn create_private_dir(path: &Path) -> std::io::Result<()> {
     let mut b = std::fs::DirBuilder::new();
     b.recursive(true);
@@ -48,7 +56,12 @@ pub fn create_private_dir(path: &Path) -> std::io::Result<()> {
         }
         Ok(())
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        b.create(path)?;
+        acl::protect(path, true)
+    }
+    #[cfg(not(any(unix, windows)))]
     b.create(path)
 }
 
@@ -69,9 +82,14 @@ fn write_atomic_with(path: &Path, data: &[u8], new_mode: u32) -> std::io::Result
             // the data is written. A new file gets `new_mode` & ~umask (0666 like `std::fs::write`, or owner-only).
             opts.mode(if existing.is_some() { 0o600 } else { new_mode });
         }
-        #[cfg(not(unix))]
-        let _ = new_mode;
         let mut f = opts.open(&tmp)?;
+        // A new private file is protected before any data is in it.
+        #[cfg(windows)]
+        if existing.is_none() && new_mode & 0o077 == 0 {
+            acl::protect(&tmp, false)?;
+        }
+        #[cfg(not(any(unix, windows)))]
+        let _ = new_mode;
         f.write_all(data)?;
         if let Some(m) = &existing {
             f.set_permissions(m.permissions())?;
@@ -83,6 +101,83 @@ fn write_atomic_with(path: &Path, data: &[u8], new_mode: u32) -> std::io::Result
         let _ = std::fs::remove_file(&tmp);
     }
     result
+}
+
+/// Owner-only on Windows: a protected DACL (nothing inherited from the parent) granting full access to this user, SYSTEM and
+/// Administrators, what a profile folder has. The same SID lookup as the agent's terminal pipe (`daemon_windows.rs`).
+#[cfg(windows)]
+pub(crate) mod acl {
+    use std::io;
+    use std::os::windows::ffi::OsStrExt;
+    use std::path::Path;
+
+    use windows::Win32::Foundation::{CloseHandle, ERROR_INVALID_FUNCTION, ERROR_NOT_SUPPORTED, ERROR_SUCCESS, HANDLE, HLOCAL, LocalFree};
+    use windows::Win32::Security::Authorization::{
+        ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1, SE_FILE_OBJECT, SetNamedSecurityInfoW,
+    };
+    use windows::Win32::Security::{
+        ACL, DACL_SECURITY_INFORMATION, GetSecurityDescriptorDacl, GetTokenInformation, PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, TOKEN_QUERY,
+        TOKEN_USER, TokenUser,
+    };
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+    use windows::core::{BOOL, PCWSTR, PWSTR};
+
+    /// The SID of the user this process runs as, in its `S-1-5-…` form.
+    pub(crate) fn current_user() -> io::Result<String> {
+        let mut token = HANDLE::default();
+        // SAFETY: the pseudo-handle of this process needs no closing; `token` receives a new handle, closed below.
+        unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) }?;
+        let result = (|| {
+            let mut len = 0u32;
+            // SAFETY: asking for the size only (fails with ERROR_INSUFFICIENT_BUFFER, `len` is set).
+            let _ = unsafe { GetTokenInformation(token, TokenUser, None, 0, &mut len) };
+            // u64 words keep the buffer aligned for TOKEN_USER.
+            let mut buffer = vec![0u64; (len as usize).div_ceil(8).max(1)];
+            // SAFETY: the buffer is writable and at least `len` bytes long.
+            unsafe { GetTokenInformation(token, TokenUser, Some(buffer.as_mut_ptr().cast()), len, &mut len) }?;
+            // SAFETY: GetTokenInformation(TokenUser) filled the aligned buffer with a TOKEN_USER whose SID points into it.
+            let sid = unsafe { (*buffer.as_ptr().cast::<TOKEN_USER>()).User.Sid };
+            let mut text = PWSTR::null();
+            // SAFETY: `sid` is valid while `buffer` lives; `text` receives a LocalAlloc'd string, freed below.
+            unsafe { ConvertSidToStringSidW(sid, &mut text) }?;
+            // SAFETY: a NUL-terminated wide string from ConvertSidToStringSidW.
+            let out = unsafe { text.to_string() }.map_err(io::Error::other);
+            // SAFETY: allocated by ConvertSidToStringSidW, freed once.
+            unsafe { LocalFree(Some(HLOCAL(text.0.cast()))) };
+            out
+        })();
+        // SAFETY: opened above, closed once.
+        let _ = unsafe { CloseHandle(token) };
+        result
+    }
+
+    /// Replaces the ACL of `path` with the owner-only one; a folder's entries are inherited by what is created in it.
+    /// A file system without ACLs (FAT, exFAT) is left as it is, as `chmod` does on Unix.
+    pub(crate) fn protect(path: &Path, folder: bool) -> io::Result<()> {
+        let inherit = if folder { "OICI" } else { "" };
+        let sddl = format!("D:P(A;{inherit};FA;;;{})(A;{inherit};FA;;;SY)(A;{inherit};FA;;;BA)", current_user()?);
+        let sddl: Vec<u16> = sddl.encode_utf16().chain([0]).collect();
+        let mut sd = PSECURITY_DESCRIPTOR::default();
+        // SAFETY: a NUL-terminated SDDL string; `sd` receives a LocalAlloc'd descriptor, freed below.
+        unsafe { ConvertStringSecurityDescriptorToSecurityDescriptorW(PCWSTR(sddl.as_ptr()), SDDL_REVISION_1, &mut sd, None) }?;
+        let result = (|| {
+            let (mut present, mut defaulted) = (BOOL(0), BOOL(0));
+            let mut dacl: *mut ACL = std::ptr::null_mut();
+            // SAFETY: `sd` is the live descriptor from above; `dacl` points into it.
+            unsafe { GetSecurityDescriptorDacl(sd, &mut present, &mut dacl, &mut defaulted) }?;
+            let name: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+            let info = DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION;
+            // SAFETY: a NUL-terminated path and the DACL of `sd`, which lives for the call.
+            let status = unsafe { SetNamedSecurityInfoW(PCWSTR(name.as_ptr()), SE_FILE_OBJECT, info, None, None, Some(dacl), None) };
+            match status {
+                ERROR_SUCCESS | ERROR_NOT_SUPPORTED | ERROR_INVALID_FUNCTION => Ok(()),
+                e => Err(io::Error::from_raw_os_error(e.0 as i32)),
+            }
+        })();
+        // SAFETY: allocated by ConvertStringSecurityDescriptorToSecurityDescriptorW, freed once.
+        unsafe { LocalFree(Some(HLOCAL(sd.0))) };
+        result
+    }
 }
 
 #[cfg(test)]
@@ -146,6 +241,105 @@ mod tests {
         std::fs::set_permissions(&a, std::fs::Permissions::from_mode(0o640)).unwrap();
         write_private(&a, "y").unwrap();
         assert_eq!(mode(&a), 0o640);
+    }
+
+    /// The DACL of `path` as SDDL text (`D:P(A;OICI;FA;;;SY)…`).
+    #[cfg(windows)]
+    fn dacl(path: &Path) -> String {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::Win32::Foundation::{ERROR_SUCCESS, HLOCAL, LocalFree};
+        use windows::Win32::Security::Authorization::{
+            ConvertSecurityDescriptorToStringSecurityDescriptorW, GetNamedSecurityInfoW, SDDL_REVISION_1, SE_FILE_OBJECT,
+        };
+        use windows::Win32::Security::{DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR};
+        use windows::core::{PCWSTR, PWSTR};
+        let name: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+        let mut sd = PSECURITY_DESCRIPTOR::default();
+        // SAFETY: a NUL-terminated path; `sd` receives a LocalAlloc'd descriptor, freed below.
+        let status = unsafe { GetNamedSecurityInfoW(PCWSTR(name.as_ptr()), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, None, None, None, None, &mut sd) };
+        assert_eq!(status, ERROR_SUCCESS, "{}", path.display());
+        let mut text = PWSTR::null();
+        // SAFETY: `sd` is live; `text` receives a LocalAlloc'd string, freed below.
+        unsafe { ConvertSecurityDescriptorToStringSecurityDescriptorW(sd, SDDL_REVISION_1, DACL_SECURITY_INFORMATION, &mut text, None) }.unwrap();
+        // SAFETY: a NUL-terminated string from the call above.
+        let out = unsafe { text.to_string() }.unwrap();
+        // SAFETY: both allocated by the calls above, freed once.
+        unsafe {
+            LocalFree(Some(HLOCAL(text.0.cast())));
+            LocalFree(Some(HLOCAL(sd.0)));
+        }
+        out
+    }
+
+    /// Gives `path` the DACL `sddl` (`D:(A;OICI;FA;;;WD)`, everyone), as a folder made by hand or another tool could have.
+    #[cfg(windows)]
+    fn set_dacl(path: &Path, sddl: &str) {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::Win32::Foundation::{ERROR_SUCCESS, HLOCAL, LocalFree};
+        use windows::Win32::Security::Authorization::{
+            ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1, SE_FILE_OBJECT, SetNamedSecurityInfoW,
+        };
+        use windows::Win32::Security::{ACL, DACL_SECURITY_INFORMATION, GetSecurityDescriptorDacl, PSECURITY_DESCRIPTOR};
+        use windows::core::{BOOL, PCWSTR};
+        let text: Vec<u16> = sddl.encode_utf16().chain([0]).collect();
+        let name: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+        let mut sd = PSECURITY_DESCRIPTOR::default();
+        let (mut present, mut defaulted, mut acl) = (BOOL(0), BOOL(0), std::ptr::null_mut::<ACL>());
+        // SAFETY: NUL-terminated strings; `sd` is LocalAlloc'd and freed below, `acl` points into it.
+        unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(PCWSTR(text.as_ptr()), SDDL_REVISION_1, &mut sd, None).unwrap();
+            GetSecurityDescriptorDacl(sd, &mut present, &mut acl, &mut defaulted).unwrap();
+            assert_eq!(SetNamedSecurityInfoW(PCWSTR(name.as_ptr()), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, None, None, Some(acl), None), ERROR_SUCCESS);
+            LocalFree(Some(HLOCAL(sd.0)));
+        }
+    }
+
+    /// The access entries of an SDDL DACL, without the `D:` flags: `["A;OICI;FA;;;SY", …]`.
+    #[cfg(windows)]
+    fn aces(sddl: &str) -> Vec<String> {
+        sddl.split('(').skip(1).map(|a| a.trim_end_matches(')').to_string()).collect()
+    }
+
+    /// `create_private_dir`, `create_private` and `write_private` leave a folder and files that only this user, SYSTEM and
+    /// Administrators can open, whatever the parent folder allows: what 0700/0600 are on Unix.
+    #[cfg(windows)]
+    #[test]
+    fn windows_private_files_and_folders_are_owner_only() {
+        let user = acl::current_user().unwrap();
+        let d = dir("private-acl");
+        // The parent lets everyone in, as a folder on a shared disk (`CODEYARD_CONFIG_DIR`) might.
+        set_dacl(&d, "D:(A;OICI;FA;;;WD)(A;OICI;FA;;;BU)");
+        let sub = d.join("a/b");
+        create_private_dir(&sub).unwrap();
+        let folder = dacl(&sub);
+        assert!(folder.starts_with("D:P"), "protected: nothing inherited from the parent: {folder}");
+        let (a, b) = (sub.join("a.txt"), sub.join("b.txt"));
+        write_private(&a, "x").unwrap();
+        create_private(&b).unwrap().write_all(b"x").unwrap();
+        assert!(create_private(&b).is_err(), "never replaces a file");
+        for path in [&sub, &a, &b] {
+            let sddl = dacl(path);
+            let entries = aces(&sddl);
+            assert_eq!(entries.len(), 3, "{}: {sddl}", path.display());
+            for e in &entries {
+                let trustee = e.rsplit(';').next().unwrap();
+                // An access entry names this user by SID, or by an alias for a well-known account (`LA` on CI runners).
+                assert!(["SY", "BA", "LA", user.as_str()].contains(&trustee), "{}: {e} in {sddl}", path.display());
+                assert!(e.starts_with("A;"), "allow entries only: {e}");
+            }
+            assert!(!sddl.contains(";WD)") && !sddl.contains(";BU)") && !sddl.contains(";AU)"), "{}: {sddl}", path.display());
+        }
+        // A folder that exists with a loose ACL is tightened, and what is already in it follows.
+        let old = d.join("old");
+        std::fs::create_dir(&old).unwrap();
+        std::fs::write(old.join("crash-1.txt"), "trace").unwrap();
+        assert!(dacl(&old.join("crash-1.txt")).contains(";WD)"), "the setup gives everyone access");
+        create_private_dir(&old).unwrap();
+        for path in [old.clone(), old.join("crash-1.txt")] {
+            let sddl = dacl(&path);
+            assert!(!sddl.contains(";WD)") && !sddl.contains(";BU)"), "{}: {sddl}", path.display());
+        }
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[cfg(unix)]
