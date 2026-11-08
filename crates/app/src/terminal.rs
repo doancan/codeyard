@@ -292,6 +292,11 @@ impl TerminalView {
         format!("{:?}", *self.term.mode())
     }
 
+    #[cfg(test)]
+    pub fn alt_screen_for_test(&self) -> bool {
+        self.term.mode().contains(TermMode::ALT_SCREEN)
+    }
+
     pub fn new(host: Arc<dyn Host>, cwd: Option<String>, shell: Option<String>, cx: &mut Context<Self>) -> Self {
         Self::new_with(host, cwd, Launch { shell, ..Launch::default() }, cx)
     }

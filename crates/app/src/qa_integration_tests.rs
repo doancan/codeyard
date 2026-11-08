@@ -1941,6 +1941,12 @@ fn qa_terminal_wheel_in_alternate_screen_sends_arrows(cx: &mut TestAppContext) {
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
     start_reading(cx, &term, "1049");
+    // An older Windows console host (Windows Server 2022's) keeps the alternate screen to itself and repaints the main one:
+    // the terminal never learns a full-screen program is running, so there is nothing to turn the wheel into.
+    if cfg!(windows) && !term.read_with(cx, |t, _| t.alt_screen_for_test()) {
+        crate::test_sshd::skip_unusable("conhost-alternate-screen", "this Windows' console host does not pass the alternate screen (?1049h) on");
+        return;
+    }
     let at = term.read_with(cx, |t, _| t.cell_center(5, 5));
     for _ in 0..3 {
         cx.simulate_event(gpui::ScrollWheelEvent {
@@ -1954,7 +1960,7 @@ fn qa_terminal_wheel_in_alternate_screen_sends_arrows(cx: &mut TestAppContext) {
     // Control: a real ↑ key press is echoed the same way, so the setup works.
     cx.simulate_keystrokes("up");
     assert!(echoed(cx, &term, "^["), "control: ↑ key not echoed");
-    assert!(got, "wheel in the alternate screen sent nothing to the program");
+    assert!(got, "wheel in the alternate screen sent nothing to the program; terminal modes {}", term.read_with(cx, |t, _| t.modes_for_test()));
 }
 
 /// Sets the private mode `mode` (`1049`: the alternate screen, `1000`: mouse reports) and leaves a program reading the
