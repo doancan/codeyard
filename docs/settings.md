@@ -198,6 +198,7 @@ status bar reports it.
 | `terminal.notifications` | `true` / `false` | `true` | Flag a terminal and the taskbar when its program rings the bell or asks for you |
 | `terminal.persistentScrollback` | number 0–10000 | `0` | Lines of each terminal's history kept for the next start, as plain text on this computer (0: none) |
 | `terminal.persistentSessionTimeout` | number 0–1440 | `5` | Minutes the terminals keep running for the next start after Codeyard quits, crashes or is killed (0: not kept) |
+| `terminal.rightClick` | `menu`, `program` | `menu` | Where a right click goes while a program in the terminal reads the mouse: the terminal's menu or the program (Shift opens the menu) |
 | `terminal.sanitizePaste` | `auto`, `always`, `off` | `auto` | Remove control characters from pasted text |
 | `terminal.scrollSensitivity` | number 0.1–10 | `2.0` | Mouse wheel and trackpad scroll speed multiplier |
 | `terminal.scrollback` | number 0–200000 | `50000` | Lines kept in terminal history. More than 50,000 can use a lot of memory and slow down scrolling and search |

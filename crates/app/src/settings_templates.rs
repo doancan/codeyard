@@ -188,6 +188,9 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // of a drag or a double-click in it, or press Ctrl+C), as Claude Code does over SSH; a file you cat cannot replace what you
   // copied. "always" or "off".
   // "terminal.allowClipboardWrite": "copy",
+  // A right click opens the terminal's menu, also in programs that read the mouse (Claude Code, vim, tmux, htop); "program"
+  // gives it to such a program instead (Shift or ⌥ still opens the menu). A middle click goes to such a program anyway.
+  // "terminal.rightClick": "menu",
   // Pasting: "auto" removes control characters unless the shell reads the paste as text (bracketed paste), "always" or
   // "off"; bracketed-paste markers inside pasted text are always removed. A paste of several lines asks first
   // ("unbracketed": when the shell would run each line at once, "always" or "never").

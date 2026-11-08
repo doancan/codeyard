@@ -2793,6 +2793,7 @@ What runs after a commit: nothing, push or sync. Your own settings only; a folde
 When a file, diff or page opens while the panel is maximized: shrink the panel to half, give it back its size, or move the terminal into a tab	
 When the close button of a tab shows	
 Where .http requests are sent from: the workspace host (the server when connected over SSH) or this computer	
+Where a right click goes while a program in the terminal reads the mouse: the terminal's menu or the program (Shift opens the menu)	
 Where forwarded ports listen: this computer only, or every network interface	
 Whole word	
 Whole word (⌥W)	

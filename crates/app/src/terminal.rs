@@ -798,6 +798,10 @@ impl TerminalView {
         }
     }
 
+    fn on_other_button_up(&mut self, ev: &gpui::MouseUpEvent, _: &mut Window, _: &mut Context<Self>) {
+        self.report_other_button(ev.button, false, ev.position, &ev.modifiers);
+    }
+
     #[cfg(test)]
     pub fn selected_text(&self) -> Option<String> {
         self.term.selection_to_string()
@@ -1370,12 +1374,12 @@ impl Render for TerminalView {
             .on_key_down(cx.listener(Self::on_key_down))
             .on_scroll_wheel(cx.listener(Self::on_scroll))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
-            // Middle click pastes (a program that reads the mouse keeps it; Shift or ⌥ pastes anyway).
+            // Middle click pastes; a program that reads the mouse gets it instead (Shift or ⌥ pastes anyway).
             .on_mouse_down(
                 MouseButton::Middle,
                 cx.listener(|this, ev: &MouseDownEvent, window, cx| {
-                    if selects_text(&ev.modifiers) || !this.term.mode().intersects(TermMode::MOUSE_MODE) {
-                        window.focus(&this.focus_handle);
+                    window.focus(&this.focus_handle);
+                    if selects_text(&ev.modifiers) || !this.report_other_button(MouseButton::Middle, true, ev.position, &ev.modifiers) {
                         this.paste(&TermPaste, window, cx);
                     }
                 }),
@@ -1384,16 +1388,24 @@ impl Render for TerminalView {
             .on_mouse_down(
                 MouseButton::Right,
                 cx.listener(|this, ev: &MouseDownEvent, window, cx| {
-                    // Always ours, also while a program reads the mouse (Claude Code, htop, vim with mouse=a, over SSH too):
-                    // otherwise there is no way to copy or paste with the mouse in those programs.
+                    // Ours by default, also while a program reads the mouse (Claude Code, htop, vim with mouse=a, over SSH too):
+                    // otherwise there is no way to copy or paste with the mouse in those programs. `terminal.rightClick:
+                    // "program"` gives it to such a program instead, and Shift or ⌥ still opens the menu.
                     window.focus(&this.focus_handle);
-                    cx.emit(TerminalEvent::ContextMenu(ev.position));
+                    let to_program = cx.global::<crate::settings::Settings>().terminal_right_click == "program" && !selects_text(&ev.modifiers);
+                    if !(to_program && this.report_other_button(MouseButton::Right, true, ev.position, &ev.modifiers)) {
+                        cx.emit(TerminalEvent::ContextMenu(ev.position));
+                    }
                 }),
             )
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .when(self.hover_link.is_some(), |d| d.cursor(gpui::CursorStyle::PointingHand))
             .on_mouse_up(MouseButton::Left, cx.listener(|this, ev, _, cx| this.on_mouse_up(ev, cx)))
             .on_mouse_up_out(MouseButton::Left, cx.listener(|this, ev, _, cx| this.on_mouse_up(ev, cx)))
+            .on_mouse_up(MouseButton::Middle, cx.listener(Self::on_other_button_up))
+            .on_mouse_up_out(MouseButton::Middle, cx.listener(Self::on_other_button_up))
+            .on_mouse_up(MouseButton::Right, cx.listener(Self::on_other_button_up))
+            .on_mouse_up_out(MouseButton::Right, cx.listener(Self::on_other_button_up))
             .relative()
             .size_full()
             .bg(c(p.bg))

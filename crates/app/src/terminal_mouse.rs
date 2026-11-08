@@ -17,11 +17,13 @@ use super::TerminalView;
 /// How long after a copy gesture a program's clipboard write is taken: over SSH it comes back after a round trip.
 const COPY_WINDOW: Duration = Duration::from_secs(5);
 
-/// The left button as the program sees it.
+/// The buttons as the program sees them.
 #[derive(Default)]
 pub(super) struct ProgramMouse {
-    /// The cell and click count of the press the program got: moves are drags until the release.
+    /// The cell and click count of the left press the program got: moves are drags until the release.
     press: Option<((usize, usize), usize)>,
+    /// The middle (1) or right (2) button the program got pressed: moves are drags of it until the release.
+    other: Option<u8>,
     /// The cell the last report was for: a move inside the same cell is not reported again.
     last: Option<(usize, usize)>,
     /// When the user last let go of a drag or a double-click in the program, or pressed Ctrl+C in it.
@@ -37,6 +39,15 @@ impl ProgramMouse {
 /// Shift or ⌥ held: the drag selects text even while the program reads the mouse (Terminal.app and iTerm use ⌥ for this).
 pub(super) fn selects_text(m: &Modifiers) -> bool {
     m.shift || m.alt
+}
+
+/// The xterm code of the middle or right button (the left one has its own press and release: it selects and copies).
+pub(super) fn other_button_code(button: MouseButton) -> Option<u8> {
+    match button {
+        MouseButton::Middle => Some(1),
+        MouseButton::Right => Some(2),
+        _ => None,
+    }
 }
 
 /// Whether a program's clipboard write (OSC 52) is taken under `terminal.allowClipboardWrite`.
@@ -97,13 +108,32 @@ impl TerminalView {
         true
     }
 
+    /// The middle or right button went down or up: it goes to the program if it reads the mouse. `false` if it doesn't.
+    pub(super) fn report_other_button(&mut self, button: MouseButton, pressed: bool, pos: Point<Pixels>, mods: &Modifiers) -> bool {
+        let Some(code) = other_button_code(button) else { return false };
+        if !pressed && self.program_mouse.other != Some(code) {
+            // Its press was not the program's (it opened the menu, or pasted): neither is the release.
+            return false;
+        }
+        let Some(bytes) = self.mouse_report(code, pressed, pos, mods) else {
+            self.program_mouse.other = None;
+            return false;
+        };
+        self.program_mouse.other = pressed.then_some(code);
+        self.program_mouse.last = Some(self.mouse_cell(pos));
+        self.write(bytes);
+        true
+    }
+
     /// A move the program asked for: a drag while its button is held (`?1002h` or `?1003h`), any move with `?1003h`.
     /// `false` when the program does not follow it (it only reads clicks, or nothing).
     pub(super) fn report_motion(&mut self, ev: &MouseMoveEvent) -> bool {
         let mode = *self.term.mode();
-        let held = self.program_mouse.press.is_some() && ev.pressed_button == Some(MouseButton::Left);
+        let other = self.program_mouse.other.filter(|code| ev.pressed_button.and_then(other_button_code) == Some(*code));
+        let held = other.is_some() || (self.program_mouse.press.is_some() && ev.pressed_button == Some(MouseButton::Left));
         if ev.pressed_button.is_none() {
             self.program_mouse.press = None;
+            self.program_mouse.other = None;
         }
         let wanted = if held {
             mode.intersects(TermMode::MOUSE_DRAG | TermMode::MOUSE_MOTION)
@@ -116,8 +146,9 @@ impl TerminalView {
         let cell = self.mouse_cell(ev.position);
         if self.program_mouse.last != Some(cell) {
             self.program_mouse.last = Some(cell);
-            // A move adds 32 to the button: 0 (left) while dragging, 3 (none) otherwise.
-            let bytes = self.mouse_bytes(if held { 32 } else { 35 }, true, cell, &ev.modifiers);
+            // A move adds 32 to the button: the held one (0 left, 1 middle, 2 right) while dragging, 3 (none) otherwise.
+            let button = if held { other.unwrap_or(0) } else { 3 };
+            let bytes = self.mouse_bytes(32 + button, true, cell, &ev.modifiers);
             self.write(bytes);
         }
         true

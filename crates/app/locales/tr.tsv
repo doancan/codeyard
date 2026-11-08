@@ -3655,3 +3655,4 @@ Commits that exist only on the remote branch are lost for everyone using it.	Yal
 If the remote branch moves while this question is open, git refuses.	Bu soru açıkken uzak dal ilerlerse git reddeder.
 The server refused the login: check the account and that the token may push.	Sunucu girişi reddetti: hesabı ve jetonun push yetkisi olduğunu kontrol edin.
 {} commit on the remote branch is not in yours and is lost for everyone using it.|{} commits on the remote branch are not in yours and are lost for everyone using it.	Uzak daldaki {} commit sizde yok ve onu kullanan herkes için kaybolur.
+Where a right click goes while a program in the terminal reads the mouse: the terminal's menu or the program (Shift opens the menu)	Terminaldeki bir program fareyi okurken sağ tıkın nereye gideceği: terminalin menüsü ya da program (Shift menüyü açar)
