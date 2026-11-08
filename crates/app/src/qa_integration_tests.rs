@@ -1830,6 +1830,7 @@ fn terminal_fixture(mode: &str) -> String {
 }
 
 /// The line `terminal_fixture` prints once its mode is set and it reads the console.
+#[cfg(windows)]
 const FIXTURE_READY: &str = "fixture reading";
 
 /// Started by `terminal_fixture` inside a ConPTY: reads the console the way a full-screen program does (VT input, no line
