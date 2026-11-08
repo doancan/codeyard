@@ -113,6 +113,10 @@ such a list silently drops every new test (until 2026-10 it ran 322 of the app's
 
 - Code that exists only on Unix (a POSIX shell script as a fixture, Unix permissions, the SSH daemon's sockets) is
   tested under `#[cfg(unix)]`, next to the code it tests.
+- Terminal tests run in `/bin/sh` on Unix and in cmd on Windows, through a real ConPTY. What cmd cannot do itself
+  (`stty size`, `printf '\033[?1000h'; cat -v`) is done by `qa_integration_tests::terminal_fixture`, which starts the
+  test binary in the terminal as a console program reading VT input. ConPTY's console host asks the terminal for SGR
+  mouse reports and focus events on its own, so a program that set mode 1000 gets `ESC [ < …` reports there.
 - A test that needs something this machine lacks checks for it first and returns after printing a `SKIPPED` line
   with the reason: `test_sshd::start` for `sshd`, `test_sshd::skip_missing` for an external tool (python3, clangd, …)
   and `ext_runtime::code_runs_for_test` for code extensions, which run only in `codeyard-exthost` inside its OS

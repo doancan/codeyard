@@ -286,6 +286,12 @@ impl TerminalView {
         self.start_dir()
     }
 
+    /// The modes the program has switched on (mouse reports, alternate screen, …), for a failing test to show.
+    #[cfg(test)]
+    pub fn modes_for_test(&self) -> String {
+        format!("{:?}", *self.term.mode())
+    }
+
     pub fn new(host: Arc<dyn Host>, cwd: Option<String>, shell: Option<String>, cx: &mut Context<Self>) -> Self {
         Self::new_with(host, cwd, Launch { shell, ..Launch::default() }, cx)
     }

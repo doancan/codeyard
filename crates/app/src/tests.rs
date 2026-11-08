@@ -586,9 +586,6 @@ fn case_transforms_and_block_comment_work_on_the_selection(cx: &mut TestAppConte
 /// Comparisons, last edit location, scratch file, and running the selected text in the terminal.
 #[gpui::test]
 fn compare_last_edit_scratch_and_run_selected_text(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
-        return;
-    }
     let cfg = config_dir("extras");
     let dir = project("extras");
     // The output line is `run-42`; the echoed command line is not (cmd has no arithmetic, so the line just says it).
@@ -4681,9 +4678,6 @@ fn file_history_follows_renames_and_blame_sees_unsaved_lines(cx: &mut TestAppCon
 
 #[gpui::test]
 fn terminal_cmd_click_opens_file_locations(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
-        return;
-    }
     let dir = crate::ui::canonical_for_test(project("termlink"));
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
