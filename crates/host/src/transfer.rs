@@ -872,11 +872,35 @@ mod tests {
         assert_eq!(std::fs::read_dir(destination).unwrap().count(), 1);
     }
 
+    /// A remote path for the emulated server: Git Bash reads `C:/…` on Windows, where `\` would be an escape.
+    fn remote(path: &Path) -> String {
+        path.to_string_lossy().replace('\\', "/")
+    }
+
+    /// Whether `portable_shell` has a shell to run: always on Unix; on Windows, Git Bash from Git for Windows. When not,
+    /// prints a SKIPPED line (`CODEYARD_REQUIRE_TOOLS=1` or a list naming `bash` makes it a failure) and returns `false`.
+    fn server_shell() -> bool {
+        #[cfg(windows)]
+        if !git_bash().is_file() {
+            let test = std::thread::current().name().unwrap_or("?").to_string();
+            let required = std::env::var("CODEYARD_REQUIRE_TOOLS").is_ok_and(|r| r == "1" || r.split(',').any(|t| t == "bash"));
+            assert!(!required, "{test}: needs Git Bash ({}), and CODEYARD_REQUIRE_TOOLS asks for it", git_bash().display());
+            eprintln!("SKIPPED {test}: needs Git Bash ({}) to emulate the server (set CODEYARD_REQUIRE_TOOLS=1 to make this an error)", git_bash().display());
+            return false;
+        }
+        true
+    }
+
+    #[cfg(windows)]
+    fn git_bash() -> PathBuf {
+        PathBuf::from(std::env::var_os("ProgramFiles").unwrap_or_default()).join("Git/bin/bash.exe")
+    }
+
+    /// The emulated server: `sh -c` on Unix, Git Bash on Windows (`server_shell` says whether it is there).
     fn portable_shell(script: &str) -> Command {
         #[cfg(windows)]
         {
-            let bash = PathBuf::from(std::env::var_os("ProgramFiles").unwrap()).join("Git/bin/bash.exe");
-            let mut command = Command::new(bash);
+            let mut command = Command::new(git_bash());
             command.args(["--noprofile", "--norc", "-c", &format!("PATH=/usr/bin:/bin:$PATH; {script}")]);
             command
         }
@@ -1063,8 +1087,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "uses a local POSIX shell to emulate the remote server")]
     fn file_round_trip_with_spaces_and_progress() {
+        if !server_shell() {
+            return;
+        }
         let d = dir("file");
         let src = d.join("a b 'quoted'.bin");
         let data: Vec<u8> = (0..1_500_000u32).map(|i| (i % 251) as u8).collect();
@@ -1072,14 +1098,14 @@ mod tests {
         let remote_dir = d.join("srv/new dir");
         let cancel = AtomicBool::new(false);
         let mut seen = 0u64;
-        let dest = upload(&local_shell, &src, remote_dir.to_str().unwrap(), &cancel, |n| seen += n).unwrap();
+        let dest = upload(&portable_shell, &src, &remote(&remote_dir), &cancel, |n| seen += n).unwrap();
         assert_eq!(seen, data.len() as u64);
         assert_eq!(std::fs::read(&dest).unwrap(), data);
         assert!(std::fs::read_dir(&remote_dir).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().contains("codeyard-part")), "no partial files left");
 
         let back = d.join("downloads");
         let mut got = 0u64;
-        let local = download(&local_shell, &dest, false, &back, &cancel, |n| got += n).unwrap();
+        let local = download(&portable_shell, &dest, false, &back, &cancel, |n| got += n).unwrap();
         assert_eq!(local, back.join("a b 'quoted'.bin"));
         assert_eq!(std::fs::read(&local).unwrap(), data);
         assert_eq!(got, data.len() as u64);
@@ -1087,8 +1113,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "uses a local POSIX shell to emulate the remote server")]
     fn folder_round_trip_keeps_tree_and_empty_dirs() {
+        if !server_shell() {
+            return;
+        }
         let d = dir("folder");
         let src = d.join("project");
         std::fs::create_dir_all(src.join("src/deep")).unwrap();
@@ -1097,11 +1125,11 @@ mod tests {
         std::fs::write(src.join("src/deep/ğ ü.txt"), "türkçe").unwrap();
         let remote_dir = d.join("srv");
         let cancel = AtomicBool::new(false);
-        let dest = upload(&local_shell, &src, remote_dir.to_str().unwrap(), &cancel, |_| {}).unwrap();
+        let dest = upload(&portable_shell, &src, &remote(&remote_dir), &cancel, |_| {}).unwrap();
         assert_eq!(std::fs::read_to_string(format!("{dest}/src/deep/ğ ü.txt")).unwrap(), "türkçe");
         assert!(std::path::Path::new(&format!("{dest}/empty")).is_dir());
         let back = d.join("back");
-        let local = download(&local_shell, &dest, true, &back, &cancel, |_| {}).unwrap();
+        let local = download(&portable_shell, &dest, true, &back, &cancel, |_| {}).unwrap();
         assert_eq!(std::fs::read_to_string(local.join("src/main.rs")).unwrap(), "fn main() {}\n");
         assert!(local.join("empty").is_dir());
         assert!(local_size(&src) > 0);
@@ -1109,14 +1137,16 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "uses a local POSIX shell to emulate the remote server")]
     fn cancel_leaves_nothing_behind() {
+        if !server_shell() {
+            return;
+        }
         let d = dir("cancel");
         let src = d.join("big.bin");
         std::fs::write(&src, vec![7u8; 5_000_000]).unwrap();
         let remote_dir = d.join("srv");
         let cancel = AtomicBool::new(false);
-        let err = upload(&local_shell, &src, remote_dir.to_str().unwrap(), &cancel, |_| cancel.store(true, Ordering::Relaxed)).unwrap_err();
+        let err = upload(&portable_shell, &src, &remote(&remote_dir), &cancel, |_| cancel.store(true, Ordering::Relaxed)).unwrap_err();
         assert!(err.to_string().contains("cancelled"), "{err}");
         let left: Vec<_> = std::fs::read_dir(&remote_dir).map(|r| r.flatten().map(|e| e.file_name()).collect()).unwrap_or_default();
         assert!(left.is_empty(), "no partial or final file after cancel: {left:?}");
@@ -1125,7 +1155,7 @@ mod tests {
         std::fs::write(&remote_file, vec![1u8; 5_000_000]).unwrap();
         let cancel = AtomicBool::new(false);
         let out = d.join("out");
-        let err = download(&local_shell, remote_file.to_str().unwrap(), false, &out, &cancel, |_| cancel.store(true, Ordering::Relaxed)).unwrap_err();
+        let err = download(&portable_shell, &remote(&remote_file), false, &out, &cancel, |_| cancel.store(true, Ordering::Relaxed)).unwrap_err();
         assert!(err.to_string().contains("cancelled"));
         assert_eq!(std::fs::read_dir(&out).unwrap().count(), 0);
         let _ = std::fs::remove_dir_all(&d);
@@ -1190,17 +1220,15 @@ mod tests {
 
     /// `Shell` whose remote side is an arbitrary script, to script "server" behaviour (early exit…) in tests.
     fn script(body: &'static str) -> impl Fn(&str) -> Command {
-        move |_: &str| {
-            let mut c = Command::new("sh");
-            c.arg("-c").arg(body);
-            c
-        }
+        move |_: &str| portable_shell(body)
     }
 
     /// A server may send any tar it likes: whatever sits next to the folder that was asked for must not reach the target folder.
     #[test]
-    #[cfg_attr(windows, ignore = "uses a local POSIX shell to emulate the remote server")]
     fn a_hostile_tar_cannot_write_beside_the_downloaded_folder() {
+        if !server_shell() {
+            return;
+        }
         let d = dir("hostile");
         let evil = d.join("evil");
         std::fs::create_dir_all(evil.join("project")).unwrap();
@@ -1210,11 +1238,7 @@ mod tests {
         let made = Command::new("tar").arg("-C").arg(&evil).arg("-cf").arg(&tarball).arg("./project").arg("./.zshrc").status().unwrap();
         assert!(made.success());
         let cat = tarball.clone();
-        let hostile = move |_: &str| {
-            let mut c = Command::new("cat");
-            c.arg(&cat);
-            c
-        };
+        let hostile = move |_: &str| portable_shell(&format!("cat '{}'", remote(&cat)));
         let out = d.join("out");
         let cancel = AtomicBool::new(false);
         let err = download(&hostile, "/srv/project", true, &out, &cancel, |_| {}).unwrap_err().to_string();
@@ -1227,8 +1251,10 @@ mod tests {
 
     /// An existing folder is still merged into, as before the stream went through a scratch folder.
     #[test]
-    #[cfg_attr(windows, ignore = "uses a local POSIX shell to emulate the remote server")]
     fn downloading_into_an_existing_folder_merges() {
+        if !server_shell() {
+            return;
+        }
         let d = dir("merge");
         let src = d.join("srv/project");
         std::fs::create_dir_all(src.join("sub")).unwrap();
@@ -1239,7 +1265,7 @@ mod tests {
         std::fs::write(out.join("project/mine.txt"), "mine").unwrap();
         std::fs::write(out.join("project/sub/both.txt"), "old").unwrap();
         let cancel = AtomicBool::new(false);
-        let got = download(&local_shell, src.to_str().unwrap(), true, &out, &cancel, |_| {}).unwrap();
+        let got = download(&portable_shell, &remote(&src), true, &out, &cancel, |_| {}).unwrap();
         assert_eq!(std::fs::read_to_string(got.join("mine.txt")).unwrap(), "mine");
         assert_eq!(std::fs::read_to_string(got.join("new.txt")).unwrap(), "new");
         assert_eq!(std::fs::read_to_string(got.join("sub/both.txt")).unwrap(), "from server");
@@ -1247,8 +1273,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "uses a local POSIX shell to emulate the remote server")]
     fn a_file_and_a_folder_never_replace_each_other_and_nothing_is_damaged() {
+        if !server_shell() {
+            return;
+        }
         let d = dir("types");
         let cancel = AtomicBool::new(false);
         // File over an existing folder of the same name: refused with a reason, the folder is intact.
@@ -1257,7 +1285,7 @@ mod tests {
         let srv = d.join("srv");
         std::fs::create_dir_all(srv.join("thing/inside")).unwrap();
         std::fs::write(srv.join("thing/inside/keep.txt"), "keep").unwrap();
-        let err = upload(&local_shell, &src, srv.to_str().unwrap(), &cancel, |_| {}).unwrap_err().to_string();
+        let err = upload(&portable_shell, &src, &remote(&srv), &cancel, |_| {}).unwrap_err().to_string();
         assert!(err.contains("folder named") && err.contains("thing"), "{err}");
         assert_eq!(std::fs::read_to_string(srv.join("thing/inside/keep.txt")).unwrap(), "keep");
         assert!(!srv.join("thing/thing").exists(), "mv must not drop the file inside the folder");
@@ -1268,25 +1296,27 @@ mod tests {
         let srv2 = d.join("srv2");
         std::fs::create_dir_all(&srv2).unwrap();
         std::fs::write(srv2.join("pack"), "i am a file").unwrap();
-        let err = upload(&local_shell, &srcdir, srv2.to_str().unwrap(), &cancel, |_| {}).unwrap_err().to_string();
+        let err = upload(&portable_shell, &srcdir, &remote(&srv2), &cancel, |_| {}).unwrap_err().to_string();
         assert!(err.contains("file named") && err.contains("pack"), "{err}");
         assert_eq!(std::fs::read_to_string(srv2.join("pack")).unwrap(), "i am a file");
         // Downloads: same two cases on the local side.
         std::fs::create_dir_all(d.join("dl/thing")).unwrap();
-        let err = download(&local_shell, src.to_str().unwrap(), false, &d.join("dl"), &cancel, |_| {}).unwrap_err().to_string();
+        let err = download(&portable_shell, &remote(&src), false, &d.join("dl"), &cancel, |_| {}).unwrap_err().to_string();
         assert!(err.contains("folder named"), "{err}");
         std::fs::write(d.join("dl2-file"), "x").unwrap();
         std::fs::create_dir_all(d.join("dl2")).unwrap();
         std::fs::write(d.join("dl2/pack"), "local file").unwrap();
-        let err = download(&local_shell, srcdir.to_str().unwrap(), true, &d.join("dl2"), &cancel, |_| {}).unwrap_err().to_string();
+        let err = download(&portable_shell, &remote(&srcdir), true, &d.join("dl2"), &cancel, |_| {}).unwrap_err().to_string();
         assert!(err.contains("file named"), "{err}");
         assert_eq!(std::fs::read_to_string(d.join("dl2/pack")).unwrap(), "local file");
         let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "uses a local POSIX shell to emulate the remote server")]
     fn cancelling_a_folder_removes_a_new_folder_but_never_an_existing_one() {
+        if !server_shell() {
+            return;
+        }
         let d = dir("folder-cancel");
         let src = d.join("proj");
         std::fs::create_dir_all(&src).unwrap();
@@ -1296,24 +1326,23 @@ mod tests {
         // New destination: cancel leaves nothing on the "server" or locally.
         let cancel = AtomicBool::new(false);
         let srv = d.join("srv");
-        let err = upload(&local_shell, &src, srv.to_str().unwrap(), &cancel, |_| cancel.store(true, Ordering::Relaxed)).unwrap_err().to_string();
+        let err = upload(&portable_shell, &src, &remote(&srv), &cancel, |_| cancel.store(true, Ordering::Relaxed)).unwrap_err().to_string();
         assert!(err.contains("cancelled"), "{err}");
         assert!(!srv.join("proj").exists(), "a cancelled new folder is removed again");
         let cancel = AtomicBool::new(false);
-        let err =
-            download(&local_shell, src.to_str().unwrap(), true, &d.join("dl"), &cancel, |_| cancel.store(true, Ordering::Relaxed)).unwrap_err().to_string();
+        let err = download(&portable_shell, &remote(&src), true, &d.join("dl"), &cancel, |_| cancel.store(true, Ordering::Relaxed)).unwrap_err().to_string();
         assert!(err.contains("cancelled"));
         assert!(!d.join("dl/proj").exists());
         // Existing destination (the user agreed to merge): cancelling must keep what was already there.
         std::fs::create_dir_all(srv.join("proj")).unwrap();
         std::fs::write(srv.join("proj/precious.txt"), "do not lose").unwrap();
         let cancel = AtomicBool::new(false);
-        let _ = upload(&local_shell, &src, srv.to_str().unwrap(), &cancel, |_| cancel.store(true, Ordering::Relaxed));
+        let _ = upload(&portable_shell, &src, &remote(&srv), &cancel, |_| cancel.store(true, Ordering::Relaxed));
         assert_eq!(std::fs::read_to_string(srv.join("proj/precious.txt")).unwrap(), "do not lose");
         std::fs::create_dir_all(d.join("dl2/proj")).unwrap();
         std::fs::write(d.join("dl2/proj/mine.txt"), "my local file").unwrap();
         let cancel = AtomicBool::new(false);
-        let _ = download(&local_shell, src.to_str().unwrap(), true, &d.join("dl2"), &cancel, |_| cancel.store(true, Ordering::Relaxed));
+        let _ = download(&portable_shell, &remote(&src), true, &d.join("dl2"), &cancel, |_| cancel.store(true, Ordering::Relaxed));
         assert_eq!(std::fs::read_to_string(d.join("dl2/proj/mine.txt")).unwrap(), "my local file", "a cancelled merge never deletes the user's folder");
         // Same for the local copy.
         std::fs::create_dir_all(d.join("in/proj")).unwrap();
@@ -1328,8 +1357,10 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "uses a local POSIX shell to emulate the remote server")]
     fn a_dropped_connection_is_reported_as_such() {
+        if !server_shell() {
+            return;
+        }
         let d = dir("lost");
         let src = d.join("big.bin");
         std::fs::write(&src, vec![1u8; 6_000_000]).unwrap();
@@ -1369,23 +1400,26 @@ mod tests {
         std::fs::set_permissions(tree.join("sub/run.sh"), std::fs::Permissions::from_mode(0o750)).unwrap();
         std::fs::set_permissions(tree.join("sub"), std::fs::Permissions::from_mode(0o700)).unwrap();
         let mode = |p: PathBuf| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
-        let dest = upload(&local_shell, &tree, d.join("srv").to_str().unwrap(), &cancel, |_| {}).unwrap();
+        let dest = upload(&portable_shell, &tree, &remote(&d.join("srv")), &cancel, |_| {}).unwrap();
         assert_eq!((mode(Path::new(&dest).join("sub/run.sh")), mode(Path::new(&dest).join("sub"))), (0o750, 0o700));
-        let back = download(&local_shell, &dest, true, &d.join("back"), &cancel, |_| {}).unwrap();
+        let back = download(&portable_shell, &dest, true, &d.join("back"), &cancel, |_| {}).unwrap();
         assert_eq!(back.file_name().unwrap(), "-xvf");
         assert_eq!(mode(back.join("sub/run.sh")), 0o750);
         let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "uses a local POSIX shell to emulate the remote server")]
     fn unusual_names_empty_files_and_folders_and_symlinks_survive() {
+        if !server_shell() {
+            return;
+        }
         let d = dir("names");
         let cancel = AtomicBool::new(false);
-        let odd = d.join("it's a \"test\" $HOME `x` ğüş\nline2.txt");
+        // Windows allows neither `"` nor a line break in a name; what a shell would read there still is.
+        let odd = d.join(if cfg!(windows) { "it's a $HOME `x` ğüş & (1) %PATH%.txt" } else { "it's a \"test\" $HOME `x` ğüş\nline2.txt" });
         std::fs::write(&odd, "").unwrap(); // empty file
         let srv = d.join("srv dir");
-        let dest = upload(&local_shell, &odd, srv.to_str().unwrap(), &cancel, |_| {}).unwrap();
+        let dest = upload(&portable_shell, &odd, &remote(&srv), &cancel, |_| {}).unwrap();
         assert_eq!(std::fs::read(&dest).unwrap(), b"");
         assert_eq!(std::path::Path::new(&dest).file_name().unwrap(), odd.file_name().unwrap());
         // Folder: empty subfolder, a file, a symlink to a file, a broken symlink (kept as a link, not an error).
@@ -1397,7 +1431,7 @@ mod tests {
             std::os::unix::fs::symlink("real.txt", tree.join("link.txt")).unwrap();
             std::os::unix::fs::symlink("/definitely/missing", tree.join("broken")).unwrap();
         }
-        let dest = upload(&local_shell, &tree, srv.to_str().unwrap(), &cancel, |_| {}).unwrap();
+        let dest = upload(&portable_shell, &tree, &remote(&srv), &cancel, |_| {}).unwrap();
         assert!(Path::new(&dest).join("empty").is_dir());
         assert_eq!(std::fs::read_to_string(Path::new(&dest).join("real.txt")).unwrap(), "data");
         #[cfg(unix)]
@@ -1410,15 +1444,15 @@ mod tests {
         {
             let link = d.join("treelink");
             std::os::unix::fs::symlink(&tree, &link).unwrap();
-            let dest = upload(&local_shell, &link, srv.to_str().unwrap(), &cancel, |_| {}).unwrap();
+            let dest = upload(&portable_shell, &link, &remote(&srv), &cancel, |_| {}).unwrap();
             assert!(Path::new(&dest).is_dir() && !std::fs::symlink_metadata(&dest).unwrap().file_type().is_symlink(), "the content, not the link");
             assert_eq!(std::fs::read_to_string(Path::new(&dest).join("real.txt")).unwrap(), "data");
         }
         // Download an empty remote folder and the odd file name back.
-        let back = download(&local_shell, &srv.join(odd.file_name().unwrap()).to_string_lossy(), false, &d.join("back"), &cancel, |_| {}).unwrap();
+        let back = download(&portable_shell, &remote(&srv.join(odd.file_name().unwrap())), false, &d.join("back"), &cancel, |_| {}).unwrap();
         assert_eq!(back.file_name().unwrap(), odd.file_name().unwrap());
         std::fs::create_dir_all(srv.join("void")).unwrap();
-        let void = download(&local_shell, &srv.join("void").to_string_lossy(), true, &d.join("back"), &cancel, |_| {}).unwrap();
+        let void = download(&portable_shell, &remote(&srv.join("void")), true, &d.join("back"), &cancel, |_| {}).unwrap();
         assert!(void.is_dir());
         let _ = std::fs::remove_dir_all(&d);
     }
@@ -1435,21 +1469,23 @@ mod tests {
         std::fs::set_permissions(tree.join("secret.txt"), std::fs::Permissions::from_mode(0o000)).unwrap();
         let cancel = AtomicBool::new(false);
         let srv = d.join("srv");
-        let res = upload(&local_shell, &tree, srv.to_str().unwrap(), &cancel, |_| {});
+        let res = upload(&portable_shell, &tree, &remote(&srv), &cancel, |_| {});
         std::fs::set_permissions(tree.join("secret.txt"), std::fs::Permissions::from_mode(0o644)).unwrap();
         // Running as root nothing is unreadable and the upload succeeds.
         if let Err(e) = res {
             assert!(e.to_string().to_lowercase().contains("permission denied") || e.to_string().contains("tar"), "{e}");
             assert!(!srv.join("proj").exists(), "the half-copied new folder is removed");
         }
-        let file_err = upload(&local_shell, &tree.join("nonexistent.txt"), "/srv", &cancel, |_| {}).unwrap_err().to_string();
+        let file_err = upload(&portable_shell, &tree.join("nonexistent.txt"), "/srv", &cancel, |_| {}).unwrap_err().to_string();
         assert!(file_err.contains("nonexistent.txt"), "{file_err}");
         let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
-    #[cfg_attr(windows, ignore = "uses a local POSIX shell to emulate the remote server")]
     fn errors_carry_the_remote_reason() {
+        if !server_shell() {
+            return;
+        }
         let d = dir("err");
         let src = d.join("x.txt");
         std::fs::write(&src, "x").unwrap();
@@ -1457,11 +1493,11 @@ mod tests {
         // Parent is a file: mkdir fails on the "server".
         let blocker = d.join("blocker");
         std::fs::write(&blocker, "f").unwrap();
-        let err = upload(&local_shell, &src, blocker.join("sub").to_str().unwrap(), &cancel, |_| {}).unwrap_err();
+        let err = upload(&portable_shell, &src, &remote(&blocker.join("sub")), &cancel, |_| {}).unwrap_err();
         assert!(err.to_string().to_lowercase().contains("not a directory") || err.to_string().contains("mkdir"), "{err}");
-        let err = download(&local_shell, d.join("missing.txt").to_str().unwrap(), false, &d.join("o"), &cancel, |_| {}).unwrap_err();
+        let err = download(&portable_shell, &remote(&d.join("missing.txt")), false, &d.join("o"), &cancel, |_| {}).unwrap_err();
         assert!(err.to_string().to_lowercase().contains("no such file"), "{err}");
-        assert!(download(&local_shell, "relative", false, &d, &cancel, |_| {}).is_err());
+        assert!(download(&portable_shell, "relative", false, &d, &cancel, |_| {}).is_err());
         let _ = std::fs::remove_dir_all(&d);
     }
 }
