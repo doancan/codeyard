@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Windows: *File: Filter Log Lines…* works on a local file without Git Bash or WSL. It needed `sh`, `tail` and `grep`
+  on the PATH, which Git for Windows does not put there by default; a local file is now filtered by the app itself (the
+  last 256 MB, a case-insensitive regular expression, the last 5000 matches). Files over SSH are filtered on the server
+  as before.
 - Windows: Data Lens shows an epoch time in local time too (with that date's daylight saving), as on macOS and Linux;
   it said local time was not available.
 - Windows: crash reports, scratch files (which hold HTTP responses) and the update hand-over file are for your account

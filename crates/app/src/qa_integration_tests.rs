@@ -853,9 +853,6 @@ fn qa_debug_launch_failure_is_reported(cx: &mut TestAppContext) {
 /// A failing preLaunchTask stops the start (the debugger never starts); its output reaches Problems.
 #[gpui::test]
 fn qa_debug_build_failure_fills_problems(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
-        return;
-    }
     let dir = qa_dir("qa-debugbuild");
     std::fs::create_dir_all(dir.join(".vscode")).unwrap();
     std::fs::write(

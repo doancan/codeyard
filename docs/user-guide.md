@@ -1788,7 +1788,7 @@ reaches the same targets from the keyboard.
 - **Follow (Tail)**: *File: Follow (Tail) Active File*, or *Follow (Tail)* in the explorer and tab menus, opens the file in a read-only
   view that sticks to the end while the file grows (`tail -f`). It works for any size, survives log rotation, colours `ERROR`/`WARN`/`DEBUG`
   lines, and starts on its own for `.log` files (and `/var/log`) that are too large to edit. Scrolling up pauses it and a
-  "↓ N new lines" badge counts what arrived; click it, press End or ⌘↓ to catch up. **File: Filter Log Lines…** runs `grep` on the host
+  "↓ N new lines" badge counts what arrived; click it, press End or ⌘↓ to catch up. **File: Filter Log Lines…** runs `grep` on the host (on Windows the app filters a local file itself)
   (the last 256 MB, at most 5000 lines, case-insensitive regular expression) and shows the matches in a tab.
 - **Edit and secure hosts**: **Remote: Edit SSH Host…** changes `HostName`, `User`, `Port`, `IdentityFile` or `ProxyJump` of one host block
   (values are validated; other lines, comments and blocks stay as they are). **Remote: Set Up Key Login…** finds or creates
