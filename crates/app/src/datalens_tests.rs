@@ -599,11 +599,43 @@ fn epoch_values_in_seconds_and_milliseconds() {
     let lines = decode("1700000000123").unwrap();
     assert_eq!(lines[0], "1700000000123 (milliseconds)");
     assert_eq!(lines[1], "  UTC    2023-11-14 22:13:20.123");
-    assert!(lines[2].trim_start().starts_with("Local") || lines[2].contains("not available"), "{lines:?}");
+    if cfg!(any(unix, windows)) {
+        assert!(lines[2].trim_start().starts_with("Local"), "{lines:?}");
+    } else {
+        assert!(lines[2].contains("not available"), "{lines:?}");
+    }
     let many = decode("0, 86400\n951782400").unwrap();
     assert_eq!(many.iter().filter(|l| l.contains("UTC")).count(), 3);
     assert!(many.join("\n").contains("2000-02-29 00:00:00"));
     assert_eq!(crate::datalens_decode::civil_for_test(-1), "1969-12-31 23:59:59");
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn local_offset_is_a_real_time_zone_offset() {
+    // Winter and summer of the northern hemisphere, the epoch, and a time before 1970.
+    for secs in [1_700_000_000, 1_719_000_000, 0, -1_000_000_000] {
+        let off = crate::datalens_decode::local_offset_for_test(secs).unwrap_or_else(|| panic!("no local offset at {secs}"));
+        assert!(off.abs() <= 14 * 3600 && off % 900 == 0, "{secs}: {off}");
+    }
+}
+
+/// The offset of this moment agrees with Windows' own bias for the time zone, daylight saving included.
+#[cfg(windows)]
+#[test]
+fn local_offset_matches_the_windows_time_zone_now() {
+    use windows::Win32::System::Time::{GetTimeZoneInformation, TIME_ZONE_INFORMATION};
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64;
+    let mut tz = TIME_ZONE_INFORMATION::default();
+    // SAFETY: writes only into `tz`, which lives for the call.
+    let id = unsafe { GetTimeZoneInformation(&mut tz) };
+    let extra = match id {
+        1 => tz.StandardBias, // TIME_ZONE_ID_STANDARD
+        2 => tz.DaylightBias, // TIME_ZONE_ID_DAYLIGHT
+        _ => 0,
+    };
+    let expected = -i64::from(tz.Bias + extra) * 60;
+    assert_eq!(crate::datalens_decode::local_offset_for_test(now), Some(expected));
 }
 
 #[test]

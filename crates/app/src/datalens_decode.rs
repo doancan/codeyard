@@ -138,10 +138,36 @@ fn local_offset(secs: i64) -> Option<i64> {
     }
 }
 
+/// Seconds east of UTC at that moment in the user's time zone. `SystemTimeToTzSpecificLocalTimeEx` applies the
+/// daylight saving rule of that year (dynamic time zones), as `localtime_r` does; Windows dates start in 1601.
+#[cfg(windows)]
+fn local_offset(secs: i64) -> Option<i64> {
+    use windows::Win32::Foundation::{FILETIME, SYSTEMTIME};
+    use windows::Win32::System::Time::{FileTimeToSystemTime, SystemTimeToFileTime, SystemTimeToTzSpecificLocalTimeEx};
+    const EPOCH_1601: i64 = 11_644_473_600;
+    let ticks = u64::try_from(secs.checked_add(EPOCH_1601)?.checked_mul(10_000_000)?).ok()?;
+    let utc_ft = FILETIME { dwLowDateTime: ticks as u32, dwHighDateTime: (ticks >> 32) as u32 };
+    let (mut utc, mut local, mut local_ft) = (SYSTEMTIME::default(), SYSTEMTIME::default(), FILETIME::default());
+    // SAFETY: each call reads and writes only the structures we pass, which live for the call; no time zone
+    // argument means the one Windows is set to.
+    unsafe {
+        FileTimeToSystemTime(&utc_ft, &mut utc).ok()?;
+        SystemTimeToTzSpecificLocalTimeEx(None, &utc, &mut local).ok()?;
+        SystemTimeToFileTime(&local, &mut local_ft).ok()?;
+    }
+    let local_ticks = (u64::from(local_ft.dwHighDateTime) << 32) | u64::from(local_ft.dwLowDateTime);
+    Some((local_ticks as i64 - ticks as i64) / 10_000_000)
+}
+
 /// No portable way without another dependency: the UTC row is shown alone.
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn local_offset(_: i64) -> Option<i64> {
     None
+}
+
+#[cfg(test)]
+pub fn local_offset_for_test(secs: i64) -> Option<i64> {
+    local_offset(secs)
 }
 
 #[cfg(test)]
