@@ -109,7 +109,7 @@ pub struct Settings {
     /// Where a right click goes while a program reads the mouse: "menu" (the terminal's menu) or "program"
     /// (`terminal.rightClick`; Shift or ⌥ still opens the menu).
     pub terminal_right_click: String,
-    /// zsh, bash and fish mark prompts, commands and their folder (`terminal.shellIntegration`).
+    /// zsh, bash, fish and PowerShell mark prompts, commands and their folder (`terminal.shellIntegration`).
     pub terminal_shell_integration: bool,
     /// The bell and program notifications (OSC 9/777) flag the terminal and the taskbar (`terminal.notifications`).
     pub terminal_notifications: bool,

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Windows: PowerShell terminals (Windows PowerShell 5.1 and PowerShell 7) get shell integration, as zsh, bash and fish
+  have: a dot shows how each command ended (with a program's own exit code), commands can be jumped between and their
+  output copied, and a split opens in the folder the shell is in. Your profile still runs first, and an execution
+  policy that refuses scripts does not stop it. It needs a console host that passes the marks on, as current Windows 11
+  does; with an older one PowerShell runs as before. `terminal.shellIntegration: false` turns it off.
 - Terminal: a program that reads the mouse (vim, tmux, htop, Midnight Commander) gets the middle button, with its drags,
   instead of the click being lost. `terminal.rightClick: "program"` gives it the right button too; by default a right
   click still opens the terminal's menu, and with the setting Shift or ⌥ opens it.

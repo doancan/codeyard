@@ -2493,7 +2493,7 @@ Terminal: Rename…	Terminal: Yeniden Adlandır…
 Terminal: Change Color…	Terminal: Rengi Değiştir…
 Terminal: Kill All Terminals	Terminal: Tüm Terminalleri Sonlandır
 Copy Last Command Output	Son Komutun Çıktısını Kopyala
-Mark prompts, commands and the folder in zsh, bash and fish	zsh, bash ve fish'te istemleri, komutları ve klasörü işaretle
+Mark prompts, commands and the folder in zsh, bash, fish and PowerShell	zsh, bash, fish ve PowerShell'de istemleri, komutları ve klasörü işaretle
 Flag a terminal and the taskbar when its program rings the bell or asks for you	Terminaldeki program zil çaldığında veya sizi beklediğinde terminali ve görev çubuğunu işaretle
 A command failed with code {}	Bir komut {} koduyla başarısız oldu
 A command finished	Bir komut bitti

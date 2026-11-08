@@ -261,6 +261,12 @@ impl TerminalView {
         self.marks.list.iter().filter(|m| m.output.is_some()).count()
     }
 
+    /// The exit code the newest finished command reported (`Some(None)`: it finished without one).
+    #[cfg(test)]
+    pub fn last_exit_for_test(&self) -> Option<Option<i32>> {
+        self.marks.list.iter().rev().find_map(|m| m.end.map(|(_, code)| code))
+    }
+
     #[cfg(test)]
     pub fn last_output_for_test(&self) -> Option<String> {
         self.last_output()
