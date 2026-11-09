@@ -400,7 +400,10 @@ impl Store {
         let pkg = pkgs.into_iter().next().expect("one package at least");
         let id = pkg.manifest.id.clone();
         let old = lock.extensions.get(&id);
+        // A rollback keeps the lock entry's source, so it may only go back to a package of the same identity: a sideloaded
+        // file must not come back labelled with a registry publisher's name, switches and keychain entries.
         let previous = match old {
+            Some(o) if grants::identity(&o.source) != grants::identity(&source) => None,
             Some(o) if o.digest != pkg.digest => Some(o.digest),
             Some(o) => o.previous,
             None => None,

@@ -330,6 +330,22 @@ fn switches_and_instances_of_a_removed_extension_do_not_outlive_it() {
 }
 
 #[test]
+fn a_rollback_never_lands_on_a_package_from_another_publisher() {
+    let d = Dir::new("rollback-identity");
+    let s = d.store();
+    // A file the user sideloaded, then the registry's package of the same extension.
+    s.install(&theme("a.one", "1.0.0"), src()).unwrap();
+    s.install(&theme("a.one", "2.0.0"), registry_source(7)).unwrap();
+    assert!(matches!(s.rollback(&id("a.one")), Err(Error::NoPrevious(_))), "the sideloaded package must not inherit the registry's identity");
+    // Another publisher's package of the same id, too.
+    s.install(&theme("a.one", "3.0.0"), registry_source(8)).unwrap();
+    assert!(matches!(s.rollback(&id("a.one")), Err(Error::NoPrevious(_))));
+    // The same publisher's earlier version is what a rollback is for.
+    s.install(&theme("a.one", "3.1.0"), registry_source(8)).unwrap();
+    assert_eq!(s.rollback(&id("a.one")).unwrap().manifest.version.to_string(), "3.0.0");
+}
+
+#[test]
 fn invalid_packages_install_nothing() {
     let d = Dir::new("invalid");
     let s = d.store();
