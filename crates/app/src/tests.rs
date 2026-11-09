@@ -586,9 +586,6 @@ fn case_transforms_and_block_comment_work_on_the_selection(cx: &mut TestAppConte
 /// Comparisons, last edit location, scratch file, and running the selected text in the terminal.
 #[gpui::test]
 fn compare_last_edit_scratch_and_run_selected_text(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
-        return;
-    }
     let cfg = config_dir("extras");
     let dir = project("extras");
     // The output line is `run-42`; the echoed command line is not (cmd has no arithmetic, so the line just says it).
@@ -2770,7 +2767,80 @@ fn zsh_reports_commands_and_its_folder_with_shell_integration(cx: &mut TestAppCo
     wait_for(cx, "the second command", |cx| term.read_with(cx, |t, _| t.command_count_for_test()) >= 2 && t_out(&term, cx).is_some_and(|o| o.is_empty()));
 }
 
-#[cfg(unix)]
+/// Windows PowerShell with the integration, through a real ConPTY: commands and their exit codes (a program's own, 1 for
+/// a failed cmdlet) are marked, and it reports its folder in the workbench's form.
+#[cfg(windows)]
+#[gpui::test]
+fn powershell_reports_commands_and_its_folder_with_shell_integration(cx: &mut TestAppContext) {
+    let dir = crate::ui::canonical_for_test(single_file_dir("pwsh-int"));
+    std::fs::create_dir_all(dir.join("alt klasör")).unwrap();
+    let powershell = std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
+    let mut settings = crate::settings::Settings::default();
+    let profile =
+        crate::terminal_profiles::Profile { name: "PowerShell".into(), path: powershell.to_string_lossy().into_owned(), args: None, env: vec![], color: None };
+    settings.terminal_profiles.insert(crate::terminal_profiles::os_key(std::env::consts::OS).into(), vec![profile]);
+    settings.terminal_default_profile = Some("PowerShell".into());
+    let (wb, cx) = crate::qa_integration_tests::setup_with(cx, settings);
+    open(&wb, &dir, cx);
+    cx.simulate_keystrokes("ctrl-`");
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    // Enter as a key: PSReadLine reads a typed line break (Ctrl+J) as one more line of the same command.
+    wait_for(cx, "the prompt", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l.starts_with("PS "))));
+    // The first prompt says where the shell is. A console host that drops OSC sequences (an older Windows) cannot carry
+    // the integration: tell it from a broken script by writing one by hand.
+    let said = |cx: &mut VisualTestContext| term.read_with(cx, |t, _| t.live_cwd());
+    let start = std::time::Instant::now();
+    while said(cx).is_none() && start.elapsed() < std::time::Duration::from_secs(5) {
+        cx.run_until_parked();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    if said(cx).is_none() {
+        cx.simulate_input("[Console]::Write([char]27 + ']7;file://probe/C:/probe' + [char]7)");
+        cx.simulate_keystrokes("enter");
+        let start = std::time::Instant::now();
+        while said(cx).is_none() && start.elapsed() < std::time::Duration::from_secs(5) {
+            cx.run_until_parked();
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(said(cx).is_none(), "the console host passes OSC 7 on, but the integration's prompt did not report the folder");
+        crate::test_sshd::skip_unusable(
+            "powershell-integration",
+            "this Windows' console host drops OSC sequences, so PowerShell's marks cannot reach the terminal",
+        );
+        return;
+    }
+    let here = crate::ui::local_path(&dir);
+    assert_eq!(said(cx).as_deref(), Some(here.as_str()), "OSC 7 from the prompt");
+
+    // A program's exit code.
+    cx.simulate_input("cmd /c exit 3");
+    cx.simulate_keystrokes("enter");
+    wait_for(cx, "the first command", |cx| term.read_with(cx, |t, _| t.command_count_for_test() >= 1 && t.last_exit_for_test().is_some()));
+    assert_eq!(term.read_with(cx, |t, _| t.last_exit_for_test()), Some(Some(3)));
+    // Output, success and a new folder (with a space and a Turkish letter).
+    cx.simulate_input("cd 'alt klasör'; Write-Output marked-output");
+    cx.simulate_keystrokes("enter");
+    wait_for(cx, "the second command", |cx| {
+        term.read_with(cx, |t, _| t.command_count_for_test()) >= 2 && t_out(&term, cx).is_some_and(|o| o.contains("marked-output"))
+    });
+    assert_eq!(term.read_with(cx, |t, _| t.last_exit_for_test()), Some(Some(0)));
+    wait_for(cx, "the new folder", |cx| said(cx).as_deref() == Some(format!("{here}/alt klasör").as_str()));
+    // A failed cmdlet has no exit code of its own: 1, not the 3 a program left behind.
+    cx.simulate_input("Get-Item no-such-file-here");
+    cx.simulate_keystrokes("enter");
+    wait_for(cx, "the third command", |cx| term.read_with(cx, |t, _| t.command_count_for_test() >= 3 && t.last_exit_for_test() == Some(Some(1))));
+    // The same program failing twice keeps its code.
+    cx.simulate_input("cmd /c exit 3; cmd /c exit 3");
+    cx.simulate_keystrokes("enter");
+    wait_for(cx, "the fourth command", |cx| term.read_with(cx, |t, _| t.command_count_for_test() >= 4 && t.last_exit_for_test() == Some(Some(3))));
+    // An empty line is not a command.
+    cx.simulate_keystrokes("enter");
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    cx.run_until_parked();
+    assert_eq!(term.read_with(cx, |t, _| t.command_count_for_test()), 4);
+}
+
+#[cfg(any(unix, windows))]
 fn t_out(term: &gpui::Entity<crate::terminal::TerminalView>, cx: &mut VisualTestContext) -> Option<String> {
     term.read_with(cx, |t, _| t.last_output_for_test())
 }
@@ -4681,9 +4751,6 @@ fn file_history_follows_renames_and_blame_sees_unsaved_lines(cx: &mut TestAppCon
 
 #[gpui::test]
 fn terminal_cmd_click_opens_file_locations(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
-        return;
-    }
     let dir = crate::ui::canonical_for_test(project("termlink"));
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);

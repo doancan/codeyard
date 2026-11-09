@@ -1639,7 +1639,7 @@ program that only reads clicks gets a reminder the first time. Such a program al
 pastes instead). A right click opens the terminal's menu there too; `terminal.rightClick: "program"` gives it to the
 program, and Shift or ⌥ then opens the menu.
 
-**Shell integration.** zsh, bash and fish mark each prompt and command, with no setup:
+**Shell integration.** zsh, bash, fish and PowerShell mark each prompt and command, with no setup:
 
 - A dot beside each command shows how it ended: green for success, red for failure.
 - ⌥⌘↑ / ⌥⌘↓ (Ctrl+Shift+↑ / ↓) jump between commands. ⌘↑ / ⌘↓ scroll to the top and bottom of the history.
@@ -1648,7 +1648,10 @@ program, and Shift or ⌥ then opens the menu.
 - A split opens in the folder the shell is in.
 
 Your own startup files are still read. `"terminal.shellIntegration": false` turns it off. bash before 4.4 (the macOS
-system bash is 3.2) marks prompts and the folder only, so it has no command dots or jumps.
+system bash is 3.2) marks prompts and the folder only, so it has no command dots or jumps. On Windows, PowerShell
+(Windows PowerShell 5.1 and PowerShell 7) is marked where Windows' console host passes the marks on to the terminal, as
+current Windows 11 does; with an older console host PowerShell runs as before, unmarked. cmd has no way to mark its
+commands.
 
 **Profiles.** *Terminal: New Terminal with Profile…* lists your profiles and the shells installed on the machine, and
 *Terminal: Select Default Profile…* picks the one new terminals use. Profiles are defined in `terminal.profiles.macos`,
@@ -1785,7 +1788,7 @@ reaches the same targets from the keyboard.
 - **Follow (Tail)**: *File: Follow (Tail) Active File*, or *Follow (Tail)* in the explorer and tab menus, opens the file in a read-only
   view that sticks to the end while the file grows (`tail -f`). It works for any size, survives log rotation, colours `ERROR`/`WARN`/`DEBUG`
   lines, and starts on its own for `.log` files (and `/var/log`) that are too large to edit. Scrolling up pauses it and a
-  "↓ N new lines" badge counts what arrived; click it, press End or ⌘↓ to catch up. **File: Filter Log Lines…** runs `grep` on the host
+  "↓ N new lines" badge counts what arrived; click it, press End or ⌘↓ to catch up. **File: Filter Log Lines…** runs `grep` on the host (on Windows the app filters a local file itself)
   (the last 256 MB, at most 5000 lines, case-insensitive regular expression) and shows the matches in a tab.
 - **Edit and secure hosts**: **Remote: Edit SSH Host…** changes `HostName`, `User`, `Port`, `IdentityFile` or `ProxyJump` of one host block
   (values are validated; other lines, comments and blocks stay as they are). **Remote: Set Up Key Login…** finds or creates

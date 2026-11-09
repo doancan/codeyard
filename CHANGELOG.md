@@ -9,12 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Windows: PowerShell terminals (Windows PowerShell 5.1 and PowerShell 7) get shell integration, as zsh, bash and fish
+  have: a dot shows how each command ended (with a program's own exit code), commands can be jumped between and their
+  output copied, and a split opens in the folder the shell is in. Your profile still runs first, and an execution
+  policy that refuses scripts does not stop it. It needs a console host that passes the marks on, as current Windows 11
+  does; with an older one PowerShell runs as before. `terminal.shellIntegration: false` turns it off.
 - Terminal: a program that reads the mouse (vim, tmux, htop, Midnight Commander) gets the middle button, with its drags,
   instead of the click being lost. `terminal.rightClick: "program"` gives it the right button too; by default a right
   click still opens the terminal's menu, and with the setting Shift or ⌥ opens it.
 
 ### Fixed
 
+- Windows: *File: Filter Log Lines…* works on a local file without Git Bash or WSL. It needed `sh`, `tail` and `grep`
+  on the PATH, which Git for Windows does not put there by default; a local file is now filtered by the app itself (the
+  last 256 MB, a case-insensitive regular expression, the last 5000 matches). Files over SSH are filtered on the server
+  as before.
+- Windows: Data Lens shows an epoch time in local time too (with that date's daylight saving), as on macOS and Linux;
+  it said local time was not available.
+- Windows: crash reports, scratch files (which hold HTTP responses) and the update hand-over file are for your account
+  alone, as on macOS and Linux: their folder gets an ACL of its own (you, SYSTEM and Administrators) instead of taking
+  the parent's. In `%APPDATA%` nothing changes; a `CODEYARD_CONFIG_DIR` on a shared disk let other users read them.
 - Windows and Linux: a menu of the menu bar opens under the left edge of its title wherever the title is clicked, and stays
   under the bar in a window too short for it (it scrolls). A long menu such as View was pushed up over the bar and the
   title bar, and could close at once as the click was let go over it.

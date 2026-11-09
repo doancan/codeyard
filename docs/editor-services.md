@@ -93,7 +93,8 @@ Follow mode polls the agent's incrementally extended line index, detects truncat
 file vanished or was replaced), counts unseen lines while the user has scrolled away (badge, `End` to resume), and
 colours log levels. `.log` files follow automatically. *Filter Log Lines* runs
 `tail -c 268435456 | grep -a -i -E -e PATTERN | cut -c1-2000 | tail -n 5000` on the file's host: only the last
-256 MB, at most 5000 lines of at most 2000 characters.
+256 MB, at most 5000 lines of at most 2000 characters. A local file on Windows, which has no `sh`, `tail` or `grep` by
+default, is filtered in the app the same way (Rust's `regex`, case-insensitive; `filter_log_lines` in `workbench_panels.rs`).
 
 ## Other services
 

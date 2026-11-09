@@ -853,9 +853,6 @@ fn qa_debug_launch_failure_is_reported(cx: &mut TestAppContext) {
 /// A failing preLaunchTask stops the start (the debugger never starts); its output reaches Problems.
 #[gpui::test]
 fn qa_debug_build_failure_fills_problems(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
-        return;
-    }
     let dir = qa_dir("qa-debugbuild");
     std::fs::create_dir_all(dir.join(".vscode")).unwrap();
     std::fs::write(
@@ -1819,11 +1816,77 @@ pub(crate) fn type_line(cx: &mut VisualTestContext, s: &str) {
     cx.simulate_keystrokes("enter");
 }
 
-#[gpui::test]
-fn qa_terminal_ctrl_c_interrupts(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
+/// What a POSIX shell does with `stty size` or `printf '\033[?…h'; cat -v`, for the terminal tests on Windows, where cmd
+/// has neither: the command line that starts `terminal_fixture` (this test binary) in the terminal's console. `mode` is
+/// `size:<tag>` (prints `SIZE<tag>=<rows> <columns>` as the console sees them) or the number of a private mode to set
+/// (`1000`, `1049`), after which every byte typed comes back as `cat -v` shows it.
+#[cfg(windows)]
+fn terminal_fixture(mode: &str) -> String {
+    let exe = std::env::current_exe().unwrap();
+    format!(
+        "set CODEYARD_TERMINAL_FIXTURE={mode}&& \"{}\" --exact qa_integration_tests::terminal_fixture_cat_v --ignored --nocapture --test-threads=1 -q",
+        exe.display()
+    )
+}
+
+/// The line `terminal_fixture` prints once its mode is set and it reads the console.
+#[cfg(windows)]
+const FIXTURE_READY: &str = "fixture reading";
+
+/// Started by `terminal_fixture` inside a ConPTY: reads the console the way a full-screen program does (VT input, no line
+/// editing or echo), so mouse reports and keys arrive as the escape sequences the program would get.
+#[cfg(windows)]
+#[test]
+#[ignore = "a program the Windows terminal tests start in a terminal (terminal_fixture)"]
+fn terminal_fixture_cat_v() {
+    use std::io::{Read, Write};
+    use windows::Win32::System::Console::{
+        CONSOLE_SCREEN_BUFFER_INFO, ENABLE_EXTENDED_FLAGS, ENABLE_MOUSE_INPUT, ENABLE_PROCESSED_OUTPUT, ENABLE_VIRTUAL_TERMINAL_INPUT,
+        ENABLE_VIRTUAL_TERMINAL_PROCESSING, GetConsoleScreenBufferInfo, GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetConsoleMode,
+    };
+    let mode = std::env::var("CODEYARD_TERMINAL_FIXTURE").unwrap();
+    // SAFETY: the standard handles of this process, which a console program has; the structures live for each call.
+    let (input, output) = unsafe { (GetStdHandle(STD_INPUT_HANDLE).unwrap(), GetStdHandle(STD_OUTPUT_HANDLE).unwrap()) };
+    let mut out = std::io::stdout();
+    if let Some(tag) = mode.strip_prefix("size:") {
+        let mut info = CONSOLE_SCREEN_BUFFER_INFO::default();
+        // SAFETY: as above.
+        unsafe { GetConsoleScreenBufferInfo(output, &mut info) }.unwrap();
+        let w = info.srWindow;
+        writeln!(out, "SIZE{tag}={} {}", w.Bottom - w.Top + 1, w.Right - w.Left + 1).unwrap();
         return;
     }
+    // SAFETY: as above. Quick edit off, so the console leaves mouse events to the program.
+    unsafe {
+        SetConsoleMode(input, ENABLE_VIRTUAL_TERMINAL_INPUT | ENABLE_MOUSE_INPUT | ENABLE_EXTENDED_FLAGS).unwrap();
+        SetConsoleMode(output, ENABLE_PROCESSED_OUTPUT | ENABLE_VIRTUAL_TERMINAL_PROCESSING).unwrap();
+    }
+    write!(out, "\x1b[?{mode}h{FIXTURE_READY}\r\n").unwrap();
+    out.flush().unwrap();
+    // A test that ends leaves its terminal behind for a moment: never outlive it by much.
+    std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_secs(30));
+        std::process::exit(0);
+    });
+    let mut stdin = std::io::stdin();
+    let mut buf = [0u8; 256];
+    while let Ok(n @ 1..) = stdin.read(&mut buf) {
+        let shown: String = buf[..n]
+            .iter()
+            .map(|&b| match b {
+                0x1b => "^[".to_string(),
+                0x7f => "^?".to_string(),
+                b if b < 0x20 => format!("^{}", (b + 0x40) as char),
+                b => (b as char).to_string(),
+            })
+            .collect();
+        write!(out, "{shown}").unwrap();
+        out.flush().unwrap();
+    }
+}
+
+#[gpui::test]
+fn qa_terminal_ctrl_c_interrupts(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-termctrlc");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
@@ -1842,11 +1905,7 @@ fn qa_terminal_ctrl_c_interrupts(cx: &mut TestAppContext) {
 
 /// The pty size must match what is drawn (`stty size` rows == visible rows).
 #[gpui::test]
-#[cfg_attr(windows, ignore = "needs a POSIX shell: stty, printf and cat -v")]
 fn qa_terminal_pty_size_matches_grid(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
-        return;
-    }
     let dir = qa_dir("qa-termsize");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
@@ -1854,6 +1913,9 @@ fn qa_terminal_pty_size_matches_grid(cx: &mut TestAppContext) {
     // Ask again until the size settles (at most 6 tries): a persistent mismatch still fails.
     let mut last = String::new();
     for attempt in 0..6 {
+        #[cfg(windows)]
+        type_line(cx, &terminal_fixture(&format!("size:{attempt}")));
+        #[cfg(unix)]
         type_line(cx, &format!("echo SIZE{attempt}=$(stty size)"));
         let marker = format!("SIZE{attempt}=");
         wait_for(cx, "stty", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l.starts_with(&marker) && l.len() > marker.len() + 1)));
@@ -1874,17 +1936,17 @@ fn qa_terminal_pty_size_matches_grid(cx: &mut TestAppContext) {
 /// screen; the mouse wheel there must send ↑/↓ (xterm "alternate scroll",
 /// VS Code does this), otherwise the wheel does nothing in `less`.
 #[gpui::test]
-#[cfg_attr(windows, ignore = "needs a POSIX shell: stty, printf and cat -v")]
 fn qa_terminal_wheel_in_alternate_screen_sends_arrows(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
-        return;
-    }
     let dir = qa_dir("qa-termaltscroll");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
-    type_line(cx, "printf '\\033[?1049h'; cat -v");
-    std::thread::sleep(Duration::from_millis(300));
-    cx.run_until_parked();
+    start_reading(cx, &term, "1049");
+    // An older Windows console host (Windows Server 2022's) keeps the alternate screen to itself and repaints the main one:
+    // the terminal never learns a full-screen program is running, so there is nothing to turn the wheel into.
+    if cfg!(windows) && !term.read_with(cx, |t, _| t.alt_screen_for_test()) {
+        crate::test_sshd::skip_unusable("conhost-alternate-screen", "this Windows' console host does not pass the alternate screen (?1049h) on");
+        return;
+    }
     let at = term.read_with(cx, |t, _| t.cell_center(5, 5));
     for _ in 0..3 {
         cx.simulate_event(gpui::ScrollWheelEvent {
@@ -1898,7 +1960,25 @@ fn qa_terminal_wheel_in_alternate_screen_sends_arrows(cx: &mut TestAppContext) {
     // Control: a real ↑ key press is echoed the same way, so the setup works.
     cx.simulate_keystrokes("up");
     assert!(echoed(cx, &term, "^["), "control: ↑ key not echoed");
-    assert!(got, "wheel in the alternate screen sent nothing to the program");
+    assert!(got, "wheel in the alternate screen sent nothing to the program; terminal modes {}", term.read_with(cx, |t, _| t.modes_for_test()));
+}
+
+/// Sets the private mode `mode` (`1049`: the alternate screen, `1000`: mouse reports) and leaves a program reading the
+/// terminal that shows every byte it gets as `cat -v` does: `printf` and `cat -v` in a POSIX shell, `terminal_fixture`
+/// in cmd.
+fn start_reading(cx: &mut VisualTestContext, term: &Entity<crate::terminal::TerminalView>, mode: &str) {
+    #[cfg(windows)]
+    {
+        type_line(cx, &terminal_fixture(mode));
+        wait_for(cx, "the program reads the terminal", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == FIXTURE_READY)));
+    }
+    #[cfg(unix)]
+    {
+        let _ = term;
+        type_line(cx, &format!("printf '\\033[?{mode}h'; cat -v"));
+        std::thread::sleep(Duration::from_millis(300));
+        cx.run_until_parked();
+    }
 }
 
 fn echoed(cx: &mut VisualTestContext, term: &Entity<crate::terminal::TerminalView>, what: &str) -> bool {
@@ -1916,24 +1996,23 @@ fn echoed(cx: &mut VisualTestContext, term: &Entity<crate::terminal::TerminalVie
 /// Programs that enable mouse reporting (htop, vim `mouse=a`, tmux, mc) must
 /// receive clicks (VS Code forwards them).
 #[gpui::test]
-#[cfg_attr(windows, ignore = "needs a POSIX shell: stty, printf and cat -v")]
 fn qa_terminal_mouse_reporting_reaches_program(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
-        return;
-    }
     let dir = qa_dir("qa-termmouse");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
-    type_line(cx, "printf '\\033[?1000h'; cat -v");
-    std::thread::sleep(Duration::from_millis(300));
-    cx.run_until_parked();
+    start_reading(cx, &term, "1000");
+    let mode = term.read_with(cx, |t, _| t.modes_for_test());
     let at = term.read_with(cx, |t, _| t.cell_center(8, 10));
     cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
-    let got = echoed(cx, &term, "^[[M");
+    // A left press: `ESC [ M space …` (X10, what mode 1000 asks for), or `ESC [ < 0 ; …` (SGR). ConPTY's console host
+    // asks the terminal for SGR reports (1006) and focus events itself and hands the SGR report on to the program.
+    let (likely, other) = if cfg!(windows) { ("^[[<0;", "^[[M ") } else { ("^[[M ", "^[[<0;") };
+    let got = echoed(cx, &term, likely) || echoed(cx, &term, other);
     cx.simulate_keystrokes("up");
     assert!(echoed(cx, &term, "^[[A"), "control: ↑ key not echoed");
-    assert!(got, "click was not reported to the program (mouse mode 1000 on)");
+    let screen = term.read_with(cx, |t, _| t.screen_text());
+    assert!(got, "click was not reported to the program (mouse mode 1000 on); terminal modes {mode}; screen:\n{screen}");
 }
 
 /// macOS line editing in the shell: ⌘← / ⌘→ jump to the ends of the line, ⌥← moves back a word, ⌘⌫ clears the line.
@@ -1969,9 +2048,6 @@ fn qa_terminal_macos_line_editing_keys(cx: &mut TestAppContext) {
 /// Escape closes it and the shell has the keys again.
 #[gpui::test]
 fn qa_terminal_find_counts_selects_and_closes(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
-        return;
-    }
     let dir = qa_dir("qa-termfind");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
@@ -2559,9 +2635,6 @@ fn diff_inline_toggle_renders_both_modes(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn terminal_split_shows_two_and_caps_the_count(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
-        return;
-    }
     let dir = qa_dir("qa-termsplit");
     let (wb, cx) = setup(cx);
     let first = terminal(&wb, &dir, cx);

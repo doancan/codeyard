@@ -203,7 +203,7 @@ status bar reports it.
 | `terminal.scrollSensitivity` | number 0.1–10 | `2.0` | Mouse wheel and trackpad scroll speed multiplier |
 | `terminal.scrollback` | number 0–200000 | `50000` | Lines kept in terminal history. More than 50,000 can use a lot of memory and slow down scrolling and search |
 | `terminal.shell` | text | empty | Shell for new terminals (empty: login shell) |
-| `terminal.shellIntegration` | `true` / `false` | `true` | Mark prompts, commands and the folder in zsh, bash and fish |
+| `terminal.shellIntegration` | `true` / `false` | `true` | Mark prompts, commands and the folder in zsh, bash, fish and PowerShell |
 | `terminal.warnMultilinePaste` | `unbracketed`, `always`, `never` | `unbracketed` | Ask before pasting several lines into the terminal |
 
 ## `ui`

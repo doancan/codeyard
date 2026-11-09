@@ -130,6 +130,66 @@ mod script_tests {
     }
 }
 
+/// PowerShell's integration (Windows PowerShell 5.1 and PowerShell 7): wraps `prompt` and PSReadLine's line reader.
+#[cfg(any(windows, test))]
+const POWERSHELL: &str = include_str!("shell/codeyard.ps1");
+
+/// Arguments to start PowerShell (`powershell.exe`, `pwsh`, by name or path) with integration: the user's profile runs as
+/// usual, then the script. It is passed on the command line (`-EncodedCommand`), not as a file: an execution policy that
+/// refuses scripts (Windows PowerShell's default) lets a command through, and nothing is written to disk. `None` for
+/// other shells.
+#[cfg(any(windows, test))]
+pub fn powershell_args(shell: &str) -> Option<Vec<String>> {
+    let name = shell.rsplit(['\\', '/']).next()?.to_ascii_lowercase();
+    if !matches!(name.strip_suffix(".exe").unwrap_or(&name), "powershell" | "pwsh") {
+        return None;
+    }
+    let utf16: Vec<u8> = POWERSHELL.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    Some(vec!["-NoExit".into(), "-EncodedCommand".into(), base64(&utf16)])
+}
+
+/// Standard base64 with padding (what `-EncodedCommand` reads).
+#[cfg(any(windows, test))]
+fn base64(bytes: &[u8]) -> String {
+    const ABC: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let n = chunk.iter().enumerate().fold(0u32, |n, (i, &b)| n | u32::from(b) << (16 - 8 * i));
+        for i in 0..4 {
+            out.push(if i <= chunk.len() { ABC[(n >> (18 - 6 * i) & 63) as usize] as char } else { '=' });
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod powershell_tests {
+    #[test]
+    fn powershell_by_name_or_path_gets_the_script_and_other_shells_do_not() {
+        for shell in ["powershell.exe", "pwsh", "PWSH.EXE", r"C:\Program Files\PowerShell\7\pwsh.exe", "/opt/microsoft/powershell/7/pwsh"] {
+            let args = super::powershell_args(shell).unwrap_or_else(|| panic!("{shell}"));
+            assert_eq!(args[..2], ["-NoExit", "-EncodedCommand"], "{shell}");
+        }
+        for shell in ["cmd.exe", "bash.exe", r"C:\tools\powershell-helper.exe", "", "wsl.exe"] {
+            assert!(super::powershell_args(shell).is_none(), "{shell}");
+        }
+    }
+
+    #[test]
+    fn the_encoded_command_is_the_script_in_utf16() {
+        assert_eq!(super::base64(b""), "");
+        assert_eq!(super::base64(b"f"), "Zg==");
+        assert_eq!(super::base64(b"fo"), "Zm8=");
+        assert_eq!(super::base64(b"foo"), "Zm9v");
+        assert_eq!(super::base64(b"foobar"), "Zm9vYmFy");
+        // PowerShell's own example: `dir "c:\program files"`.
+        let utf16: Vec<u8> = "dir \"c:\\program files\" ".encode_utf16().flat_map(u16::to_le_bytes).collect();
+        assert_eq!(super::base64(&utf16), "ZABpAHIAIAAiAGMAOgBcAHAAcgBvAGcAcgBhAG0AIABmAGkAbABlAHMAIgAgAA==");
+        let script = &super::powershell_args("pwsh").unwrap()[2];
+        assert!(script.len() < 16_000, "well under the 32 767 characters of a Windows command line: {}", script.len());
+    }
+}
+
 #[cfg(unix)]
 fn cache_root() -> Option<PathBuf> {
     match std::env::var_os("XDG_CACHE_HOME").map(PathBuf::from).filter(|p| p.is_absolute()) {

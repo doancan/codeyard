@@ -561,7 +561,12 @@ impl Workbench {
         self.notice = Some(Notice::Info(crate::i18n::tf("Filtering {0} for “{1}”…", &[&ui::file_name(&path), &pattern]).into()));
         cx.notify();
         let (p, pat) = (path.clone(), pattern.clone());
+        // Windows has no sh, tail or grep unless Git Bash's are on PATH: a local file is filtered here.
+        let in_process = cfg!(windows) && !host.is_remote();
         let task = cx.background_executor().spawn(async move {
+            if in_process {
+                return filter_log_lines(&p, &pat);
+            }
             let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
             // `cut`: limit a single line to 2000 characters (so minified JSON logs don't lock up the screen).
             let script = format!("tail -c 268435456 -- {} | grep -a -i -E -e {} | cut -c1-2000 | tail -n 5000", q(&p), q(&pat));
@@ -721,10 +726,72 @@ fn problem_row(i: usize, indent: f32, p: &Palette, cx: &mut Context<Workbench>) 
         .on_click(cx.listener(move |this, _, window, cx| this.open_problem_row(i, window, cx)))
 }
 
+/// What the server's `tail -c 256M | grep -a -i -E | cut -c1-2000 | tail -n 5000` gives, without a shell: the lines of the
+/// file's last 256 MB that match `pattern` (case-insensitive), each cut at 2000 characters, the last 5000 of them.
+fn filter_log_lines(path: &str, pattern: &str) -> Result<String, String> {
+    use std::io::{BufRead, Seek};
+    const TAIL: u64 = 256 << 20;
+    const KEEP: usize = 5000;
+    const WIDTH: usize = 2000;
+    let re = regex::RegexBuilder::new(pattern).case_insensitive(true).build().map_err(|e| {
+        let text = e.to_string();
+        let why = text.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or(&text).trim().trim_start_matches("error: ").to_string();
+        crate::i18n::tf("“{0}” is not a valid regular expression ({1}). Escape special characters with a backslash.", &[&pattern, &why])
+    })?;
+    let failed = |e: std::io::Error| format!("{}: {e}", ui::file_name(path));
+    let mut file = std::fs::File::open(path).map_err(failed)?;
+    let len = file.metadata().map_err(failed)?.len();
+    file.seek(std::io::SeekFrom::Start(len.saturating_sub(TAIL))).map_err(failed)?;
+    let mut reader = std::io::BufReader::new(file);
+    let (mut kept, mut line) = (std::collections::VecDeque::new(), Vec::new());
+    loop {
+        line.clear();
+        if reader.read_until(b'\n', &mut line).map_err(failed)? == 0 {
+            break;
+        }
+        let text = String::from_utf8_lossy(&line);
+        let text = text.trim_end_matches(['\n', '\r']);
+        if re.is_match(text) {
+            kept.push_back(text.chars().take(WIDTH).collect::<String>());
+            if kept.len() > KEEP {
+                kept.pop_front();
+            }
+        }
+    }
+    Ok(kept.into_iter().map(|l| l + "\n").collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::lsp::{Diagnostic, Related};
+
+    /// The in-process filter (Windows' local files) gives what the server's grep pipeline does.
+    #[test]
+    fn log_lines_are_filtered_without_a_shell() {
+        let dir = std::env::temp_dir().join(format!("codeyard-filter-log-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("app.log");
+        let mut body = String::from("INFO start\r\nERROR disk full\r\nwarn slow\nbinary \u{0}\u{1} Error here\n");
+        body.push_str(&format!("ERROR {}\n", "x".repeat(3000)));
+        for i in 0..6000 {
+            body.push_str(&format!("error {i}\n"));
+        }
+        body.push_str("no newline at the end ERROR");
+        std::fs::write(&log, body).unwrap();
+        let out = filter_log_lines(log.to_str().unwrap(), "error|WARN").unwrap();
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), 5000, "the last 5000 matches");
+        assert_eq!((lines[0], lines[4999]), ("error 1001", "no newline at the end ERROR"));
+        let few = filter_log_lines(log.to_str().unwrap(), "^(warn|binary|ERROR [x]+$)").unwrap();
+        let few: Vec<&str> = few.lines().collect();
+        assert_eq!(few[..2], ["warn slow", "binary \u{0}\u{1} Error here"], "text after a NUL is still searched");
+        assert_eq!(few[2].chars().count(), 2000, "a long line is cut");
+        assert_eq!(filter_log_lines(log.to_str().unwrap(), "zzz").unwrap(), "");
+        assert!(filter_log_lines(log.to_str().unwrap(), "(unclosed").unwrap_err().contains("is not a valid regular expression"));
+        assert!(filter_log_lines(dir.join("missing.log").to_str().unwrap(), "x").unwrap_err().starts_with("missing.log: "));
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     fn rel(line: u32, col: u32, message: &str) -> Related {
         Related { path: "/p/src/lib.rs".into(), start: (line, col), end: (line, col + 1), message: message.into() }

@@ -356,9 +356,6 @@ fn a_terminal_that_was_not_offered_is_refused(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn inputs_are_asked_before_the_start_and_the_program_can_run_in_a_terminal(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
-        return;
-    }
     if !crate::test_lsp::have_python() {
         return;
     }

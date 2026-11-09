@@ -163,8 +163,17 @@ pub fn parse_cwd(url: &str) -> Option<String> {
         out.push(bytes[i]);
         i += 1;
     }
-    let path = String::from_utf8(out).ok()?;
-    (path.starts_with('/') && !path.chars().any(char::is_control) && path.len() <= MAX_PAYLOAD).then_some(path)
+    let mut path = String::from_utf8(out).ok()?;
+    // Windows (PowerShell): `file://host/C:/Users/a` names `C:/Users/a`, the form the workbench keeps a local folder in
+    // (`ui::local_path`); a share `file://host//server/share` stays `//server/share`.
+    let drive = matches!(path.as_bytes(), [b'/', d, b':', rest @ ..] if d.is_ascii_alphabetic() && matches!(rest.first(), None | Some(b'/')));
+    if drive {
+        path.remove(0);
+        if path.len() == 2 {
+            path.push('/');
+        }
+    }
+    ((drive || path.starts_with('/')) && !path.chars().any(char::is_control) && path.len() <= MAX_PAYLOAD).then_some(path)
 }
 
 #[cfg(test)]
@@ -206,6 +215,18 @@ mod tests {
         assert_eq!(parse_cwd("file://host"), None);
         assert_eq!(parse_cwd("file:///a%0Ab"), None, "no control characters");
         assert_eq!(parse_cwd("file:///a%zzb").as_deref(), Some("/a%zzb"), "a bad escape stays as it is");
+    }
+
+    /// What PowerShell's integration reports on Windows: a drive folder in the workbench's form, a share as it is.
+    #[test]
+    fn windows_folders_from_powershell() {
+        assert_eq!(parse_cwd("file://PC/C:/Users/a b/%25x").as_deref(), Some("C:/Users/a b/%x"));
+        assert_eq!(parse_cwd("file://PC/d:").as_deref(), Some("d:/"), "the root of a drive");
+        assert_eq!(parse_cwd("file://PC/C:/").as_deref(), Some("C:/"));
+        assert_eq!(parse_cwd("file://PC//server/share/dir").as_deref(), Some("//server/share/dir"));
+        assert_eq!(parse_cwd("file://PC/C:x").as_deref(), Some("/C:x"), "not a drive: a Unix name with a colon");
+        assert_eq!(parse_cwd("file://PC/ab:/x").as_deref(), Some("/ab:/x"));
+        assert_eq!(parse_cwd("file://PC/C:/a%0Ab"), None, "no control characters");
     }
 
     #[test]

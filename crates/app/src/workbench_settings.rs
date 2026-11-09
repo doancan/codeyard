@@ -171,7 +171,7 @@ pub const CATALOG: &[Entry] = &[
         Kind::Number { min: 0., max: 1_440. },
     ),
     e("terminal.scrollSensitivity", crate::i18n::tr("Mouse wheel and trackpad scroll speed multiplier"), Kind::Number { min: 0.1, max: 10. }),
-    e("terminal.shellIntegration", crate::i18n::tr("Mark prompts, commands and the folder in zsh, bash and fish"), Kind::Bool),
+    e("terminal.shellIntegration", crate::i18n::tr("Mark prompts, commands and the folder in zsh, bash, fish and PowerShell"), Kind::Bool),
     e("terminal.notifications", crate::i18n::tr("Flag a terminal and the taskbar when its program rings the bell or asks for you"), Kind::Bool),
     e(
         "workbench.panel.firstTerminalMaximized",
