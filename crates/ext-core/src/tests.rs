@@ -270,6 +270,39 @@ fn reinstalling_repairs_a_changed_file_in_the_store() {
 }
 
 #[test]
+fn an_update_decided_on_an_old_lock_does_not_overwrite_what_changed_since() {
+    let d = Dir::new("cas");
+    let s = d.store();
+    let one = s.install(&theme("a.one", "1.0.0"), src()).unwrap();
+    // The update was decided against 1.0.0; meanwhile another window installed 3.0.0.
+    let three = s.install(&theme("a.one", "3.0.0"), src()).unwrap();
+    let r = s.install_replacing(&theme("a.one", "2.0.0"), src(), BTreeMap::new(), one.digest);
+    assert!(matches!(r, Err(Error::Changed(_))), "{r:?}");
+    assert_eq!(s.locked().unwrap()[&id("a.one")].digest, three.digest);
+    // Or it was uninstalled: the update must not bring it back.
+    s.uninstall(&id("a.one")).unwrap();
+    let r = s.install_replacing(&theme("a.one", "2.0.0"), src(), BTreeMap::new(), three.digest);
+    assert!(matches!(r, Err(Error::Changed(_))), "{r:?}");
+    assert!(s.locked().unwrap().is_empty());
+    // Still the installed version: it goes through.
+    let one = s.install(&theme("a.one", "1.0.0"), src()).unwrap();
+    s.install_replacing(&theme("a.one", "2.0.0"), src(), BTreeMap::new(), one.digest).unwrap();
+    assert_eq!(s.locked().unwrap()[&id("a.one")].version.to_string(), "2.0.0");
+}
+
+#[test]
+fn a_rollback_decided_on_an_old_lock_does_not_apply_to_what_changed_since() {
+    let d = Dir::new("cas-rollback");
+    let s = d.store();
+    s.install(&theme("a.one", "1.0.0"), src()).unwrap();
+    let two = s.install(&theme("a.one", "2.0.0"), src()).unwrap();
+    s.install(&theme("a.one", "3.0.0"), src()).unwrap();
+    let r = s.rollback_from(&id("a.one"), two.digest);
+    assert!(matches!(r, Err(Error::Changed(_))), "{r:?}");
+    assert_eq!(s.locked().unwrap()[&id("a.one")].version.to_string(), "3.0.0");
+}
+
+#[test]
 fn invalid_packages_install_nothing() {
     let d = Dir::new("invalid");
     let s = d.store();
