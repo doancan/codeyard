@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Select previous occurrence and Move last selection to next occurrence no longer take seconds with tens of thousands of selections.
 - SSH: adding a host no longer replaces `~/.ssh/config` with just the new host when the file cannot be read as UTF-8
   (a comment in a legacy encoding, say); it reports the error and leaves the file alone.
 - Language servers that only support full-document sync get the whole text on every change instead of range edits they cannot apply.

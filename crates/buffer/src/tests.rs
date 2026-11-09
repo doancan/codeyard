@@ -544,6 +544,23 @@ fn block_comments_round_trip() {
 }
 
 #[test]
+fn previous_and_skip_occurrence_stay_fast_with_tens_of_thousands_of_selections() {
+    let text = "ab ".repeat(30_000);
+    let mut b = Buffer::from_str(&text);
+    b.set_cursor(0, false);
+    assert!(b.select_next_occurrence());
+    b.select_all_occurrences();
+    assert_eq!(b.selected_texts().len(), 30_000);
+    let started = std::time::Instant::now();
+    // Everything is selected: nothing is free, and finding that out must not take quadratic time.
+    assert!(!b.select_previous_occurrence());
+    assert!(started.elapsed().as_secs() < 5, "previous: {:?}", started.elapsed());
+    let started = std::time::Instant::now();
+    assert!(!b.move_last_selection_to_next_occurrence());
+    assert!(started.elapsed().as_secs() < 5, "skip: {:?}", started.elapsed());
+}
+
+#[test]
 fn next_occurrence_stays_fast_with_tens_of_thousands_of_selections() {
     let text = "ab ".repeat(30_000);
     let mut b = Buffer::from_str(&text);

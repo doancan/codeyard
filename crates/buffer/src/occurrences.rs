@@ -51,7 +51,10 @@ impl Buffer {
         let needle = self.rope.slice(range).to_string();
         let all = self.occurrences(&needle, self.word_search);
         let from = self.sels.iter().map(Sel::start).min().unwrap_or(0);
-        let free = |r: &Range<usize>| !self.sels.iter().any(|s| s.start() < r.end && r.start < s.end());
+        let free = |r: &Range<usize>| {
+            let i = self.sels.partition_point(|s| s.end() <= r.start);
+            !self.sels.get(i).is_some_and(|s| s.start() < r.end)
+        };
         let prev = all.iter().rev().find(|r| r.end <= from && free(r)).or_else(|| all.iter().rev().find(|r| free(r))).cloned();
         match prev {
             Some(r) => {
@@ -72,7 +75,10 @@ impl Buffer {
         let needle = self.rope.slice(range.clone()).to_string();
         let all = self.occurrences(&needle, self.word_search);
         let others: Vec<Sel> = self.sels.iter().enumerate().filter(|(i, _)| *i != self.primary).map(|(_, s)| *s).collect();
-        let free = |r: &Range<usize>| *r != range && !others.iter().any(|s| s.start() < r.end && r.start < s.end());
+        let free = |r: &Range<usize>| {
+            let i = others.partition_point(|s| s.end() <= r.start);
+            *r != range && !others.get(i).is_some_and(|s| s.start() < r.end)
+        };
         let next = all.iter().find(|r| r.start >= range.end && free(r)).or_else(|| all.iter().find(|r| free(r))).cloned();
         let Some(r) = next else { return false };
         let word = self.word_search;
