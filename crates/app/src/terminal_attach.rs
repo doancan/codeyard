@@ -149,7 +149,7 @@ impl TerminalView {
                     }
                     t.feed(&output);
                     if backlog.take_dropped() {
-                        t.feed(b"\r\n\x1b[2m[output was dropped: the terminal could not keep up]\x1b[0m\r\n");
+                        t.feed(b"\x18\r\n\x1b[2m[output was dropped: the terminal could not keep up]\x1b[0m\r\n");
                     }
                     t.drain_events(cx);
                     cx.notify();
@@ -173,14 +173,24 @@ impl TerminalView {
     /// Ask the daemon for the token of terminal `id` (off the UI thread) and keep it on the view.
     fn fetch_token(this: gpui::WeakEntity<Self>, id: u32, cx: &mut gpui::AsyncApp) {
         let Ok(host) = this.read_with(cx, |t, _| t.host.clone()) else { return };
-        let ask = cx.background_executor().spawn(async move { host.pty_token(id) });
         cx.spawn(async move |cx| {
-            if let Ok((instance, secret)) = ask.await {
-                this.update(cx, |t, cx| {
-                    t.token = Some(crate::terminal_session::SavedPty { pty: id, instance, secret });
-                    cx.emit(TerminalEvent::Kept);
-                })
-                .ok();
+            // Without its token a terminal cannot be taken back after a restart: a busy connection gets a few more tries.
+            for wait in [0, 1, 3, 10] {
+                if wait > 0 {
+                    cx.background_executor().timer(std::time::Duration::from_secs(wait)).await;
+                }
+                let host = host.clone();
+                if let Ok((instance, secret)) = cx.background_executor().spawn(async move { host.pty_token(id) }).await {
+                    this.update(cx, |t, cx| {
+                        t.token = Some(crate::terminal_session::SavedPty { pty: id, instance, secret });
+                        cx.emit(TerminalEvent::Kept);
+                    })
+                    .ok();
+                    return;
+                }
+                if this.read_with(cx, |t, _| t.has_exited()).unwrap_or(true) {
+                    return;
+                }
             }
         })
         .detach();

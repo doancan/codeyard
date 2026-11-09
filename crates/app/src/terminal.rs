@@ -252,6 +252,8 @@ pub struct TerminalView {
     program_mouse: mouse::ProgramMouse,
     /// Link hovered while ⌘ is held: (screen row, columns).
     hover_link: Option<(usize, std::ops::Range<usize>)>,
+    /// Where the link under the pointer (OSC 8: any text can stand for any address) really goes.
+    hover_uri: Option<SharedString>,
     /// The find bar, while it is open.
     find: Option<find::FindState>,
     /// Font size and line height from `terminal.fontSize` (set on every render, so zoom and setting changes apply at once).
@@ -361,6 +363,7 @@ impl TerminalView {
             program_mouse: Default::default(),
             find: None,
             hover_link: None,
+            hover_uri: None,
             metrics: {
                 let s = cx.global::<crate::settings::Settings>();
                 metrics(s.terminal_font_size, s.terminal_line_height)
@@ -711,6 +714,16 @@ impl TerminalView {
         (GridPoint::new(Line(row - offset), Column(col)), side)
     }
 
+    /// The address of a link the program marked (OSC 8) under the position, whether or not it opens.
+    fn marked_link_uri(&self, pos: Point<Pixels>) -> Option<String> {
+        self.uri_at(self.grid_point(pos).0)
+    }
+
+    fn uri_at(&self, at: GridPoint) -> Option<String> {
+        let uri = self.term.grid()[at.line][at.column].hyperlink()?.uri().to_string();
+        Some(uri.chars().filter(|c| !c.is_control()).take(300).collect())
+    }
+
     /// Link at the position: (screen row, columns, link). The row is read cell by cell.
     fn link_under(&self, pos: Point<Pixels>) -> Option<(usize, std::ops::Range<usize>, crate::links::Link)> {
         let (at, _) = self.grid_point(pos);
@@ -767,6 +780,11 @@ impl TerminalView {
         let hover = (ev.modifiers.secondary() && ev.pressed_button.is_none()).then(|| self.link_under(ev.position).map(|(r, c, _)| (r, c))).flatten();
         if hover != self.hover_link {
             self.hover_link = hover;
+            cx.notify();
+        }
+        let uri = self.marked_link_uri(ev.position).map(SharedString::from);
+        if uri != self.hover_uri {
+            self.hover_uri = uri;
             cx.notify();
         }
         // Drags and moves the program follows (Claude Code selects text this way).
@@ -958,6 +976,7 @@ impl TerminalView {
     /// Clear scrollback and ask the shell to redraw the screen (Ctrl+L).
     pub fn clear_all(&mut self, cx: &mut Context<Self>) {
         self.term.grid_mut().clear_history();
+        self.forget_marks();
         self.write(b"\x0c".to_vec());
         cx.notify();
     }
@@ -1411,6 +1430,11 @@ impl Render for TerminalView {
             )
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .when(self.hover_link.is_some(), |d| d.cursor(gpui::CursorStyle::PointingHand))
+            .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
+                if !*hovered && this.hover_uri.take().is_some() {
+                    cx.notify();
+                }
+            }))
             .on_mouse_up(MouseButton::Left, cx.listener(|this, ev, _, cx| this.on_mouse_up(ev, cx)))
             .on_mouse_up_out(MouseButton::Left, cx.listener(|this, ev, _, cx| this.on_mouse_up(ev, cx)))
             .on_mouse_up(MouseButton::Middle, cx.listener(Self::on_other_button_up))
@@ -1449,6 +1473,25 @@ impl Render for TerminalView {
                             }),
                         )
                         .child(crate::i18n::t("Jump to Bottom")),
+                )
+            })
+            .when_some(self.hover_uri.clone(), |d, uri| {
+                d.child(
+                    div()
+                        .absolute()
+                        .bottom(px(theme::SPACE[3]))
+                        .left(px(theme::SPACE[5]))
+                        .max_w_full()
+                        .px(px(theme::SPACE[3]))
+                        .py(px(theme::SPACE[1]))
+                        .rounded(px(theme::radius::SM))
+                        .bg(c(p.surface_raised))
+                        .text_color(c(p.text))
+                        .text_size(px(crate::ui::text::XS.0))
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .child(uri),
                 )
             })
             .when(self.shift_hint, |d| {

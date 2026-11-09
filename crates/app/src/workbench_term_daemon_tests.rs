@@ -412,3 +412,82 @@ fn an_ssh_session_kept_for_a_restart_hands_its_shell_to_the_next_connection() {
     second.pty_input(id, b"echo still-the-same-$$\n".to_vec());
     read_until(&back, &format!("still-the-same-{pid}"));
 }
+
+/// A daemon connection whose answers the test chooses: what it lists, and what taking each terminal back gives.
+struct ScriptedDaemon {
+    info: proto::HostInfo,
+    listed: Vec<u32>,
+    refuse_with: fn() -> host::HostError,
+    killed: Mutex<Vec<u32>>,
+}
+
+impl ScriptedDaemon {
+    fn new(listed: Vec<u32>, refuse_with: fn() -> host::HostError) -> Self {
+        let info = proto::HostInfo { version: 0, os: "linux".into(), arch: "x86_64".into(), home: "/".into(), hostname: "d".into(), resumed: true };
+        Self { info, listed, refuse_with, killed: Mutex::new(Vec::new()) }
+    }
+}
+
+impl Host for ScriptedDaemon {
+    fn info(&self) -> &proto::HostInfo {
+        &self.info
+    }
+    fn label(&self) -> String {
+        "scripted".into()
+    }
+    fn is_remote(&self) -> bool {
+        false
+    }
+    fn call(&self, req: proto::Request) -> host::Result<proto::Response> {
+        match req {
+            proto::Request::PtyList => Ok(proto::Response::PtyList(self.listed.clone())),
+            other => unimplemented!("{other:?}"),
+        }
+    }
+    fn search(&self, _: proto::SearchQuery) -> host::Result<host::SearchStream> {
+        unimplemented!()
+    }
+    fn hash_tree(&self, _: &str, _: Vec<String>, _: bool, _: u32, _: Option<Vec<String>>) -> host::Result<host::HashStream> {
+        unimplemented!()
+    }
+    fn cancel(&self, _: u32) {}
+    fn pty_spawn(&self, _: u16, _: u16, _: Option<String>, _: Option<String>) -> host::Result<host::Pty> {
+        unimplemented!()
+    }
+    fn pty_adopt(&self, _: u32, _: String, _: String) -> host::Result<(host::Pty, u64)> {
+        Err((self.refuse_with)())
+    }
+    fn pty_input(&self, _: u32, _: Vec<u8>) {}
+    fn pty_resize(&self, _: u32, _: u16, _: u16) {}
+    fn pty_kill(&self, pty: u32) {
+        self.killed.lock().unwrap().push(pty);
+    }
+    fn watch(&self, _: Vec<String>) {}
+    fn fs_events(&self) -> std::sync::mpsc::Receiver<host::FsChanges> {
+        std::sync::mpsc::channel().1
+    }
+    fn status_events(&self) -> std::sync::mpsc::Receiver<host::ConnStatus> {
+        std::sync::mpsc::channel().1
+    }
+    fn proc_spawn(&self, _: &str, _: Vec<String>, _: Option<String>) -> host::Result<host::Proc> {
+        unimplemented!()
+    }
+    fn proc_input(&self, _: u32, _: Vec<u8>) {}
+    fn proc_kill(&self, _: u32) {}
+}
+
+/// A shell is ended only when the daemon says it is not this window's. A connection that failed while taking it back proves
+/// nothing, and the user's running programs must survive it.
+#[test]
+fn a_failed_connection_never_ends_the_shells_it_could_not_take_back() {
+    let token = |pty| (Slot::Panel(0), SavedPty { pty, instance: "i".into(), secret: "s".into() });
+    let tokens = [token(1)];
+
+    let hiccup = ScriptedDaemon::new(vec![1, 2], || host::HostError::Disconnected("pipe closed".into()));
+    assert!(adopt_all(&hiccup, &tokens).is_empty());
+    assert!(hiccup.killed.lock().unwrap().is_empty(), "nothing was proven about shell 1: it lives");
+
+    let refused = ScriptedDaemon::new(vec![1, 2], || host::HostError::Op(proto::Error::PermissionDenied("not this session's".into())));
+    assert!(adopt_all(&refused, &tokens).is_empty());
+    assert_eq!(*refused.killed.lock().unwrap(), vec![1], "refused: no window can reach it; shell 2 is newer than the saved ones and stays");
+}

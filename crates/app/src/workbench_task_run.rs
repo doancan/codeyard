@@ -297,11 +297,15 @@ impl Workbench {
         }
         let (host, title) = (live.host.clone(), live.run.task(node).label.clone());
         let term = cx.new(|cx| TerminalView::output_only(host, title, cx));
-        self._subs.push(cx.subscribe_in(&term, window, |this, _, event: &TerminalEvent, window, cx| match event {
-            TerminalEvent::OpenLink(link) => this.open_link(link.clone(), window, cx),
-            TerminalEvent::TitleChanged | TerminalEvent::Exited => cx.notify(),
-            _ => {}
-        }));
+        self.term_subs.retain(|(w, _)| w.upgrade().is_some());
+        self.term_subs.push((
+            term.downgrade(),
+            cx.subscribe_in(&term, window, |this, _, event: &TerminalEvent, window, cx| match event {
+                TerminalEvent::OpenLink(link) => this.open_link(link.clone(), window, cx),
+                TerminalEvent::TitleChanged | TerminalEvent::Exited => cx.notify(),
+                _ => {}
+            }),
+        ));
         // Without any problem matcher in the run, the output is scanned for common compiler messages (as for a terminal
         // task); with one, the matchers own the Problems panel and the scanner stays out of it.
         let scan = {

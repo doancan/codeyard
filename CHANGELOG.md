@@ -26,6 +26,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Terminal: erasing the history (a program's `CSI 3J`, a reset, Clear Terminal) no longer leaves the command dots,
+  Jump to Command and Copy Last Output pointing at the wrong rows. Select All over a long scrollback no longer stalls the
+  terminal while output arrives, searching a long history waits for the typing to pause, and a command whose text a
+  full-screen program redrew away is not looked for again on every chunk of output.
+- Terminal: hovering a link a program marked (OSC 8) shows where it really goes. Splitting a terminal whose shell sits in
+  `ssh` opens in the terminal's own folder instead of failing on the other machine's path. A dropped-output note can no
+  longer be swallowed by an escape sequence it cut in half. A terminal's token for restoring it after a restart is asked
+  for again when the first ask fails. Closed terminals no longer leave their subscription behind, and a failure to start
+  the output thread no longer panics.
+- Ports panel: a failed scan and a cut list are told to screen readers also while there are rows; a listening port's menu
+  has Copy Port Number. Long profile and shell names are cut in the New Terminal menu.
 - Ports: connecting to another server no longer keeps the first scan of the previous one, so its already-open ports are
   not forwarded by mistake and the previous server's baseline does not hide new ones.
 - Ports: `3000:8080` for a port that is forwarded already moves it to that local port (or says it is there already)

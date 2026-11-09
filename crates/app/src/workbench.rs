@@ -884,6 +884,8 @@ pub struct Workbench {
     data: data_glue::DataState,
     focus_handle: FocusHandle,
     _subs: Vec<Subscription>,
+    /// Subscriptions to terminals, each with its terminal: dropped once the terminal is gone.
+    term_subs: Vec<(gpui::WeakEntity<TerminalView>, Subscription)>,
 }
 
 impl Focusable for Workbench {
@@ -1421,6 +1423,7 @@ impl Workbench {
             data: Default::default(),
             focus_handle: cx.focus_handle(),
             _subs: subs,
+            term_subs: Vec::new(),
         };
         wb.apply_theme(&theme_choice, window, cx);
         wb.reload_config(window, cx);
