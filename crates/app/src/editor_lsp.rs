@@ -3,6 +3,36 @@
 use super::*;
 use crate::i18n::{t, tf};
 
+/// Above this many lines, whole-document requests are skipped and hints cover only a window around the cursor.
+const BIG_FILE_LINES: usize = 3000;
+/// Lines on each side of the cursor covered by inlay hints in a big file.
+const HINT_WINDOW_LINES: usize = 300;
+const EXTRAS_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+const MAX_LENS_RESOLVES: usize = 10;
+
+/// Hints of the same line joined into one label.
+fn group_inlay_labels(hints: Vec<crate::lsp::InlayHint>) -> std::collections::HashMap<usize, String> {
+    let mut by_line: std::collections::HashMap<usize, String> = std::collections::HashMap::new();
+    for hint in hints {
+        let slot = by_line.entry(hint.line).or_default();
+        if !slot.is_empty() {
+            slot.push_str("  ");
+        }
+        slot.push_str(&hint.label);
+    }
+    by_line
+}
+
+/// The highlight role of an LSP semantic token type; types without a role keep the syntax color.
+fn semantic_role(kind: &str) -> Option<Role> {
+    match kind {
+        "function" | "method" | "macro" | "decorator" => Some(Role::Function),
+        "type" | "class" | "struct" | "enum" | "interface" | "typeParameter" | "namespace" => Some(Role::Type),
+        "enumMember" => Some(Role::Number),
+        _ => None,
+    }
+}
+
 impl EditorView {
     /// Connect to the server: open the document (full text), after that only changes are sent.
     pub fn set_lsp(&mut self, client: Option<Arc<crate::lsp::Client>>, lang: &'static str, cx: &mut Context<Self>) {
@@ -222,7 +252,7 @@ impl EditorView {
             return;
         };
         // On a large file, hints only around the cursor; whole-document requests are skipped (expensive).
-        let big = self.buffer.len_lines() > 3000;
+        let big = self.buffer.len_lines() > BIG_FILE_LINES;
         let s = cx.global::<Settings>();
         let want_inlay = s.inlay_hints && client.supports("inlayHintProvider");
         let want_fold = !big && client.supports("foldingRangeProvider");
@@ -243,11 +273,11 @@ impl EditorView {
             let Ok(Some((uri, range, lines))) = this.update(cx, |e, _| {
                 e.sync_lsp();
                 let lines = e.buffer.len_lines();
-                let (from, to) = if lines <= 3000 {
+                let (from, to) = if lines <= BIG_FILE_LINES {
                     (0, e.buffer.len_chars())
                 } else {
                     let l = e.buffer.char_to_line(e.buffer.cursor());
-                    (e.buffer.line_to_char(l.saturating_sub(300)), e.buffer.line_to_char((l + 300).min(lines)))
+                    (e.buffer.line_to_char(l.saturating_sub(HINT_WINDOW_LINES)), e.buffer.line_to_char((l + HINT_WINDOW_LINES).min(lines)))
                 };
                 let (a, b) = (e.buffer.lsp_position(from), e.buffer.lsp_position(to));
                 let range = serde_json::json!({ "start": { "line": a.0, "character": a.1 }, "end": { "line": b.0, "character": b.1 } });
@@ -259,7 +289,7 @@ impl EditorView {
             let result = cx
                 .background_executor()
                 .spawn(async move {
-                    let t = std::time::Duration::from_secs(8);
+                    let t = EXTRAS_REQUEST_TIMEOUT;
                     let doc = serde_json::json!({ "uri": uri });
                     let live = || guard.load(SeqCst) == mine;
                     let mut errors: Vec<String> = Vec::new();
@@ -295,8 +325,8 @@ impl EditorView {
                         let (mut done, todo) = ask("textDocument/codeLens", serde_json::json!({ "textDocument": doc }))
                             .map(|v| crate::lsp::parse_code_lenses(&v))
                             .unwrap_or_default();
-                        // Resolve lenses without commands: at most 10 (each is a separate request).
-                        for item in todo.into_iter().take(10) {
+                        // Resolve lenses without commands: a bounded number (each is a separate request).
+                        for item in todo.into_iter().take(MAX_LENS_RESOLVES) {
                             if let Some(r) = ask("codeLens/resolve", item) {
                                 done.extend(crate::lsp::parse_code_lenses(&serde_json::json!([r])).0);
                             }
@@ -324,15 +354,7 @@ impl EditorView {
                     e.log_lsp_failure(err, cx);
                 }
                 if let Some(h) = hints {
-                    let mut by_line: std::collections::HashMap<usize, String> = std::collections::HashMap::new();
-                    for hint in h {
-                        let slot = by_line.entry(hint.line).or_default();
-                        if !slot.is_empty() {
-                            slot.push_str("  ");
-                        }
-                        slot.push_str(&hint.label);
-                    }
-                    e.inlays = by_line;
+                    e.inlays = group_inlay_labels(h);
                 }
                 if let Some(f) = folds {
                     e.lsp_folds = f;
@@ -348,12 +370,7 @@ impl EditorView {
                 if let Some(tokens) = sem {
                     let mut by_line: std::collections::HashMap<usize, Vec<(u32, u32, Role)>> = std::collections::HashMap::new();
                     for t in tokens {
-                        let role = match t.kind.as_str() {
-                            "function" | "method" | "macro" | "decorator" => Role::Function,
-                            "type" | "class" | "struct" | "enum" | "interface" | "typeParameter" | "namespace" => Role::Type,
-                            "enumMember" => Role::Number,
-                            _ => continue,
-                        };
+                        let Some(role) = semantic_role(&t.kind) else { continue };
                         by_line.entry(t.line).or_default().push((t.start, t.len, role));
                     }
                     e.sem = by_line;
