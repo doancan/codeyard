@@ -57,7 +57,7 @@ pub fn parse_log(out: &str) -> Vec<LogEntry> {
 /// A file's history (follows renames), newest first.
 pub fn file_log(host: &dyn Host, root: &str, rel: &str, limit: usize) -> Result<Vec<LogEntry>, String> {
     let n = format!("-n{limit}");
-    git_ok(host, root, &["--literal-pathspecs", "log", "--follow", &n, LOG_FORMAT, "--name-only", "--", rel]).map(|o| parse_log(&o))
+    git_ok(host, root, &["--literal-pathspecs", "-c", "core.quotepath=off", "log", "--follow", &n, LOG_FORMAT, "--name-only", "--", rel]).map(|o| parse_log(&o))
 }
 
 /// The commit that last changed the line. `contents`: unsaved text (so lines do not shift).
