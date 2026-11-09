@@ -66,20 +66,31 @@ impl Watcher {
 
     /// One round: return what changed.
     pub fn poll(&self) -> Vec<(String, ChangeKind)> {
+        self.poll_with(stamp)
+    }
+
+    /// The lock is held only to copy the paths and to store the results, never while `stat` runs: a slow share must not block `set`.
+    fn poll_with(&self, stat: impl Fn(&PathBuf) -> Option<Stamp>) -> Vec<(String, ChangeKind)> {
+        let watched: Vec<(String, PathBuf, Option<Stamp>)> = self.paths.locked().iter().map(|(key, (full, last))| (key.clone(), full.clone(), *last)).collect();
+        let seen: Vec<_> = watched.into_iter().map(|(key, full, last)| (stat(&full), key, full, last)).collect();
         let mut map = self.paths.locked();
         let mut out = Vec::new();
-        for (key, (full, last)) in map.iter_mut() {
-            let now = stamp(full);
-            let kind = match (*last, now) {
+        for (now, key, full, last) in seen {
+            // `set` may have removed or replaced the path meanwhile; its own baseline then stands.
+            let Some((current, stored)) = map.get_mut(&key) else { continue };
+            if *current != full {
+                continue;
+            }
+            let kind = match (last, now) {
                 (None, Some(_)) => Some(ChangeKind::Created),
                 (Some(_), None) => Some(ChangeKind::Removed),
                 (Some(a), Some(b)) if a != b => Some(ChangeKind::Modified),
                 _ => None,
             };
             if let Some(k) = kind {
-                out.push((key.clone(), k));
+                out.push((key, k));
             }
-            *last = now;
+            *stored = now;
         }
         out.sort();
         out
@@ -131,6 +142,28 @@ mod tests {
 
         std::fs::remove_file(&f).unwrap();
         assert!(w.poll().contains(&(key(&f), ChangeKind::Removed)));
+    }
+
+    #[test]
+    fn a_slow_stat_does_not_block_changing_the_watched_set() {
+        let d = big_tree("slow", 1, 1);
+        let f = d.join("d000").join("f00000.txt");
+        let w = Arc::new(Watcher::default());
+        w.set(vec![(f.to_string_lossy().into_owned(), f.clone())]);
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let other = d.clone();
+        let w2 = w.clone();
+        w.poll_with(|p| {
+            let (w3, tx, other) = (w2.clone(), done_tx.clone(), other.clone());
+            std::thread::spawn(move || {
+                w3.set(vec![("other".into(), other)]);
+                let _ = tx.send(());
+            });
+            let finished = done_rx.recv_timeout(Duration::from_secs(3)).is_ok();
+            assert!(finished, "set() waited for the poll's stat of {p:?}");
+            stamp(p)
+        });
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     fn big_tree(name: &str, dirs: usize, files_per_dir: usize) -> PathBuf {
