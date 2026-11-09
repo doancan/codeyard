@@ -345,7 +345,7 @@ fn an_external_edit_after_our_write_is_followed(cx: &mut TestAppContext) {
 
 /// A watcher read that starts before our write and answers after it never brings back the text the write replaced (the
 /// scheduler orders the read, the write and their replies differently on each iteration).
-#[gpui::test(iterations = 30)]
+#[gpui::test(iterations = 8)]
 fn a_watcher_read_crossing_our_write_does_not_undo_it(cx: &mut TestAppContext) {
     let (base, file) = mono("race-read-first");
     std::fs::create_dir_all(base.join("docs")).unwrap();

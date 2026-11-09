@@ -40,6 +40,8 @@ the 2026-10-27 local run passed 1,516 tests, with three documented manual/data-d
 - **Random sessions**: `CODEYARD_QA_SEEDS=N cargo test … qa_random_new_commands_many_seeds` types random keys and
   commands, then undoes everything and checks the original text, then redoes and checks the edited text.
   The default sessions are short (a step draws a whole workbench frame); `CODEYARD_QA_STEPS=3000` runs long ones.
+- **Scheduler orders**: a test marked `#[gpui::test(iterations = N)]` runs N scheduler seeds. The defaults are small
+  (each iteration builds a workbench); `ITERATIONS=100` runs more seeds, and `SEED=n` replays one.
 
 ## Rules
 
