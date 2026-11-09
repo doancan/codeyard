@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Yard: a registry file that cannot be written or renamed no longer leaves a half-written temporary file beside it, and
+  the new file is flushed to disk before it replaces the old one.
 - Search: finding in a very large file no longer loads a whole minified line (hundreds of MB) into memory, and Cancel
   takes effect at once instead of after thousands of lines. Only the first 1 MiB of a line is searched.
 - Search: a search no longer returns more matches than the result limit when one line holds many of them.
