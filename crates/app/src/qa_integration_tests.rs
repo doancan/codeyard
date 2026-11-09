@@ -1897,7 +1897,8 @@ fn qa_terminal_wheel_in_alternate_screen_sends_arrows(cx: &mut TestAppContext) {
 
 fn echoed(cx: &mut VisualTestContext, term: &Entity<crate::terminal::TerminalView>, what: &str) -> bool {
     let start = std::time::Instant::now();
-    while start.elapsed() < Duration::from_secs(3) {
+    // Returns as soon as the program echoed it; the limit only bounds a failing run, so a loaded machine must not trip it.
+    while start.elapsed() < Duration::from_secs(10 * crate::test_sshd::timeout_scale()) {
         cx.run_until_parked();
         if term.read_with(cx, |t, _| t.screen_text().contains(what)) {
             return true;
