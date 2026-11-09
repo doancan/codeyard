@@ -248,9 +248,21 @@ mod imp {
         let child = cmd.spawn()?;
         // `setsid` made the shell the leader of its own session and process group.
         crate::guard::pty_started(child.id());
-        let master = File::from(master);
-        let reader = master.try_clone()?;
-        let mut writer = master.try_clone()?;
+        attach(child, File::from(master), File::try_clone)
+    }
+
+    /// Give the started shell its reader and writer threads. If a handle cannot be made (out of file descriptors), the shell is
+    /// stopped and reaped here: it is not yet owned by a `Pty`, whose `Drop` would otherwise do it.
+    pub(super) fn attach(mut child: Child, master: File, try_clone: impl Fn(&File) -> io::Result<File>) -> io::Result<(Pty, File)> {
+        let (reader, mut writer) = match try_clone(&master).and_then(|reader| Ok((reader, try_clone(&master)?))) {
+            Ok(handles) => handles,
+            Err(e) => {
+                crate::guard::forget(child.id());
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(e);
+            }
+        };
         let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(512);
         std::thread::spawn(move || {
             while let Ok(chunk) = rx.recv() {
@@ -439,6 +451,18 @@ mod tests {
         let (mut p, _reader) = spawn_with(spec).unwrap();
         p.kill();
         assert_eq!(p.wait(), Some(128 + libc::SIGKILL), "same code as a killed process in proc.rs");
+    }
+
+    #[test]
+    fn a_shell_is_reaped_when_its_terminal_handles_cannot_be_made() {
+        let child = std::process::Command::new("/bin/sleep").arg("30").spawn().unwrap();
+        let pid = child.id() as libc::pid_t;
+        let master = File::open("/dev/null").unwrap();
+        let failing = |_: &File| Err(io::Error::from_raw_os_error(libc::EMFILE));
+        assert!(imp::attach(child, master, failing).is_err());
+        // SAFETY: signal 0 only checks that the process exists.
+        let alive = unsafe { libc::kill(pid, 0) } == 0;
+        assert!(!alive, "the shell must be killed and reaped, not left as a zombie");
     }
 
     #[test]

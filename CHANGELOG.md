@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Terminal: when a new terminal cannot get its file handles (out of descriptors), its shell is stopped instead of left running.
 - Terminal: a shell killed by a signal now reports exit code 128 plus the signal, like other processes, instead of no code.
 - SSH config: saving the config from two windows at once no longer fails because they shared one temporary file; the
   temporary file is flushed before it replaces the config and is removed if the write fails.
