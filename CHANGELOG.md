@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- SSH config: saving the config from two windows at once no longer fails because they shared one temporary file; the
+  temporary file is flushed before it replaces the config and is removed if the write fails.
 - Yard: a registry file that cannot be written or renamed no longer leaves a half-written temporary file beside it, and
   the new file is flushed to disk before it replaces the old one.
 - Search: finding in a very large file no longer loads a whole minified line (hundreds of MB) into memory, and Cancel
