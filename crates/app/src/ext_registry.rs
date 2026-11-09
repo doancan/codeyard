@@ -145,8 +145,7 @@ impl Fetch for Curl {
         let (headers, body) = (dir.join("headers"), dir.join("body"));
         let mut c = Command::new("curl");
         c.args(["-q", "--silent", "--show-error", "--location", "--max-redirs", "5", "--connect-timeout", "15", "--max-time", "120", "--tlsv1.2"]);
-        // A redirect never leaves https, even from a local http registry.
-        c.args(["--proto", allowed, "--proto-redir", "=https"]);
+        c.args(["--proto", allowed, "--proto-redir", allowed]);
         c.args(["--max-filesize", &limit.to_string(), "--dump-header"]).arg(&headers).arg("--output").arg(&body);
         if let Some(tag) = etag {
             c.args(["--header", &format!("If-None-Match: {tag}")]);
