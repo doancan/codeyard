@@ -12,11 +12,12 @@ pub(super) fn build(host: &dyn host::Host, target: &CargoTarget, root: &str) -> 
     let command = if target.kind.is_test() { "cargo test" } else { "cargo build" };
     let output = host
         .exec("cargo", &args.iter().map(String::as_str).collect::<Vec<_>>(), Some(root), None)
-        .map_err(|e| (crate::i18n::tf("Could not run “{}”: {}", &[&command, &e.to_string()]), String::new()))?;
+        .map_err(|e| (crate::i18n::tf("Could not run “{}”: {}", &[&command, &crate::cargo_project::explain_failure(&e.to_string())]), String::new()))?;
     let (executables, diagnostics) = artifacts(&output.stdout_str(), target);
     let diagnostics = format!("{diagnostics}{}", output.stderr_str());
     if !output.ok() || !crate::cargo_project::build_finished(&output.stdout_str()) {
-        return Err((crate::i18n::tf("Build failed: {}", &[&command]), diagnostics));
+        let hint = crate::cargo_project::toolchain_hint(&diagnostics).map(|h| format!("{h} ")).unwrap_or_default();
+        return Err((format!("{hint}{}", crate::i18n::tf("Build failed: {}", &[&command])), diagnostics));
     }
     match (executables.len(), executables.into_iter().next()) {
         (1, Some(path)) => Ok(path),
