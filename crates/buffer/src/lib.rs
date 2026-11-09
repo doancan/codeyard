@@ -524,7 +524,7 @@ impl Buffer {
     pub fn char_at_visual_col(&self, line: usize, vcol: usize, tab: usize) -> usize {
         let tab = tab.max(1);
         let mut w = 0usize;
-        for (i, ch) in self.line(line).chars().enumerate() {
+        for (i, ch) in self.rope.line(line).chars().enumerate() {
             if ch == '\n' || ch == '\r' {
                 return i;
             }
@@ -544,7 +544,7 @@ impl Buffer {
     pub fn visual_col(&self, line: usize, col: usize, tab: usize) -> usize {
         let tab = tab.max(1);
         let mut w = 0usize;
-        for ch in self.line(line).chars().take(col) {
+        for ch in self.rope.line(line).chars().take(col.min(self.line_len_chars(line))) {
             w += if ch == '\t' { tab - w % tab } else { 1 };
         }
         w
