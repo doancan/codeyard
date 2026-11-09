@@ -97,8 +97,7 @@ pub fn run(input: impl Read, output: impl Write + Send + 'static) -> Result<(), 
         Ok(Exports { guest: guest_exports.load(&mut *store, &instance)?, events })
     })?;
     guest.ext = Some(ext);
-    let activated =
-        guest.call(limits::ACTIVATE_MILLIS, |store, ext| ext.expect("instantiated").guest.call_activate(store, &convert::activation(&hello.reason)))?;
+    let activated = guest.call_exports(limits::ACTIVATE_MILLIS, |store, ext| ext.guest.call_activate(store, &convert::activation(&hello.reason)))?;
     guest.store.data_mut().send(&ToApp::Activated(activated));
     guest.drain()?;
 
@@ -112,26 +111,26 @@ pub fn run(input: impl Read, output: impl Write + Send + 'static) -> Result<(), 
             ToHost::Hello(_) => return Err("a second Hello".into()),
             ToHost::Handle { id, request, .. } => {
                 let request = request.into();
-                guest.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").guest.call_handle(s, id, &request))?;
+                guest.call_exports(limits::GUEST_CALL_MILLIS, |s, x| x.guest.call_handle(s, id, &request))?;
             }
             ToHost::Cancel { id } => {
-                guest.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").guest.call_cancel(s, id))?;
+                guest.call_exports(limits::GUEST_CALL_MILLIS, |s, x| x.guest.call_cancel(s, id))?;
             }
             ToHost::Complete { ticket, completion } => guest.complete(ticket, completion.into())?,
             ToHost::Event { ticket, event } => {
                 let event = event.into();
-                guest.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").guest.call_event(s, ticket, &event))?;
+                guest.call_exports(limits::GUEST_CALL_MILLIS, |s, x| x.guest.call_event(s, ticket, &event))?;
             }
             ToHost::Documents { watch, events } => {
                 let events: Vec<_> = events.into_iter().map(Into::into).collect();
-                guest.call(limits::GUEST_CALL_MILLIS, |s, x| match &x.expect("instantiated").events {
+                guest.call_exports(limits::GUEST_CALL_MILLIS, |s, x| match &x.events {
                     Some(e) => e.call_documents(s, watch, &events),
                     None => Ok(()),
                 })?;
             }
             ToHost::Files { watch, events } => {
                 let events: Vec<_> = events.into_iter().map(Into::into).collect();
-                guest.call(limits::GUEST_CALL_MILLIS, |s, x| match &x.expect("instantiated").events {
+                guest.call_exports(limits::GUEST_CALL_MILLIS, |s, x| match &x.events {
                     Some(e) => e.call_files(s, watch, &events),
                     None => Ok(()),
                 })?;
@@ -140,7 +139,7 @@ pub fn run(input: impl Read, output: impl Write + Send + 'static) -> Result<(), 
             ToHost::Env(env) => guest.store.data_mut().env = env,
             ToHost::Grants(granted) => guest.store.data_mut().set_granted(granted),
             ToHost::Shutdown => {
-                guest.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").guest.call_deactivate(s))?;
+                guest.call_exports(limits::GUEST_CALL_MILLIS, |s, x| x.guest.call_deactivate(s))?;
                 return Ok(());
             }
         }
@@ -211,8 +210,13 @@ impl Guest {
         }
     }
 
+    /// `call` once the component is instantiated: every request after activation goes through this.
+    fn call_exports<R>(&mut self, budget_ms: u64, f: impl FnOnce(&mut Store<State>, &Exports) -> wasmtime::Result<R>) -> Result<R, String> {
+        self.call(budget_ms, |store, ext| f(store, ext.expect("instantiated")))
+    }
+
     fn complete(&mut self, ticket: u64, completion: crate::bindings::codeyard::api::types::Completion) -> Result<(), String> {
-        self.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").guest.call_complete(s, ticket, &completion))
+        self.call_exports(limits::GUEST_CALL_MILLIS, |s, x| x.guest.call_complete(s, ticket, &completion))
     }
 
     /// Deliver tickets that finished inside the exthost (refused calls). Delivering one may refuse another, so this
