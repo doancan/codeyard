@@ -3704,3 +3704,6 @@ Undo a commit that is already on {}?	{} üzerinde zaten bulunan bir commit geri 
 {} commit leaves this branch.|{} commits leave this branch.	{} commit bu daldan çıkar.
 {} of them is on no other branch, tag or remote: after the reset only Git's reflog still finds it.|{} of them are on no other branch, tag or remote: after the reset only Git's reflog still finds them.	Bunlardan {} tanesi başka hiçbir dalda, etikette ya da remote'ta yok: reset'ten sonra onları yalnızca Git'in reflog'u bulur.
 The server protects this branch and refuses direct pushes: push to another branch and open a pull request.	Sunucu bu dalı koruyor ve doğrudan push kabul etmiyor: başka bir dala push edip pull request açın.
+Cargo was not found. Install Rust from https://rustup.rs and make sure `cargo` is on the PATH of this machine.	Cargo bulunamadı. Rust'ı https://rustup.rs adresinden kurun ve `cargo`'nun bu makinenin PATH'inde olduğundan emin olun.
+No Rust toolchain is selected. Run `rustup default stable` in a terminal.	Seçili bir Rust araç zinciri yok. Bir terminalde `rustup default stable` çalıştırın.
+The project's Rust toolchain is not installed. Run `rustup toolchain install` in the project folder.	Projenin Rust araç zinciri kurulu değil. Proje klasöründe `rustup toolchain install` çalıştırın.

@@ -210,6 +210,7 @@ Cargo package has no name
 Cargo package has no targets	
 Cargo reported {0} executables for target {1}	
 Cargo target has no name	
+Cargo was not found. Install Rust from https://rustup.rs and make sure `cargo` is on the PATH of this machine.	
 Categories	
 Change	
 Change All Occurrences	
@@ -1460,6 +1461,7 @@ Next match (↵)
 Next result (F4)	
 No Cargo.toml found for this file	
 No Docker contexts found. Install Docker and start its engine.	
+No Rust toolchain is selected. Run `rustup default stable` in a terminal.	
 No SSH host connected	
 No SSH hosts yet. Use Remote: Add SSH Host…	
 No WSL distributions found.	
@@ -2499,6 +2501,7 @@ The pattern does not parse: {0} (line {1}, column {2})
 The preLaunchTask “{0}” did not succeed ({1}), so debugging was not started. Check its terminal, then start debugging again.	
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	
 The program is running: pause it first, or set a breakpoint.	
+The project's Rust toolchain is not installed. Run `rustup toolchain install` in the project folder.	
 The provider answered with something else: {}	
 The query ends too early	
 The query is nested too deeply	

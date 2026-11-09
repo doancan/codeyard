@@ -1123,9 +1123,15 @@ mod first_line_tests {
     fn a_failure_headline_skips_the_from_and_to_lines_of_git() {
         let clobber = "From https://github.com/x/y\n ! [rejected] v1 -> v1  (would clobber existing tag)";
         assert_eq!(first_line(clobber), "! [rejected] v1 -> v1  (would clobber existing tag)");
+        // A cause that is not recognized stays git's own line.
         assert_eq!(
-            first_line("To github.com:x/y.git\n ! [remote rejected] main -> main (protected branch hook declined)"),
-            "! [remote rejected] main -> main (protected branch hook declined)"
+            first_line("To github.com:x/y.git\n ! [remote rejected] main -> main (pre-receive hook declined)"),
+            "! [remote rejected] main -> main (pre-receive hook declined)"
+        );
+        assert!(
+            first_line("To github.com:x/y.git\n ! [remote rejected] main -> main (protected branch hook declined)")
+                .starts_with("The server protects this branch"),
+            "a protected branch says so"
         );
         assert!(
             first_line("To github.com:x/y.git\n ! [rejected] main -> main (fetch first)").starts_with("The remote has commits you do not have"),
