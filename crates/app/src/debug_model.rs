@@ -193,6 +193,24 @@ impl BreakpointStore {
         self.set_file(path, list);
     }
 
+    /// A file or folder was renamed (`to`) or deleted (`None`): its breakpoints, and those of files under it, move with it
+    /// or go. Returns (old path, new path) for every file affected.
+    pub fn relocate(&mut self, from: &str, to: Option<&str>) -> Vec<(String, Option<String>)> {
+        let under = format!("{}/", from.trim_end_matches('/'));
+        let affected: Vec<String> = self.files.keys().filter(|p| p.as_str() == from || p.starts_with(&under)).cloned().collect();
+        let mut moves = Vec::new();
+        for old in affected {
+            let list = self.files.remove(&old).unwrap_or_default();
+            let new = to.map(|to| if old == from { to.to_string() } else { format!("{}/{}", to.trim_end_matches('/'), &old[under.len()..]) });
+            if let Some(new) = &new {
+                self.files.insert(new.clone(), list);
+            }
+            self.ids.retain(|_, (path, _)| *path != old);
+            moves.push((old, new));
+        }
+        moves
+    }
+
     /// Removes every breakpoint; returns the files that had some (their editors and the adapter need the empty list).
     pub fn remove_all(&mut self) -> Vec<String> {
         self.functions.clear();
@@ -326,6 +344,22 @@ mod tests {
 
     fn lines(w: &[dap::Breakpoint]) -> Vec<u32> {
         w.iter().map(|b| b.line).collect()
+    }
+
+    #[test]
+    fn breakpoints_follow_a_renamed_file_or_folder_and_go_with_a_deleted_one() {
+        let mut store = BreakpointStore::default();
+        let bp = |line| vec![(line, BpMeta { condition: Some("x > 1".into()), ..Default::default() })];
+        store.set_file("/p/src/a.rs", bp(3));
+        store.set_file("/p/src/sub/b.rs", bp(4));
+        store.set_file("/p/src2/c.rs", bp(5));
+        let mut moves = store.relocate("/p/src", Some("/p/lib"));
+        moves.sort();
+        assert_eq!(moves, [("/p/src/a.rs".to_string(), Some("/p/lib/a.rs".to_string())), ("/p/src/sub/b.rs".to_string(), Some("/p/lib/sub/b.rs".to_string()))]);
+        assert_eq!(store.paths(), ["/p/lib/a.rs", "/p/lib/sub/b.rs", "/p/src2/c.rs"], "a sibling that only shares the prefix stays");
+        assert_eq!(store.file("/p/lib/a.rs")[0].1.condition.as_deref(), Some("x > 1"), "the settings move with the line");
+        assert_eq!(store.relocate("/p/lib/a.rs", None), [("/p/lib/a.rs".to_string(), None)]);
+        assert_eq!(store.count(), 2);
     }
 
     #[test]
