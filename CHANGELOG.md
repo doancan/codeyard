@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Extensions: the registry downloader in the app allows plain http only to this machine, read the way a client reads the host (`http://localhost.evil.test` is not), and a redirect never leaves https.
 - File watching: a slow or hung network share no longer blocks changes to the watched set while a poll is checking it.
 - Commands run by the agent (git and others) that hit the time limit are stopped together with the processes they started.
 - Terminal: when a new terminal cannot get its file handles (out of descriptors), its shell is stopped instead of left running.

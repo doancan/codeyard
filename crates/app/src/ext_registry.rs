@@ -129,17 +129,24 @@ pub fn now() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
 
+/// The protocols `curl` may use for `url`: https, and plain http only to this machine (read the way a client reads the host,
+/// so `http://localhost.evil.test` and `http://localhost@evil.test` are not it).
+fn allowed_protocols(url: &str) -> &'static str {
+    if registry::is_local_http(url) { "=https,http" } else { "=https" }
+}
+
 /// `curl`, as the updater runs it: https only (http only to this machine), bounded size and time.
 struct Curl;
 
 impl Fetch for Curl {
     fn get(&self, url: &str, etag: Option<&str>, limit: usize) -> Result<Got, String> {
-        let local = url.starts_with("http://localhost") || url.starts_with("http://127.0.0.1");
+        let allowed = allowed_protocols(url);
         let dir = tempdir()?;
         let (headers, body) = (dir.join("headers"), dir.join("body"));
         let mut c = Command::new("curl");
         c.args(["-q", "--silent", "--show-error", "--location", "--max-redirs", "5", "--connect-timeout", "15", "--max-time", "120", "--tlsv1.2"]);
-        c.args(["--proto", if local { "=https,http" } else { "=https" }, "--proto-redir", if local { "=https,http" } else { "=https" }]);
+        // A redirect never leaves https, even from a local http registry.
+        c.args(["--proto", allowed, "--proto-redir", "=https"]);
         c.args(["--max-filesize", &limit.to_string(), "--dump-header"]).arg(&headers).arg("--output").arg(&body);
         if let Some(tag) = etag {
             c.args(["--header", &format!("If-None-Match: {tag}")]);
@@ -403,5 +410,22 @@ mod curl_tests {
         assert!(Curl.get(&format!("{base}/index.json"), None, 3).is_err(), "over the size limit");
         // Plain http is for this machine only.
         assert!(Curl.get("http://example.com/index.json", None, 100).is_err());
+    }
+}
+
+#[cfg(test)]
+mod protocol_tests {
+    use super::allowed_protocols;
+
+    #[test]
+    fn plain_http_is_allowed_only_to_this_machine() {
+        for url in ["http://localhost/index.json", "http://127.0.0.1:8080/x", "http://[::1]:9/x"] {
+            assert_eq!(allowed_protocols(url), "=https,http", "{url}");
+        }
+        for url in
+            ["https://example.org/x", "http://localhost.evil.test/x", "http://localhost@evil.test/x", "http://127.0.0.1.evil.test/x", "http://example.org/x"]
+        {
+            assert_eq!(allowed_protocols(url), "=https", "{url}");
+        }
     }
 }
