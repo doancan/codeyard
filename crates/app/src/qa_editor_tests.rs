@@ -1532,3 +1532,19 @@ fn qa_find_in_a_large_file_runs_in_the_background_and_drops_stale_results(cx: &m
     assert_eq!(ed.read_with(cx, |e, _| e.match_count_for_test()), 1);
     assert!(status(cx).ends_with("of 1"), "{}", status(cx));
 }
+
+/// The word before the cursor is found as before, and a huge unbroken run does not make every keystroke walk all of it.
+#[gpui::test]
+fn qa_word_start_is_bounded_on_a_huge_unbroken_run(cx: &mut TestAppContext) {
+    let (wb, cx) = setup(cx);
+    let f = file("word-start", "a.txt", format!("let some_name = other_{}", "A1b2".repeat(500_000)).as_bytes());
+    let ed = open(&wb, &f, cx);
+    let n = ed.read_with(cx, |e, _| e.text().chars().count());
+    let t = std::time::Instant::now();
+    let start = ed.read_with(cx, |e, _| e.word_start_for_test(n));
+    let budget = 500 * u128::from(crate::test_sshd::timeout_scale());
+    assert!(t.elapsed().as_millis() < budget, "{:?}", t.elapsed());
+    assert!(start > n - 2000, "walked back {} chars", n - start);
+    // A normal word: unchanged.
+    assert_eq!(ed.read_with(cx, |e, _| e.word_start_for_test(8)), 4);
+}

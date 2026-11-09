@@ -7,11 +7,14 @@ impl EditorView {
         c.is_alphanumeric() || c == '_'
     }
 
-    /// Start of the word to the left of the cursor.
+    /// Start of the word to the left of the cursor. Looks back at most `MAX_WORD_LOOKBACK` characters: a longer run
+    /// (base64, minified code) is no word to complete, and walking it on every keystroke is slow.
     pub(super) fn word_start(&self, cursor: usize) -> usize {
+        const MAX_WORD_LOOKBACK: usize = 1024;
         let rope = self.buffer.rope();
+        let floor = cursor.saturating_sub(MAX_WORD_LOOKBACK);
         let mut i = cursor;
-        while i > 0 && Self::is_word(rope.char(i - 1)) {
+        while i > floor && Self::is_word(rope.char(i - 1)) {
             i -= 1;
         }
         i
@@ -197,6 +200,11 @@ impl EditorView {
             })
             .ok();
         }));
+    }
+
+    #[cfg(test)]
+    pub fn word_start_for_test(&self, cursor: usize) -> usize {
+        self.word_start(cursor)
     }
 
     #[cfg(test)]
