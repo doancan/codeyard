@@ -75,6 +75,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Windows 10 and Windows Server: quitting or crashing with terminals open no longer leaves their console hosts
   (`conhost.exe`) running at a full CPU core each. A terminal's console host and shell now end with the process that
   opened them; terminals kept for the next start live in the terminal daemon and end with it.
+### Fixed
+
+- File history: a file whose name contains `*`, `?` or `[...]` listed the commits of other files that matched the name as a pattern.
 
 ## [0.8.0] - 2026-11-06
 
