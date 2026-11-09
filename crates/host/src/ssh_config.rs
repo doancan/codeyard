@@ -163,7 +163,12 @@ fn backup_and_write(path: &Path, new_text: &str) -> Result<(), String> {
 pub fn add_host(path: &Path, h: &NewHost) -> Result<(), String> {
     validate(h)?;
     // Line endings are normalised to LF; the file's own style (CRLF) is restored on write.
-    let text = std::fs::read_to_string(path).unwrap_or_default().replace("\r\n", "\n");
+    // Only a missing file starts empty: any other failure (a legacy-encoded comment, no permission) must not end in the file being replaced.
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text.replace("\r\n", "\n"),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
     if parse_config(&text).iter().any(|x| x.alias.eq_ignore_ascii_case(&h.alias)) {
         return Err(format!("A host named “{}” already exists in {}", h.alias, path.display()));
     }
@@ -520,6 +525,19 @@ mod tests {
         // Duplicate refused, file untouched.
         assert!(add_host(&p, &h).unwrap_err().contains("already exists"));
         assert_eq!(std::fs::read_to_string(&p).unwrap(), text);
+    }
+
+    #[test]
+    fn add_never_replaces_a_config_it_cannot_read_as_text() {
+        let p = tmp("add-latin1");
+        let original = b"# t\xfcrk\xe7e yorum
+Host old
+    HostName old.example.com
+";
+        std::fs::write(&p, original).unwrap();
+        let err = add_host(&p, &parse_target("a@b").unwrap()).unwrap_err();
+        assert!(err.contains(&p.display().to_string()), "{err}");
+        assert_eq!(std::fs::read(&p).unwrap(), original, "the user's config is untouched");
     }
 
     #[test]
