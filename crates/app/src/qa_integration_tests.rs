@@ -374,12 +374,10 @@ fn qa_lsp_crash_loop_by_signal_is_bounded(cx: &mut TestAppContext) {
     open(&wb, &dir.join("main.c"), cx);
     let count = || std::fs::read_to_string(&starts).map(|s| s.lines().count()).unwrap_or(0);
     // Let it crash and restart for a while (restart timer is 1 s on the fake clock).
-    let start = std::time::Instant::now();
-    while start.elapsed() < Duration::from_secs(15) && count() < 8 && !notice(&wb, cx).contains("keeps crashing") {
+    wait_secs(cx, 15, "the crash-loop notice", |cx| {
         cx.executor().advance_clock(Duration::from_millis(1500));
-        cx.run_until_parked();
-        std::thread::sleep(Duration::from_millis(100));
-    }
+        notice(&wb, cx).contains("keeps crashing")
+    });
     let n = count();
     assert!(n <= 4, "server was started {n} times (signal crashes are never counted); notice: {:?}", notice(&wb, cx));
     assert!(notice(&wb, cx).contains("keeps crashing"), "{:?}", notice(&wb, cx));
@@ -650,10 +648,7 @@ fn qa_lsp_format_on_paste_is_off_by_default(cx: &mut TestAppContext) {
     wait_for(cx, "server", |cx| ed.read_with(cx, |e, _| e.lsp_client().is_some()));
     cx.write_to_clipboard(gpui::ClipboardItem::new_string("int  x;".into()));
     cx.simulate_keystrokes("cmd-v");
-    for _ in 0..10 {
-        cx.run_until_parked();
-        std::thread::sleep(Duration::from_millis(30));
-    }
+    cx.run_until_parked();
     assert_eq!(ed.read_with(cx, |e, _| e.text()), "int  x;");
 }
 
@@ -1864,7 +1859,6 @@ fn qa_terminal_pty_size_matches_grid(cx: &mut TestAppContext) {
         if rows == text.split('\n').count() {
             return;
         }
-        std::thread::sleep(Duration::from_millis(250));
         cx.run_until_parked();
     }
     panic!("pty rows vs grid rows never matched: {last}");
@@ -1882,9 +1876,9 @@ fn qa_terminal_wheel_in_alternate_screen_sends_arrows(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-termaltscroll");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
-    type_line(cx, "printf '\\033[?1049h'; cat -v");
-    std::thread::sleep(Duration::from_millis(300));
-    cx.run_until_parked();
+    // The marker is printed after the mode switch, so seeing it means the terminal is in the alternate screen.
+    type_line(cx, "printf '\\033[?1049h'; echo ALT-READY; cat -v");
+    wait_for(cx, "alternate screen", |cx| term.read_with(cx, |t, _| t.screen_text().contains("ALT-READY")));
     let at = term.read_with(cx, |t, _| t.cell_center(5, 5));
     for _ in 0..3 {
         cx.simulate_event(gpui::ScrollWheelEvent {
@@ -1924,9 +1918,9 @@ fn qa_terminal_mouse_reporting_reaches_program(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-termmouse");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
-    type_line(cx, "printf '\\033[?1000h'; cat -v");
-    std::thread::sleep(Duration::from_millis(300));
-    cx.run_until_parked();
+    // The marker is printed after the mode switch, so seeing it means mouse reporting is on.
+    type_line(cx, "printf '\\033[?1000h'; echo MOUSE-READY; cat -v");
+    wait_for(cx, "mouse reporting", |cx| term.read_with(cx, |t, _| t.screen_text().contains("MOUSE-READY")));
     let at = term.read_with(cx, |t, _| t.cell_center(8, 10));
     cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
@@ -2038,7 +2032,11 @@ fn qa_ssh_git_terminal_and_reconnect(cx: &mut TestAppContext) {
 
     // Drop the transport (the fixture's bridge process, started by us).
     let _ = std::process::Command::new("pkill").arg("-f").arg(format!("{}/remote/agent.*--attach", sshd.dir.display())).status();
-    std::thread::sleep(Duration::from_secs(2));
+    wait_secs(cx, 40, "the drop is noticed", |cx| {
+        tick(cx);
+        let text = notice(&wb, cx);
+        text.contains("dropped") || text.starts_with("Reconnected")
+    });
     wait_secs(cx, 40, "reconnected", |cx| {
         tick(cx);
         notice(&wb, cx).starts_with("Reconnected")
