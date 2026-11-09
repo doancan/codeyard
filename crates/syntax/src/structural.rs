@@ -270,7 +270,30 @@ fn first_error(root: Node, src: &str) -> (PatternErrorKind, Range<usize>) {
     (kind, r.start..end.max(r.start))
 }
 
+// Work done on this thread, counted so that the tests assert on it instead of on how long it took.
+#[cfg(test)]
+#[derive(Default, Clone, Copy)]
+struct Work {
+    parses: usize,
+    steps: u64,
+    longest_attempt: u32,
+}
+
+#[cfg(test)]
+thread_local!(static WORK: std::cell::Cell<Work> = std::cell::Cell::new(Work::default()));
+
+#[cfg(test)]
+fn record_work(f: impl FnOnce(&mut Work)) {
+    WORK.with(|w| {
+        let mut work = w.get();
+        f(&mut work);
+        w.set(work);
+    });
+}
+
 fn parse(lang: &Language, text: &str) -> Option<Tree> {
+    #[cfg(test)]
+    record_work(|w| w.parses += 1);
     let mut parser = Parser::new();
     parser.set_language(&lang.ts).ok()?;
     parser.parse(text, None)
@@ -572,7 +595,13 @@ pub fn find_all_in(pattern: &Pattern, lang: &Language, text: &str) -> Result<Vec
             run.binds.iter_mut().for_each(|b| *b = None);
             run.trail.clear();
             run.steps = 0;
-            if run.node(root, t) {
+            let matched = run.node(root, t);
+            #[cfg(test)]
+            record_work(|w| {
+                w.steps += u64::from(run.steps);
+                w.longest_attempt = w.longest_attempt.max(run.steps);
+            });
+            if matched {
                 let captures = pattern
                     .vars
                     .iter()
