@@ -1891,9 +1891,10 @@ fn qa_terminal_wheel_in_alternate_screen_sends_arrows(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-termaltscroll");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
-    // The marker is printed after the mode switch, so seeing it means the terminal is in the alternate screen.
-    type_line(cx, "printf '\\033[?1049h'; echo ALT-READY; cat -v");
-    wait_for(cx, "alternate screen", |cx| term.read_with(cx, |t, _| t.screen_text().contains("ALT-READY")));
+    // The marker is printed after the mode switch, so seeing it means the terminal is in the alternate screen. It is computed
+    // (`$((40+2))`): the typed command line is echoed too, and the marker as typed would show before the switch happened.
+    type_line(cx, "printf '\\033[?1049h'; echo ALT-$((40+2)); cat -v");
+    wait_for(cx, "alternate screen", |cx| term.read_with(cx, |t, _| t.screen_text().contains("ALT-42")));
     let at = term.read_with(cx, |t, _| t.cell_center(5, 5));
     for _ in 0..3 {
         cx.simulate_event(gpui::ScrollWheelEvent {
@@ -1934,9 +1935,10 @@ fn qa_terminal_mouse_reporting_reaches_program(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-termmouse");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
-    // The marker is printed after the mode switch, so seeing it means mouse reporting is on.
-    type_line(cx, "printf '\\033[?1000h'; echo MOUSE-READY; cat -v");
-    wait_for(cx, "mouse reporting", |cx| term.read_with(cx, |t, _| t.screen_text().contains("MOUSE-READY")));
+    // The marker is printed after the mode switch, so seeing it means mouse reporting is on. It is computed (`$((40+2))`): the
+    // typed command line is echoed too, and the marker as typed would show before the switch happened.
+    type_line(cx, "printf '\\033[?1000h'; echo MOUSE-$((40+2)); cat -v");
+    wait_for(cx, "mouse reporting", |cx| term.read_with(cx, |t, _| t.screen_text().contains("MOUSE-42")));
     let at = term.read_with(cx, |t, _| t.cell_center(8, 10));
     cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
