@@ -315,6 +315,13 @@ impl Client {
         !matches!(&self.capabilities[capability], Value::Null | Value::Bool(false))
     }
 
+    /// Whether the server announced full-document sync (`textDocumentSync` 1, or `change` 1 in the options object):
+    /// it reads only the whole text of a `didChange` and cannot apply range edits.
+    pub fn wants_full_text(&self) -> bool {
+        let sync = &self.capabilities["textDocumentSync"];
+        sync.as_u64().or_else(|| sync["change"].as_u64()) == Some(1)
+    }
+
     pub fn wants_save(&self) -> bool {
         let sync = &self.capabilities["textDocumentSync"];
         sync.is_object() && (sync["save"].is_object() || sync["save"].as_bool() == Some(true))

@@ -536,15 +536,19 @@ impl EditorView {
             return;
         }
         self.lsp_version += 1;
-        let content: Vec<_> = changes
-            .into_iter()
-            .map(|ch| {
-                serde_json::json!({
-                    "range": { "start": { "line": ch.start.0, "character": ch.start.1 }, "end": { "line": ch.end.0, "character": ch.end.1 } },
-                    "text": ch.text,
+        let content: Vec<_> = if c.wants_full_text() {
+            vec![serde_json::json!({ "text": self.buffer.rope().to_string() })]
+        } else {
+            changes
+                .into_iter()
+                .map(|ch| {
+                    serde_json::json!({
+                        "range": { "start": { "line": ch.start.0, "character": ch.start.1 }, "end": { "line": ch.end.0, "character": ch.end.1 } },
+                        "text": ch.text,
+                    })
                 })
-            })
-            .collect();
+                .collect()
+        };
         c.notify(
             "textDocument/didChange",
             serde_json::json!({ "textDocument": { "uri": crate::lsp::path_to_uri(&self.path), "version": self.lsp_version }, "contentChanges": content }),
