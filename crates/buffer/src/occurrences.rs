@@ -3,10 +3,18 @@
 
 use super::*;
 
+// Selections looked at by `overlaps_none` on this thread; the tests count them instead of timing the search.
+#[cfg(test)]
+thread_local!(pub(crate) static OVERLAP_PROBES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) });
+
 /// Whether no selection overlaps `r`. The selections are sorted and do not overlap each other, so a binary search finds the
 /// only one that can (scanning all of them for every candidate took seconds with tens of thousands of matches).
 fn overlaps_none(sels: &[Sel], r: &Range<usize>) -> bool {
-    let i = sels.partition_point(|s| s.end() <= r.start);
+    let i = sels.partition_point(|s| {
+        #[cfg(test)]
+        OVERLAP_PROBES.with(|n| n.set(n.get() + 1));
+        s.end() <= r.start
+    });
     !sels.get(i).is_some_and(|s| s.start() < r.end)
 }
 

@@ -543,35 +543,43 @@ fn block_comments_round_trip() {
     assert_eq!(b.text_range(0..b.len_chars()), "  a { x }\n\n  b\n");
 }
 
-#[test]
-fn previous_and_skip_occurrence_stay_fast_with_tens_of_thousands_of_selections() {
-    let text = "ab ".repeat(30_000);
-    let mut b = Buffer::from_str(&text);
-    b.set_cursor(0, false);
-    assert!(b.select_next_occurrence());
-    b.select_all_occurrences();
-    assert_eq!(b.selected_texts().len(), 30_000);
-    let started = std::time::Instant::now();
-    // Everything is selected: nothing is free, and finding that out must not take quadratic time.
-    assert!(!b.select_previous_occurrence());
-    assert!(started.elapsed().as_secs() < 5, "previous: {:?}", started.elapsed());
-    let started = std::time::Instant::now();
-    assert!(!b.move_last_selection_to_next_occurrence());
-    assert!(started.elapsed().as_secs() < 5, "skip: {:?}", started.elapsed());
+/// How many selections the overlap test looked at during `f`.
+fn overlap_probes(f: impl FnOnce()) -> usize {
+    let before = crate::occurrences::OVERLAP_PROBES.with(|n| n.get());
+    f();
+    crate::occurrences::OVERLAP_PROBES.with(|n| n.get()) - before
 }
 
-#[test]
-fn next_occurrence_stays_fast_with_tens_of_thousands_of_selections() {
-    let text = "ab ".repeat(30_000);
-    let mut b = Buffer::from_str(&text);
+/// With `n` selections and `n` matches, a binary search per match costs about `n * log2(n)` probes; looking at every
+/// selection for every match would cost `n * n / 2` (450 million for 30 000).
+const MATCHES: usize = 30_000;
+const PROBE_BUDGET: usize = MATCHES * 2 * 16;
+
+fn buffer_with_every_ab_selected() -> Buffer {
+    let mut b = Buffer::from_str(&"ab ".repeat(MATCHES));
     b.set_cursor(0, false);
     assert!(b.select_next_occurrence()); // selects the word `ab`
     b.select_all_occurrences();
-    assert_eq!(b.selected_texts().len(), 30_000);
-    let started = std::time::Instant::now();
+    assert_eq!(b.selected_texts().len(), MATCHES);
+    b
+}
+
+#[test]
+fn previous_and_skip_occurrence_do_not_rescan_the_selections_for_every_match() {
+    let mut b = buffer_with_every_ab_selected();
     // Everything is selected: nothing is free, and finding that out must not take quadratic time.
-    assert!(!b.select_next_occurrence());
-    assert!(started.elapsed().as_secs() < 5, "{:?}", started.elapsed());
+    let previous = overlap_probes(|| assert!(!b.select_previous_occurrence()));
+    assert!(previous <= PROBE_BUDGET, "previous: {previous} probes");
+    let skip = overlap_probes(|| assert!(!b.move_last_selection_to_next_occurrence()));
+    assert!(skip <= PROBE_BUDGET, "skip: {skip} probes");
+}
+
+#[test]
+fn next_occurrence_does_not_rescan_the_selections_for_every_match() {
+    let mut b = buffer_with_every_ab_selected();
+    // Everything is selected: nothing is free, and finding that out must not take quadratic time.
+    let next = overlap_probes(|| assert!(!b.select_next_occurrence()));
+    assert!(next <= PROBE_BUDGET, "{next} probes");
     // Correctness of the overlap test on a small case: cursors inside/at the edge of a match.
     let mut c = Buffer::from_str("foo foo foo");
     c.set_cursor(0, false);
@@ -1019,19 +1027,18 @@ fn cursor_steps_on_a_huge_single_line_do_not_scan_the_whole_line() {
     // A minified bundle: one 4 MB line. Each key press must cost about the same as on a short line.
     let mut b = Buffer::from_str(&"var a=1;".repeat(500_000));
     b.set_cursor(2_000_000, false);
-    let started = std::time::Instant::now();
+    // The text a step reads around the cursor stays a small window however long the line is.
+    let (window, _) = b.grapheme_window(2_000_000);
+    assert!(window.chars().count() <= 2 * GRAPHEME_CONTEXT, "a step read {} characters", window.chars().count());
     for _ in 0..50 {
         b.move_left(false);
         b.move_right(false);
         b.move_right(false);
     }
-    let moving = started.elapsed();
-    let started = std::time::Instant::now();
+    assert_eq!(b.cursor_line_col(), (0, 2_000_050));
     for _ in 0..50 {
         b.backspace();
         b.delete();
     }
-    let deleting = started.elapsed();
-    assert!(moving.as_secs() < 1, "moving: {moving:?}");
-    assert!(deleting.as_secs() < 1, "deleting: {deleting:?}");
+    assert_eq!(b.len_chars(), 500_000 * 8 - 100);
 }
