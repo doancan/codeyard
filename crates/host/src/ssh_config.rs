@@ -214,14 +214,14 @@ pub fn remove_host(path: &Path, alias: &str) -> Result<bool, String> {
         while keep_end > at + 1 && lines[keep_end - 1].trim().is_empty() {
             keep_end -= 1;
         }
-        out.extend(lines[..start].iter().map(|s| s.to_string()));
-        out.extend(lines[keep_end..].iter().map(|s| s.to_string()));
+        out.extend(lines[..start].iter().copied().map(String::from));
+        out.extend(lines[keep_end..].iter().copied().map(String::from));
     } else {
         let rest: Vec<&String> = tokens.iter().filter(|a| *a != alias).collect();
         let indent: String = lines[at].chars().take_while(|c| c.is_whitespace()).collect();
-        out.extend(lines[..at].iter().map(|s| s.to_string()));
+        out.extend(lines[..at].iter().copied().map(String::from));
         out.push(format!("{indent}Host {}", rest.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(" ")));
-        out.extend(lines[at + 1..].iter().map(|s| s.to_string()));
+        out.extend(lines[at + 1..].iter().copied().map(String::from));
     }
     let mut new_text = out.join("\n");
     if !new_text.is_empty() {
@@ -381,7 +381,7 @@ pub fn set_field(path: &Path, alias: &str, field: Field, value: Option<&str>) ->
     let (at, end) = block_of(&lines, alias)?;
     let key = field.key().to_ascii_lowercase();
     let is_field = |l: &str| directive(l).is_some_and(|(k, _)| k == key);
-    let mut out: Vec<String> = lines[..=at].iter().map(|s| s.to_string()).collect();
+    let mut out: Vec<String> = lines[..=at].iter().copied().map(String::from).collect();
     let mut placed = false;
     let indent_of = |l: &str| l.chars().take_while(|c| c.is_whitespace()).collect::<String>();
     let mut indent = "    ".to_string();
@@ -407,7 +407,7 @@ pub fn set_field(path: &Path, alias: &str, field: Field, value: Option<&str>) ->
         }
         out.insert(insert_at, format!("{indent}{} {}", field.key(), quote_value(v)));
     }
-    out.extend(lines[end..].iter().map(|s| s.to_string()));
+    out.extend(lines[end..].iter().copied().map(String::from));
     let mut new_text = out.join("\n");
     new_text.push('\n');
     if new_text == text {
