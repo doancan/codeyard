@@ -443,19 +443,23 @@ impl Workbench {
         let (r, path) = (root.clone(), rel.clone());
         // If it was renamed, the content in HEAD is at the old path.
         let orig = self.vcs.status.as_ref().and_then(|g| g.changes.iter().find(|c| c.path == rel).and_then(|c| c.orig.clone())).unwrap_or_else(|| rel.clone());
-        let task = cx.background_executor().spawn(async move {
-            let h = host.as_ref();
-            if staged {
-                (crate::git::show(h, &r, "HEAD", &orig), crate::git::show(h, &r, "", &path))
-            } else {
-                let disk = h.read(&format!("{}/{path}", r.trim_end_matches('/'))).ok().map(|(d, _)| String::from_utf8_lossy(&d).replace("\r\n", "\n"));
-                (crate::git::show(h, &r, "", &path), disk)
-            }
-        });
+        // Lines are staged from this diff, and unstaged from the staged one unless it shows a rename (lines cannot be
+        // moved between two paths).
+        let stager = (!staged || orig == rel).then(|| crate::diff_stage::Stager { host: host.clone(), root: root.clone(), staged });
+        let o = orig.clone();
+        let task = cx.background_executor().spawn(async move { crate::diff_stage::load_texts(host.as_ref(), &r, &path, &o, staged) });
         cx.spawn_in(window, async move |this, cx| {
             let (old, new) = task.await;
             this.update_in(cx, |this, window, cx| {
-                let view = cx.new(|cx| crate::diff::DiffView::new(rel, staged, old.as_deref().unwrap_or(""), new.as_deref().unwrap_or(""), cx));
+                let view = cx.new(|cx| {
+                    let view = crate::diff::DiffView::new(rel, staged, old.as_deref().unwrap_or(""), new.as_deref().unwrap_or(""), cx);
+                    match stager {
+                        Some(stager) => view.with_staging(stager),
+                        None => view,
+                    }
+                });
+                // A stage or unstage from the diff: Source Control shows the new state.
+                cx.subscribe(&view, |this, _, _: &crate::diff_stage::DiffEvent, cx| this.refresh_git(0, cx)).detach();
                 window.focus(&view.focus_handle(cx));
                 this.tabs.diff = Some(view);
                 this.reveal_editor_area(window, cx);

@@ -4741,7 +4741,7 @@ fn stage_and_revert_change_at_cursor(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("ctrl-g");
     cx.simulate_input("3");
     cx.simulate_keystrokes("enter");
-    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Stage Change at Cursor", window, cx));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Stage Selected Lines", window, cx));
     let staged = || {
         let o = crate::test_git::git().args(["show", ":src/lib.rs"]).current_dir(&dir).output().unwrap();
         String::from_utf8(o.stdout).unwrap()
@@ -4752,11 +4752,62 @@ fn stage_and_revert_change_at_cursor(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("ctrl-g");
     cx.simulate_input("9");
     cx.simulate_keystrokes("enter");
-    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Revert Change at Cursor", window, cx));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Revert Selected Lines", window, cx));
     let text = ed.read_with(cx, |e, _| e.text());
     assert!(text.contains("// satır 9\n") && text.contains("DEĞİŞTİ 3"), "{text}");
     cx.simulate_keystrokes("cmd-z");
     assert!(ed.read_with(cx, |e, _| e.text()).contains("DEĞİŞTİ 9"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[gpui::test]
+fn stage_and_revert_selected_lines(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let Some(dir) = git_repo("linecmd") else { return };
+    let dir = crate::ui::canonical_for_test(dir);
+    let lib = dir.join("src/lib.rs");
+    // Lines 3, 4 and 5 form one change.
+    let edited: String = (1..=10).map(|i| if (3..=5).contains(&i) { format!("// NEW {i}\n") } else { format!("// satır {i}\n") }).collect();
+    std::fs::write(&lib, &edited).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    open(&wb, &lib, cx);
+    let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
+    use crate::git::LineMark;
+    wait_for(cx, "gutter", |cx| ed.read_with(cx, |e, _| e.git_marks().get(3).copied().flatten() == Some(LineMark::Modified)));
+    // Select line 4 only: the menu offers the selected lines, and staging takes just that line.
+    cx.simulate_keystrokes("ctrl-g");
+    cx.simulate_input("4");
+    cx.simulate_keystrokes("enter home shift-end");
+    wb.update_in(cx, |wb, window, cx| wb.open_editor_menu_for_test(window, cx));
+    let labels = wb.read_with(cx, |wb, cx| wb.menu_labels(cx)).expect("menu");
+    assert!(labels.iter().any(|l| l == "Stage Selected Lines") && labels.iter().any(|l| l == "Revert Selected Lines"), "{labels:?}");
+    wb.update_in(cx, |wb, _, cx| wb.select_menu_for_test("Stage Selected Lines", cx));
+    let staged = || {
+        let o = crate::test_git::git().args(["show", ":src/lib.rs"]).current_dir(&dir).output().unwrap();
+        String::from_utf8(o.stdout).unwrap()
+    };
+    wait_for(cx, "index", |_| staged().contains("NEW 4"));
+    let index = staged();
+    assert!(!index.contains("NEW 3") && !index.contains("NEW 5"), "{index}");
+    assert!(index.contains("// satır 3\n") && index.contains("// satır 5\n"), "{index}");
+    wait_for(cx, "the message", |cx| wb.read_with(cx, |wb, _| wb.notice_text()).is_some_and(|n| n.contains("Staged 1 line")));
+    // Revert line 5 only; line 3 stays changed, undo brings line 5 back.
+    cx.simulate_keystrokes("ctrl-g");
+    cx.simulate_input("5");
+    cx.simulate_keystrokes("enter home shift-end");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Revert Selected Lines", window, cx));
+    let text = ed.read_with(cx, |e, _| e.text());
+    assert!(text.contains("// satır 5\n") && text.contains("// NEW 3\n") && text.contains("// NEW 4\n"), "{text}");
+    cx.simulate_keystrokes("cmd-z");
+    assert!(ed.read_with(cx, |e, _| e.text()).contains("// NEW 5"));
+    // No selection on an unchanged line: the menu has no staging.
+    cx.simulate_keystrokes("ctrl-g");
+    cx.simulate_input("9");
+    cx.simulate_keystrokes("enter");
+    wb.update_in(cx, |wb, window, cx| wb.open_editor_menu_for_test(window, cx));
+    let labels = wb.read_with(cx, |wb, cx| wb.menu_labels(cx)).expect("menu");
+    assert!(!labels.iter().any(|l| l.starts_with("Stage")), "{labels:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -164,7 +164,9 @@ impl Workbench {
             return;
         }
         use crate::editor as e;
-        let entries: Vec<(&str, Box<dyn gpui::Action>, bool)> = vec![
+        // Staging and reverting are offered on a changed line: the selected lines, or the change at the cursor.
+        let change_here = self.active_editor().and_then(|ed| ed.read(cx).git_change_here());
+        let mut entries: Vec<(&str, Box<dyn gpui::Action>, bool)> = vec![
             // (label, action, separator before)
             (crate::i18n::t("Go to Definition"), Box::new(e::GoToDefinition), false),
             (crate::i18n::t("Go to Type Definition"), Box::new(e::GoToTypeDefinition), false),
@@ -189,6 +191,16 @@ impl Workbench {
             (crate::i18n::t("Compare with Commit…"), Box::new(GitCompareCommit), false),
             (crate::i18n::t("Command Palette…"), Box::new(CommandPalette), true),
         ];
+        if let Some(selection) = change_here {
+            let at = entries.iter().position(|(l, ..)| *l == crate::i18n::t("Open Changes")).map_or(entries.len(), |i| i + 1);
+            let (stage, revert) = if selection {
+                (crate::i18n::t("Stage Selected Lines"), crate::i18n::t("Revert Selected Lines"))
+            } else {
+                (crate::i18n::t("Stage Change"), crate::i18n::t("Revert Change"))
+            };
+            entries.insert(at, (revert, Box::new(e::RevertHunk), false));
+            entries.insert(at, (stage, Box::new(e::StageHunk), false));
+        }
         self.show_action_menu_with_extensions(entries, ext_manifest::MenuLocation::EditorContext, position, window, cx);
     }
 

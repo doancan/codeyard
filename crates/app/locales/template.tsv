@@ -259,8 +259,10 @@ Choose an action
 Choose an answer (Esc: none)	
 Choose an extension in the Extensions view.	
 Choose…	
+Clear	
 Clear Terminal	
 Clear filters	
+Clear the picked lines (Escape)	
 Clear the search	
 Clear the search field	
 Click to remove this filter	
@@ -835,13 +837,16 @@ Encoding for files that are not UTF-8
 End files with a newline when saving	
 Enter a folder path on {}…	
 Enter installs or retries. Escape cancels while installation is running.	
+Enter stages the picked lines	
 Enter the remote as: name url	
+Enter unstages the picked lines	
 Enter: path branch	
 Error	
 Errors and warnings	
 Esc keeps Restricted Mode. Change it later with Workspace: Manage Workspace Trust…	
 Evaluate	
 Evaluate an expression (↵)	
+Every change in this file is staged	
 Every file of {} matches its package.	
 Every setting, with comments	
 Everything resolved so far in this merge is discarded.	
@@ -1061,10 +1066,10 @@ Git: Remove Remote…
 Git: Remove Worktree…	
 Git: Rename Branch…	
 Git: Rename Remote…	
-Git: Revert Change at Cursor	
+Git: Revert Selected Lines	
 Git: Set Upstream Branch…	
 Git: Show Stash…	
-Git: Stage Change at Cursor	
+Git: Stage Selected Lines	
 Git: Stash	
 Git: Stash (Include Untracked)	
 Git: Stash Staged Changes	
@@ -1590,6 +1595,7 @@ Not valid URL encoding: left unchanged
 Not valid {}: left unchanged	
 Nothing	
 Nothing changed: every setting has its default value.	
+Nothing in this file is staged	
 Nothing is listening on the server yet.	
 Nothing is listening on {0}:{1} (start the program with its debug server first, e.g. `python -m debugpy --listen {1} --wait-for-client app.py`).	
 Nothing is staged: stage the changes to commit first (or turn on git.enableSmartCommit)	
@@ -1599,6 +1605,8 @@ Nothing to commit
 Nothing to rename here	
 Nothing to replace: the files no longer contain matches.	
 Nothing to run: select some text or put the cursor on a line.	
+Nothing to stage in these lines	
+Nothing to unstage in these lines	
 Nothing was installed. Run the command again with --accept-permissions to grant these, or install it from the Extensions view.	
 Nothing was installed. This release isn't signed, so Codeyard can't verify it.	
 Nothing was installed. What the update server sent didn't match the signed checksums, so Codeyard discarded it.	
@@ -1740,6 +1748,8 @@ Pick a stash to apply
 Pick a stash to drop	
 Pick a stash to pop	
 Pick a stash to show	
+Pick lines to stage them, or use a change's button	
+Pick lines to unstage them, or use a change's button	
 Pin	
 Pin the enclosing function or class line while scrolling	
 Pin to the top	
@@ -2029,7 +2039,9 @@ Resume updates
 Retry	
 Reveal in Finder	
 Revert	
+Revert Change	
 Revert File	
+Revert Selected Lines	
 Revert in progress	
 Revert stopped and was undone: {}	
 Reverted {}	
@@ -2259,14 +2271,19 @@ Spelling: “{}”
 Split Editor	
 Split Terminal	
 Stage	
+Stage Change	
+Stage Lines	
+Stage Selected Lines	
 Stage all	
 Stage {}	
 Staged Changes	
 Staged {} change|Staged {} changes	
+Staged {} line|Staged {} lines	
 Staging changes inside a symlink or submodule is not supported	
 Staging changes is not supported in files with old-Mac (CR only) line endings	
 Staging changes needs a UTF-8 file	
 Staging changes needs a UTF-8 file (this one is stored in another encoding)	
+Staging…	
 Start	
 Start Debugging	
 Start Debugging (F5)	
@@ -2444,6 +2461,7 @@ The editor could not move to a new window: {}
 The element can't be renamed.	
 The file changed during the write ({})	
 The file changed on disk while you were editing. Nothing was saved.	
+The file changed since this diff was shown. It has been reloaded: pick the lines again.	
 The file could not be read.	
 The file is empty.	
 The file is not open any more.	
@@ -2545,6 +2563,7 @@ These branches share no history, so git will not merge them. In a terminal, `git
 They were not found.	
 This branch is not published yet. Click to publish it.	
 This can't be undone.	
+This change removes the file: unstage the whole file instead	
 This computer	
 This container is paused or restarting. Resume it in Docker before connecting.	
 This copy isn't installed as an app, so download the new version yourself.	
@@ -2656,8 +2675,12 @@ Unknown theme '{0}'. Available: {1}
 Unpin	
 Unsaved changes stay open in their tabs; saving recreates the file.	
 Unstage	
+Unstage Change	
+Unstage Lines	
 Unstage all	
 Unstage {}	
+Unstaged {} line|Unstaged {} lines	
+Unstaging…	
 Unsupported encoding: the file would not be written back exactly, so it is not changed.	
 Unterminated quote in the Cargo test command	
 Untracked files will be deleted. This can't be undone.	
@@ -3242,6 +3265,7 @@ your words
 {0} · version {1}	
 {0} · version {1} · {2} license	
 {0}, by {1}	
+{0}, change {1} of {2}	
 {0}, from {1}	
 {0}, in development from {1}	
 {0}, installed from {1} (not verified by a registry)	
@@ -3273,6 +3297,7 @@ your words
 {0}: “{1}” is not a name .env files can hold (letters, digits and _)	
 {0}{1} found	
 {{$processEnv}} needs a name	
+{} (Enter)	
 {} (curl exit {})	
 {} (cut at 5 MB)	
 {} (diff)	
@@ -3372,6 +3397,7 @@ your words
 {} item|{} items	
 {} keeps crashing; restart the folder to try again.	
 {} license	
+{} line picked|{} lines picked	
 {} match|{} matches	
 {} minute ago|{} minutes ago	
 {} minutes ago	

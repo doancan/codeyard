@@ -2,10 +2,13 @@
 
 use super::*;
 
+/// The app's files that bind keys: `main.rs`, and views that keep their own list (the diff's).
+const BINDING_SOURCES: [&str; 2] = ["main.rs", "diff.rs"];
+
 #[test]
 fn reference_builtin_keys() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let source = std::fs::read_to_string(root.join("../app/src/main.rs")).unwrap();
+    let source: String = BINDING_SOURCES.iter().map(|f| std::fs::read_to_string(root.join("../app/src").join(f)).unwrap()).collect::<Vec<_>>().join("\n");
     let keys = keys_in_source(&source);
     assert!(keys.len() > 100, "the app's bindings were not found: {}", keys.len());
     let want: String = keys.iter().map(|k| format!("{k}\n")).collect();
