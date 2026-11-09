@@ -191,11 +191,8 @@ pub fn status_logged(tx: &Transaction, id: &ExtId, version: &Version) -> rusqlit
 }
 
 pub fn set_status_logged(tx: &Transaction, id: &ExtId, version: &Version, logged: u64) -> rusqlite::Result<()> {
-    tx.execute(
-        "INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = ?2",
-        params![status_key(id, version), logged as i64],
-    )
-    .map(|_| ())
+    tx.execute("INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = ?2", params![status_key(id, version), logged as i64])
+        .map(|_| ())
 }
 
 fn status_key(id: &ExtId, version: &Version) -> String {

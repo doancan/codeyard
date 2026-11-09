@@ -41,10 +41,7 @@ impl Registry {
         let name =
             v["name"].as_str().filter(|n| !n.is_empty() && n.len() <= 40 && n.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'));
         let name = name.ok_or("“name” is lowercase a-z, 0-9 and -, at most 40 characters")?;
-        let url = v["url"]
-            .as_str()
-            .map(|u| u.trim_end_matches('/'))
-            .filter(|u| u.starts_with("https://") || is_local_http(u));
+        let url = v["url"].as_str().map(|u| u.trim_end_matches('/')).filter(|u| u.starts_with("https://") || is_local_http(u));
         let url = url.ok_or("“url” is an https:// address")?;
         let keys = v["root-keys"].as_array().ok_or("“root-keys” lists the registry's root public keys (hex)")?;
         let keys: Vec<_> = keys.iter().map(|k| k.as_str().and_then(yard::PublicKey::parse)).collect::<Option<_>>().ok_or("a root key is 64 hex digits")?;

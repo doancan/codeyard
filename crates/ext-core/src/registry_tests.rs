@@ -205,7 +205,9 @@ fn settings_entries_and_specs() {
         let local = serde_json::json!({ "name": "dev", "url": url, "root-keys": [key], "threshold": 1 });
         assert!(Registry::from_setting(&local).is_ok(), "{url}");
     }
-    for url in ["http://localhost.evil.test", "http://127.0.0.1.evil.test/", "http://localhost@evil.test/", "http://127.0.0.1:80@evil.test", "http://localhostx"] {
+    for url in
+        ["http://localhost.evil.test", "http://127.0.0.1.evil.test/", "http://localhost@evil.test/", "http://127.0.0.1:80@evil.test", "http://localhostx"]
+    {
         let remote = serde_json::json!({ "name": "dev", "url": url, "root-keys": [key], "threshold": 1 });
         assert!(Registry::from_setting(&remote).is_err(), "{url}");
     }
