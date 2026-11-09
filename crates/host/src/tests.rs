@@ -167,9 +167,8 @@ fn ping_tells_a_live_agent_from_a_silent_one() {
         }
     });
     let silent = RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "silent").unwrap();
-    let started = std::time::Instant::now();
-    assert!(!silent.shared.ping(std::time::Duration::from_millis(300)));
-    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    // Never answered, so any wait ends the same way.
+    assert!(!silent.shared.ping(std::time::Duration::from_millis(1)));
     assert!(silent.shared.waiters.lock().unwrap().is_empty(), "no waiter is leaked by a missed ping");
 }
 
@@ -211,9 +210,7 @@ fn a_silent_agent_makes_a_call_fail_instead_of_hanging() {
     });
     let host = RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "silent").unwrap();
     host.set_call_timeout_secs(1);
-    let started = std::time::Instant::now();
     let err = host.call(Request::ReadDir { path: "/hang".into() }).unwrap_err();
-    assert!(started.elapsed() < std::time::Duration::from_secs(10), "{:?}", started.elapsed());
     assert!(err.to_string().contains("did not answer"), "{err}");
     assert!(host.shared.waiters.lock().unwrap().is_empty(), "the abandoned waiter was removed");
     assert!(matches!(host.call(Request::Stat { path: "/ok".into() }), Ok(Response::Stat(_))), "the connection still works");
@@ -226,21 +223,16 @@ fn a_silent_agent_makes_a_call_fail_instead_of_hanging() {
 fn dropping_a_host_ends_the_agent_session_immediately() {
     let (req_r, req_w) = std::io::pipe().unwrap();
     let (resp_r, resp_w) = std::io::pipe().unwrap();
-    let ended = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let flag = ended.clone();
+    let (ended, session_ended) = mpsc::channel();
     std::thread::spawn(move || {
         let _ = agent::serve(req_r, resp_w);
-        flag.store(true, Ordering::Relaxed);
+        let _ = ended.send(());
     });
     let host = RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "bye").unwrap();
     let pty = host.pty_spawn(80, 24, None, Some("/bin/sh".into())).unwrap();
     drop(pty);
     drop(host);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while !ended.load(Ordering::Relaxed) {
-        assert!(std::time::Instant::now() < deadline, "the agent session did not end after the host was dropped");
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    session_ended.recv_timeout(std::time::Duration::from_secs(5)).expect("the agent session did not end after the host was dropped");
 }
 
 /// Two pipes and a thread instead of a real process: end-to-end protocol test.
@@ -421,7 +413,8 @@ fn watch_reports_external_changes() {
     let events = host.fs_events();
     let key = f.to_string_lossy().into_owned();
     host.watch(vec![key.clone()]);
-    std::thread::sleep(std::time::Duration::from_millis(100));
+    // The agent handles requests in order: once this answers, the watch (and its baseline) is in place.
+    host.stat(&key).unwrap();
     std::fs::write(&f, "dışarıdan").unwrap();
     let batch = events.recv_timeout(std::time::Duration::from_secs(5)).expect("change event");
     assert_eq!(batch, vec![(key, ChangeKind::Modified)]);
@@ -573,11 +566,12 @@ fn a_stalled_process_consumer_loses_nothing_and_does_not_block_other_calls() {
         h.proc_input(p.id, (sent..sent + n).map(pattern).collect());
         sent += n;
     }
-    // Give the echo time to pile up unread, then prove other calls are served meanwhile.
-    std::thread::sleep(std::time::Duration::from_millis(800));
-    let t = std::time::Instant::now();
-    assert!(h.stat("/").is_ok());
-    assert!(t.elapsed() < std::time::Duration::from_secs(2), "a stat took {:?} behind a stalled process consumer", t.elapsed());
+    // Nothing reads the echo while it piles up; other calls must be served meanwhile (a blocked reader would hit the limit).
+    h.set_call_timeout_secs(10);
+    for _ in 0..20 {
+        assert!(h.stat("/").is_ok(), "a stat failed behind a stalled process consumer");
+    }
+    h.set_call_timeout_secs(0);
     // The slow consumer finally reads: every byte, in order.
     let mut got = 0usize;
     while got < TOTAL {
@@ -675,6 +669,8 @@ struct Gated {
     inner: Box<dyn Write + Send>,
     gate: Arc<(Mutex<bool>, std::sync::Condvar)>,
     fail: Arc<std::sync::atomic::AtomicBool>,
+    /// Told each time a write has to wait for the gate.
+    stuck: mpsc::Sender<()>,
 }
 
 impl Write for Gated {
@@ -682,6 +678,7 @@ impl Write for Gated {
         let (open, cv) = &*self.gate;
         let mut open = open.locked();
         while !*open {
+            let _ = self.stuck.send(());
             open = cv.wait(open).unwrap_or_else(std::sync::PoisonError::into_inner);
         }
         drop(open);
@@ -703,41 +700,48 @@ fn open_gate(gate: &Gate) {
 }
 
 /// A host over a real agent whose request pipe goes through a gate (open for the handshake, closed afterwards).
-fn gated_agent() -> (RemoteHost, Gate, Arc<std::sync::atomic::AtomicBool>) {
+fn gated_agent() -> (RemoteHost, Gate, Arc<std::sync::atomic::AtomicBool>, mpsc::Receiver<()>) {
     let (req_r, req_w) = std::io::pipe().unwrap();
     let (resp_r, resp_w) = std::io::pipe().unwrap();
     std::thread::spawn(move || agent::serve(req_r, resp_w));
     let gate: Gate = Arc::new((Mutex::new(true), std::sync::Condvar::new()));
     let fail = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let w = Gated { inner: Box::new(req_w), gate: gate.clone(), fail: fail.clone() };
+    let (stuck, writer_stuck) = mpsc::channel();
+    let w = Gated { inner: Box::new(req_w), gate: gate.clone(), fail: fail.clone(), stuck };
     let host = RemoteHost::from_streams(Box::new(resp_r), Box::new(w), "gated").unwrap();
     *gate.0.locked() = false;
-    (host, gate, fail)
+    (host, gate, fail, writer_stuck)
 }
 
-/// The UI thread only queues: with a 30 MB write stuck in the pipe, notifications return at once, and everything goes out
+/// The UI thread only queues: with a 2 MB write stuck in the pipe, notifications return at once, and everything goes out
 /// in order once the peer reads again.
 #[test]
 fn notify_does_not_wait_for_a_stuck_write() {
     let dir = tmp("notify-stuck");
     let path = dir.join("big.bin").to_string_lossy().into_owned();
-    let (host, gate, _) = gated_agent();
+    let (host, gate, _, writer_stuck) = gated_agent();
     let host = Arc::new(host);
     let big = {
         let host = host.clone();
-        std::thread::spawn(move || host.write(&path, vec![7u8; 30 * 1024 * 1024], None))
+        std::thread::spawn(move || host.write(&path, vec![7u8; 2 * 1024 * 1024], None))
     };
-    std::thread::sleep(std::time::Duration::from_millis(200));
+    writer_stuck.recv_timeout(std::time::Duration::from_secs(10)).expect("the big write reaches the pipe");
 
-    let started = std::time::Instant::now();
-    host.pty_resize(1, 80, 24);
-    host.proc_input(1, b"didChange".to_vec());
-    host.cancel(99);
-    assert!(started.elapsed() < std::time::Duration::from_millis(50), "{:?}", started.elapsed());
-    // The heartbeat probe must not wait on the stuck write either.
-    let started = std::time::Instant::now();
-    assert!(!host.shared.ping(std::time::Duration::from_millis(100)));
-    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    // The gate stays closed until the end, so a call that waited for the write could never return: finishing is the proof.
+    let queued = {
+        let host = host.clone();
+        let (done, finished) = mpsc::channel();
+        std::thread::spawn(move || {
+            host.pty_resize(1, 80, 24);
+            host.proc_input(1, b"didChange".to_vec());
+            host.cancel(99);
+            // The heartbeat probe must not wait on the stuck write either.
+            let answered = host.shared.ping(std::time::Duration::from_millis(1));
+            let _ = done.send(answered);
+        });
+        finished
+    };
+    assert_eq!(queued.recv_timeout(std::time::Duration::from_secs(10)), Ok(false), "notifications waited for the stuck write");
 
     open_gate(&gate);
     assert!(big.join().unwrap().is_ok());
@@ -793,7 +797,7 @@ fn queued_frames_keep_their_order() {
 /// A write error reaches the caller that waited for it as `Disconnected`, and later calls fail the same way.
 #[test]
 fn a_write_error_surfaces_as_disconnected() {
-    let (host, gate, fail) = gated_agent();
+    let (host, gate, fail, _) = gated_agent();
     fail.store(true, Ordering::Relaxed);
     open_gate(&gate);
     let err = host.stat("/").unwrap_err();
@@ -806,7 +810,7 @@ fn a_write_error_surfaces_as_disconnected() {
 /// given up on and callers see `Disconnected`.
 #[test]
 fn a_peer_that_never_reads_fails_the_host_instead_of_dropping_input() {
-    let (host, gate, fail) = gated_agent();
+    let (host, gate, fail, _) = gated_agent();
     for _ in 0..40 {
         host.proc_input(1, vec![0u8; 2 * 1024 * 1024]);
     }
@@ -820,7 +824,7 @@ fn a_peer_that_never_reads_fails_the_host_instead_of_dropping_input() {
 /// Dropping the host ends the writer thread: the stream it owns is dropped with it.
 #[test]
 fn the_writer_thread_ends_with_the_host() {
-    struct Sink(Arc<std::sync::atomic::AtomicBool>);
+    struct Sink(mpsc::Sender<()>);
     impl Write for Sink {
         fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
             Ok(b.len())
@@ -831,17 +835,13 @@ fn the_writer_thread_ends_with_the_host() {
     }
     impl Drop for Sink {
         fn drop(&mut self) {
-            self.0.store(true, Ordering::Relaxed);
+            let _ = self.0.send(());
         }
     }
-    let released = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let w = outbox::Writer::start(BufWriter::new(Box::new(Sink(released.clone())))).unwrap();
+    let (released, stream_dropped) = mpsc::channel();
+    let w = outbox::Writer::start(BufWriter::new(Box::new(Sink(released)))).unwrap();
     w.send(vec![1, 2, 3]).unwrap();
-    assert!(!released.load(Ordering::Relaxed));
+    assert!(stream_dropped.try_recv().is_err());
     drop(w);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while !released.load(Ordering::Relaxed) {
-        assert!(std::time::Instant::now() < deadline, "writer thread still alive");
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    stream_dropped.recv_timeout(std::time::Duration::from_secs(5)).expect("writer thread still alive");
 }
