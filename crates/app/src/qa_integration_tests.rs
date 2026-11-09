@@ -52,7 +52,19 @@ fn open(wb: &Entity<Workbench>, path: &Path, cx: &mut VisualTestContext) {
     cx.run_until_parked();
 }
 
-pub(crate) fn wait_secs(cx: &mut VisualTestContext, secs: u64, what: &str, mut done: impl FnMut(&mut VisualTestContext) -> bool) {
+pub(crate) fn wait_secs(cx: &mut VisualTestContext, secs: u64, what: &str, done: impl FnMut(&mut VisualTestContext) -> bool) {
+    wait_secs_describing(cx, secs, what, |_| String::new(), done);
+}
+
+/// Like [`wait_secs`], and a timeout also says what the application looked like then (`state`), so a failure on a busy machine
+/// explains itself instead of only saying that time ran out.
+pub(crate) fn wait_secs_describing(
+    cx: &mut VisualTestContext,
+    secs: u64,
+    what: &str,
+    state: impl Fn(&mut VisualTestContext) -> String,
+    mut done: impl FnMut(&mut VisualTestContext) -> bool,
+) {
     let limit = Duration::from_secs(secs * crate::test_sshd::timeout_scale());
     let start = std::time::Instant::now();
     loop {
@@ -60,7 +72,10 @@ pub(crate) fn wait_secs(cx: &mut VisualTestContext, secs: u64, what: &str, mut d
         if done(cx) {
             return;
         }
-        assert!(start.elapsed() < limit, "timeout: {what}");
+        if start.elapsed() >= limit {
+            let state = state(cx);
+            panic!("timeout: {what}{}{state}", if state.is_empty() { "" } else { " — " });
+        }
         std::thread::sleep(Duration::from_millis(20));
     }
 }
@@ -2038,10 +2053,16 @@ fn qa_ssh_git_terminal_and_reconnect(cx: &mut TestAppContext) {
         let text = notice(&wb, cx);
         text.contains("dropped") || text.starts_with("Reconnected")
     });
-    wait_secs(cx, 40, "reconnected", |cx| {
-        tick(cx);
-        notice(&wb, cx).starts_with("Reconnected")
-    });
+    wait_secs_describing(
+        cx,
+        40,
+        "reconnected",
+        |cx| format!("notice {:?}, connection {}", notice(&wb, cx), wb.read_with(cx, |wb, _| wb.conn_label_for_test())),
+        |cx| {
+            tick(cx);
+            notice(&wb, cx).starts_with("Reconnected")
+        },
+    );
     assert_eq!(notice(&wb, cx), "Reconnected. Terminals kept running.");
     type_line(cx, "echo tekrar-$((1+1))");
     wait_secs(cx, 20, "terminal after reconnect", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == "tekrar-2")));

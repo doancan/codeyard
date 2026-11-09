@@ -37,6 +37,16 @@ impl Workbench {
         self.forget_recent(r, cx);
     }
 
+    pub fn conn_label_for_test(&self) -> String {
+        match &self.remote.conn {
+            Conn::Local => "local".into(),
+            Conn::Connecting { .. } => "connecting".into(),
+            Conn::Connected { .. } => "connected".into(),
+            Conn::Reconnecting { attempt, .. } => format!("reconnecting#{attempt}"),
+            Conn::Failed { message, .. } => format!("failed: {message}"),
+        }
+    }
+
     pub fn reconnect_lost_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.reconnect_lost(window, cx);
     }
