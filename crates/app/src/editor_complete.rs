@@ -2,6 +2,9 @@
 
 use super::*;
 
+const COMPLETION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const SIGNATURE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
 impl EditorView {
     pub(super) fn is_word(c: char) -> bool {
         c.is_alphanumeric() || c == '_'
@@ -147,9 +150,9 @@ impl EditorView {
             "context": context,
         });
         // The response can be thousands of items: parse in the background too (so typing is not blocked).
-        let task = cx.background_executor().spawn(async move {
-            client.request("textDocument/completion", params, std::time::Duration::from_secs(5)).map(|r| crate::lsp::parse_completions(&r))
-        });
+        let task = cx
+            .background_executor()
+            .spawn(async move { client.request("textDocument/completion", params, COMPLETION_TIMEOUT).map(|r| crate::lsp::parse_completions(&r)) });
         self.completion_task = Some(cx.spawn(async move |this, cx| {
             let Ok((items, incomplete)) = task.await else { return };
             this.update(cx, |e, cx| {
@@ -191,7 +194,7 @@ impl EditorView {
         self.sync_lsp();
         let (line, col) = self.buffer.lsp_position(self.buffer.cursor());
         let params = serde_json::json!({ "textDocument": { "uri": crate::lsp::path_to_uri(&self.path) }, "position": { "line": line, "character": col } });
-        let task = cx.background_executor().spawn(async move { client.request("textDocument/signatureHelp", params, std::time::Duration::from_secs(3)) });
+        let task = cx.background_executor().spawn(async move { client.request("textDocument/signatureHelp", params, SIGNATURE_TIMEOUT) });
         self.signature_task = Some(cx.spawn(async move |this, cx| {
             let Ok(v) = task.await else { return };
             this.update(cx, |e, cx| {
@@ -288,7 +291,7 @@ impl EditorView {
         // Let the server see the current document; if the document changed before the response arrived the positions are stale: not applied.
         self.sync_lsp();
         let version = self.buffer.version();
-        let task = cx.background_executor().spawn(async move { client.request("completionItem/resolve", (*raw).clone(), std::time::Duration::from_secs(5)) });
+        let task = cx.background_executor().spawn(async move { client.request("completionItem/resolve", (*raw).clone(), COMPLETION_TIMEOUT) });
         cx.spawn(async move |this, cx| {
             let Ok(v) = task.await else { return };
             if this.update(cx, |e, _| e.buffer.version() != version).unwrap_or(true) {

@@ -8,6 +8,13 @@ const BIG_FILE_LINES: usize = 3000;
 /// Lines on each side of the cursor covered by inlay hints in a big file.
 const HINT_WINDOW_LINES: usize = 300;
 const EXTRAS_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+const COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+const HIGHLIGHT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
+const HOVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+/// Go to definition / implementation and similar lookups the user is waiting for.
+const NAVIGATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const HIERARCHY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+const FORMAT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 const MAX_LENS_RESOLVES: usize = 10;
 
 /// Hints of the same line joined into one label.
@@ -107,7 +114,7 @@ impl EditorView {
             client.request(
                 "workspace/executeCommand",
                 serde_json::json!({ "command": name, "arguments": if args.is_array() { args } else { serde_json::json!([]) } }),
-                std::time::Duration::from_secs(15),
+                COMMAND_TIMEOUT,
             )
         });
         cx.spawn(async move |this, cx| {
@@ -143,10 +150,7 @@ impl EditorView {
             }) else {
                 return;
             };
-            let result = cx
-                .background_executor()
-                .spawn(async move { client.request("textDocument/documentHighlight", params, std::time::Duration::from_secs(4)) })
-                .await;
+            let result = cx.background_executor().spawn(async move { client.request("textDocument/documentHighlight", params, HIGHLIGHT_TIMEOUT) }).await;
             this.update(cx, |e, cx| {
                 if let Ok(v) = result {
                     let mut ranges: Vec<Range<usize>> = v
@@ -711,7 +715,7 @@ impl EditorView {
                 Some(c) => {
                     let params = serde_json::json!({ "textDocument": { "uri": uri }, "position": { "line": line, "character": col } });
                     cx.background_executor()
-                        .spawn(async move { c.request("textDocument/hover", params, std::time::Duration::from_secs(5)) })
+                        .spawn(async move { c.request("textDocument/hover", params, HOVER_TIMEOUT) })
                         .await
                         .ok()
                         .and_then(|v| crate::lsp::hover_text(&v))
@@ -779,7 +783,7 @@ impl EditorView {
         self.sync_lsp();
         let (line, col) = self.buffer.lsp_position(ix);
         let params = serde_json::json!({ "textDocument": { "uri": crate::lsp::path_to_uri(&self.path) }, "position": { "line": line, "character": col } });
-        let task = cx.background_executor().spawn(async move { client.request(method, params, std::time::Duration::from_secs(10)) });
+        let task = cx.background_executor().spawn(async move { client.request(method, params, NAVIGATION_TIMEOUT) });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |_, cx| match result.map(|v| crate::lsp::parse_locations(&v)) {
@@ -836,7 +840,7 @@ impl EditorView {
         // Definition in the same file: read from the unsaved buffer (the lines on disk may have shifted).
         let (own_path, own_text) = (self.path.clone(), self.buffer.rope().to_string());
         let task = cx.background_executor().spawn(async move {
-            let locs = crate::lsp::parse_locations(&client.request("textDocument/definition", params, std::time::Duration::from_secs(10))?);
+            let locs = crate::lsp::parse_locations(&client.request("textDocument/definition", params, NAVIGATION_TIMEOUT)?);
             let Some((path, (l, c))) = locs.first().cloned() else { return Ok(None) };
             let data = if path == own_path { own_text.into_bytes() } else { host.read(&path).map_err(|e| e.to_string())?.0 };
             let text = String::from_utf8_lossy(&data);
@@ -879,7 +883,7 @@ impl EditorView {
         let (line, col) = self.buffer.lsp_position(self.buffer.cursor());
         let params = serde_json::json!({ "textDocument": { "uri": crate::lsp::path_to_uri(&self.path) }, "position": { "line": line, "character": col } });
         let task = cx.background_executor().spawn(async move {
-            let t = std::time::Duration::from_secs(15);
+            let t = HIERARCHY_TIMEOUT;
             let items = client.request(prepare, params, t)?;
             let Some(item) = items.as_array().and_then(|a| a.first()).cloned() else { return Ok(Vec::new()) };
             let result = client.request(method, serde_json::json!({ "item": item }), t)?;
@@ -917,7 +921,7 @@ impl EditorView {
     /// (edits computed against old positions must not corrupt other text).
     pub(super) fn apply_lsp_format(&mut self, method: &'static str, client: Arc<crate::lsp::Client>, params: serde_json::Value, cx: &mut Context<Self>) {
         let epoch = self.lsp_epoch.load(std::sync::atomic::Ordering::SeqCst);
-        let task = cx.background_executor().spawn(async move { client.request(method, params, std::time::Duration::from_secs(2)) });
+        let task = cx.background_executor().spawn(async move { client.request(method, params, FORMAT_TIMEOUT) });
         cx.spawn(async move |this, cx| {
             let Ok(v) = task.await else { return };
             this.update(cx, |e, cx| {
