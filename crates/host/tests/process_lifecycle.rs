@@ -1,12 +1,12 @@
 #![cfg(unix)]
 
 use host::{Host, ProcEvent};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[test]
 fn cancellation_remains_available_after_the_process_closes_stdout() {
     let host = host::local();
-    let process = host.proc_spawn("/bin/sh", vec!["-c".into(), "printf 'ready\\n'; exec 1>&-; exec /bin/sleep 5".into()], None).unwrap();
+    let process = host.proc_spawn("/bin/sh", vec!["-c".into(), "printf 'ready\\n'; exec 1>&-; exec /bin/sleep 30".into()], None).unwrap();
     let mut output = Vec::new();
     while !output.ends_with(b"ready\n") {
         match process.events.recv_timeout(Duration::from_secs(2)).unwrap() {
@@ -14,11 +14,15 @@ fn cancellation_remains_available_after_the_process_closes_stdout() {
             other => panic!("unexpected event: {other:?}"),
         }
     }
-    // Give the output reader time to observe EOF; the child deliberately keeps running.
-    std::thread::sleep(Duration::from_millis(100));
-    let start = Instant::now();
+    // The child deliberately keeps running with its stdout closed (for half a minute): the kill must end it, and
+    // the exit arrives as an event instead of after the natural end.
     host.done(proto::Request::ProcKill { proc: process.id }).unwrap();
-    assert!(start.elapsed() < Duration::from_secs(2), "cancellation waited for natural exit: {:?}", start.elapsed());
+    loop {
+        match process.events.recv_timeout(Duration::from_secs(10)).expect("the killed process reports its exit") {
+            ProcEvent::Exit(_) => break,
+            ProcEvent::Output(_) => {}
+        }
+    }
 }
 
 /// A task through the local host: typed argv, environment, merged output and exit code; a kill ends with `Exit(None)`.

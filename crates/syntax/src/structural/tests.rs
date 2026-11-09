@@ -4,6 +4,13 @@ fn lang(id: &str) -> &'static Language {
     family(id).unwrap().language()
 }
 
+/// The work `f` did on this thread: parses, matcher steps and the longest single attempt.
+fn work_of(f: impl FnOnce()) -> Work {
+    let before = WORK.with(|w| w.replace(Work::default()));
+    f();
+    WORK.with(|w| w.replace(before))
+}
+
 fn pat(id: &str, p: &str) -> Pattern {
     compile(lang(id), p).unwrap_or_else(|e| panic!("{id} pattern {p:?}: {e:?}"))
 }
@@ -295,65 +302,61 @@ fn random_patterns_never_panic_or_hang() {
         ("Python", "def f(a):\n    x = foo(a, 1)\n    if x == a:\n        return foo(x, x, x)\n    return x\n"),
         ("Go", "package p\nfunc f(a int) int {\n\tx := foo(a, 1)\n\tif x == a {\n\t\treturn foo(x, x)\n\t}\n\treturn x\n}\n"),
     ];
-    let start = std::time::Instant::now();
     let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
     let mut compiled = 0;
-    for round in 0..1500 {
-        let (id, text) = texts[round % texts.len()];
-        let n = 1 + (rng.next() % 9) as usize;
-        let pattern: String = (0..n).map(|_| rng.pick(BITS)).collect();
-        if let Ok(p) = compile(lang(id), &pattern) {
-            compiled += 1;
-            let _ = find_all(&p, text);
-            let _ = p.literal_hint();
-            for m in find_all(&p, text) {
-                let _ = expand(&pattern, &m.captures);
+    let work = work_of(|| {
+        for round in 0..1500 {
+            let (id, text) = texts[round % texts.len()];
+            let n = 1 + (rng.next() % 9) as usize;
+            let pattern: String = (0..n).map(|_| rng.pick(BITS)).collect();
+            if let Ok(p) = compile(lang(id), &pattern) {
+                compiled += 1;
+                let _ = find_all(&p, text);
+                let _ = p.literal_hint();
+                for m in find_all(&p, text) {
+                    let _ = expand(&pattern, &m.captures);
+                }
             }
         }
-    }
+    });
     assert!(compiled > 20, "the generator should produce some valid patterns ({compiled})");
-    assert!(start.elapsed().as_secs() < 60, "fuzz run took {:?}", start.elapsed());
+    // No pattern keeps the matcher busy for longer than its step limit, whatever the generator produced.
+    assert!(work.longest_attempt <= STEP_LIMIT + 1, "an attempt took {} steps", work.longest_attempt);
 }
 
 #[test]
 fn many_triple_dollar_variables_cannot_run_away() {
     let args = (0..40).map(|i| format!("a{i}")).collect::<Vec<_>>().join(", ");
-    let text = format!("fn f() {{ foo({args}); }}");
+    // The word `nomatch` is in the text, or the literal hint would rule the file out before any matching.
+    let text = format!("fn f() {{ foo({args}); }}\nfn g() {{ nomatch(); }}");
     let p = pat("Rust", "foo($$$A, $$$B, $$$C, $$$D, $$$E, nomatch)");
-    let start = std::time::Instant::now();
-    assert!(find_all(&p, &text).is_empty());
-    assert!(start.elapsed().as_secs() < 5, "{:?}", start.elapsed());
+    let work = work_of(|| assert!(find_all(&p, &text).is_empty()));
+    // 40 arguments split four ways would take millions of steps; the limit stops the attempt at 20 000.
+    assert_eq!(work.longest_attempt, STEP_LIMIT + 1, "the attempt is cut off at the limit, not run to the end");
+    assert!(work.steps <= u64::from(STEP_LIMIT) * 4, "{} steps in total", work.steps);
 }
 
-/// 1 MB of dense Rust: parsing alone takes about 70 ms in a release build, the walk about as much again here (a match every
-/// 125 bytes). The limits only guard against a quadratic walk; the numbers are printed with --nocapture.
+/// 200 KB of dense Rust (a match every 125 bytes). The limits only guard against a quadratic walk, so they count the
+/// matcher's steps (a few per match, per unit of source) instead of timing them.
 #[test]
-fn a_megabyte_of_source_matches_in_reasonable_time() {
+fn dense_source_matches_with_work_that_follows_its_size() {
     let unit = "fn item(a: Option<String>, b: Vec<u8>) -> String {\n    let x = a.unwrap_or(b.len().to_string().clone());\n    x // trailing\n}\n\n";
-    let text = unit.repeat(1_000_000 / unit.len());
+    let units = 200_000 / unit.len();
+    let text = unit.repeat(units);
     let p = pat("Rust", "$R.unwrap_or($X.clone())");
-    // Tree-sitter's own parse is most of the time (about 70 ms per MB of this code on a 2023 laptop, release build).
-    let parse_only = std::time::Instant::now();
-    drop(parse(p.language(), &text).unwrap());
-    let parse_time = parse_only.elapsed();
-    eprintln!("parse alone {parse_time:?}");
     let rare = pat("Rust", "$R.unwrap_or($X.len())");
-    let sparse = std::time::Instant::now();
-    assert!(find_all(&rare, &text).is_empty());
-    eprintln!("parse and walk, nothing matches: {:?}", sparse.elapsed());
-    let start = std::time::Instant::now();
-    let n = find_all(&p, &text).len();
-    let took = start.elapsed();
-    eprintln!("{} bytes matched in {took:?}", text.len());
-    assert_eq!(n, 1_000_000 / unit.len());
-    // Relative to the parse on the same machine: a fixed number fails on a slow runner, a quadratic walk fails at any speed.
-    assert!(took < parse_time * 12 + std::time::Duration::from_millis(250), "1 MB took {took:?}, parsing alone {parse_time:?}");
-    let t = std::time::Instant::now();
-    for _ in 0..100 {
-        let _ = compile(lang("Rust"), "unwrap_or($X.clone())").unwrap();
-    }
-    eprintln!("compile {:?} each", t.elapsed() / 100);
-    assert!(t.elapsed().as_millis() / 100 < if cfg!(debug_assertions) { 20 } else { 5 }, "compile took {:?} each", t.elapsed() / 100);
+    let sparse = work_of(|| assert!(find_all(&rare, &text).is_empty()));
+    assert_eq!(sparse.parses, 1, "the text is parsed once");
+    let mut n = 0;
+    let work = work_of(|| n = find_all(&p, &text).len());
+    assert_eq!(n, units);
+    assert_eq!(work.parses, 1, "the text is parsed once");
+    // A linear walk costs a constant number of steps per unit of source; a quadratic one grows with the whole text.
+    assert!(work.steps <= units as u64 * 64, "{} steps for {units} units", work.steps);
+    assert!(work.longest_attempt < 64, "one attempt took {} steps", work.longest_attempt);
+    // Compiling a pattern parses it in a fixed number of contexts, however often it is done.
+    let compiled = work_of(|| drop(compile(lang("Rust"), "unwrap_or($X.clone())").unwrap()));
+    assert!(compiled.parses <= 4, "compiling parsed {} times", compiled.parses);
 }
 
 /// The recipes of the user guide, as written there.

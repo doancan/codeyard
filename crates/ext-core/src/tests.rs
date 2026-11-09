@@ -425,19 +425,19 @@ fn two_stores_on_one_folder_do_not_interleave() {
 }
 
 #[test]
-fn a_hundred_extensions_load_without_parsing() {
+fn loading_many_extensions_reads_the_index_and_not_their_manifests() {
     let d = Dir::new("hundred");
     let s = d.store();
-    for n in 0..100 {
+    for n in 0..10 {
         s.install(&theme(&format!("p.e{n}"), "1.0.0"), src()).unwrap();
     }
-    let t = std::time::Instant::now();
+    // The first load after an install may build the index; the next ones must not touch the installed packages at all.
+    s.load().unwrap();
+    remove_tree(&s.root.join("store")).unwrap();
     let loaded = d.store().load().unwrap();
-    let took = t.elapsed();
-    assert!(!loaded.rebuilt);
-    assert_eq!(loaded.extensions.len(), 100);
-    // Debug build on a shared runner; the release-build row is in perf/metrics.json.
-    assert!(took < std::time::Duration::from_millis(250), "{took:?}");
+    assert!(!loaded.rebuilt, "a load that read the manifests would have rebuilt the index");
+    assert!(loaded.problems.is_empty(), "{:?}", loaded.problems);
+    assert_eq!(loaded.extensions.len(), 10);
 }
 
 // --- trust
