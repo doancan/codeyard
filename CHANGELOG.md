@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Command palette and other short lists: a query that appears in a label as typed ranks it first. "reverse lines" no
+  longer put *Editor: Reverse Lines* below labels that only contain the letters scattered, because the match started at
+  the `r` of "Editor".
 - Windows and Linux: a menu of the menu bar opens under the left edge of its title wherever the title is clicked, and stays
   under the bar in a window too short for it (it scrolls). A long menu such as View was pushed up over the bar and the
   title bar, and could close at once as the click was let go over it.
