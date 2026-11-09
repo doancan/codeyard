@@ -302,6 +302,33 @@ fn a_rollback_decided_on_an_old_lock_does_not_apply_to_what_changed_since() {
     assert_eq!(s.locked().unwrap()[&id("a.one")].version.to_string(), "3.0.0");
 }
 
+fn registry_source(repo: u64) -> Source {
+    let publisher = crate::yard::Publisher {
+        issuer: "https://token.actions.githubusercontent.com".into(),
+        subject: None,
+        owner_id: Some(1),
+        repository_id: Some(repo),
+        workflow: Some(".github/workflows/release.yml".into()),
+    };
+    Source::Registry { registry: "yard".into(), publisher }
+}
+
+#[test]
+fn switches_and_instances_of_a_removed_extension_do_not_outlive_it() {
+    let d = Dir::new("leftovers");
+    let s = d.store();
+    s.install(&theme("a.one", "1.0.0"), src()).unwrap();
+    let off = Permissions { net: vec!["x.example.com".into()], ..Default::default() };
+    s.set_revoked_permissions(&id("a.one"), &src(), &off).unwrap();
+    s.set_revoked_permissions(&id("gone.ext"), &src(), &off).unwrap();
+    s.add_user_host(&id("gone.ext"), &src(), "git.example.com").unwrap();
+    // `gone.ext` was uninstalled by a process that died before it cleaned up (or the lock was synced without it).
+    s.install(&theme("b.two", "1.0.0"), src()).unwrap();
+    let raw = std::fs::read_to_string(s.permissions_path()).unwrap();
+    assert!(raw.contains("a.one") && !raw.contains("gone.ext"), "{raw}");
+    assert!(!std::fs::read_to_string(s.instances_path()).unwrap().contains("gone.ext"));
+}
+
 #[test]
 fn invalid_packages_install_nothing() {
     let d = Dir::new("invalid");

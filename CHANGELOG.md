@@ -48,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extensions: a failed write of a registry's cached index or Market page no longer leaves its `.tmp<pid>` file behind.
 ### Fixed
 
+- Extensions: the switches and self-managed instances of an extension are forgotten when it is no longer installed, even if the process that uninstalled it died before cleaning up, so a later install does not inherit them.
 - Extensions: an automatic update or rollback that was decided before another window changed or removed the extension no longer overwrites that change or brings a removed extension back.
 - Extensions: installing a package again repairs its files in the store when one is missing or changed, as the Verify notice advises; it used to reuse the damaged folder.
 - Editor: reloading a file that was deleted and came back clears its "deleted" mark, so the next save checks for changes made on disk again.

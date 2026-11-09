@@ -486,8 +486,6 @@ impl Store {
         lock.extensions.remove(id).ok_or_else(|| Error::NotInstalled(id.clone()))?;
         self.commit_lock(&lock)?;
         let _ = remove_tree(&self.data_dir(id));
-        self.forget_permissions(id);
-        self.forget_instances(id);
         Ok(())
     }
 
@@ -601,8 +599,8 @@ impl Store {
         Ok(bad)
     }
 
-    /// Store folders that neither a current nor a previous version refers to, and data folders of extensions that are
-    /// no longer installed, are removed. Errors are ignored: the next transaction tries again.
+    /// Store folders that neither a current nor a previous version refers to, and the data folders, switches and
+    /// instances of extensions that are no longer installed, are removed. Errors are ignored: the next transaction tries again.
     fn collect_garbage(&self, lock: &Lock) {
         let keep: BTreeSet<String> = lock.digests().map(|d| d.hex()).collect();
         if let Ok(entries) = std::fs::read_dir(self.root.join("store")) {
@@ -621,6 +619,8 @@ impl Store {
                 }
             }
         }
+        self.forget_permissions_except(&ids);
+        self.forget_instances_except(&ids);
     }
 
     /// Temporary folders left by a transaction that died (only ever written under the store lock, so any found while
