@@ -263,12 +263,18 @@ pub struct Session {
 
 type Forward = (String, Transport, u16, u16);
 
+/// Set up (`cancel = false`) or remove (`cancel = true`) the SSH forwarding of the debug port.
+fn ssh_forward(forward: &Forward, cancel: bool) -> host::Result<()> {
+    let (alias, transport, remote, local) = forward;
+    match transport {
+        Transport::Connect => host::ssh::forward_port(alias, *local, *remote, cancel),
+        _ => host::ssh::forward_port_reverse(alias, *remote, *local, cancel),
+    }
+}
+
 fn release_forward(f: &Option<Forward>) {
-    if let Some((alias, transport, remote, local)) = f {
-        let _ = match transport {
-            Transport::Connect => host::ssh::forward_port(alias, *local, *remote, true),
-            _ => host::ssh::forward_port_reverse(alias, *remote, *local, true),
-        };
+    if let Some(forward) = f {
+        let _ = ssh_forward(forward, true);
     }
 }
 
@@ -332,12 +338,8 @@ impl Session {
             }
         };
         let forward = (remote && transport != Transport::Stdio).then(|| (alias.clone(), transport, adapter_port, port));
-        if let Some((alias, transport, remote_port, local)) = &forward {
-            let done = match transport {
-                Transport::Connect => host::ssh::forward_port(alias, *local, *remote_port, false),
-                _ => host::ssh::forward_port_reverse(alias, *remote_port, *local, false),
-            };
-            done.map_err(|e| crate::i18n::tf("Could not forward the debug port over SSH: {}", &[&e]))?;
+        if let Some(forward) = &forward {
+            ssh_forward(forward, false).map_err(|e| crate::i18n::tf("Could not forward the debug port over SSH: {}", &[&e]))?;
         }
         let args = if transport == Transport::Stdio { args } else { substitute(&args, adapter_port) };
         let proc = host.proc_spawn(command, args, cwd).map_err(|e| e.to_string())?;
