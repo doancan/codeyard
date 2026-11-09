@@ -11,6 +11,8 @@ use regex::bytes::{Regex, RegexBuilder};
 /// Larger files are not searched (minified bundles, logs, data files).
 const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 /// The preview is limited to this many characters; the match is centered.
+/// A single-file search keeps at most this much of one line; the rest of a longer line is not searched.
+const MAX_LINE_BYTES: usize = 1024 * 1024;
 const PREVIEW_CHARS: usize = 240;
 
 pub struct Summary {
@@ -149,7 +151,6 @@ pub fn run(q: &SearchQuery, root: &Path, cancel: &AtomicBool, mut emit: impl FnM
 }
 
 fn search_one_file(re: &Regex, path: &Path, max: u32, cancel: &AtomicBool, mut emit: impl FnMut(FileMatches)) -> Result<Summary, Error> {
-    use std::io::BufRead;
     let file = std::fs::File::open(path).map_err(|e| Error::NotFound(format!("{}: {e}", path.display())))?;
     let mut reader = std::io::BufReader::with_capacity(256 * 1024, file);
     let mut line = Vec::new();
@@ -162,11 +163,11 @@ fn search_one_file(re: &Regex, path: &Path, max: u32, cancel: &AtomicBool, mut e
         }
     };
     loop {
-        if count >= max || (line_no % 4096 == 0 && cancel.load(Ordering::Relaxed)) {
+        if count >= max || cancel.load(Ordering::Relaxed) {
             break;
         }
         line.clear();
-        if reader.read_until(b'\n', &mut line).map_err(|e| Error::Other(e.to_string()))? == 0 {
+        if read_line_capped(&mut reader, &mut line, MAX_LINE_BYTES).map_err(|e| Error::Other(e.to_string()))? == 0 {
             break;
         }
         line_no += 1;
@@ -188,6 +189,29 @@ fn search_one_file(re: &Regex, path: &Path, max: u32, cancel: &AtomicBool, mut e
     }
     flush(&mut matches);
     Ok(Summary { files: 1, matches: count, truncated: count >= max, cancelled: cancel.load(Ordering::Relaxed) })
+}
+
+/// Reads one line (up to and including `\n`) into `line`, keeping at most `cap` bytes of it; the rest of a longer line is
+/// consumed and dropped. Returns the bytes consumed, 0 at the end of the file.
+fn read_line_capped(reader: &mut impl std::io::BufRead, line: &mut Vec<u8>, cap: usize) -> std::io::Result<usize> {
+    let mut consumed = 0;
+    loop {
+        let buf = reader.fill_buf()?;
+        if buf.is_empty() {
+            return Ok(consumed);
+        }
+        let (used, done) = match buf.iter().position(|&b| b == b'\n') {
+            Some(i) => (i + 1, true),
+            None => (buf.len(), false),
+        };
+        let keep = used.min(cap.saturating_sub(line.len()));
+        line.extend_from_slice(&buf[..keep]);
+        reader.consume(used);
+        consumed += used;
+        if done {
+            return Ok(consumed);
+        }
+    }
 }
 
 /// Search line by line within a file.
@@ -331,6 +355,25 @@ mod tests {
         let re = compile(&query).unwrap();
         let found = search_bytes(&re, "x ".repeat(50).as_bytes(), 3);
         assert_eq!(found.iter().map(|m| m.ranges.len()).sum::<usize>(), 3);
+    }
+
+    #[test]
+    fn a_huge_line_is_capped_and_the_next_lines_still_count() {
+        let dir = std::env::temp_dir().join(format!("codeyard-agent-longline-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("long.log");
+        let mut text = "a".repeat(MAX_LINE_BYTES * 3);
+        text.push_str("needle\nsecond needle\n");
+        std::fs::write(&f, &text).unwrap();
+        let mut got = Vec::new();
+        let sum = run(&q("needle"), &f, &AtomicBool::new(false), |fm| got.push(fm)).unwrap();
+        // The match past the cap is not searched; the following line keeps its number.
+        assert_eq!(sum.matches, 1);
+        assert_eq!(got[0].matches[0].line, 2);
+        let mut line = Vec::new();
+        let mut reader = std::io::Cursor::new(text.into_bytes());
+        read_line_capped(&mut reader, &mut line, MAX_LINE_BYTES).unwrap();
+        assert_eq!(line.len(), MAX_LINE_BYTES);
     }
 
     #[test]
