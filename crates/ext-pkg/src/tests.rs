@@ -504,6 +504,23 @@ fn a_negation_in_cyxignore_is_an_error() {
 }
 
 #[test]
+fn a_package_file_over_the_limit_is_refused_without_being_read() {
+    let dir = std::env::temp_dir().join(format!("ext-pkg-bigfile-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let big = dir.join("big.cyx");
+    // Sparse: the length is claimed, nothing is written.
+    std::fs::File::create(&big).unwrap().set_len(limits::TARGET_PACKAGE_BYTES + 1).unwrap();
+    let e = read_file(&big).unwrap_err();
+    assert!(matches!(e, Error::TooLarge(_)), "{e}");
+    let (bytes, _) = write(theme_files()).unwrap();
+    std::fs::write(dir.join("ok.cyx"), &bytes).unwrap();
+    assert_eq!(read_file(&dir.join("ok.cyx")).unwrap(), bytes);
+    assert!(matches!(read_file(&dir.join("missing.cyx")), Err(Error::Io(_))));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn a_folder_of_huge_files_is_refused_by_its_total_before_anything_is_read() {
     let dir = std::env::temp_dir().join(format!("ext-pkg-bigfolder-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);

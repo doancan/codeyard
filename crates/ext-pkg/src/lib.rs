@@ -427,6 +427,18 @@ pub fn read(bytes: &[u8]) -> Result<Package, Error> {
     Ok(Package { manifest, files, digest, component, target })
 }
 
+/// Read a `.cyx` file: at most the largest package there may be, so a file of any other size (or a device) is refused
+/// without being read into memory.
+pub fn read_file(path: &Path) -> Result<Vec<u8>, Error> {
+    let file = std::fs::File::open(path).map_err(Error::Io)?;
+    let mut bytes = Vec::new();
+    file.take(limits::TARGET_PACKAGE_BYTES + 1).read_to_end(&mut bytes).map_err(Error::Io)?;
+    if bytes.len() as u64 > limits::TARGET_PACKAGE_BYTES {
+        return Err(Error::TooLarge(format!("the package is larger than {} MiB compressed", limits::TARGET_PACKAGE_BYTES >> 20)));
+    }
+    Ok(bytes)
+}
+
 /// Collect an extension folder for `write`: the files a package holds (`rules`: no secrets, version control,
 /// dependencies, build input, tests, packages such as the one `cyx package` wrote last time, nor what `.cyxignore`
 /// names), with their executable bit. The `native/` folder is not collected as such. Symlinks are refused rather than

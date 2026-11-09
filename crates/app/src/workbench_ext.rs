@@ -118,7 +118,7 @@ pub(super) fn contribution_lines(m: &Manifest) -> Vec<String> {
 /// written for authors and shown as they are.
 fn read_package(source: &ExtSource) -> Result<Pending, String> {
     let mut packages = match source {
-        ExtSource::File { path } => vec![std::fs::read(path).map_err(|e| crate::i18n::tf("Cannot read {0}: {1}", &[path, &e]))?],
+        ExtSource::File { path } => vec![ext_pkg::read_file(std::path::Path::new(path)).map_err(|e| crate::i18n::tf("Cannot read {0}: {1}", &[path, &e]))?],
         ExtSource::Folder { path } => folder_packages(std::path::Path::new(path))?,
         ExtSource::Registry { .. } => return Err("a registry package is downloaded by review_registry_extension".into()),
     };
