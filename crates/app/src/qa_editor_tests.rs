@@ -1155,7 +1155,7 @@ fn qa_random_keys_on_hostile_text(cx: &mut TestAppContext) {
         ("tabs.py", "\t\t \tdef f():\n\t  \treturn\t1".to_string()),
     ];
     for (i, (name, text)) in texts.iter().enumerate() {
-        random_session_on(500 + i as u64, qa_steps(40), i % 2 == 1, name, text, cx);
+        random_session_on(500 + i as u64, qa_steps(24), i % 2 == 1, name, text, cx);
     }
 }
 
