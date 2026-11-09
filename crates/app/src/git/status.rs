@@ -271,32 +271,60 @@ pub fn show(host: &dyn Host, root: &str, rev: &str, rel: &str) -> Option<String>
 /// File names are not patterns: without this `[ab].txt` would also match `a.txt` and `b.txt`, and `:(exclude)` or `*` in a name would be magic.
 const LITERAL_PATHSPECS: &str = "--literal-pathspecs";
 
+/// The most bytes of file names given to one git command. Windows allows about 32 KB for a whole command line and unix has a limit
+/// of its own: a selection of thousands of files would fail with "Argument list too long".
+const MAX_ARGS_BYTES: usize = 20_000;
+
+/// `items` in groups whose names fit one command line each (a group always holds at least one item).
+fn batches<T>(items: &[T], name_len: impl Fn(&T) -> usize) -> impl Iterator<Item = &[T]> {
+    let mut rest = items;
+    std::iter::from_fn(move || {
+        if rest.is_empty() {
+            return None;
+        }
+        let mut bytes = 0;
+        let fit = rest.iter().take_while(|item| {
+            bytes += name_len(item) + 1;
+            bytes <= MAX_ARGS_BYTES
+        });
+        let (group, tail) = rest.split_at(fit.count().max(1));
+        rest = tail;
+        Some(group)
+    })
+}
+
 pub fn stage(host: &dyn Host, root: &str, paths: &[String]) -> Result<(), String> {
-    let mut args = vec![LITERAL_PATHSPECS, "add", "-A", "--"];
-    args.extend(paths.iter().map(String::as_str));
-    git_ok(host, root, &args).map(|_| ())
+    for group in batches(paths, String::len) {
+        let mut args = vec![LITERAL_PATHSPECS, "add", "-A", "--"];
+        args.extend(group.iter().map(String::as_str));
+        git_ok(host, root, &args)?;
+    }
+    Ok(())
 }
 
 pub fn unstage(host: &dyn Host, root: &str, paths: &[String]) -> Result<(), String> {
     // Before the first commit there is no HEAD: `rm --cached` is needed.
     let has_head = git(host, root, &["rev-parse", "--verify", "-q", "HEAD"]).is_ok_and(|o| o.ok());
-    let mut args = if has_head { vec![LITERAL_PATHSPECS, "reset", "-q", "HEAD", "--"] } else { vec![LITERAL_PATHSPECS, "rm", "-q", "--cached", "-r", "--"] };
-    args.extend(paths.iter().map(String::as_str));
-    git_ok(host, root, &args).map(|_| ())
+    for group in batches(paths, String::len) {
+        let mut args =
+            if has_head { vec![LITERAL_PATHSPECS, "reset", "-q", "HEAD", "--"] } else { vec![LITERAL_PATHSPECS, "rm", "-q", "--cached", "-r", "--"] };
+        args.extend(group.iter().map(String::as_str));
+        git_ok(host, root, &args)?;
+    }
+    Ok(())
 }
 
 /// Discard unstaged changes. Untracked files are deleted (the UI asks first).
 pub fn discard(host: &dyn Host, root: &str, changes: &[Change]) -> Result<(), String> {
     let (untracked, tracked): (Vec<&Change>, Vec<&Change>) = changes.iter().partition(|c| c.unstaged == Some(Mark::Untracked));
-    if !tracked.is_empty() {
-        let mut args = vec![LITERAL_PATHSPECS, "checkout", "-q", "--"];
-        args.extend(tracked.iter().map(|c| c.path.as_str()));
-        git_ok(host, root, &args)?;
-    }
-    if !untracked.is_empty() {
-        let mut args = vec![LITERAL_PATHSPECS, "clean", "-f", "-q", "--"];
-        args.extend(untracked.iter().map(|c| c.path.as_str()));
-        git_ok(host, root, &args)?;
+    for (command, list) in [(&["checkout", "-q"][..], &tracked), (&["clean", "-f", "-q"][..], &untracked)] {
+        for group in batches(list, |c| c.path.len()) {
+            let mut args = vec![LITERAL_PATHSPECS];
+            args.extend(command);
+            args.push("--");
+            args.extend(group.iter().map(|c| c.path.as_str()));
+            git_ok(host, root, &args)?;
+        }
     }
     Ok(())
 }
@@ -516,6 +544,26 @@ mod tests {
         discard(&host, &root, &[change]).unwrap();
         assert!(dir.join("a.txt").exists() && dir.join("b.txt").exists(), "discarding one untracked file deleted others");
         assert!(!dir.join(odd).exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Staging a very large selection must not hit the operating system's limit on the length of a command line.
+    #[test]
+    fn staging_and_unstaging_thousands_of_long_paths_work() {
+        let Some((dir, run)) = repo("many-paths") else { return };
+        let host = host::local();
+        let root = dir.to_string_lossy().into_owned();
+        let names: Vec<String> = (0..6000).map(|i| format!("{}{i:05}.txt", "n".repeat(200))).collect();
+        for name in &names {
+            std::fs::write(dir.join(name), "x\n").unwrap();
+        }
+        stage(&host, &root, &names).unwrap();
+        assert_eq!(run(&["diff", "--cached", "--name-only"]).unwrap().lines().count(), names.len());
+        unstage(&host, &root, &names).unwrap();
+        assert_eq!(run(&["diff", "--cached", "--name-only"]).unwrap().lines().count(), 0);
+        let changes: Vec<Change> = names.iter().map(|p| Change { path: p.clone(), orig: None, staged: None, unstaged: Some(Mark::Untracked) }).collect();
+        discard(&host, &root, &changes).unwrap();
+        assert!(names.iter().all(|n| !dir.join(n).exists()));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
