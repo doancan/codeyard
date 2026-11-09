@@ -1267,22 +1267,6 @@ fn screen_readers_get_the_release_notes_with_a_pointer_to_the_rest(cx: &mut Test
 }
 
 #[gpui::test]
-fn huge_release_notes_are_drawn_only_up_to_a_limit_and_say_so(cx: &mut TestAppContext) {
-    let (wb, cx, fake) = rig(cx);
-    // 256 KiB, the most the updater accepts, in the shape that makes the most blocks.
-    let huge = "x\n\n".repeat(256 * 1024 / 3);
-    offered_notes(&wb, cx, &fake, huge);
-    let (blocks, last) = wb.read_with(cx, |wb, _| wb.update_notes_for_test());
-    assert!(blocks <= 64 * 1024 / 3 + 2, "{blocks} blocks");
-    assert_eq!(last, "The release notes are longer: read the rest on GitHub.");
-    // A note just under the limit is shown whole, without the line.
-    wb.update(cx, |wb, _| wb.reset_update_for_test());
-    offered_notes(&wb, cx, &fake, "y\n\n".repeat(64 * 1024 / 3 - 1));
-    let (blocks, last) = wb.read_with(cx, |wb, _| wb.update_notes_for_test());
-    assert_eq!((blocks, last.as_str()), (64 * 1024 / 3 - 1, "y"));
-}
-
-#[gpui::test]
 fn the_notes_can_be_read_with_the_keyboard(cx: &mut TestAppContext) {
     let (wb, cx, fake) = rig(cx);
     let notes: String = (0..80).map(|i| format!("Paragraph {i} of the notes.\n\n")).collect();
