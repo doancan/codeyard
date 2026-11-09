@@ -133,3 +133,16 @@ fn the_chosen_features_profile_and_output_folder_reach_the_build() {
     assert_eq!(tail, ["--features", "cli,format,tls", "--no-default-features", "--profile", "release", "--target-dir", "out dir"]);
     assert_eq!(target.build.summary().as_deref(), Some("release · features: format, tls · no default features · output: out dir"));
 }
+
+#[test]
+fn rust_hardening_missing_cargo_or_toolchain_gets_an_actionable_message() {
+    let missing = explain_failure("not found: cargo: No such file or directory (os error 2)");
+    assert!(missing.starts_with("Cargo was not found. Install Rust from https://rustup.rs"), "{missing}");
+    let none =
+        explain_failure("error: rustup could not choose a version of cargo to run, because one wasn't specified explicitly, and no default is configured.");
+    assert!(none.contains("rustup default stable"), "{none}");
+    let gone = explain_failure("error: toolchain 'nightly-2020-01-01' is not installed");
+    assert!(gone.contains("rustup toolchain install"), "{gone}");
+    assert_eq!(explain_failure("error: could not parse manifest\n"), "error: could not parse manifest", "other failures stay as they are");
+    assert_eq!(toolchain_hint("error: no such file or directory: src/main.rs"), None, "a missing source file is not a missing cargo");
+}

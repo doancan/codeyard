@@ -63,16 +63,19 @@ pub enum ScanMethod {
     Proc,
     /// `lsof` (macOS and BSD servers): addresses and programs.
     Lsof,
+    /// `netstat -ano` (Windows servers): addresses only.
+    Netstat,
 }
 
 impl ScanMethod {
-    const ALL: [ScanMethod; 3] = [ScanMethod::Ss, ScanMethod::Proc, ScanMethod::Lsof];
+    const ALL: [ScanMethod; 4] = [ScanMethod::Ss, ScanMethod::Proc, ScanMethod::Lsof, ScanMethod::Netstat];
 
     fn command(self) -> (&'static str, &'static [&'static str]) {
         match self {
             ScanMethod::Ss => ("ss", &["-H", "-ltnp"]),
             ScanMethod::Proc => ("cat", &["/proc/net/tcp", "/proc/net/tcp6"]),
             ScanMethod::Lsof => ("lsof", &["-nP", "-iTCP", "-sTCP:LISTEN", "-Fpcn"]),
+            ScanMethod::Netstat => ("netstat", &["-ano"]),
         }
     }
 
@@ -81,6 +84,7 @@ impl ScanMethod {
             ScanMethod::Ss => parse_ss(text),
             ScanMethod::Proc => parse_proc_net_entries(text),
             ScanMethod::Lsof => parse_lsof_entries(text),
+            ScanMethod::Netstat => parse_netstat_entries(text),
         }
     }
 }
@@ -175,6 +179,21 @@ pub fn parse_lsof_entries(text: &str) -> Vec<ListeningPort> {
         }
     }
     merge(out)
+}
+
+/// `netstat -ano` (Windows): `TCP  0.0.0.0:135  0.0.0.0:0  LISTENING  1008`. The state word is translated by the system
+/// language, so a listener is a TCP row whose peer address has port 0. The program is not named in this output.
+pub fn parse_netstat_entries(text: &str) -> Vec<ListeningPort> {
+    let entries = text.lines().take(MAX_ENTRIES * 4).filter_map(|line| {
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        let [proto, local, peer, _state, _pid] = cols[..] else { return None };
+        if !proto.eq_ignore_ascii_case("TCP") || parse_socket(peer)?.1 != 0 {
+            return None;
+        }
+        let (bind, port) = parse_socket(local)?;
+        Some(ListeningPort { port, binds: vec![bind], process: None })
+    });
+    merge(entries.collect())
 }
 
 /// One entry per port, sorted: addresses joined, the first known program kept.
@@ -312,6 +331,22 @@ LISTEN 0      5    *:8000 *:* users:((\"py,(\\\"x\",pid=7,fd=3))\n";
     }
 
     #[test]
+    fn windows_netstat_listeners_are_read_in_any_language() {
+        let english = "\nActive Connections\n\n  Proto  Local Address          Foreign Address        State           PID\n\
+  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1008\n\
+  TCP    127.0.0.1:5432         0.0.0.0:0              LISTENING       4120\n\
+  TCP    [::]:135               [::]:0                 LISTENING       1008\n\
+  TCP    [::1]:3000             [::]:0                 LISTENING       777\n\
+  TCP    10.0.0.5:22            10.0.0.9:51000         ESTABLISHED     900\n\
+  UDP    0.0.0.0:123            *:*                                    2100\n";
+        let german = "  TCP    0.0.0.0:8080           0.0.0.0:0              ABHÖREN         4\n";
+        let ports = parse_netstat_entries(&format!("{english}{german}"));
+        assert_eq!(ports.iter().map(|p| p.port).collect::<Vec<_>>(), vec![135, 3000, 5432, 8080], "no UDP, no established, any state word");
+        assert_eq!(ports[0].binds, vec![BindAddr::Any4, BindAddr::Any6]);
+        assert_eq!(ports[1].binds, vec![BindAddr::Loopback6]);
+    }
+
+    #[test]
     fn the_forward_target_follows_the_listening_address() {
         assert_eq!(forward_target(&[BindAddr::Loopback4]), RemoteTarget::V4(Ipv4Addr::LOCALHOST));
         assert_eq!(forward_target(&[BindAddr::Loopback6]), RemoteTarget::V6(Ipv6Addr::LOCALHOST));
@@ -336,7 +371,7 @@ LISTEN 0      5    *:8000 *:* users:((\"py,(\\\"x\",pid=7,fd=3))\n";
             "nfoo:bar",
         ];
         for g in garbage {
-            let _ = (parse_proc_net_entries(g), parse_ss(g), parse_lsof_entries(g));
+            let _ = (parse_proc_net_entries(g), parse_ss(g), parse_lsof_entries(g), parse_netstat_entries(g));
         }
         let huge = "LISTEN 0 0 127.0.0.1:3000 *\n".repeat(200_000);
         assert_eq!(parse_ss(&huge).len(), 1);

@@ -414,7 +414,9 @@ impl Workbench {
                     let mut args = testexp::cargo_select_args(&test.command)?;
                     args.insert(0, "test".into());
                     args.extend(["--no-run".into(), "--message-format=json".into()]);
-                    let output = host.exec("cargo", &args.iter().map(String::as_str).collect::<Vec<_>>(), Some(&r), None).map_err(|e| e.to_string())?;
+                    let output = host
+                        .exec("cargo", &args.iter().map(String::as_str).collect::<Vec<_>>(), Some(&r), None)
+                        .map_err(|e| crate::cargo_project::explain_failure(&e.to_string()))?;
                     let text = format!("{}\n{}", output.stdout_str(), output.stderr_str());
                     testexp::built_test_executables(&text, output.code).map(|bins| (bins, test))
                 });

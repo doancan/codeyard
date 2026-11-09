@@ -646,6 +646,13 @@ mod tests {
     }
 
     #[test]
+    fn a_launch_file_saved_with_a_byte_order_mark_is_still_read() {
+        let text = "\u{feff}{ \"configurations\": [ { \"name\": \"hello\", \"type\": \"lldb\", \"request\": \"launch\", \"program\": \"/bin/true\" } ] }";
+        assert_eq!(parse_launch_json(text, "/w", None, &[]).len(), 1);
+        assert_eq!(parse_compounds("\u{feff}{\"compounds\": [{\"name\": \"c\", \"configurations\": [\"a\"]}]}", "/w", None, &[]).len(), 1);
+    }
+
+    #[test]
     fn compounds_inputs_and_the_post_debug_task_are_read() {
         let tasks =
             vec![Task::shell("build".into(), "make".into(), "tasks.jsonc"), Task::shell("clean".into(), "rm -rf ${workspaceFolder}/out".into(), "tasks.jsonc")];

@@ -367,8 +367,10 @@ pub fn contrast(a: u32, b: u32) -> f64 {
     (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
 }
 
-/// JSONC -> JSON: strips `//` and `/* */` comments and trailing commas. Leaves string contents alone.
+/// JSONC -> JSON: strips a leading byte order mark (Windows editors write one), `//` and `/* */` comments and trailing
+/// commas. Leaves string contents alone.
 pub fn strip_jsonc(src: &str) -> String {
+    let src = src.strip_prefix('\u{feff}').unwrap_or(src);
     let b = src.as_bytes();
     let mut out = String::with_capacity(src.len());
     let mut i = 0;
