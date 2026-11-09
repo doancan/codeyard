@@ -1405,6 +1405,8 @@ impl Workbench {
                 asks: Default::default(),
                 transfer: None,
                 view: Default::default(),
+                #[cfg(test)]
+                resumed_reconnects: 0,
             },
             roots: state_glue::RootsState {
                 primary: tree,

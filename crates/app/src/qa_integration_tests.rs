@@ -2050,22 +2050,16 @@ fn qa_ssh_git_terminal_and_reconnect(cx: &mut TestAppContext) {
 
     // Drop the transport (the fixture's bridge process, started by us).
     let _ = std::process::Command::new("pkill").arg("-f").arg(format!("{}/remote/agent.*--attach", sshd.dir.display())).status();
-    wait_secs(cx, 40, "the drop is noticed", |cx| {
-        tick(cx);
-        let text = notice(&wb, cx);
-        text.contains("dropped") || text.starts_with("Reconnected")
-    });
+    // The connection coming back is read from a counter, not from the notice: the notice goes away after a few seconds of the
+    // fake clock, which a polling loop that ticks it can pass between two looks.
     wait_secs_describing(
         cx,
         40,
         "reconnected",
         |cx| format!("notice {:?}, connection {}", notice(&wb, cx), wb.read_with(cx, |wb, _| wb.conn_label_for_test())),
-        |cx| {
-            tick(cx);
-            notice(&wb, cx).starts_with("Reconnected")
-        },
+        |cx| wb.read_with(cx, |wb, _| wb.resumed_reconnects_for_test()) >= 1,
     );
-    assert_eq!(notice(&wb, cx), "Reconnected. Terminals kept running.");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.conn_label_for_test()), "connected");
     type_line(cx, "echo tekrar-$((1+1))");
     wait_secs(cx, 20, "terminal after reconnect", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == "tekrar-2")));
 }

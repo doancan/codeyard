@@ -47,6 +47,10 @@ impl Workbench {
         }
     }
 
+    pub fn resumed_reconnects_for_test(&self) -> u32 {
+        self.remote.resumed_reconnects
+    }
+
     pub fn reconnect_lost_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.reconnect_lost(window, cx);
     }
