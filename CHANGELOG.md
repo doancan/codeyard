@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SSH: adding a host no longer replaces `~/.ssh/config` with just the new host when the file cannot be read as UTF-8
   (a comment in a legacy encoding, say); it reports the error and leaves the file alone.
 - Language servers that only support full-document sync get the whole text on every change instead of range edits they cannot apply.
+- Source Control: staging, unstaging or discarding a file whose name contains `*`, `?` or `[...]` also touched other files that matched the name as a pattern; names are now taken literally.
 - Terminal: erasing the history (a program's `CSI 3J`, a reset, Clear Terminal) no longer leaves the command dots,
   Jump to Command and Copy Last Output pointing at the wrong rows. Select All over a long scrollback no longer stalls the
   terminal while output arrives, searching a long history waits for the typing to pause, and a command whose text a
@@ -77,6 +78,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Windows 10 and Windows Server: quitting or crashing with terminals open no longer leaves their console hosts
   (`conhost.exe`) running at a full CPU core each. A terminal's console host and shell now end with the process that
   opened them; terminals kept for the next start live in the terminal daemon and end with it.
+### Fixed
+
+- Source Control: staging, unstaging or discarding a very large selection failed with "Argument list too long" (on Windows already at a few hundred files); the files go to git in groups now.
+- Save with Encoding: a UTF-8 file with a BOM could not be saved as UTF-16 or a single-byte encoding (the BOM was rejected as an unwritable character).
+- File history: a file whose name contains `*`, `?` or `[...]` listed the commits of other files that matched the name as a pattern.
 
 ## [0.8.0] - 2026-11-06
 

@@ -543,7 +543,11 @@ impl EditorView {
         let bytes = self.buffer.to_bytes();
         match self.encoding {
             Encoding::Utf8 => Ok(bytes),
-            enc => crate::encoding::encode(std::str::from_utf8(&bytes).unwrap_or_default(), enc),
+            // A UTF-8 BOM is not text in another encoding: UTF-16 writes its own, single-byte encodings have none.
+            enc => {
+                let text = std::str::from_utf8(&bytes).unwrap_or_default();
+                crate::encoding::encode(text.strip_prefix('\u{feff}').unwrap_or(text), enc)
+            }
         }
     }
 
