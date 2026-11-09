@@ -26,6 +26,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- File watching: a slow or hung network share no longer blocks changes to the watched set while a poll is checking it.
+- Commands run by the agent (git and others) that hit the time limit are stopped together with the processes they started.
+- Terminal: when a new terminal cannot get its file handles (out of descriptors), its shell is stopped instead of left running.
+- Terminal: a shell killed by a signal now reports exit code 128 plus the signal, like other processes, instead of no code.
+- SSH config: saving the config from two windows at once no longer fails because they shared one temporary file; the
+  temporary file is flushed before it replaces the config and is removed if the write fails.
+- Yard: a registry file that cannot be written or renamed no longer leaves a half-written temporary file beside it, and
+  the new file is flushed to disk before it replaces the old one.
+- Search: finding in a very large file no longer loads a whole minified line (hundreds of MB) into memory, and Cancel
+  takes effect at once instead of after thousands of lines. Only the first 1 MiB of a line is searched.
+- Search: a search no longer returns more matches than the result limit when one line holds many of them.
 - Editor: reloading a file that was deleted and came back clears its "deleted" mark, so the next save checks for changes made on disk again.
 - Search: highlight ranges that a remote search agent sends outside the line's text, or inside a character, no longer crash the results list or Open; they are moved onto whole characters.
 - Search with a byte pattern (`(?-u:\xa9)`) that matches inside a character no longer returns a highlight range that cuts the character, which could crash the results list.

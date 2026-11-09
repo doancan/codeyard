@@ -140,23 +140,29 @@ fn backup_and_write(path: &Path, new_text: &str) -> Result<(), String> {
         bak.push(".codeyard-bak");
         std::fs::copy(path, &bak).map_err(|e| format!("could not back up {}: {e}", path.display()))?;
     }
+    // Unique per call: two saves in one process (several windows) must not share one temporary file.
+    static NEXT_TMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let mut tmp = path.as_os_str().to_owned();
-    tmp.push(format!(".codeyard-tmp{}", std::process::id()));
+    tmp.push(format!(".codeyard-tmp{}-{}", std::process::id(), NEXT_TMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
     let tmp = PathBuf::from(tmp);
-    std::fs::write(&tmp, body.as_bytes()).map_err(|e| format!("{}: {e}", tmp.display()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mode = existing_mode.map_or(0o600, |m| m.permissions().mode() & 0o777);
-        let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(mode));
+    let staged = (|| {
+        use std::io::Write as _;
+        let mut file = std::fs::File::create(&tmp).map_err(|e| format!("{}: {e}", tmp.display()))?;
+        file.write_all(body.as_bytes()).and_then(|()| file.sync_all()).map_err(|e| format!("{}: {e}", tmp.display()))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = existing_mode.map_or(0o600, |m| m.permissions().mode() & 0o777);
+            let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(mode));
+        }
+        #[cfg(not(unix))]
+        let _ = existing_mode;
+        std::fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))
+    })();
+    if staged.is_err() {
+        let _ = std::fs::remove_file(&tmp);
     }
-    #[cfg(not(unix))]
-    let _ = existing_mode;
-    std::fs::rename(&tmp, path)
-        .inspect_err(|_| {
-            let _ = std::fs::remove_file(&tmp);
-        })
-        .map_err(|e| format!("{}: {e}", path.display()))
+    staged
 }
 
 /// Add a new `Host` block. Errors if the name exists (never overwrites).
@@ -488,6 +494,22 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d.join("config")
+    }
+
+    #[test]
+    fn concurrent_saves_never_fail_on_a_shared_temporary_file() {
+        let p = tmp("concurrent");
+        std::fs::write(&p, "Host a\n    HostName a.example.com\n").unwrap();
+        let p = &p;
+        for round in 0..20 {
+            let results: Vec<Result<(), String>> = std::thread::scope(|scope| {
+                let handles: Vec<_> = (0..8).map(|i| scope.spawn(move || backup_and_write(p, &format!("Host h{round}-{i}\n    HostName x\n")))).collect();
+                handles.into_iter().map(|h| h.join().unwrap()).collect()
+            });
+            assert!(results.iter().all(Result::is_ok), "{results:?}");
+        }
+        let names: Vec<_> = std::fs::read_dir(p.parent().unwrap()).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        assert!(names.iter().all(|n| !n.contains("codeyard-tmp")), "{names:?}");
     }
 
     #[test]

@@ -261,6 +261,31 @@ fn a_command_that_never_ends_is_killed_at_the_timeout() {
     assert!(t.elapsed() < Duration::from_secs(2), "{:?}", t.elapsed());
 }
 
+/// The timeout stops what the command started too, not only the command itself.
+#[test]
+#[cfg(unix)]
+fn a_timeout_kills_the_commands_descendants() {
+    let pid_file = std::env::temp_dir().join(format!("codeyard-exec-tree-{}", std::process::id()));
+    let _ = std::fs::remove_file(&pid_file);
+    let script = format!("sleep 30 & echo $! > '{}'; wait", pid_file.display());
+    let err = exec_with_timeout("/bin/sh", &["-c".into(), script], None, None, Duration::from_millis(700)).err().expect("timeout");
+    assert_eq!(err.kind(), io::ErrorKind::TimedOut);
+    let grandchild: libc::pid_t = std::fs::read_to_string(&pid_file).unwrap().trim().parse().unwrap();
+    let _ = std::fs::remove_file(&pid_file);
+    let deadline = Instant::now() + Duration::from_secs(3);
+    // SAFETY: signal 0 only checks that the process exists.
+    while unsafe { libc::kill(grandchild, 0) } == 0 && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // SAFETY: as above; the second call tells a killed process from a survivor.
+    let alive = unsafe { libc::kill(grandchild, 0) } == 0;
+    if alive {
+        // SAFETY: do not leave the 30 s sleeper behind when the assertion fails.
+        unsafe { libc::kill(grandchild, libc::SIGKILL) };
+    }
+    assert!(!alive, "the command's child process survived the timeout");
+}
+
 /// A command given stdin (git commit -F -) goes through the same path.
 #[test]
 #[cfg(unix)]

@@ -517,6 +517,11 @@ fn the_site_is_served_beside_the_registry() {
     assert_eq!(request(addr, "GET", "/../yard.sqlite", b""), (404, b"not found\n".to_vec()));
     // The registry's own paths are unchanged.
     assert_eq!(request(addr, "GET", "/healthz", b""), (200, b"ok\n".to_vec()));
+    // `serve` signs the first index in the background: wait for it instead of racing it.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while request(addr, "GET", "/index.json", b"").0 != 200 && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
     assert_eq!(request(addr, "GET", "/index.json", b"").0, 200);
     assert_eq!(request(addr, "GET", "/packages/zz.details.json", b"").0, 404);
     assert_eq!(request(addr, "GET", "/v1/publish", b"").0, 404);
@@ -647,4 +652,17 @@ fn a_rejected_native_program_is_never_listed() {
     // Its version number stays used, for every platform; the publisher is still not trusted for native programs.
     assert!(matches!(t.native("1.0.0", MAC), Err(Error::Forbidden(_))));
     assert!(t.native("1.0.1", LINUX).unwrap().review);
+}
+
+#[test]
+fn a_failed_atomic_write_leaves_no_temporary_file() {
+    let dir = std::env::temp_dir().join(format!("codeyard-yard-atomic-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("target.json")).unwrap(); // a directory in the way: the rename fails
+    assert!(write_atomic(&dir.join("target.json"), b"{}").is_err());
+    let left: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name()).collect();
+    assert_eq!(left, ["target.json"], "no temporary file may stay behind");
+    write_atomic(&dir.join("ok.json"), b"{}").unwrap();
+    assert_eq!(std::fs::read(dir.join("ok.json")).unwrap(), b"{}");
+    let _ = std::fs::remove_dir_all(&dir);
 }

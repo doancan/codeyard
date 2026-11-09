@@ -597,8 +597,17 @@ pub fn sig_path(file: &Path) -> PathBuf {
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), Error> {
-    let tmp = path.with_extension(format!("tmp{}", std::process::id()));
-    std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path)).map_err(|e| Error::Internal(format!("cannot write {}: {e}", path.display())))
+    use std::io::Write as _;
+    let mut name = path.as_os_str().to_owned();
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    name.push(format!(".tmp{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    let tmp = PathBuf::from(name);
+    // Synced before the rename: after a crash the new name must never point at an empty or partial file.
+    let result = std::fs::File::create(&tmp).and_then(|mut f| f.write_all(bytes).and_then(|()| f.sync_all())).and_then(|()| std::fs::rename(&tmp, path));
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result.map_err(|e| Error::Internal(format!("cannot write {}: {e}", path.display())))
 }
 
 fn hex(bytes: &[u8]) -> String {
