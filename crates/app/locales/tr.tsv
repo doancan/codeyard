@@ -539,7 +539,6 @@ Could not read the commit: {}	Commit okunamadı: {}
 {} still has merge conflict markers. Resolve them (Accept Current / Incoming / Both) and save first.	{} içinde hâlâ birleştirme çakışma işaretleri var. Önce bunları çözün (Geçerli / Gelen / İkisini de Kabul Et) ve kaydedin.
 No changes to discard	Atılacak değişiklik yok
 Amended {}	Düzeltildi: {}
-Undid commit “{}”	Commit geri alındı: “{}”
 Stashed changes	Değişiklikler stash'lendi
 Popped {}	{} pop edildi
 Applied {}	{} uygulandı
@@ -627,7 +626,6 @@ Cherry-picked {}	{} cherry-pick edildi
 Cherry-pick stopped and was undone: {}	Cherry-pick durdu ve geri alındı: {}
 Reverted {}	{} revert edildi
 Revert stopped and was undone: {}	Revert durdu ve geri alındı: {}
-Reset to {0} ({1})	{0} noktasına reset yapıldı ({1})
 
 # ---- Git branch, checkout, tag, stash and remote flows: prompts, pickers and results ----
 Create branch	Dal oluştur
@@ -3682,3 +3680,15 @@ Unstaging…	Stage'den çıkarılıyor…
 {0}, change {1} of {2}	{0}, değişiklik {1} / {2}
 {} (Enter)	{} (Enter tuşu)
 {} line picked|{} lines picked	{} satır seçildi
+Every uncommitted change is lost. This can't be undone.	Commit edilmemiş her değişiklik kaybolur. Bu işlem geri alınamaz.
+Reset past {0} commit that is already on {1}?|Reset past {0} commits that are already on {1}?	{1} üzerinde zaten bulunan {0} commit'in gerisine reset yapılsın mı?
+Reset to {0} ({1}); the branch was at {2}	{0} noktasına reset yapıldı ({1}); dal önceden {2} üzerindeydi
+The branch moved while the question was open. Nothing was changed.	Soru açıkken dal ilerledi. Hiçbir şey değiştirilmedi.
+The commit stays on {}: the next Sync brings it back. To remove it there too, push with force after undoing (Git: Push (Force)…).	Commit {} üzerinde kalır: bir sonraki Sync onu geri getirir. Oradan da kaldırmak için geri aldıktan sonra zorla push yapın (Git: Push (Force)…).
+They stay on {}: the next Sync brings them back. To remove them there too, push with force after the reset (Git: Push (Force)…).	Bunlar {} üzerinde kalır: bir sonraki Sync onları geri getirir. Oradan da kaldırmak için reset'ten sonra zorla push yapın (Git: Push (Force)…).
+Undid commit “{0}” (the branch was at {1})	“{0}” commit'i geri alındı (dal önceden {1} üzerindeydi)
+Undo Commit	Commit'i Geri Al
+Undo a commit that is already on {}?	{} üzerinde zaten bulunan bir commit geri alınsın mı?
+{0} of them is already on {1}: the next Sync brings it back.|{0} of them are already on {1}: the next Sync brings them back.	Bunlardan {0} tanesi zaten {1} üzerinde: bir sonraki Sync onları geri getirir.
+{} commit leaves this branch.|{} commits leave this branch.	{} commit bu daldan çıkar.
+{} of them is on no other branch, tag or remote: after the reset only Git's reflog still finds it.|{} of them are on no other branch, tag or remote: after the reset only Git's reflog still finds them.	Bunlardan {} tanesi başka hiçbir dalda, etikette ya da remote'ta yok: reset'ten sonra onları yalnızca Git'in reflog'u bulur.
