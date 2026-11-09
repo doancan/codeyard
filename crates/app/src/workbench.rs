@@ -853,6 +853,9 @@ pub struct Workbench {
     /// Test: `git status` never returns (hung git).
     #[cfg(test)]
     pub git_status_hangs: bool,
+    /// Test: how long a Rust command waits for the language server (a server that never answers is real time).
+    #[cfg(test)]
+    pub rust_request_timeout: Duration,
     /// Debug session and its settings (see workbench_debug.rs).
     dbg: state_glue::DebugUi,
     /// Last task, plus problems parsed from its terminal and output (see workbench_tasks.rs).
@@ -1250,6 +1253,8 @@ impl Workbench {
             menu: None,
             #[cfg(test)]
             git_status_hangs: false,
+            #[cfg(test)]
+            rust_request_timeout: rust_glue::RUST_REQUEST_TIMEOUT,
             terminals: Vec::new(),
             term_launches: Vec::new(),
             term_split: None,
