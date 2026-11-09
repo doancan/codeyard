@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Search: highlight ranges that a remote search agent sends outside the line's text, or inside a character, no longer crash the results list or Open; they are moved onto whole characters.
 - Search with a byte pattern (`(?-u:\xa9)`) that matches inside a character no longer returns a highlight range that cuts the character, which could crash the results list.
 - Undo history of a large file no longer holds a copy of the file for each of the first 63 big edits (such as Replace All); the memory cap now applies right after a big edit.
 - Arrow keys, Backspace and Delete are instant on a huge single-line file (a minified bundle); each press used to segment the whole line.
