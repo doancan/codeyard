@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extensions: the registry downloader in the app allows plain http only to this machine, read the way a client reads the host (`http://localhost.evil.test` is not).
 ### Fixed
 
+- Debugger: a `launch.json` (or any other JSON-with-comments settings file) saved with a byte order mark is read instead of silently showing no configurations.
 - Ports: the panel lists the listening ports of Windows SSH servers (read with `netstat`, in any system language) instead of reporting that ports cannot be listed.
 - Debugger: breakpoints follow a file or folder that is renamed or moved, and are dropped when it is deleted, instead of staying behind at the old path.
 - Test explorer: Rust results are read from coloured output (`CARGO_TERM_COLOR=always`) and from tests that print with `--nocapture`, instead of being reported as not run.
