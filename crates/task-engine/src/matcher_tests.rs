@@ -90,9 +90,8 @@ fn task_matcher_rejects_invalid_captures_patterns_loops_and_excessive_configurat
 #[test]
 fn task_matcher_bounds_long_output_and_expensive_backtracking() {
     let mut m = matcher(json!({"pattern":{"kind":"file","regexp":r"^(a|aa)+\1$","file":0,"message":0}}));
-    let start = std::time::Instant::now();
+    // The regex engine counts its backtracking steps; running out of them is a runtime error, not a late answer.
     let result = m.line(&("a".repeat(128) + "!"));
-    assert!(result.is_err() || result.unwrap().problem.is_none());
-    assert!(start.elapsed() < std::time::Duration::from_secs(2));
+    assert_eq!(result.map(|r| r.problem), Err(Error::Runtime));
     assert_eq!(m.line(&"x".repeat(64 * 1024 + 1)), Err(Error::Limit));
 }
