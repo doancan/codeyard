@@ -1223,6 +1223,7 @@ fn qa_conflicts_in_a_big_file_scan_off_thread_and_commands_stay_exact(cx: &mut T
     let content = format!("<<<<<<< HEAD\nbiz\n=======\nonlar\n>>>>>>> dal\n{filler}");
     let f = file("bigconflict", "big.txt", content.as_bytes());
     let (wb, cx) = setup(cx);
+    cx.simulate_resize(gpui::size(gpui::px(600.), gpui::px(200.)));
     cx.update(|_, cx| cx.global_mut::<crate::settings::Settings>().lsp_enabled = false);
     let ed = open(&wb, &f, cx);
     assert_eq!(ed.read_with(cx, |e, _| e.conflict_count()), 1, "scanned on open");
