@@ -19,12 +19,29 @@ fn text(wb: &Entity<Workbench>, cx: &mut gpui::VisualTestContext) -> String {
 }
 
 fn daemon(name: &str) -> std::path::PathBuf {
+    daemon_with_registry(name).0
+}
+
+/// [`daemon`], and its registry: a test that must know when the daemon has noticed a window going away waits on it.
+fn daemon_with_registry(name: &str) -> (std::path::PathBuf, std::sync::Arc<agent::daemon::Registry>) {
     let dir = std::env::temp_dir().join(format!("codeyard-app-termd-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let sock = dir.join("d.sock");
     let s2 = sock.clone();
-    std::thread::spawn(move || agent::daemon::run(&s2));
-    sock
+    let registry = std::sync::Arc::new(agent::daemon::Registry::default());
+    let shared = registry.clone();
+    std::thread::spawn(move || agent::daemon::run_with(&s2, shared));
+    (sock, registry)
+}
+
+/// Waits (on the real clock: the daemon is another thread) until no connection of the daemon is attached: it has noticed that
+/// the window's connection ended, so what a shell prints from now on is kept for the next window.
+fn wait_for_detach(registry: &agent::daemon::Registry) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20 * crate::test_sshd::timeout_scale());
+    while registry.any_attached() {
+        assert!(std::time::Instant::now() < deadline, "the daemon still has the closed window attached");
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
 }
 
 /// A window of `dir` on the terminal daemon `sock`, with its terminals restored.
@@ -120,7 +137,7 @@ fn window_with_terminal<'a>(
 fn a_terminal_outlives_its_window_and_the_next_window_takes_the_same_shell_back(cx: &mut gpui::TestAppContext) {
     let home = crate::qa_workbench_tests::fresh("termd-home");
     let dir = crate::qa_workbench_tests::project("termd");
-    let sock = daemon("reattach");
+    let (sock, registry) = daemon_with_registry("reattach");
     let first = {
         let (wb, vcx) = window(cx, &home, &dir, &sock);
         wb.update_in(vcx, |wb, window, cx| wb.new_terminal_launch(None, crate::terminal::Launch::default(), window, cx));
@@ -133,6 +150,7 @@ fn a_terminal_outlives_its_window_and_the_next_window_takes_the_same_shell_back(
         let line = format!("read _ < {}; echo printed-while-closed; touch {}\n", release.display(), printed.display());
         wb.update(vcx, |wb, cx| wb.terminals[0].update(cx, |t, _| t.send(&line)));
         quit(wb, vcx);
+        wait_for_detach(&registry);
         std::fs::write(&release, "go\n").unwrap();
         wait_for_file(&printed);
         pid
@@ -141,7 +159,16 @@ fn a_terminal_outlives_its_window_and_the_next_window_takes_the_same_shell_back(
     let (wb, cx) = window(cx, &home, &dir, &sock);
     wait_ticking(cx, "the terminal taken back", |cx| wb.read_with(cx, |wb, _| wb.terminals.len() == 1));
     wait_notice(&wb, cx, "Reconnected to terminal session");
-    wait_ticking(cx, "the buffered output", |cx| text(&wb, cx).contains("printed-while-closed"));
+    crate::qa_integration_tests::wait_secs_describing(
+        cx,
+        10,
+        "the buffered output",
+        |cx| format!("the screen shows {:?}", text(&wb, cx)),
+        |cx| {
+            cx.executor().advance_clock(std::time::Duration::from_millis(300));
+            text(&wb, cx).contains("printed-while-closed")
+        },
+    );
     let shown = text(&wb, cx);
     assert!(shown.contains("Reconnected to terminal session") && !shown.contains("Previous session ended"), "{shown}");
     assert_eq!(shell_pid(&wb, cx, &dir.join("pid-2")), first, "the same shell process");
