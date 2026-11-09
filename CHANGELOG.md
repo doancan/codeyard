@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Editor: Find in a file over 1 MB searches in the background instead of freezing typing on every keystroke.
 ### Fixed
 
+- cyx: `http://localhost@example.com` (user info) was taken for this machine, so `--registry` could send a publish over plain http to another host; plain http is now accepted only when the host really is `localhost`, `127.0.0.1` or `[::1]`.
 - Yard: a file write that fails (disk full, a folder in the way) no longer leaves its `.tmp<pid>` file in the public folder.
 - Extensions: a registry address like `http://localhost.example.com` or `http://localhost@example.com` is no longer taken for this machine; plain `http://` is accepted only for `localhost`, `127.0.0.1` and `[::1]`.
 - Extensions: a failed write of a registry's cached index or Market page no longer leaves its `.tmp<pid>` file behind.
