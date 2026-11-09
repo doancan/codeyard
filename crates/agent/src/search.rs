@@ -245,6 +245,9 @@ fn preview(line_no: u32, line: &[u8], ranges: &[(usize, usize)]) -> LineMatch {
         remapped = ranges.iter().map(|&(a, b)| (lossy_offset(line, a, false), lossy_offset(line, b, true))).collect();
         &remapped
     };
+    // A byte pattern (`(?-u:\xa9)`) can match inside a character: widen the range to the whole character, so that the client
+    // can slice the preview with it.
+    let ranges: Vec<(usize, usize)> = ranges.iter().map(|&(a, b)| (text.floor_char_boundary(a), text.ceil_char_boundary(b))).collect();
     let column = text[..text.floor_char_boundary(ranges[0].0)].chars().count() as u32;
     // Drop leading whitespace (so indentation doesn't take up preview space).
     let indent = text.len() - text.trim_start().len();
@@ -366,6 +369,20 @@ mod tests {
         let m = &search_bytes(&compile(&regex).unwrap(), b"x\xe2\x82y", 10)[0];
         let (a, b) = m.ranges[0];
         assert_eq!(&m.preview[a as usize..b as usize], "\u{FFFD}");
+    }
+
+    #[test]
+    fn a_byte_pattern_matching_inside_a_character_keeps_the_preview_sliceable() {
+        // `(?-u:\xa9)` matches the second byte of `é`: the range must not start or end inside the character, in a short
+        // line and in a long one (which is clipped around the match).
+        let regex = SearchQuery { regex: true, ..q(r"(?-u:\xa9)") };
+        let re = compile(&regex).unwrap();
+        for line in ["aéb".to_string(), format!("{}é{}", "ü".repeat(400), "z".repeat(400))] {
+            let m = &search_bytes(&re, line.as_bytes(), 10)[0];
+            for &(a, b) in &m.ranges {
+                assert_eq!(&m.preview[a as usize..b as usize], "é", "{line:.12}");
+            }
+        }
     }
 
     #[test]

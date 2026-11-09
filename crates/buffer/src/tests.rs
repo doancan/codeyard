@@ -544,6 +544,23 @@ fn block_comments_round_trip() {
 }
 
 #[test]
+fn previous_and_skip_occurrence_stay_fast_with_tens_of_thousands_of_selections() {
+    let text = "ab ".repeat(30_000);
+    let mut b = Buffer::from_str(&text);
+    b.set_cursor(0, false);
+    assert!(b.select_next_occurrence());
+    b.select_all_occurrences();
+    assert_eq!(b.selected_texts().len(), 30_000);
+    let started = std::time::Instant::now();
+    // Everything is selected: nothing is free, and finding that out must not take quadratic time.
+    assert!(!b.select_previous_occurrence());
+    assert!(started.elapsed().as_secs() < 5, "previous: {:?}", started.elapsed());
+    let started = std::time::Instant::now();
+    assert!(!b.move_last_selection_to_next_occurrence());
+    assert!(started.elapsed().as_secs() < 5, "skip: {:?}", started.elapsed());
+}
+
+#[test]
 fn next_occurrence_stays_fast_with_tens_of_thousands_of_selections() {
     let text = "ab ".repeat(30_000);
     let mut b = Buffer::from_str(&text);
@@ -649,6 +666,104 @@ fn undo_history_is_bounded_and_the_newest_steps_survive() {
         kept += 1;
     }
     assert!((1..=100).contains(&kept), "{kept} steps of ~2 MB each stay near the 64 MB cap");
+}
+
+#[test]
+fn a_few_huge_steps_do_not_wait_for_the_64th_step_to_be_trimmed() {
+    // Each replace-all of a 4 MB file keeps 8 MB in the history: 20 of them are 160 MB, far over the cap.
+    let mut b = Buffer::from_str(&"x".repeat(4 * 1024 * 1024));
+    for _ in 0..20 {
+        let n = b.len_chars();
+        b.replace(0..n, &"y".repeat(4 * 1024 * 1024), false);
+    }
+    let mut kept = 0;
+    while b.undo() {
+        kept += 1;
+    }
+    assert!((1..=MAX_UNDO_BYTES / (8 * 1024 * 1024) + 1).contains(&kept), "{kept} steps of 8 MB each");
+}
+
+/// Tiny deterministic generator (no dependency): xorshift64.
+struct Rng(u64);
+
+impl Rng {
+    fn below(&mut self, n: usize) -> usize {
+        self.0 ^= self.0 << 13;
+        self.0 ^= self.0 >> 7;
+        self.0 ^= self.0 << 17;
+        (self.0 % n as u64) as usize
+    }
+
+    fn flip(&mut self) -> bool {
+        self.below(2) == 0
+    }
+}
+
+/// Random editing sessions over awkward text (multi-byte letters, combining marks, emoji, tabs, CR): no operation may panic, the
+/// cursors stay inside the text, and undoing every step brings the original text back.
+#[test]
+fn random_sessions_never_panic_and_undo_back_to_the_start() {
+    const PIECES: [&str; 14] = ["a", "İ", "ı", "ş", "e\u{301}", "👨‍👩‍👧", "🇹🇷", "\t", "\n", "\r\n", " ", "{", "(", "\u{200f}م"];
+    let seeds: u64 = std::env::var("CODEYARD_BUFFER_FUZZ_SEEDS").ok().and_then(|s| s.parse().ok()).unwrap_or(200);
+    for seed in 1..=seeds {
+        let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+        let text: String = (0..rng.below(60)).map(|_| PIECES[rng.below(PIECES.len())]).collect();
+        let mut b = Buffer::from_str(&text);
+        let start = b.rope().to_string();
+        for step in 0..80 {
+            let at = rng.below(b.len_chars() + 1);
+            let piece = PIECES[rng.below(PIECES.len())];
+            let op = rng.below(34);
+            let note = format!("seed {seed} step {step} op {op}");
+            let (f1, f2) = (rng.flip(), rng.flip());
+            let (k, a, c) = (rng.below(5), (rng.below(5), rng.below(9)), (rng.below(5), rng.below(9)));
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match op {
+                0 => b.set_cursor(at, f1),
+                1 => b.insert(piece),
+                2 => b.backspace(),
+                3 => b.delete(),
+                4 => b.move_left(f1),
+                5 => b.move_right(f1),
+                6 => b.move_word_left(f1),
+                7 => b.move_word_right(f1),
+                8 => b.move_vertical(if f2 { 1 } else { -1 }, f1),
+                9 => b.add_cursor_vertical(if f2 { 1 } else { -1 }),
+                10 => {
+                    b.select_next_occurrence();
+                }
+                11 => b.select_all_occurrences(),
+                12 => b.newline(),
+                13 => b.smart_newline("  ", false),
+                14 => b.type_char(['(', '{', ')', 'a', '\''][k], true),
+                15 => b.backspace_pair(),
+                16 => b.delete_word(f1),
+                17 => b.move_lines(f1),
+                18 => b.copy_lines(f1),
+                19 => b.toggle_comment("//"),
+                20 => b.indent_lines("\t"),
+                21 => b.outdent_lines(4),
+                22 => b.sort_lines(f1),
+                23 => b.join_lines(),
+                24 => b.transpose_chars(),
+                25 => b.delete_lines(),
+                26 => b.move_word_part(f1, f2),
+                27 => b.delete_word_part(f1),
+                28 => b.delete_to_line_end(),
+                29 => b.delete_to_line_start(),
+                30 => b.transform_selections(|s| s.to_uppercase()),
+                31 => b.insert_line(f1),
+                32 => b.select_columns(a, c, 4),
+                _ => b.duplicate_selection(),
+            }));
+            assert!(result.is_ok(), "panic: {note}");
+            let n = b.len_chars();
+            assert!(b.selections().iter().all(|r| r.end <= n), "selection outside the text: {note}");
+            let (line, col) = b.cursor_line_col();
+            assert!(line < b.len_lines() && col <= b.line_len_chars(line), "cursor outside its line: {note}");
+        }
+        while b.undo() {}
+        assert_eq!(b.rope().to_string(), start, "undo-all, seed {seed}");
+    }
 }
 
 #[test]
@@ -897,4 +1012,26 @@ fn move_last_selection_wraps_and_stops_when_nothing_is_free() {
     single.set_cursor(6, false);
     assert!(single.select_next_occurrence());
     assert!(!single.move_last_selection_to_next_occurrence(), "no other match");
+}
+
+#[test]
+fn cursor_steps_on_a_huge_single_line_do_not_scan_the_whole_line() {
+    // A minified bundle: one 4 MB line. Each key press must cost about the same as on a short line.
+    let mut b = Buffer::from_str(&"var a=1;".repeat(500_000));
+    b.set_cursor(2_000_000, false);
+    let started = std::time::Instant::now();
+    for _ in 0..50 {
+        b.move_left(false);
+        b.move_right(false);
+        b.move_right(false);
+    }
+    let moving = started.elapsed();
+    let started = std::time::Instant::now();
+    for _ in 0..50 {
+        b.backspace();
+        b.delete();
+    }
+    let deleting = started.elapsed();
+    assert!(moving.as_secs() < 1, "moving: {moving:?}");
+    assert!(deleting.as_secs() < 1, "deleting: {deleting:?}");
 }
