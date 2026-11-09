@@ -322,7 +322,7 @@ impl Pty {
         {
             // The shell leaves the process guard before it is reaped (its group id may be reused after that).
             crate::guard::forget(self.child.id());
-            self.child.wait().ok().and_then(|s| s.code())
+            self.child.wait().ok().and_then(crate::proc::exit_code)
         }
         #[cfg(windows)]
         {
@@ -431,6 +431,14 @@ mod tests {
         let busy = wait_for(&p, "a program in the foreground", |s| s.busy == Some(true));
         assert_eq!(busy.name.as_deref(), Some("sleep"));
         p.kill();
+    }
+
+    #[test]
+    fn a_shell_killed_by_a_signal_reports_128_plus_the_signal() {
+        let spec = Spawn { cols: 80, rows: 24, shell: Some("/bin/sh".into()), args: Some(Vec::new()), ..Spawn::default() };
+        let (mut p, _reader) = spawn_with(spec).unwrap();
+        p.kill();
+        assert_eq!(p.wait(), Some(128 + libc::SIGKILL), "same code as a killed process in proc.rs");
     }
 
     #[test]

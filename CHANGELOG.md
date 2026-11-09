@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Terminal: a shell killed by a signal now reports exit code 128 plus the signal, like other processes, instead of no code.
 - SSH config: saving the config from two windows at once no longer fails because they shared one temporary file; the
   temporary file is flushed before it replaces the config and is removed if the write fails.
 - Yard: a registry file that cannot be written or renamed no longer leaves a half-written temporary file beside it, and

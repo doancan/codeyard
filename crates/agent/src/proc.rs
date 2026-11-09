@@ -491,7 +491,7 @@ impl Drop for Proc {
 
 /// Exit code; for a process killed by a signal, 128 + signal as in the shell (SIGSEGV → 139).
 /// `None` only if waiting failed: the client treats this as a lost connection.
-fn exit_code(status: std::process::ExitStatus) -> Option<i32> {
+pub(crate) fn exit_code(status: std::process::ExitStatus) -> Option<i32> {
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt;
