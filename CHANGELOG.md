@@ -40,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Editor: typing next to a very long unbroken run of letters and digits (base64, minified code) no longer stalls while the editor looks for the word to complete.
 - Editor: spell checking in a large Markdown file finds the code fences without copying every line after each edit.
 - Editor: Find in a file over 1 MB searches in the background instead of freezing typing on every keystroke.
+### Fixed
+
+- Yard: a file write that fails (disk full, a folder in the way) no longer leaves its `.tmp<pid>` file in the public folder.
+- Extensions: a failed write of a registry's cached index or Market page no longer leaves its `.tmp<pid>` file behind.
 - Editor: reloading a file that was deleted and came back clears its "deleted" mark, so the next save checks for changes made on disk again.
 - Search: highlight ranges that a remote search agent sends outside the line's text, or inside a character, no longer crash the results list or Open; they are moved onto whole characters.
 - Search with a byte pattern (`(?-u:\xa9)`) that matches inside a character no longer returns a highlight range that cuts the character, which could crash the results list.

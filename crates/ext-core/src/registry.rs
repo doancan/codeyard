@@ -190,7 +190,10 @@ fn refresh(reg: &Registry, dir: &Path, fetch: &dyn Fetch, now: u64, state: &Stat
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), Error> {
     let tmp = path.with_extension(format!("tmp{}", std::process::id()));
-    std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path)).map_err(|e| Error::Cache(format!("cannot write {}: {e}", path.display())))
+    std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path)).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        Error::Cache(format!("cannot write {}: {e}", path.display()))
+    })
 }
 
 /// `publisher.name` or `publisher.name@1.2.0`.

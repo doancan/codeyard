@@ -207,6 +207,16 @@ fn settings_entries_and_specs() {
 }
 
 #[test]
+fn a_failed_cache_write_leaves_no_temporary_file() {
+    let dir = tmp("write-atomic");
+    // A folder where the file should go: the rename fails after the temporary file is written.
+    std::fs::create_dir_all(dir.join("state.json")).unwrap();
+    assert!(matches!(write_atomic(&dir.join("state.json"), b"{}"), Err(Error::Cache(_))));
+    let left: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name()).collect();
+    assert_eq!(left, ["state.json"], "the temporary file was removed");
+}
+
+#[test]
 fn a_registry_that_moved_on_without_us_is_still_read_through_the_retry() {
     // The index and its signature disagree once (written between two reads); the second attempt reads both again.
     let s = setup("retry");
