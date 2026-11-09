@@ -44,7 +44,7 @@ impl Registry {
         let url = v["url"]
             .as_str()
             .map(|u| u.trim_end_matches('/'))
-            .filter(|u| u.starts_with("https://") || u.starts_with("http://localhost") || u.starts_with("http://127.0.0.1"));
+            .filter(|u| u.starts_with("https://") || is_local_http(u));
         let url = url.ok_or("“url” is an https:// address")?;
         let keys = v["root-keys"].as_array().ok_or("“root-keys” lists the registry's root public keys (hex)")?;
         let keys: Vec<_> = keys.iter().map(|k| k.as_str().and_then(yard::PublicKey::parse)).collect::<Option<_>>().ok_or("a root key is 64 hex digits")?;
@@ -58,6 +58,22 @@ impl Registry {
     fn file_url(&self, name: &str) -> String {
         format!("{}/{name}", self.url)
     }
+}
+
+/// Whether `url` is plain `http://` to this machine (`localhost`, `127.0.0.1` or `[::1]`, with an optional port): the
+/// only plain http a registry or `cyx` accepts. The host is read the way a client does, so `localhost.evil.test` and
+/// `localhost@evil.test` are not it.
+pub fn is_local_http(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("http://") else { return false };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let (host, port) = match authority.strip_prefix('[') {
+        Some(v6) => match v6.split_once(']') {
+            Some((host, after)) => (format!("[{host}]"), after.strip_prefix(':').unwrap_or(after)),
+            None => return false,
+        },
+        None => authority.split_once(':').map_or((authority.to_string(), ""), |(h, p)| (h.to_string(), p)),
+    };
+    matches!(host.as_str(), "localhost" | "127.0.0.1" | "[::1]") && port.bytes().all(|b| b.is_ascii_digit())
 }
 
 /// What a [`Fetch`] got.

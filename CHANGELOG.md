@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Yard: a file write that fails (disk full, a folder in the way) no longer leaves its `.tmp<pid>` file in the public folder.
+- Extensions: a registry address like `http://localhost.example.com` or `http://localhost@example.com` is no longer taken for this machine; plain `http://` is accepted only for `localhost`, `127.0.0.1` and `[::1]`.
 - Extensions: a failed write of a registry's cached index or Market page no longer leaves its `.tmp<pid>` file behind.
 - Editor: reloading a file that was deleted and came back clears its "deleted" mark, so the next save checks for changes made on disk again.
 - Search: highlight ranges that a remote search agent sends outside the line's text, or inside a character, no longer crash the results list or Open; they are moved onto whole characters.

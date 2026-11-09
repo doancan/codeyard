@@ -200,6 +200,15 @@ fn settings_entries_and_specs() {
     ] {
         assert!(Registry::from_setting(&bad).is_err(), "{bad}");
     }
+    // Plain http is for this machine only: not a host that merely starts with "localhost", nor user info that hides one.
+    for url in ["http://localhost", "http://localhost:8080/", "http://127.0.0.1:3000", "http://[::1]:8080"] {
+        let local = serde_json::json!({ "name": "dev", "url": url, "root-keys": [key], "threshold": 1 });
+        assert!(Registry::from_setting(&local).is_ok(), "{url}");
+    }
+    for url in ["http://localhost.evil.test", "http://127.0.0.1.evil.test/", "http://localhost@evil.test/", "http://127.0.0.1:80@evil.test", "http://localhostx"] {
+        let remote = serde_json::json!({ "name": "dev", "url": url, "root-keys": [key], "threshold": 1 });
+        assert!(Registry::from_setting(&remote).is_err(), "{url}");
+    }
     assert_eq!(parse_spec("you.night").unwrap(), (id("you.night"), None));
     assert_eq!(parse_spec("you.night@1.2.0-beta.1").unwrap().1.unwrap().to_string(), "1.2.0-beta.1");
     assert!(parse_spec("you.night@x").is_err());
