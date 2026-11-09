@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Editor: Find in a file over 1 MB searches in the background instead of freezing typing on every keystroke.
 ### Fixed
 
+- Yard: an old yank, restore or deprecate statement (they are public in the transparency log) can no longer be sent again within its 15 minutes to undo the publisher's later one.
 - Yard: a server error (500) no longer sends file paths or database messages to the client; it says "internal error" and the details go to the server's log.
 - cyx: `http://localhost@example.com` (user info) was taken for this machine, so `--registry` could send a publish over plain http to another host; plain http is now accepted only when the host really is `localhost`, `127.0.0.1` or `[::1]`.
 - Yard: a file write that fails (disk full, a folder in the way) no longer leaves its `.tmp<pid>` file in the public folder.

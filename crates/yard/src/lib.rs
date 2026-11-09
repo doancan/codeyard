@@ -465,6 +465,12 @@ impl Yard {
         if matches!(current, Status::Revoked { .. }) {
             return Err(Error::Forbidden(format!("{id} {version} was revoked by the registry; only the registry can change that")));
         }
+        // Bundles are public in Rekor, so anyone can send an old statement again within its 15 minutes: only one logged
+        // at or after the last accepted one counts, and the latest sent twice changes nothing more.
+        if signed.logged < db::status_logged(&tx, &id, &version).map_err(internal("database"))? {
+            return Err(Error::Forbidden(format!("a newer statement for {id} {version} was accepted; this one is older")));
+        }
+        db::set_status_logged(&tx, &id, &version, signed.logged).map_err(internal("database"))?;
         let status = match change {
             StatusChange::Yank => Status::Yanked,
             StatusChange::Restore => Status::Ok,

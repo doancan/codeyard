@@ -249,6 +249,25 @@ fn publishers_yank_restore_and_deprecate_with_signed_statements() {
 }
 
 #[test]
+fn an_older_status_statement_cannot_be_replayed_over_a_newer_one() {
+    // Statements are logged in public: anyone can send one again within its 15 minutes.
+    let t = Test::new("status-replay");
+    let me = github(7, 42);
+    t.publish(&package("you.night", "1.0.0", "Night"), &me).unwrap();
+    let statement = StatusChange::Yank.statement(&ExtId::parse("you.night").unwrap(), &Version::parse("1.0.0").unwrap());
+    let yank = y::frame(&t.authority.sign(&statement, &me, NOW + 10), &statement);
+    t.yard.change_status(&yank, NOW + 60).unwrap();
+    t.status("you.night", "1.0.0", StatusChange::Restore, &me, NOW + 20).unwrap();
+    assert_eq!(t.release("you.night", "1.0.0").status, Status::Ok);
+    let replayed = t.yard.change_status(&yank, NOW + 60);
+    assert!(matches!(&replayed, Err(Error::Forbidden(m)) if m.contains("older")), "{replayed:?}");
+    assert_eq!(t.release("you.night", "1.0.0").status, Status::Ok, "the publisher's later restore stands");
+    // A newer statement still works, and sending the latest one again changes nothing.
+    t.status("you.night", "1.0.0", StatusChange::Yank, &me, NOW + 30).unwrap();
+    assert_eq!(t.release("you.night", "1.0.0").status, Status::Yanked);
+}
+
+#[test]
 fn the_security_role_revokes_and_clears_advisory_fixes() {
     let t = Test::new("operator");
     let me = github(7, 42);
