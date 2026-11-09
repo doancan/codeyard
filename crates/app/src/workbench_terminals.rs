@@ -131,6 +131,9 @@ impl TermRow {
             Activity::Failed(code) => lines.push(crate::i18n::tf("The last command exited with code {}", &[code])),
             Activity::Idle => {}
         }
+        if self.exited {
+            lines.push(crate::i18n::t("The shell has exited").into());
+        }
         lines.join("\n")
     }
 }
@@ -290,7 +293,11 @@ impl Workbench {
             TerminalEvent::TitleChanged | TerminalEvent::Exited | TerminalEvent::ActivityChanged => cx.notify(),
             TerminalEvent::Attention(message) => this.terminal_wants_attention(source, message.clone(), window, cx),
             TerminalEvent::LongCommandFinished { command, code } => this.long_command_finished(source, command, *code, window, cx),
-            TerminalEvent::Kept => this.persist_terminals(cx),
+            TerminalEvent::Kept => {
+                this.persist_terminals(cx);
+                // A terminal in the editor area or a detached window has its token saved with those, not with the panel's.
+                this.persist_moved_terminals(cx);
+            }
             TerminalEvent::ImagePasteFailed(error) => {
                 this.notice = Some(Notice::Error(crate::i18n::tf("Could not paste: {}", &[error]).into()));
                 cx.notify();
@@ -1015,6 +1022,8 @@ mod tests {
         assert!(row(Activity::Failed(2), None).indicator(&p).is_some());
         assert_eq!(row(Activity::Running("$ make".into()), None).tooltip(), "zsh\n/srv/app\nRunning: $ make");
         assert_eq!(row(Activity::Failed(2), None).tooltip(), "zsh\n/srv/app\nThe last command exited with code 2");
+        let gone = TermRow { exited: true, ..row(Activity::Idle, None) };
+        assert_eq!(gone.tooltip(), "zsh\n/srv/app\nThe shell has exited", "a closed shell says so, not only by its colour");
     }
 }
 

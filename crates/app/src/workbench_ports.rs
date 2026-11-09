@@ -378,7 +378,7 @@ impl Workbench {
         cx.notify();
     }
 
-    fn retry_forward(&mut self, remote: u16, cx: &mut Context<Self>) {
+    pub(super) fn retry_forward(&mut self, remote: u16, cx: &mut Context<Self>) {
         let alias = self.ssh_alias().unwrap_or_default();
         let Some(id) = self.ports.set.by_remote(&alias, remote).map(|f| f.id) else { return };
         let effects = self.ports.set.retry(id);

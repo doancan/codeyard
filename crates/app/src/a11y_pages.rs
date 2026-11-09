@@ -96,6 +96,7 @@ struct PortSnap {
     url: Option<String>,
     address: Option<String>,
     listening_only: bool,
+    failed: bool,
 }
 
 /// The Ports panel while it is shown: its rows, or why there are none.
@@ -340,6 +341,9 @@ impl PortsSnap {
                 if row.address.is_some() {
                     add(2, t("Copy Address"));
                 }
+                if row.failed {
+                    add(5, t("Retry"));
+                }
                 add(3, t("Stop Forwarding"));
             }
             n.set_children(buttons);
@@ -425,7 +429,7 @@ impl Workbench {
                 let state = match &r.state {
                     RowState::Active => r.address.clone().unwrap_or_default(),
                     RowState::Pending => t("forwarding…").into(),
-                    RowState::Interrupted => t("waiting for the connection").into(),
+                    RowState::Interrupted => t("waiting for the connection to come back").into(),
                     RowState::Failed(why) => why.clone(),
                     RowState::Listening => t("Not forwarded").into(),
                 };
@@ -446,6 +450,7 @@ impl Workbench {
                     url: r.url(),
                     address: r.address.clone().filter(|_| r.state == RowState::Active),
                     listening_only: r.state == RowState::Listening,
+                    failed: matches!(r.state, RowState::Failed(_)),
                 }
             })
             .collect();
@@ -557,6 +562,7 @@ impl Workbench {
             }
             3 if row.forward.is_some() => self.stop_forward(row.port, cx),
             4 if row.listening_only => self.forward_port(row.port, cx),
+            5 if row.failed && row.forward.is_some() => self.retry_forward(row.port, cx),
             _ => {}
         }
     }

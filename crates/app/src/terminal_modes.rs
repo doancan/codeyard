@@ -14,8 +14,8 @@ impl TerminalView {
 
     pub(super) fn reset_modes(&mut self) {
         // Mouse reporting (X10, button, any-motion, focus, UTF-8, SGR, urxvt), alternate screen, application cursor keys
-        // and keypad, shown cursor, default colours and attributes.
-        self.feed(b"\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?1049l\x1b[?1l\x1b>\x1b[?25h\x1b[0m");
+        // and keypad, bracketed paste (the shell turns it on again at its next prompt), shown cursor, default colours and attributes.
+        self.feed(b"\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?2004l\x1b[?1049l\x1b[?1l\x1b>\x1b[?25h\x1b[0m");
         self.wheel = Default::default();
         self.selecting = false;
         self.term.scroll_display(Scroll::Bottom);

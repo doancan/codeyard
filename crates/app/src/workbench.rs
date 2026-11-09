@@ -1072,7 +1072,7 @@ impl Workbench {
         if let Some(text) = state.as_ref().and_then(|s| s.get("scm_sections")) {
             scm.update(cx, |s, cx| s.restore_sections(&text, cx));
         }
-        let port_field = cx.new(|cx| crate::input::TextField::new(crate::i18n::tr("e.g. 3000"), cx));
+        let port_field = cx.new(|cx| crate::input::TextField::new(crate::i18n::tr("e.g. 3000 or 3000:8080"), cx));
         let subs = vec![
             cx.subscribe_in(&tree, window, |this, _, event: &TreeEvent, window, cx| this.on_tree_event(event, window, cx)),
             cx.subscribe_in(&search, window, |this, _, event: &SearchEvent, window, cx| match event {

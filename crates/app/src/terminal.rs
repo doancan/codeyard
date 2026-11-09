@@ -477,7 +477,7 @@ impl TerminalView {
         if self.exit.is_none() {
             // Nothing reads the mouse any more (the program is gone, or the SSH connection dropped under it): without this the
             // clicks go nowhere and the last output cannot be selected and copied.
-            self.feed(b"\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?1l\x1b>");
+            self.feed(b"\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?2004l\x1b[?1l\x1b>");
             self.selecting = false;
             self.exit = Some(code);
             cx.emit(TerminalEvent::Exited);
@@ -642,13 +642,6 @@ impl TerminalView {
         if self.find_has_focus(window, cx) {
             return;
         }
-        if self.exit.is_some() || self.error.is_some() {
-            if !ev.keystroke.modifiers.platform {
-                cx.stop_propagation();
-                cx.emit(TerminalEvent::CloseRequested);
-            }
-            return;
-        }
         // On Windows and Linux, Ctrl+C copies selected terminal text. Without a
         // selection it must still reach the program as the interrupt character.
         let k = &ev.keystroke;
@@ -666,6 +659,15 @@ impl TerminalView {
             cx.notify();
             return;
         }
+        // The shell is gone: a key closes the tab, except those that read the output left behind (the copy above, paging).
+        if self.exit.is_some() || self.error.is_some() {
+            let reading = matches!(k.key.as_str(), "pageup" | "pagedown" | "home" | "end");
+            if !k.modifiers.platform && !reading {
+                cx.stop_propagation();
+                cx.emit(TerminalEvent::CloseRequested);
+            }
+            return;
+        }
         // A remote program cannot read the local image clipboard itself.
         // Preserve Ctrl+V for programs when there is no image on the clipboard.
         if k.key == "v"
@@ -674,7 +676,7 @@ impl TerminalView {
             && !k.modifiers.alt
             && !k.modifiers.platform
             && self.host.is_remote()
-            && let Some(image) = cx.read_from_clipboard().and_then(Self::clipboard_image)
+            && let Some(image) = cx.read_from_clipboard().filter(|item| item.text().is_none_or(|t| t.trim().is_empty())).and_then(Self::clipboard_image)
         {
             cx.stop_propagation();
             self.paste_image(image, cx);
@@ -891,7 +893,9 @@ impl TerminalView {
 
     fn paste(&mut self, _: &TermPaste, _: &mut Window, cx: &mut Context<Self>) {
         let Some(item) = cx.read_from_clipboard() else { return };
+        // Text wins: a spreadsheet or a document puts a picture of the selection on the clipboard beside its text.
         if self.host.is_remote()
+            && item.text().is_none_or(|t| t.trim().is_empty())
             && let Some(image) = Self::clipboard_image(item.clone())
         {
             self.paste_image(image, cx);
@@ -1060,7 +1064,14 @@ pub fn key_to_bytes(k: &gpui::Keystroke, mode: TermMode) -> Option<Vec<u8>> {
         _ => {
             // Typed character (ğ, ş... on a Turkish keyboard; includes ones produced with ⌥ on macOS).
             let typed = k.key_char.clone().or_else(|| (k.key.chars().count() == 1).then(|| k.key.clone()))?;
-            typed.into_bytes()
+            // Alt+letter is the meta key of readline, emacs and vim: ESC first. Not when Alt composed another character (⌥ on
+            // macOS, AltGr on a Turkish keyboard), which is typed as it is.
+            let plain = k.key.chars().count() == 1 && typed.to_lowercase() == k.key;
+            let mut bytes = typed.into_bytes();
+            if m.alt && !m.control && !m.platform && plain {
+                bytes.insert(0, 0x1b);
+            }
+            bytes
         }
     };
     Some(bytes)
