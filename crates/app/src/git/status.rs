@@ -137,18 +137,20 @@ pub fn parse_status(root: &str, out: &[u8]) -> Status {
     let mut st = Status { root: root.to_string(), ..Default::default() };
     let mut parts = out.split(|&b| b == 0).filter(|p| !p.is_empty());
     while let Some(entry) = parts.next() {
-        let text = String::from_utf8_lossy(entry);
-        if let Some(head) = text.strip_prefix("## ") {
-            parse_branch(head, &mut st);
+        if let Some(head) = entry.strip_prefix(b"## ") {
+            parse_branch(&String::from_utf8_lossy(head), &mut st);
             continue;
         }
-        if entry.len() < 4 {
+        // "XY path": two status letters, a space and at least one character of path.
+        let [x, y, b' ', path @ ..] = entry else { continue };
+        if path.is_empty() {
             continue;
         }
-        let (x, y) = (entry[0], entry[1]);
-        let path = String::from_utf8_lossy(&entry[3..]).into_owned();
+        let (x, y) = (*x, *y);
+        let path = String::from_utf8_lossy(path).into_owned();
         // Rename/copy: the old path is a separate entry.
-        let orig = (x == b'R' || x == b'C' || y == b'R' || y == b'C').then(|| parts.next().map(|o| String::from_utf8_lossy(o).into_owned())).flatten();
+        let has_orig = matches!(x, b'R' | b'C') || matches!(y, b'R' | b'C');
+        let orig = if has_orig { parts.next().map(|o| String::from_utf8_lossy(o).into_owned()) } else { None };
         let conflict = matches!((x, y), (b'D', b'D') | (b'A', b'A') | (b'U', _) | (_, b'U'));
         let (staged, unstaged) = if conflict {
             (None, Some(Mark::Conflict))
