@@ -20,14 +20,24 @@ fn web_preview_fixed_port_reports_conflicts_and_can_restart() {
     let _serial = SOCKET_TESTS.lock().unwrap();
     let root = crate::qa_workbench_tests::fresh("preview-fixed-port");
     std::fs::write(root.join("index.html"), "fixed port").unwrap();
-    let occupied = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
-    let port = occupied.local_addr().unwrap().port();
-    let config = Config { port, ..Config::default() };
-    let start = || Server::start(Arc::new(host::local()), crate::ui::local_path(&root), config.clone());
-    let error = start().err().expect("an occupied fixed port must not silently choose another port");
-    assert!(error.contains(&port.to_string()), "{error}");
-    drop(occupied);
-    let (mut server, _events) = start().unwrap();
+    // Another test (or program) can bind the port in the moment between releasing it and starting on it: the run is
+    // repeated with a new port rather than failed for a race the test does not examine.
+    let mut attempt = 0;
+    let (mut server, _events, port, start) = loop {
+        attempt += 1;
+        let occupied = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = occupied.local_addr().unwrap().port();
+        let config = Config { port, ..Config::default() };
+        let (root, config) = (root.clone(), config);
+        let start = move || Server::start(Arc::new(host::local()), crate::ui::local_path(&root), config.clone());
+        let error = start().err().expect("an occupied fixed port must not silently choose another port");
+        assert!(error.contains(&port.to_string()), "{error}");
+        drop(occupied);
+        match start() {
+            Ok((server, events)) => break (server, events, port, start),
+            Err(e) => assert!(attempt < 5, "{e}"),
+        }
+    };
     assert_eq!(server.port(), port);
     assert!(request(&server, "GET", "/", true, None).contains("fixed port"));
     server.stop();

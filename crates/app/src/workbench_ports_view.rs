@@ -23,6 +23,8 @@ pub enum PortMenuCmd {
     Stop,
     /// A listening port that is not forwarded yet.
     Forward,
+    /// The server's port number of a row.
+    CopyPort,
 }
 
 /// State of a row as shown.
@@ -117,9 +119,10 @@ impl Workbench {
     ) {
         let active = row.state == RowState::Active;
         if row.state == RowState::Listening {
-            let items = vec![MenuItem::new(crate::i18n::t("Forward Port"))];
+            let items = vec![MenuItem::new(crate::i18n::t("Forward Port")), MenuItem::new(crate::i18n::t("Copy Port Number"))];
             let target = MenuTarget { path: row.port.to_string(), is_dir: false, tab: None };
-            return self.show_menu(items, vec![MenuCmd::Port(PortMenuCmd::Forward)], Vec::new(), target, position, window, cx);
+            let commands = vec![MenuCmd::Port(PortMenuCmd::Forward), MenuCmd::Port(PortMenuCmd::CopyPort)];
+            return self.show_menu(items, commands, Vec::new(), target, position, window, cx);
         }
         let items = vec![
             MenuItem::new(crate::i18n::t("Open in Browser")).enabled(row.url().is_some()),

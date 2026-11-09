@@ -262,6 +262,49 @@ mod tests {
     }
 
     #[gpui::test]
+    fn erasing_the_history_forgets_the_marks_that_pointed_into_it(cx: &mut TestAppContext) {
+        let (term, cx) = setup(cx);
+        let rows = term.read_with(cx, |t, _| t.term.screen_lines());
+        term.update(cx, |t, _| {
+            t.feed(b"\x1b]133;A\x07$ ls\r\n\x1b]133;C\x07out\r\n\x1b]133;D;0\x07");
+            t.feed("fill\r\n".repeat(rows + 5).as_bytes());
+        });
+        assert!(term.read_with(cx, |t, _| t.a11y_scroll().1) > 0 && term.read_with(cx, |t, _| t.command_count_for_test()) == 1);
+        // A reset empties the history: lines are numbered from the top of it, so every recorded one would now be wrong.
+        term.update(cx, |t, _| t.feed(b"\x1bc"));
+        assert_eq!(term.read_with(cx, |t, _| t.command_count_for_test()), 0);
+        assert!(term.read_with(cx, |t, _| t.visible_marks_for_test()).is_empty(), "no dot on a row that never held a prompt");
+        // New commands are marked again from there.
+        term.update(cx, |t, _| t.feed(b"\x1b]133;A\x07$ pwd\r\n\x1b]133;C\x07x\r\n\x1b]133;D;0\x07"));
+        assert_eq!(term.read_with(cx, |t, _| t.command_count_for_test()), 1);
+    }
+
+    #[gpui::test]
+    fn a_selection_of_the_whole_history_is_not_noted_for_every_chunk_of_output(cx: &mut TestAppContext) {
+        let (term, cx) = setup(cx);
+        let rows = term.read_with(cx, |t, _| t.term.screen_lines());
+        term.update_in(cx, |t, window, cx| {
+            t.feed(b"on screen\r\n");
+            t.select_all(&TermSelectAll, window, cx);
+        });
+        assert!(term.read_with(cx, |t, _| t.keep_selection().is_some()), "what fits a screen is followed across redraws");
+        term.update_in(cx, |t, window, cx| {
+            t.feed("history\r\n".repeat(rows * 4).as_bytes());
+            t.select_all(&TermSelectAll, window, cx);
+        });
+        assert!(term.read_with(cx, |t, _| t.keep_selection().is_none()), "Select All over the scrollback would copy it per chunk");
+    }
+
+    #[gpui::test]
+    fn a_marked_link_shows_where_it_really_goes(cx: &mut TestAppContext) {
+        let (term, cx) = setup(cx);
+        term.update(cx, |t, _| t.feed(b"\x1b]8;;https://evil.example/login\x07your bank\x1b]8;;\x07 plain"));
+        let at = |col: usize| alacritty_terminal::index::Point::new(Line(0), alacritty_terminal::index::Column(col));
+        assert_eq!(term.read_with(cx, |t, _| t.uri_at(at(2))).as_deref(), Some("https://evil.example/login"), "over the words, not the address");
+        assert_eq!(term.read_with(cx, |t, _| t.uri_at(at(15))), None, "plain text has no target to show");
+    }
+
+    #[gpui::test]
     fn resetting_an_output_terminal_leaves_no_history_behind(cx: &mut TestAppContext) {
         let (term, cx) = setup(cx);
         let rows = term.read_with(cx, |t, _| t.term.screen_lines());

@@ -315,11 +315,15 @@ impl Workbench {
             None => {
                 let host = self.remote.host.clone();
                 let t = cx.new(|cx| TerminalView::output_only(host, crate::i18n::t("Test Results").into(), cx));
-                self._subs.push(cx.subscribe_in(&t, window, |this, _, event: &TerminalEvent, window, cx| match event {
-                    TerminalEvent::OpenLink(link) => this.open_link(link.clone(), window, cx),
-                    TerminalEvent::TitleChanged | TerminalEvent::Exited => cx.notify(),
-                    _ => {}
-                }));
+                self.term_subs.retain(|(w, _)| w.upgrade().is_some());
+                self.term_subs.push((
+                    t.downgrade(),
+                    cx.subscribe_in(&t, window, |this, _, event: &TerminalEvent, window, cx| match event {
+                        TerminalEvent::OpenLink(link) => this.open_link(link.clone(), window, cx),
+                        TerminalEvent::TitleChanged | TerminalEvent::Exited => cx.notify(),
+                        _ => {}
+                    }),
+                ));
                 self.terminals.push(t.clone());
                 self.jobs.tests.output = Some(t.clone());
                 t

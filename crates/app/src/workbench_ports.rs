@@ -478,6 +478,10 @@ impl Workbench {
     }
 
     pub(super) fn run_port_menu(&mut self, cmd: PortMenuCmd, remote: u16, window: &mut Window, cx: &mut Context<Self>) {
+        if cmd == PortMenuCmd::CopyPort {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(remote.to_string()));
+            return;
+        }
         let Some(id) = self.forward_id(remote) else {
             if cmd == PortMenuCmd::Forward {
                 self.forward_port(remote, cx);
@@ -515,7 +519,7 @@ impl Workbench {
             }
             PortMenuCmd::Retry => self.retry_forward(remote, cx),
             PortMenuCmd::Stop => self.stop_forward(remote, cx),
-            PortMenuCmd::Forward => {}
+            PortMenuCmd::Forward | PortMenuCmd::CopyPort => {}
         }
         cx.notify();
     }

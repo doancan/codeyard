@@ -8,7 +8,8 @@ const MAX_PAYLOAD: usize = 4096;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OscEvent {
-    /// OSC 7: the shell's folder (decoded; only for this host or no host).
+    /// OSC 7: the shell's folder (decoded). The host is not compared: a shell inside `ssh` names the other machine's, so
+    /// a user of the folder checks that it exists where the terminal runs.
     Cwd(String),
     /// OSC 133;A: a prompt starts.
     PromptStart,
@@ -145,7 +146,7 @@ fn memchr(needle: u8, haystack: &[u8]) -> Option<usize> {
 }
 
 /// `file://host/path` (path percent-encoded or not) → an absolute path; `None` for other schemes, relative paths or
-/// control characters. The host is not checked here (any host name the shell knows itself by).
+/// control characters. The host is not checked here (any host name the shell knows itself by); see `Cwd`.
 pub fn parse_cwd(url: &str) -> Option<String> {
     let rest = url.strip_prefix("file://")?;
     let path = &rest[rest.find('/')?..];

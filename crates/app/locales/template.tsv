@@ -435,6 +435,7 @@ Copy Line Down
 Copy Line Up	
 Copy Message	
 Copy Path	
+Copy Port Number	
 Copy Relative Path	
 Copy Report	
 Copy Value	
@@ -3421,6 +3422,7 @@ your words
 {} minutes ago	
 {} month ago|{} months ago	
 {} more entry that the comparison hides (ignored by .gitignore or the compare settings) goes too.|{} more entries that the comparison hides (ignored by .gitignore or the compare settings) go too.	
+{} more ports are not listed here	
 {} no longer exists, so it was not reopened.	
 {} of them is on no other branch, tag or remote: after the reset only Git's reflog still finds it.|{} of them are on no other branch, tag or remote: after the reset only Git's reflog still finds them.	
 {} open	

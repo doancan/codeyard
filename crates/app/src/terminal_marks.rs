@@ -35,6 +35,11 @@ pub(super) struct Marks {
     pub list: VecDeque<CmdMark>,
     /// Lines that fell off the top since the history filled (subtracted from recorded lines).
     pub shift: i64,
+    /// History size at the last output: it only shrinks when the history was erased (`CSI 3J`, a reset, Clear), which moves
+    /// every recorded line.
+    pub history_seen: i64,
+    /// The command whose text could not be found above the screen: not looked for again before the next command.
+    pub shift_missed: Option<i64>,
     /// Folder from OSC 7.
     pub cwd: Option<String>,
     /// When the running command started (OSC 133;C).
@@ -150,6 +155,10 @@ impl TerminalView {
     /// Re-finds the shift once the history is full: the newest command's line is looked for where it should be and
     /// above it. Marks that scrolled out are dropped.
     pub(super) fn update_mark_shift(&mut self) {
+        let history = self.history();
+        if history < std::mem::replace(&mut self.marks.history_seen, history) {
+            self.forget_marks();
+        }
         let full = self.history() as usize >= self.scrollback && self.scrollback > 0;
         if !full || self.marks.list.is_empty() {
             return;
@@ -159,15 +168,26 @@ impl TerminalView {
             return;
         }
         let expected = out - 1 - self.marks.shift;
-        if self.line_text(expected).as_deref() != Some(typed.as_str())
-            && let Some(k) = (1..=SHIFT_SEARCH).find(|k| self.line_text(expected - k).as_deref() == Some(typed.as_str()))
-        {
-            self.marks.shift += k;
+        if self.line_text(expected).as_deref() != Some(typed.as_str()) && self.marks.shift_missed != Some(out) {
+            // A full-screen program can redraw the line away: the search then fails on every chunk of output, and each
+            // try reads up to SHIFT_SEARCH rows, so a miss is remembered until the next command.
+            match (1..=SHIFT_SEARCH).find(|k| self.line_text(expected - k).as_deref() == Some(typed.as_str())) {
+                Some(k) => self.marks.shift += k,
+                None => self.marks.shift_missed = Some(out),
+            }
         }
         let top = self.marks.shift;
         while self.marks.list.front().is_some_and(|m| m.prompt < top) {
             self.marks.list.pop_front();
         }
+    }
+
+    /// The recorded lines no longer exist (the history was erased): marks, shift and what hangs on them start again.
+    pub(super) fn forget_marks(&mut self) {
+        self.marks.list.clear();
+        self.marks.shift = 0;
+        self.marks.shift_missed = None;
+        self.marks.history_seen = self.history();
     }
 
     /// Prompts on screen: (screen row, state) for the gutter.

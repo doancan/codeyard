@@ -22,6 +22,8 @@ pub(super) struct FindState {
     current: Option<Match>,
     /// Matches in the whole buffer when the query last changed (capped at `MAX_COUNT + 1`).
     total: usize,
+    /// A scan of a long history waits for the typing to pause; typing again drops it.
+    pending: Option<gpui::Task<()>>,
     _sub: Subscription,
 }
 
@@ -61,11 +63,11 @@ impl TerminalView {
             None => {
                 let field = cx.new(|cx| TextField::new(crate::i18n::tr("Find"), cx));
                 let sub = cx.subscribe_in(&field, window, |this, _, ev: &FieldEvent, window, cx| match ev {
-                    FieldEvent::Changed => this.find_query_changed(cx),
+                    FieldEvent::Changed => this.find_query_changed_soon(cx),
                     FieldEvent::Submit => this.find_step(Direction::Left, cx),
                     FieldEvent::Escape => this.close_find(window, cx),
                 });
-                self.find = Some(FindState { field: field.clone(), regex: None, current: None, total: 0, _sub: sub });
+                self.find = Some(FindState { field: field.clone(), regex: None, current: None, total: 0, pending: None, _sub: sub });
                 field
             }
         };
@@ -105,6 +107,31 @@ impl TerminalView {
     /// The find field has focus: keys typed there are not for the shell.
     pub(super) fn find_has_focus(&self, window: &Window, cx: &gpui::App) -> bool {
         self.find.as_ref().is_some_and(|f| f.field.focus_handle(cx).is_focused(window))
+    }
+
+    /// A query typed: a short buffer is searched at once, a long one (a scan reads every line of it) when the typing pauses.
+    fn find_query_changed_soon(&mut self, cx: &mut Context<Self>) {
+        const PAUSE: std::time::Duration = std::time::Duration::from_millis(150);
+        const LONG: usize = 5_000;
+        if cfg!(test) || self.term.grid().history_size() < LONG {
+            if let Some(find) = &mut self.find {
+                find.pending = None;
+            }
+            return self.find_query_changed(cx);
+        }
+        let task = cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(PAUSE).await;
+            this.update(cx, |this, cx| {
+                if let Some(find) = &mut this.find {
+                    find.pending = None;
+                }
+                this.find_query_changed(cx);
+            })
+            .ok();
+        });
+        if let Some(find) = &mut self.find {
+            find.pending = Some(task);
+        }
     }
 
     /// New query: count the matches and jump to the one nearest the bottom (the latest output).

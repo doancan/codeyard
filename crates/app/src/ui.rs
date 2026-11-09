@@ -461,7 +461,8 @@ pub fn bridge<T: Send + 'static>(rx: std::sync::mpsc::Receiver<T>) -> futures::c
                 }
             }
         })
-        .expect("bridge thread");
+        // Out of threads: the stream simply ends, which readers treat as the source being gone, not a crash.
+        .ok();
     out
 }
 
@@ -480,7 +481,8 @@ pub fn bridge_with<T: Send + 'static>(
                 }
             }
         })
-        .expect("bridge thread");
+        // Out of threads: the stream simply ends, which readers treat as the source being gone, not a crash.
+        .ok();
     out
 }
 

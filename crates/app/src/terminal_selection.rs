@@ -19,6 +19,9 @@ use super::TerminalView;
 
 /// Most lines the selection is followed up by one chunk of output.
 const MAX_FOLLOW: usize = 10_000;
+/// Taller selections are not followed: noting a selection of a whole scrollback (Select All) would copy every row's text
+/// for each chunk of output, and a program redraws in place only what fits on its screen.
+const MAX_KEPT_SCREENS: usize = 2;
 /// How long "Hold Shift to select" stays, and how long before it shows again.
 const HINT_SHOWN: std::time::Duration = std::time::Duration::from_secs(3);
 const HINT_AGAIN: std::time::Duration = std::time::Duration::from_secs(30);
@@ -43,6 +46,9 @@ impl TerminalView {
     pub(super) fn keep_selection(&self) -> Option<Kept> {
         let selection = self.term.selection.clone().filter(|s| !s.is_empty())?;
         let range = selection.to_range(&self.term)?;
+        if (range.end.line.0 - range.start.line.0) as usize >= self.term.screen_lines() * MAX_KEPT_SCREENS {
+            return None;
+        }
         let rows: Vec<String> = (range.start.line.0..=range.end.line.0).map(|l| self.row_text(Line(l))).collect();
         if rows.iter().all(|r| r.is_empty()) {
             return None;

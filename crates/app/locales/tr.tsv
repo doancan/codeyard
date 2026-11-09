@@ -1553,6 +1553,8 @@ The local port is busy	Yerel bağlantı noktası meşgul
 Ports below 1024 need extra privileges on this computer	1024'ün altındaki bağlantı noktaları bu bilgisayarda ek yetki gerektirir
 The SSH connection is gone: reconnect to forward again	SSH bağlantısı koptu: yeniden yönlendirmek için tekrar bağlanın
 forwarding…	yönlendiriliyor…
+Copy Port Number	Bağlantı Noktası Numarasını Kopyala
+{} more ports are not listed here	Listede gösterilmeyen {0} bağlantı noktası daha var
 Port	Bağ. noktası
 Label	Etiket
 Forwarded Address	Yönlendirilen adres
