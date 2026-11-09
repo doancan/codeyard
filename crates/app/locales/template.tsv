@@ -849,6 +849,7 @@ Evaluate an expression (↵)
 Every change in this file is staged	
 Every file of {} matches its package.	
 Every setting, with comments	
+Every uncommitted change is lost. This can't be undone.	
 Everything resolved so far in this merge is discarded.	
 Existing custom server commands are preserved. Services start only in trusted folders. Closing this tab cancels an installation that has not reached activation.	
 Exit	
@@ -2009,8 +2010,9 @@ Reset Soft to Here
 Reset Terminal	
 Reset Zoom	
 Reset all settings to the defaults?	
+Reset past {0} commit that is already on {1}?|Reset past {0} commits that are already on {1}?	
 Reset the Rust setup in settings.jsonc?	
-Reset to {0} ({1})	
+Reset to {0} ({1}); the branch was at {2}	
 Resolve Conflicts	
 Resolve the file conflict before debugging.	
 Resolved {} conflict|Resolved {} conflicts	
@@ -2436,9 +2438,11 @@ The address is malformed: {}
 The branch goes back to how it was before the rebase started.	
 The branch is fully merged into the current branch.	
 The branch is removed from the remote repository for everyone. Local branches are not touched.	
+The branch moved while the question was open. Nothing was changed.	
 The bundled service catalogue is invalid. Reinstall Codeyard before retrying.	
 The changes are too large for one patch.	
 The clipboard has no text.	
+The commit stays on {}: the next Sync brings it back. To remove it there too, push with force after undoing (Git: Push (Force)…).	
 The complete file list is available in Output.	
 The connection dropped; trying to reconnect. Unsaved changes are kept.	
 The connection is down, so files with unsaved changes cannot be saved. Use File: Save a Copy to This Computer… to keep them, or close them, then reconnect.	
@@ -2560,6 +2564,7 @@ There is nothing to copy.
 There is nothing to ignore here	
 There isn't enough free disk space for the download. Free some space and try again.	
 These branches share no history, so git will not merge them. In a terminal, `git merge --allow-unrelated-histories` merges them anyway.	
+They stay on {}: the next Sync brings them back. To remove them there too, push with force after the reset (Git: Push (Force)…).	
 They were not found.	
 This branch is not published yet. Click to publish it.	
 This can't be undone.	
@@ -2653,10 +2658,12 @@ UI font of the whole window (empty: system font)
 Unavailable	
 Unchanged	
 Underline misspelled words in prose files and in code comments	
-Undid commit “{}”	
+Undid commit “{0}” (the branch was at {1})	
 Undo	
+Undo Commit	
 Undo Last Commit	
 Undo Replace	
+Undo a commit that is already on {}?	
 Undo conflict: {} changed after the replacement and was left as it is.	
 Undo is not available here: the replacement was made in another folder or connection.	
 Unexpected text after the closing quote	
@@ -3242,6 +3249,7 @@ your words
 {0} may now connect to {1}.	
 {0} needs strings, got {1} and {2}	
 {0} now tracks {1}	
+{0} of them is already on {1}: the next Sync brings it back.|{0} of them are already on {1}: the next Sync brings them back.	
 {0} of {1} MB	
 {0} of {1} changes	
 {0} of {1} changes in {2} files selected. Nothing is written before Apply.	
@@ -3327,6 +3335,7 @@ your words
 {} changed no files (merge or empty commit).	
 {} change|{} changes	
 {} command|{} commands	
+{} commit leaves this branch.|{} commits leave this branch.	
 {} commit on the remote branch is not in yours and is lost for everyone using it.|{} commits on the remote branch are not in yours and are lost for everyone using it.	
 {} commit|{} commits	
 {} conflict left|{} conflicts left	
@@ -3404,6 +3413,7 @@ your words
 {} month ago|{} months ago	
 {} more entry that the comparison hides (ignored by .gitignore or the compare settings) goes too.|{} more entries that the comparison hides (ignored by .gitignore or the compare settings) go too.	
 {} no longer exists, so it was not reopened.	
+{} of them is on no other branch, tag or remote: after the reset only Git's reflog still finds it.|{} of them are on no other branch, tag or remote: after the reset only Git's reflog still finds them.	
 {} open	
 {} outgoing call|{} outgoing calls	
 {} parent module|{} parent modules	

@@ -402,7 +402,11 @@ pub fn run_op(host: &dyn Host, root: &str, hash: &str, op: &CommitOp) -> Result<
                 crate::i18n::tf("Revert stopped and was undone: {}", &[&e.lines().next().unwrap_or("conflict")])
             })
         }
-        CommitOp::Reset(mode) => git(&["reset", mode.flag(), hash]).map(|_| crate::i18n::tf("Reset to {0} ({1})", &[&short, &&mode.flag()[2..]])),
+        CommitOp::Reset(mode) => {
+            // The old tip is named, so the commits that left the branch can be found again (`git reset <hash>`).
+            let was = crate::git::short_head(host, root);
+            git(&["reset", mode.flag(), hash]).map(|_| crate::i18n::tf("Reset to {0} ({1}); the branch was at {2}", &[&short, &&mode.flag()[2..], &was]))
+        }
     }
 }
 

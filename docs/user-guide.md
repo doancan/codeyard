@@ -494,8 +494,12 @@ columns), one line per commit: message, author and the most important branch/tag
 next to it, so history reads from the left edge and side branches step to the right. Hover a commit
 for its author, date, all labels and hash. Click a commit for its message, files and `+/−` counts below
 the graph (click a file for its diff; double-click for the file list). Right-click for copy hash,
-create branch or tag here, checkout (detached), cherry-pick, revert and reset (hard reset asks;
-a cherry-pick or revert that conflicts is undone, never left half done; for a merge commit the first parent is the mainline).
+create branch or tag here, checkout (detached), cherry-pick, revert and reset (a cherry-pick or revert that conflicts is
+undone, never left half done; for a merge commit the first parent is the mainline). Before a reset Codeyard counts the
+commits that leave the branch: a hard reset always asks and says how many leave, how many exist on no other branch, tag
+or remote (afterwards only Git's reflog finds them) and how many are already on the upstream; a soft or mixed reset asks
+only when some are already on the upstream, because the next Sync would bring them back. The result names the commit the
+branch was at, so `git reset <hash>` returns there.
 There is no interactive rebase (squash, reorder, edit): use a terminal for that. The header searches
 commits (message, author, hash, branch), fetches, pulls and pushes (with the counts of commits to pull
 and to push) and reloads; its **…** menu picks the view (Graph, List with times, Days), the scope (all
@@ -992,7 +996,8 @@ with branch (blue), remote (green), tag (yellow) and HEAD labels; merges are hol
 Click a commit to list the files it changed and open one as a side-by-side diff.
 
 The "…" menu in Source Control (also in the palette) has commit (amend), undo last commit
-(the changes stay staged and the message comes back), stash / stash with untracked files,
+(the changes stay staged and the message comes back; a commit that is already on the upstream is undone only after a
+question, since the next Sync would bring it back, and the result names the commit the branch was at), stash / stash with untracked files,
 pop / apply / drop a stash, and discard all changes. "Git: View File History" lists the
 commits of the open file (following renames); pick one to see what it changed. "Git: Blame
 Line" tells who last changed the line under the cursor, also when the file has unsaved edits.

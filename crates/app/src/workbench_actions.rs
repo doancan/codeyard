@@ -239,7 +239,7 @@ impl Workbench {
             }))
             .on_action(cx.listener(Self::manage_language_services))
             .on_action(cx.listener(|this, _: &GitCommitAmend, _, cx| this.with_scm(cx, |s, cx| s.commit_amend(cx))))
-            .on_action(cx.listener(|this, _: &GitUndoLastCommit, _, cx| this.with_scm(cx, |s, cx| s.undo_last_commit(cx))))
+            .on_action(cx.listener(|this, _: &GitUndoLastCommit, window, cx| this.with_scm(cx, |s, cx| s.undo_last_commit(window, cx))))
             .on_action(cx.listener(|this, _: &GitStash, _, cx| this.with_scm(cx, |s, cx| s.stash(false, cx))))
             .on_action(cx.listener(|this, _: &GitStashIncludeUntracked, _, cx| this.with_scm(cx, |s, cx| s.stash(true, cx))))
             .on_action(cx.listener(|this, _: &GitPopLatestStash, _, cx| this.with_scm(cx, |s, cx| s.stash_apply("stash@{0}".into(), true, cx))))
