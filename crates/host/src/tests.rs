@@ -122,7 +122,7 @@ fn silent_spawn_requests_time_out_and_late_processes_are_cleaned_up() {
             }
         });
         let host = Arc::new(RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "slow spawn").unwrap());
-        host.set_call_timeout_secs(1);
+        host.set_call_timeout(std::time::Duration::from_millis(150));
         let caller = host.clone();
         let (done, result) = mpsc::channel();
         let worker = std::thread::spawn(move || {
@@ -209,10 +209,12 @@ fn a_silent_agent_makes_a_call_fail_instead_of_hanging() {
         }
     });
     let host = RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "silent").unwrap();
-    host.set_call_timeout_secs(1);
+    host.set_call_timeout(std::time::Duration::from_millis(150));
     let err = host.call(Request::ReadDir { path: "/hang".into() }).unwrap_err();
     assert!(err.to_string().contains("did not answer"), "{err}");
     assert!(host.shared.waiters.lock().unwrap().is_empty(), "the abandoned waiter was removed");
+    // The short limit was only for the call that never gets an answer: a busy machine must not fail the one that does.
+    host.set_call_timeout(std::time::Duration::from_secs(10));
     assert!(matches!(host.call(Request::Stat { path: "/ok".into() }), Ok(Response::Stat(_))), "the connection still works");
 }
 
@@ -567,11 +569,11 @@ fn a_stalled_process_consumer_loses_nothing_and_does_not_block_other_calls() {
         sent += n;
     }
     // Nothing reads the echo while it piles up; other calls must be served meanwhile (a blocked reader would hit the limit).
-    h.set_call_timeout_secs(10);
+    h.set_call_timeout(std::time::Duration::from_secs(10));
     for _ in 0..20 {
         assert!(h.stat("/").is_ok(), "a stat failed behind a stalled process consumer");
     }
-    h.set_call_timeout_secs(0);
+    h.set_call_timeout(std::time::Duration::ZERO);
     // The slow consumer finally reads: every byte, in order.
     let mut got = 0usize;
     while got < TOTAL {

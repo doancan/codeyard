@@ -68,7 +68,7 @@ pub fn process_command(program: &str, args: &[String], cwd: Option<&str>) -> std
 use std::collections::HashMap;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 
 use proto::{ChangeKind, DirEntry, Frame, HostInfo, Meta, Request, Response, SearchQuery};
@@ -552,7 +552,7 @@ struct Shared {
     orphans: Mutex<HashMap<u32, Vec<PtyEvent>>>,
     next_id: AtomicU32,
     /// Pin the call timeout (seconds; 0 = default table). For tests and diagnostics.
-    call_limit_secs: AtomicU32,
+    call_limit_millis: AtomicU64,
 }
 
 /// Heartbeat interval and how long a single probe waits.
@@ -913,7 +913,7 @@ pub fn spawn_transport(mut cmd: Command) -> Result<Transport> {
 
 impl RemoteHost {
     fn request_reply(&self, req: Request, waiter: Waiter, rx: mpsc::Receiver<Response>) -> Result<Response> {
-        let limit = call_timeout(&req, self.shared.call_limit_secs.load(Ordering::Relaxed));
+        let limit = call_timeout(&req, self.shared.call_limit_millis.load(Ordering::Relaxed));
         let id = self.start(req, waiter)?;
         match rx.recv_timeout(limit) {
             Ok(response) => Ok(response),
@@ -937,7 +937,7 @@ impl RemoteHost {
         if cancel.is_some_and(|c| c.load(Ordering::Acquire)) {
             return Err(HostError::Op(proto::Error::Cancelled));
         }
-        let limit = call_timeout(&req, self.shared.call_limit_secs.load(Ordering::Relaxed));
+        let limit = call_timeout(&req, self.shared.call_limit_millis.load(Ordering::Relaxed));
         let started = std::time::Instant::now();
         let (tx, rx) = mpsc::channel();
         let id = self.start(req, Waiter::Once(tx))?;
@@ -1066,9 +1066,9 @@ impl RemoteHost {
         Ok(id)
     }
 
-    /// Pin the timeout of all calls (seconds; 0: per-request-type default, 2 min for file operations).
-    pub fn set_call_timeout_secs(&self, secs: u32) {
-        self.shared.call_limit_secs.store(secs, Ordering::Relaxed);
+    /// Pin the timeout of all calls (zero: per-request-type default, 2 min for file operations).
+    pub fn set_call_timeout(&self, limit: std::time::Duration) {
+        self.shared.call_limit_millis.store(u64::try_from(limit.as_millis()).unwrap_or(u64::MAX), Ordering::Relaxed);
     }
 
     /// Connection state changes.
@@ -1296,9 +1296,9 @@ impl Host for RemoteHost {
 
 /// Longest wait per request: ordinary file ops get 2 minutes; large-output or long jobs (commands,
 /// big file scans) get more, in line with the agent's own limits (10 minutes).
-fn call_timeout(req: &Request, override_secs: u32) -> std::time::Duration {
-    if override_secs > 0 {
-        return std::time::Duration::from_secs(u64::from(override_secs));
+fn call_timeout(req: &Request, override_millis: u64) -> std::time::Duration {
+    if override_millis > 0 {
+        return std::time::Duration::from_millis(override_millis);
     }
     match req {
         Request::Exec { .. } | Request::LineIndex { .. } | Request::ReadLines { .. } | Request::Copy { .. } => std::time::Duration::from_secs(15 * 60),
