@@ -47,8 +47,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Yard: a file write that fails (disk full, a folder in the way) no longer leaves its `.tmp<pid>` file in the public folder.
 - Extensions: a registry address like `http://localhost.example.com` or `http://localhost@example.com` is no longer taken for this machine; plain `http://` is accepted only for `localhost`, `127.0.0.1` and `[::1]`.
 - Extensions: a failed write of a registry's cached index or Market page no longer leaves its `.tmp<pid>` file behind.
-### Fixed
-
 - Extensions: a package file larger than any package may be (or a device file) is refused when installing instead of being read whole into memory first.
 - Extensions: installing a folder whose files add up to more than the package limit is refused from their sizes, before any file is read into memory.
 - Extensions: going back to the previous version never lands on a package from a different publisher or a sideloaded file; a rollback is offered only between packages of the same identity.
