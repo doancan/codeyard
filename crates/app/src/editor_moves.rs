@@ -54,12 +54,13 @@ impl EditorView {
             self.schedule_lsp_extras(600, cx);
         }
         if self.find.is_some() {
-            self.refresh_matches(cx);
+            self.refresh_matches(false, cx);
         }
         // Keep the other view's open find bar up to date too.
         for v in self.parked.iter_mut().flatten() {
             if let Some(re) = &v.find_re {
-                v.matches = find::find_all(&self.buffer, re);
+                // A large file is not scanned here on every edit; the view searches again when it is shown.
+                v.matches = if find::is_large(self.buffer.rope()) { Vec::new() } else { find::find_all(&self.buffer, re) };
             }
         }
         if let AutoSave::AfterDelay(ms) = cx.global::<Settings>().auto_save {

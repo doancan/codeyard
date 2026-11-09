@@ -539,6 +539,9 @@ pub struct EditorView {
     find: Option<(Entity<FindBar>, gpui::Subscription)>,
     find_re: Option<regex::bytes::Regex>,
     matches: Vec<Range<usize>>,
+    /// Searches of large files run in the background; only the latest one (by `find_epoch`) may write `matches`.
+    find_epoch: u64,
+    find_task: Option<gpui::Task<()>>,
     /// Git: repository root, content at HEAD, and line markers (gutter).
     git_root: Option<String>,
     /// Inline blame: (line, text version, text) and the task fetching it.
@@ -985,6 +988,8 @@ impl EditorView {
             find: None,
             find_re: None,
             matches: Vec::new(),
+            find_epoch: 0,
+            find_task: None,
             git_root: None,
             blame: None,
             blame_task: None,

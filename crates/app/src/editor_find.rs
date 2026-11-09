@@ -63,7 +63,7 @@ impl EditorView {
             }
         });
         // `Changed` arrives when the query text changes; if it didn't change, refresh by hand.
-        self.refresh_matches(cx);
+        self.refresh_matches(false, cx);
         if replace && !bar.read(cx).query(cx).is_empty() {
             bar.read(cx).focus_replacement(window, cx);
         } else {
@@ -74,14 +74,7 @@ impl EditorView {
 
     pub(super) fn on_find_event(&mut self, ev: &FindEvent, window: &mut Window, cx: &mut Context<Self>) {
         match ev {
-            FindEvent::Changed => {
-                self.refresh_matches(cx);
-                // While typing: go to the first match from the cursor.
-                let from = self.buffer.selection_or_cursor().start;
-                if let Some(m) = self.matches.iter().find(|m| m.start >= from).or(self.matches.first()).cloned() {
-                    self.select_match(m, cx);
-                }
-            }
+            FindEvent::Changed => self.refresh_matches(true, cx),
             FindEvent::Next => self.jump(true, cx),
             FindEvent::Prev => self.jump(false, cx),
             FindEvent::ReplaceOne => self.replace_one(cx),
@@ -105,8 +98,9 @@ impl EditorView {
         }
     }
 
-    /// Pattern or text changed: find the matches again, write the counter.
-    pub(super) fn refresh_matches(&mut self, cx: &mut Context<Self>) {
+    /// Pattern or text changed: find the matches again, write the counter. `jump`: select the first match from the
+    /// cursor (while typing the query). A large file is searched in the background; the matches stay empty until then.
+    pub(super) fn refresh_matches(&mut self, jump: bool, cx: &mut Context<Self>) {
         let Some((bar, _)) = &self.find else { return };
         let bar = bar.clone();
         let compiled = bar.read(cx).compile(cx);
@@ -121,12 +115,29 @@ impl EditorView {
             (false, false) => self.buffer.set_marks(key, Vec::new()),
             _ => {}
         }
+        self.find_epoch += 1;
+        self.find_task = None;
         let status = match compiled {
+            Ok(Some(re)) if find::is_large(self.buffer.rope()) => {
+                self.matches.clear();
+                self.find_re = Some(re.clone());
+                let (rope, epoch) = (self.buffer.rope().clone(), self.find_epoch);
+                let task = cx.background_executor().spawn(async move { find::find_all_in(&rope, &re) });
+                self.find_task = Some(cx.spawn(async move |this, cx| {
+                    let found = task.await;
+                    this.update(cx, |e, cx| {
+                        if e.find_epoch != epoch {
+                            return;
+                        }
+                        e.matches = found;
+                        e.finish_matches(jump, cx);
+                    })
+                    .ok();
+                }));
+                Some(None)
+            }
             Ok(Some(re)) => {
                 self.matches = find::find_all(&self.buffer, &re);
-                if let Some(scope) = self.find_scope() {
-                    self.matches.retain(|m| m.start >= scope.start && m.end <= scope.end);
-                }
                 self.find_re = Some(re);
                 None
             }
@@ -141,8 +152,29 @@ impl EditorView {
                 Some(Some((SharedString::from(e.lines().last().unwrap_or(t("Invalid pattern")).trim().to_string()), true)))
             }
         };
-        let status = status.unwrap_or_else(|| Some((self.match_status().into(), false)));
-        bar.update(cx, |b, cx| b.set_status(status, cx));
+        match status {
+            Some(status) => bar.update(cx, |b, cx| b.set_status(status, cx)),
+            None => self.finish_matches(jump, cx),
+        }
+        cx.notify();
+    }
+
+    /// The matches are in: keep those inside the scope, write the counter, optionally jump to the first one.
+    fn finish_matches(&mut self, jump: bool, cx: &mut Context<Self>) {
+        if let Some(scope) = self.find_scope() {
+            self.matches.retain(|m| m.start >= scope.start && m.end <= scope.end);
+        }
+        if let Some((bar, _)) = &self.find {
+            let status = Some((self.match_status().into(), false));
+            bar.update(cx, |b, cx| b.set_status(status, cx));
+        }
+        if jump {
+            // While typing: go to the first match from the cursor.
+            let from = self.buffer.selection_or_cursor().start;
+            if let Some(m) = self.matches.iter().find(|m| m.start >= from).or(self.matches.first()).cloned() {
+                self.select_match(m, cx);
+            }
+        }
         cx.notify();
     }
 
@@ -245,5 +277,10 @@ impl EditorView {
 
     pub fn find_bar(&self) -> Option<Entity<FindBar>> {
         self.find.as_ref().map(|(b, _)| b.clone())
+    }
+
+    #[cfg(test)]
+    pub fn match_count_for_test(&self) -> usize {
+        self.matches.len()
     }
 }

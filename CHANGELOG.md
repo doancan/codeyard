@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Search: finding in a very large file no longer loads a whole minified line (hundreds of MB) into memory, and Cancel
   takes effect at once instead of after thousands of lines. Only the first 1 MiB of a line is searched.
 - Search: a search no longer returns more matches than the result limit when one line holds many of them.
+### Fixed
+
+- Editor: Find in a file over 1 MB searches in the background instead of freezing typing on every keystroke.
 - Editor: reloading a file that was deleted and came back clears its "deleted" mark, so the next save checks for changes made on disk again.
 - Search: highlight ranges that a remote search agent sends outside the line's text, or inside a character, no longer crash the results list or Open; they are moved onto whole characters.
 - Search with a byte pattern (`(?-u:\xa9)`) that matches inside a character no longer returns a highlight range that cuts the character, which could crash the results list.
