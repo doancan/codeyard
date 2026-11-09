@@ -278,6 +278,21 @@ fn release_forward(f: &Option<Forward>) {
     }
 }
 
+const FORWARD_PROBE_TIMEOUT: Duration = Duration::from_millis(500);
+const ATTACH_PROBE_TIMEOUT: Duration = Duration::from_millis(400);
+
+/// Whether the peer closes the connection within `wait` (an SSH `-L` forward does this when the remote
+/// service isn't listening yet). Restores the blocking read mode afterwards.
+fn closed_soon(stream: &TcpStream, wait: Duration) -> bool {
+    let _ = stream.set_read_timeout(Some(wait));
+    let closed = match stream.peek(&mut [0u8; 1]) {
+        Ok(n) => n == 0,
+        Err(e) => !matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut),
+    };
+    let _ = stream.set_read_timeout(None);
+    closed
+}
+
 /// A random port on the server for the adapter (40000–59999; if taken, the adapter reports a clear error).
 fn remote_port() -> u16 {
     let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(0) as u64;
@@ -408,11 +423,7 @@ impl Session {
                         // SSH `-L` accepts the local port before the remote service is ready, then closes right away:
                         // if the connection didn't stay open for a short while the service isn't listening yet, retry.
                         Ok(s) if forward.is_some() && transport == Transport::Connect => {
-                            let _ = s.set_read_timeout(Some(Duration::from_millis(500)));
-                            let closed = matches!(s.peek(&mut [0u8; 1]), Ok(0))
-                                || matches!(s.peek(&mut [0u8; 1]), Err(e) if !matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut));
-                            if !closed {
-                                let _ = s.set_read_timeout(None);
+                            if !closed_soon(&s, FORWARD_PROBE_TIMEOUT) {
                                 break s;
                             }
                             if exited.load(Ordering::Relaxed) {
@@ -470,11 +481,7 @@ impl Session {
                     break s;
                 }
                 // SSH `-L` accepts a remote port that isn't ready and then closes: the connection must stay open.
-                let _ = s.set_read_timeout(Some(Duration::from_millis(400)));
-                let closed = matches!(s.peek(&mut [0u8; 1]), Ok(0))
-                    || matches!(s.peek(&mut [0u8; 1]), Err(e) if !matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut));
-                let _ = s.set_read_timeout(None);
-                if !closed {
+                if !closed_soon(&s, ATTACH_PROBE_TIMEOUT) {
                     break s;
                 }
             }
