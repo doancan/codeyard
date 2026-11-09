@@ -79,16 +79,8 @@ impl EditorView {
             let mut flags = vec![false; n];
             if n <= 200_000 {
                 let mut open: Option<String> = None;
-                for (i, flag) in flags.iter_mut().enumerate() {
-                    let text = self.buffer.line(i);
-                    let t = text.trim_start();
-                    let marker = if t.starts_with("```") {
-                        Some("```")
-                    } else if t.starts_with("~~~") {
-                        Some("~~~")
-                    } else {
-                        None
-                    };
+                for (flag, text) in flags.iter_mut().zip(self.buffer.rope().lines()) {
+                    let marker = fence_marker(text.chars());
                     match (&open, marker) {
                         (None, Some(m)) => {
                             open = Some(m.to_string());
@@ -147,6 +139,16 @@ impl EditorView {
     }
 }
 
+/// The fence a line opens or closes: ``` or ~~~ after any indentation. Reads the rope in place, without copying the line.
+fn fence_marker(chars: impl Iterator<Item = char>) -> Option<&'static str> {
+    let mut chars = chars.skip_while(|c| c.is_whitespace());
+    match (chars.next(), chars.next(), chars.next()) {
+        (Some('`'), Some('`'), Some('`')) => Some("```"),
+        (Some('~'), Some('~'), Some('~')) => Some("~~~"),
+        _ => None,
+    }
+}
+
 /// Ranges between double backticks (bytes, quotes included); an unclosed quote is ignored.
 fn inline_code_spans(text: &str) -> Vec<Range<usize>> {
     let ticks: Vec<usize> = text.match_indices('`').map(|(i, _)| i).collect();
@@ -176,7 +178,16 @@ impl EditorView {
 
 #[cfg(test)]
 mod tests {
-    use super::inline_code_spans;
+    use super::{fence_marker, inline_code_spans};
+
+    #[test]
+    fn fence_markers_after_indentation() {
+        assert_eq!(fence_marker("  ```rust\n".chars()), Some("```"));
+        assert_eq!(fence_marker("\t~~~".chars()), Some("~~~"));
+        assert_eq!(fence_marker("``".chars()), None);
+        assert_eq!(fence_marker("a ```".chars()), None);
+        assert_eq!(fence_marker("".chars()), None);
+    }
 
     #[test]
     fn inline_code_spans_pair_up_backticks() {

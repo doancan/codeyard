@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Search: a search no longer returns more matches than the result limit when one line holds many of them.
 ### Fixed
 
+- Editor: spell checking in a large Markdown file finds the code fences without copying every line after each edit.
 - Editor: Find in a file over 1 MB searches in the background instead of freezing typing on every keystroke.
 - Editor: reloading a file that was deleted and came back clears its "deleted" mark, so the next save checks for changes made on disk again.
 - Search: highlight ranges that a remote search agent sends outside the line's text, or inside a character, no longer crash the results list or Open; they are moved onto whole characters.
