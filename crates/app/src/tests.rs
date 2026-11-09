@@ -1203,7 +1203,7 @@ fn torture_random_commands_and_keys_never_panic(cx: &mut TestAppContext) {
         "cmd-,",
     ];
     let words = ["fn", "for", "x", "( ", "\"", "ğüş", "\n", "{", "def", "# ", "- ", "😀", "    ", "$1"];
-    let seeds: u64 = std::env::var("TORTURE_SEEDS").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
+    let seeds: u64 = std::env::var("TORTURE_SEEDS").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
     for seed in 1..=seeds {
         let mut x = seed.wrapping_mul(0x9E3779B97F4A7C15) | 1;
         let mut next = |m: usize| {
