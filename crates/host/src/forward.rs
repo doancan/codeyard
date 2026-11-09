@@ -200,10 +200,16 @@ pub(crate) fn local_spec(alias: &str, spec: &str, cancel: bool) -> Result<(), Fo
     #[cfg(windows)]
     {
         guard(alias, false)?;
-        if cancel { windows::cancel(alias, spec) } else { windows::open(alias, spec, 0) }
+        if cancel { windows::cancel(alias, spec) } else { windows::open(alias, spec, local_of(spec)) }
     }
     #[cfg(not(windows))]
-    mux(alias, "-L", spec, cancel, 0)
+    mux(alias, "-L", spec, cancel, local_of(spec))
+}
+
+/// The local port of a `-L` spec (`bind:local:target:remote`); 0 when it does not parse. Only used to name the cause of
+/// an ssh failure.
+fn local_of(spec: &str) -> u16 {
+    spec.split(':').nth(1).and_then(|p| p.parse().ok()).unwrap_or(0)
 }
 
 /// Opens `-R spec` (or cancels it).
@@ -322,6 +328,13 @@ mod tests {
         assert_eq!(k("mux_client_forward: forwarding request failed: Port forwarding failed", 3000), FailKind::Rejected);
         assert_eq!(k("channel 2: open failed: administratively prohibited: open failed", 3000), FailKind::Rejected);
         assert_eq!(k("something new", 3000), FailKind::Other);
+    }
+
+    #[test]
+    fn the_local_port_is_read_from_a_spec() {
+        assert_eq!(local_of("localhost:3000:localhost:8080"), 3000);
+        assert_eq!(local_of("0.0.0.0:80:[::1]:80"), 80);
+        assert_eq!(local_of("garbage"), 0);
     }
 
     #[test]

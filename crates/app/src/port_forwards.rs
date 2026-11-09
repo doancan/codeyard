@@ -92,6 +92,10 @@ pub struct PortForward {
     pub origin: Origin,
     pub state: ForwardState,
     seq: u64,
+    /// While a changed local port opens: how to go back to the working one if the new one cannot be opened.
+    revert: Option<Option<u16>>,
+    /// Why the last change of the local port failed and the old port was put back (shown once).
+    reverted: Option<ForwardError>,
 }
 
 impl PortForward {
@@ -328,6 +332,8 @@ impl ForwardSet {
             origin: r.origin,
             state: ForwardState::Pending,
             seq: 0,
+            revert: None,
+            reverted: None,
         });
         (id, self.open(id))
     }
@@ -339,15 +345,24 @@ impl ForwardSet {
         let current = self.get_mut(id).filter(|f| f.seq == seq && f.state == ForwardState::Pending);
         match (current, result) {
             (Some(f), Ok(opened)) => {
+                f.revert = None;
                 f.local = Some(opened.local);
                 f.spec = Some(opened.spec);
                 f.state = ForwardState::Active;
                 Vec::new()
             }
-            (Some(f), Err(e)) => {
-                f.state = ForwardState::Failed(e);
-                Vec::new()
-            }
+            // A new local port that cannot be opened must not cost the user the forward that worked.
+            (Some(f), Err(e)) => match f.revert.take() {
+                Some(previous) => {
+                    (f.wanted_local, f.strict, f.reverted) = (previous, false, Some(e));
+                    let id = f.id;
+                    self.open(id)
+                }
+                None => {
+                    f.state = ForwardState::Failed(e);
+                    Vec::new()
+                }
+            },
             // Stopped, replaced or interrupted meanwhile: give the port back. A removed forward is cancelled by the
             // caller, which knows the alias it opened on (see `orphan_cancel`).
             (None, Ok(opened)) => alias.map(|alias| Effect::Cancel { alias, spec: opened.spec }).into_iter().collect(),
@@ -368,6 +383,11 @@ impl ForwardSet {
             (ForwardState::Active, Some(spec)) => vec![Effect::Cancel { alias: f.alias, spec }],
             _ => Vec::new(),
         }
+    }
+
+    /// The error of a change of the local port that was undone (once): the forward is back on its old port.
+    pub fn take_reverted(&mut self, id: ForwardId) -> Option<ForwardError> {
+        self.get_mut(id)?.reverted.take()
     }
 
     /// Opens a failed or waiting forward again.
@@ -394,8 +414,10 @@ impl ForwardSet {
     pub fn change_local(&mut self, id: ForwardId, port: u16) -> Vec<Effect> {
         let Some(f) = self.get_mut(id) else { return Vec::new() };
         let mut out = Vec::new();
+        f.revert = None;
         if let (ForwardState::Active, Some(spec)) = (&f.state, f.spec.take()) {
             out.push(Effect::Cancel { alias: f.alias.clone(), spec });
+            f.revert = f.local.map(Some);
         }
         f.local = None;
         f.wanted_local = Some(port);
@@ -427,6 +449,7 @@ impl ForwardSet {
                 f.state = ForwardState::Interrupted;
                 f.stale = f.spec.take().or(f.stale.take());
                 f.seq = 0;
+                f.revert = None;
             }
         }
     }
@@ -583,6 +606,31 @@ mod tests {
         assert!(matches!(&effects[0], Effect::Cancel { spec, .. } if spec.contains(":8080:")));
         let Effect::Open { req, .. } = &effects[1] else { panic!("{effects:?}") };
         assert_eq!((req.wanted_local, req.strict), (Some(9090), true));
+    }
+
+    #[test]
+    fn a_local_port_that_cannot_be_opened_puts_the_working_one_back() {
+        let mut set = ForwardSet::default();
+        let (id, e) = set.request(req(8080));
+        set.on_result(id, open_of(&e).1, opened(8080));
+        let effects = set.change_local(id, 9090);
+        let (_, seq) = open_of(&effects);
+        let busy = ForwardError { kind: FailKind::AddrInUse, message: "busy".into() };
+        let back = set.on_result(id, seq, Err(busy.clone()));
+        let Effect::Open { seq: again, req: reopen, .. } = &back[0] else { panic!("{back:?}") };
+        assert_eq!((reopen.wanted_local, reopen.strict), (Some(8080), false), "the old port, preferred but not forced");
+        assert_eq!(set.take_reverted(id), Some(busy));
+        assert_eq!(set.take_reverted(id), None, "told once");
+        set.on_result(id, *again, opened(8080));
+        assert!(set.get(id).unwrap().is_active());
+        // A forward that was not working has nothing to go back to: a failure stays a failure.
+        let mut other = ForwardSet::default();
+        let (id, e) = other.request(req(7000));
+        other.on_result(id, open_of(&e).1, Err(ForwardError { kind: FailKind::Other, message: "x".into() }));
+        let (_, seq) = open_of(&other.change_local(id, 7001));
+        other.on_result(id, seq, Err(ForwardError { kind: FailKind::Other, message: "y".into() }));
+        assert!(matches!(other.get(id).unwrap().state, ForwardState::Failed(_)));
+        assert_eq!(other.take_reverted(id), None);
     }
 
     #[test]

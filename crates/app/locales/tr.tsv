@@ -1539,6 +1539,8 @@ Keep Going	Devam Et
 Port {} is forwarded: localhost:{}	Bağlantı noktası {0} yönlendirildi: localhost:{1}
 Port {} is forwarded to localhost:{} ({} was busy here)	Bağlantı noktası {0}, localhost:{1} adresine yönlendirildi ({2} burada meşguldü)
 Could not forward port {}: {}	Bağlantı noktası {0} yönlendirilemedi: {1}
+The local port was not changed: {}. Back on localhost:{}	Yerel bağlantı noktası değiştirilemedi: {0}. localhost:{1} adresine geri dönüldü
+Port {} is forwarded already: localhost:{}	{0} numaralı bağlantı noktası zaten yönlendiriliyor: localhost:{1}
 Port forwarding works while connected to an SSH host.	Bağlantı noktası yönlendirme, bir SSH sunucusuna bağlıyken çalışır.
 Open in Browser	Tarayıcıda Aç
 Stop	Durdur

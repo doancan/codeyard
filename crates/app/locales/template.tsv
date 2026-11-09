@@ -1764,6 +1764,7 @@ Port forwarding works while connected to an SSH host.
 Port mappings	
 Port {0}, {1}	
 Port {}	
+Port {} is forwarded already: localhost:{}	
 Port {} is forwarded to localhost:{} ({} was busy here)	
 Port {} is forwarded: localhost:{}	
 Ports	
@@ -2480,6 +2481,7 @@ The input “{}” would run an editor command; use promptString or pickString.
 The last background fetch failed: {}	
 The last command exited with code {}	
 The local port is busy	
+The local port was not changed: {}. Back on localhost:{}	
 The managed installation is incomplete or belongs to another catalogue. Reinstall the services to repair it.	
 The new version couldn't be installed from here. You can download it from the release page instead.	
 The number {} cannot be written in JSON	
