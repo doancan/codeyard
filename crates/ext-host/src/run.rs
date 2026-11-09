@@ -147,6 +147,9 @@ pub fn run(input: impl Read, output: impl Write + Send + 'static) -> Result<(), 
     }
 }
 
+/// How many rounds of refused calls `drain` delivers before cutting a self-refusing guest off.
+const MAX_DRAIN_ROUNDS: usize = 1000;
+
 struct Guest {
     store: Store<State>,
     ticker: Ticker,
@@ -222,7 +225,7 @@ impl Guest {
     /// Deliver tickets that finished inside the exthost (refused calls). Delivering one may refuse another, so this
     /// loops, but a guest that keeps refusing itself is cut off.
     fn drain(&mut self) -> Result<(), String> {
-        for _ in 0..1000 {
+        for _ in 0..MAX_DRAIN_ROUNDS {
             let local = std::mem::take(&mut self.store.data_mut().local);
             if local.is_empty() {
                 return Ok(());
