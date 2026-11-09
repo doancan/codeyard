@@ -125,11 +125,11 @@ fn piped<T>(handle: Option<T>) -> io::Result<T> {
 }
 
 pub fn exec_with_timeout(program: &str, args: &[String], cwd: Option<&str>, stdin: Option<Vec<u8>>, timeout: Duration) -> io::Result<Output> {
-    let mut child = command(program, args, cwd)?
-        .stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() })
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+    let mut cmd = command(program, args, cwd)?;
+    // Its own process group, so a timeout can stop what the command started (git's ssh, a hook) and not only the command.
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+    let mut child = cmd.stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() }).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
     if let Some(data) = stdin {
         let mut w = piped(child.stdin.take())?;
         std::thread::spawn(move || {
@@ -171,6 +171,8 @@ fn collect(
             return Ok((std::mem::take(&mut bufs[0]), std::mem::take(&mut bufs[1]), status));
         }
         if exited.is_none() && started.elapsed() >= timeout {
+            // SAFETY: kill has no memory-safety preconditions; a negative pid names the group this child leads.
+            unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL) };
             let _ = child.kill();
             let _ = child.wait();
             return Err(io::Error::new(io::ErrorKind::TimedOut, format!("timed out after {} s", timeout.as_secs())));
