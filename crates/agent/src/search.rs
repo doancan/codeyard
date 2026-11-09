@@ -123,10 +123,11 @@ pub fn run(q: &SearchQuery, root: &Path, cancel: &AtomicBool, mut emit: impl FnM
                     if before + n > max {
                         let allowed = max - before;
                         let mut kept = 0u32;
-                        matches.retain(|m| {
+                        matches.retain_mut(|m| {
                             let take = kept < allowed;
                             if take {
-                                kept += (m.ranges.len() as u32).min(allowed - kept);
+                                m.ranges.truncate((allowed - kept) as usize);
+                                kept += m.ranges.len() as u32;
                             }
                             take
                         });
@@ -174,7 +175,8 @@ fn search_one_file(re: &Regex, path: &Path, max: u32, cancel: &AtomicBool, mut e
         }
         let text = line.strip_suffix(b"\n").unwrap_or(&line);
         let text = text.strip_suffix(b"\r").unwrap_or(text);
-        let ranges: Vec<(usize, usize)> = re.find_iter(text).map(|m| (m.start(), m.end())).filter(|(a, b)| b > a).collect();
+        let allowed = (max - count) as usize;
+        let ranges: Vec<(usize, usize)> = re.find_iter(text).map(|m| (m.start(), m.end())).filter(|(a, b)| b > a).take(allowed).collect();
         if ranges.is_empty() {
             continue;
         }
@@ -197,7 +199,7 @@ pub fn search_bytes(re: &Regex, data: &[u8], limit: usize) -> Vec<LineMatch> {
             break;
         }
         let line = line.strip_suffix(b"\r").unwrap_or(line);
-        let ranges: Vec<(usize, usize)> = re.find_iter(line).map(|m| (m.start(), m.end())).filter(|(a, b)| b > a).collect();
+        let ranges: Vec<(usize, usize)> = re.find_iter(line).map(|m| (m.start(), m.end())).filter(|(a, b)| b > a).take(limit - count).collect();
         if ranges.is_empty() {
             continue;
         }
@@ -308,6 +310,27 @@ mod tests {
         // Folder search still skips the same file (size limit).
         let sum = run(&q("error"), &dir, &AtomicBool::new(false), |_| {}).unwrap();
         assert_eq!(sum.matches, 0);
+    }
+
+    fn ranges_in(got: &[FileMatches]) -> usize {
+        got.iter().flat_map(|f| &f.matches).map(|m| m.ranges.len()).sum()
+    }
+
+    #[test]
+    fn many_matches_on_one_line_do_not_overshoot_max_results() {
+        let dir = std::env::temp_dir().join(format!("codeyard-agent-overshoot-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.txt"), "x ".repeat(50) + "\n").unwrap();
+        let mut query = q("x");
+        query.max_results = 3;
+        let (mut single, mut folder) = (Vec::new(), Vec::new());
+        let sum = run(&query, &dir.join("a.txt"), &AtomicBool::new(false), |fm| single.push(fm)).unwrap();
+        assert_eq!((sum.matches, ranges_in(&single)), (3, 3));
+        let sum = run(&query, &dir, &AtomicBool::new(false), |fm| folder.push(fm)).unwrap();
+        assert_eq!((sum.matches, ranges_in(&folder)), (3, 3));
+        let re = compile(&query).unwrap();
+        let found = search_bytes(&re, "x ".repeat(50).as_bytes(), 3);
+        assert_eq!(found.iter().map(|m| m.ranges.len()).sum::<usize>(), 3);
     }
 
     #[test]
