@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- SSH: adding a host no longer replaces `~/.ssh/config` with just the new host when the file cannot be read as UTF-8
+  (a comment in a legacy encoding, say); it reports the error and leaves the file alone.
 - Terminal: erasing the history (a program's `CSI 3J`, a reset, Clear Terminal) no longer leaves the command dots,
   Jump to Command and Copy Last Output pointing at the wrong rows. Select All over a long scrollback no longer stalls the
   terminal while output arrives, searching a long history waits for the typing to pause, and a command whose text a

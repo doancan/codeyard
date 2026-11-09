@@ -163,7 +163,12 @@ fn backup_and_write(path: &Path, new_text: &str) -> Result<(), String> {
 pub fn add_host(path: &Path, h: &NewHost) -> Result<(), String> {
     validate(h)?;
     // Line endings are normalised to LF; the file's own style (CRLF) is restored on write.
-    let text = std::fs::read_to_string(path).unwrap_or_default().replace("\r\n", "\n");
+    // Only a missing file starts empty: any other failure (a legacy-encoded comment, no permission) must not end in the file being replaced.
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text.replace("\r\n", "\n"),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
     if parse_config(&text).iter().any(|x| x.alias.eq_ignore_ascii_case(&h.alias)) {
         return Err(format!("A host named “{}” already exists in {}", h.alias, path.display()));
     }
@@ -209,14 +214,14 @@ pub fn remove_host(path: &Path, alias: &str) -> Result<bool, String> {
         while keep_end > at + 1 && lines[keep_end - 1].trim().is_empty() {
             keep_end -= 1;
         }
-        out.extend(lines[..start].iter().map(|s| s.to_string()));
-        out.extend(lines[keep_end..].iter().map(|s| s.to_string()));
+        out.extend(lines[..start].iter().copied().map(String::from));
+        out.extend(lines[keep_end..].iter().copied().map(String::from));
     } else {
         let rest: Vec<&String> = tokens.iter().filter(|a| *a != alias).collect();
         let indent: String = lines[at].chars().take_while(|c| c.is_whitespace()).collect();
-        out.extend(lines[..at].iter().map(|s| s.to_string()));
+        out.extend(lines[..at].iter().copied().map(String::from));
         out.push(format!("{indent}Host {}", rest.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(" ")));
-        out.extend(lines[at + 1..].iter().map(|s| s.to_string()));
+        out.extend(lines[at + 1..].iter().copied().map(String::from));
     }
     let mut new_text = out.join("\n");
     if !new_text.is_empty() {
@@ -376,7 +381,7 @@ pub fn set_field(path: &Path, alias: &str, field: Field, value: Option<&str>) ->
     let (at, end) = block_of(&lines, alias)?;
     let key = field.key().to_ascii_lowercase();
     let is_field = |l: &str| directive(l).is_some_and(|(k, _)| k == key);
-    let mut out: Vec<String> = lines[..=at].iter().map(|s| s.to_string()).collect();
+    let mut out: Vec<String> = lines[..=at].iter().copied().map(String::from).collect();
     let mut placed = false;
     let indent_of = |l: &str| l.chars().take_while(|c| c.is_whitespace()).collect::<String>();
     let mut indent = "    ".to_string();
@@ -402,7 +407,7 @@ pub fn set_field(path: &Path, alias: &str, field: Field, value: Option<&str>) ->
         }
         out.insert(insert_at, format!("{indent}{} {}", field.key(), quote_value(v)));
     }
-    out.extend(lines[end..].iter().map(|s| s.to_string()));
+    out.extend(lines[end..].iter().copied().map(String::from));
     let mut new_text = out.join("\n");
     new_text.push('\n');
     if new_text == text {
@@ -520,6 +525,19 @@ mod tests {
         // Duplicate refused, file untouched.
         assert!(add_host(&p, &h).unwrap_err().contains("already exists"));
         assert_eq!(std::fs::read_to_string(&p).unwrap(), text);
+    }
+
+    #[test]
+    fn add_never_replaces_a_config_it_cannot_read_as_text() {
+        let p = tmp("add-latin1");
+        let original = b"# t\xfcrk\xe7e yorum
+Host old
+    HostName old.example.com
+";
+        std::fs::write(&p, original).unwrap();
+        let err = add_host(&p, &parse_target("a@b").unwrap()).unwrap_err();
+        assert!(err.contains(&p.display().to_string()), "{err}");
+        assert_eq!(std::fs::read(&p).unwrap(), original, "the user's config is untouched");
     }
 
     #[test]
