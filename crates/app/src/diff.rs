@@ -16,7 +16,8 @@ use crate::ui::{self, MONO_FONT, c, ca, icon, palette, text};
 
 actions!(diff, [NextChange, PrevChange, ToggleInline]);
 
-/// The diff's keys: changes (F7), the inline view, and picking lines to stage (`diff_stage`).
+/// The diff's keys: changes (F7), the inline view, and picking lines to stage (`diff_stage`). `cyx` lists them as
+/// built-in keys too (its `BINDING_SOURCES`).
 pub fn key_bindings() -> [gpui::KeyBinding; 7] {
     use crate::diff_stage::{ApplyPicked, ClearPicked, PickChange};
     use gpui::KeyBinding;
