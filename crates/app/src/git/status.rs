@@ -268,8 +268,11 @@ pub fn show(host: &dyn Host, root: &str, rev: &str, rel: &str) -> Option<String>
     out.ok().then(|| String::from_utf8_lossy(&out.stdout).trim_start_matches('\u{feff}').replace("\r\n", "\n"))
 }
 
+/// File names are not patterns: without this `[ab].txt` would also match `a.txt` and `b.txt`, and `:(exclude)` or `*` in a name would be magic.
+const LITERAL_PATHSPECS: &str = "--literal-pathspecs";
+
 pub fn stage(host: &dyn Host, root: &str, paths: &[String]) -> Result<(), String> {
-    let mut args = vec!["add", "-A", "--"];
+    let mut args = vec![LITERAL_PATHSPECS, "add", "-A", "--"];
     args.extend(paths.iter().map(String::as_str));
     git_ok(host, root, &args).map(|_| ())
 }
@@ -277,7 +280,7 @@ pub fn stage(host: &dyn Host, root: &str, paths: &[String]) -> Result<(), String
 pub fn unstage(host: &dyn Host, root: &str, paths: &[String]) -> Result<(), String> {
     // Before the first commit there is no HEAD: `rm --cached` is needed.
     let has_head = git(host, root, &["rev-parse", "--verify", "-q", "HEAD"]).is_ok_and(|o| o.ok());
-    let mut args = if has_head { vec!["reset", "-q", "HEAD", "--"] } else { vec!["rm", "-q", "--cached", "-r", "--"] };
+    let mut args = if has_head { vec![LITERAL_PATHSPECS, "reset", "-q", "HEAD", "--"] } else { vec![LITERAL_PATHSPECS, "rm", "-q", "--cached", "-r", "--"] };
     args.extend(paths.iter().map(String::as_str));
     git_ok(host, root, &args).map(|_| ())
 }
@@ -286,12 +289,12 @@ pub fn unstage(host: &dyn Host, root: &str, paths: &[String]) -> Result<(), Stri
 pub fn discard(host: &dyn Host, root: &str, changes: &[Change]) -> Result<(), String> {
     let (untracked, tracked): (Vec<&Change>, Vec<&Change>) = changes.iter().partition(|c| c.unstaged == Some(Mark::Untracked));
     if !tracked.is_empty() {
-        let mut args = vec!["checkout", "-q", "--"];
+        let mut args = vec![LITERAL_PATHSPECS, "checkout", "-q", "--"];
         args.extend(tracked.iter().map(|c| c.path.as_str()));
         git_ok(host, root, &args)?;
     }
     if !untracked.is_empty() {
-        let mut args = vec!["clean", "-f", "-q", "--"];
+        let mut args = vec![LITERAL_PATHSPECS, "clean", "-f", "-q", "--"];
         args.extend(untracked.iter().map(|c| c.path.as_str()));
         git_ok(host, root, &args)?;
     }
@@ -492,6 +495,28 @@ mod tests {
         let _ = status_for(&host, &d, true);
         assert!(marker.exists(), "the fsmonitor hook is expected to run for a trusted folder");
         let _ = std::fs::remove_file(&marker);
+    }
+
+    /// A file named `[ab].txt` is also a glob that matches `a.txt` and `b.txt`: paths must be taken literally.
+    #[test]
+    fn file_names_with_glob_characters_only_touch_that_file() {
+        let Some((dir, run)) = repo("glob-names") else { return };
+        let host = host::local();
+        let root = dir.to_string_lossy().into_owned();
+        let odd = "[ab].txt";
+        for name in [odd, "a.txt", "b.txt"] {
+            std::fs::write(dir.join(name), "x\n").unwrap();
+        }
+        stage(&host, &root, &[odd.to_string()]).unwrap();
+        let staged = run(&["diff", "--cached", "--name-only"]).unwrap();
+        assert_eq!(staged.trim(), odd, "only the named file is staged");
+        unstage(&host, &root, &[odd.to_string()]).unwrap();
+        assert_eq!(run(&["diff", "--cached", "--name-only"]).unwrap().trim(), "");
+        let change = Change { path: odd.into(), orig: None, staged: None, unstaged: Some(Mark::Untracked) };
+        discard(&host, &root, &[change]).unwrap();
+        assert!(dir.join("a.txt").exists() && dir.join("b.txt").exists(), "discarding one untracked file deleted others");
+        assert!(!dir.join(odd).exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
