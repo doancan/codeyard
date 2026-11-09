@@ -96,6 +96,24 @@ fn saving_with_an_encoding_that_cannot_hold_the_text_changes_nothing(cx: &mut Te
 }
 
 #[gpui::test]
+fn a_utf8_file_with_a_bom_saves_in_another_encoding_without_the_bom_character(cx: &mut TestAppContext) {
+    let dir = project("encoding-bom");
+    let file = dir.join("bom.txt");
+    std::fs::write(&file, "\u{feff}caf\u{e9}\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &file, cx);
+    let editor = wb.read_with(cx, |wb, _| wb.active_editor().cloned().unwrap());
+    editor.update(cx, |e, cx| e.save_with_encoding(Encoding::Iso8859_1, cx));
+    cx.run_until_parked();
+    assert_eq!(std::fs::read(&file).unwrap(), b"caf\xE9\n", "a single-byte encoding has no BOM, and the text is written");
+    assert!(editor.read_with(cx, |e, _| e.error_for_test().is_none()));
+    editor.update(cx, |e, cx| e.save_with_encoding(Encoding::Utf16Le, cx));
+    cx.run_until_parked();
+    let bytes = std::fs::read(&file).unwrap();
+    assert_eq!(&bytes[..4], [0xFF, 0xFE, b'c', 0], "UTF-16 writes its own BOM once");
+}
+
+#[gpui::test]
 fn the_recent_file_list_leaves_out_the_file_in_front(cx: &mut TestAppContext) {
     let dir = project("recent-files");
     let (wb, cx) = setup(cx);

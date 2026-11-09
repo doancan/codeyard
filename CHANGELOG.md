@@ -77,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   opened them; terminals kept for the next start live in the terminal daemon and end with it.
 ### Fixed
 
+- Save with Encoding: a UTF-8 file with a BOM could not be saved as UTF-16 or a single-byte encoding (the BOM was rejected as an unwritable character).
 - File history: a file whose name contains `*`, `?` or `[...]` listed the commits of other files that matched the name as a pattern.
 
 ## [0.8.0] - 2026-11-06
