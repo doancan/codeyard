@@ -860,6 +860,9 @@ fn perf_operations(name: &str, content: &str, repeat: usize, cx: &mut TestAppCon
     // The UI thread's work is what counts. With a language server on, run_until_parked would also wait for its
     // reply (in the background, it doesn't block typing).
     cx.update(|_, cx| cx.global_mut::<crate::settings::Settings>().lsp_enabled = false);
+    // A small window: every key draws the whole workbench, and the cost of a draw follows its size. The work per key is
+    // still a screenful, however many lines the file has.
+    cx.simulate_resize(gpui::size(gpui::px(600.), gpui::px(200.)));
     let ed = open(&wb, &f, cx);
     let mut work = Vec::new();
     let mut rec = |label, shaped| work.push((label, shaped));
