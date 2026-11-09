@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Undo history of a large file no longer holds a copy of the file for each of the first 63 big edits (such as Replace All); the memory cap now applies right after a big edit.
 - Arrow keys, Backspace and Delete are instant on a huge single-line file (a minified bundle); each press used to segment the whole line.
 - Select previous occurrence and Move last selection to next occurrence no longer take seconds with tens of thousands of selections.
 - SSH: adding a host no longer replaces `~/.ssh/config` with just the new host when the file cannot be read as UTF-8

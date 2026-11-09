@@ -83,6 +83,8 @@ pub const MAX_UNDO_STEPS: usize = 10_000;
 pub const MAX_UNDO_BYTES: usize = 64 * 1024 * 1024;
 /// Once the step limit is exceeded, this many extra are tolerated, then trimmed in bulk.
 const UNDO_SLACK: usize = 500;
+/// A single undo step this large triggers the byte limit check immediately.
+const LARGE_UNDO_STEP_BYTES: usize = 1024 * 1024;
 
 /// One piece of an edit group; `at` is the coordinate in the document before the edit.
 #[derive(Debug, Clone)]
@@ -1681,11 +1683,12 @@ impl Buffer {
             let drop = self.undo.len() - MAX_UNDO_STEPS;
             self.undo.drain(..drop);
         }
-        // Byte limit: measured every 64 steps, not on every key.
-        if !self.undo.len().is_multiple_of(64) {
+        // Byte limit: measured every 64 steps, not on every key, and right away after a step that is big by itself
+        // (a replace-all on a large file: waiting for the 64th step could hold gigabytes).
+        let size = |e: &Edit| e.parts.iter().map(|p| p.removed.len() + p.inserted.len()).sum::<usize>();
+        if !self.undo.len().is_multiple_of(64) && self.undo.last().is_none_or(|e| size(e) < LARGE_UNDO_STEP_BYTES) {
             return;
         }
-        let size = |e: &Edit| e.parts.iter().map(|p| p.removed.len() + p.inserted.len()).sum::<usize>();
         let mut keep = 0usize; // number of steps to keep, counted from the end
         let mut bytes = 0usize;
         for e in self.undo.iter().rev() {

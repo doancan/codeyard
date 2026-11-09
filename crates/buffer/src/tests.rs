@@ -669,6 +669,21 @@ fn undo_history_is_bounded_and_the_newest_steps_survive() {
 }
 
 #[test]
+fn a_few_huge_steps_do_not_wait_for_the_64th_step_to_be_trimmed() {
+    // Each replace-all of a 4 MB file keeps 8 MB in the history: 20 of them are 160 MB, far over the cap.
+    let mut b = Buffer::from_str(&"x".repeat(4 * 1024 * 1024));
+    for _ in 0..20 {
+        let n = b.len_chars();
+        b.replace(0..n, &"y".repeat(4 * 1024 * 1024), false);
+    }
+    let mut kept = 0;
+    while b.undo() {
+        kept += 1;
+    }
+    assert!((1..=MAX_UNDO_BYTES / (8 * 1024 * 1024) + 1).contains(&kept), "{kept} steps of 8 MB each");
+}
+
+#[test]
 fn moving_lines_never_swaps_with_the_phantom_last_line() {
     // "a\nb\n": ↓ on b used to give "a\n\nb" (blank line, final newline lost).
     let mut b = Buffer::from_str("a\nb\n");
