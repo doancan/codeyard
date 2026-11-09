@@ -556,7 +556,11 @@ mod tests {
         let Some((dir, run)) = repo("many-paths") else { return };
         let host = host::local();
         let root = dir.to_string_lossy().into_owned();
-        let names: Vec<String> = (0..600).map(|i| format!("{}{i:05}.txt", "n".repeat(200))).collect();
+        // Windows refuses paths over 260 characters, so there the names are short and there are more of them: the names add up to
+        // the same size either way, and that is what has to be split.
+        let fill = if cfg!(windows) { 50 } else { 200 };
+        let count = 5 * MAX_ARGS_BYTES / (fill + 9) + 10;
+        let names: Vec<String> = (0..count).map(|i| format!("{}{i:05}.txt", "n".repeat(fill))).collect();
         assert!(batches(&names, String::len).count() >= 5, "the names fit in few commands: the test no longer splits anything");
         for name in &names {
             std::fs::write(dir.join(name), "x\n").unwrap();
