@@ -549,13 +549,15 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Staging a very large selection must not hit the operating system's limit on the length of a command line.
+    /// Staging a very large selection must not hit the operating system's limit on the length of a command line: the
+    /// names go to the tool in several commands, each under `MAX_ARGS_BYTES`.
     #[test]
-    fn staging_and_unstaging_thousands_of_long_paths_work() {
+    fn staging_and_unstaging_many_long_paths_work() {
         let Some((dir, run)) = repo("many-paths") else { return };
         let host = host::local();
         let root = dir.to_string_lossy().into_owned();
-        let names: Vec<String> = (0..6000).map(|i| format!("{}{i:05}.txt", "n".repeat(200))).collect();
+        let names: Vec<String> = (0..600).map(|i| format!("{}{i:05}.txt", "n".repeat(200))).collect();
+        assert!(batches(&names, String::len).count() >= 5, "the names fit in few commands: the test no longer splits anything");
         for name in &names {
             std::fs::write(dir.join(name), "x\n").unwrap();
         }

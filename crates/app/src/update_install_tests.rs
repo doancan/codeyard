@@ -360,9 +360,10 @@ mod macos {
     }
 
     /// A disk image whose root holds the contents of `src`: a blank HFS+ image filled with `ditto`. (`create -srcfolder`
-    /// waits a fixed 4 s on current macOS versions, and `makehybrid` leaves Finder info that `codesign --strict` rejects.)
+    /// waits a fixed 4 s on current macOS versions, and `makehybrid` leaves Finder info that `codesign --strict` rejects.
+    /// `-layout NONE` skips the partition map, which makes `create` itself 5 s faster.)
     fn dmg_of(src: &Path, out: &Path) {
-        sh("hdiutil", &[&"create", &"-quiet", &"-size", &"2m", &"-fs", &"HFS+", &"-volname", &"Codeyard", &out]);
+        sh("hdiutil", &[&"create", &"-quiet", &"-size", &"2m", &"-layout", &"NONE", &"-fs", &"HFS+", &"-volname", &"Codeyard", &out]);
         let point = out.with_extension("mnt");
         std::fs::create_dir(&point).unwrap();
         sh("hdiutil", &[&"attach", &"-quiet", &"-nobrowse", &"-mountpoint", &point, &out]);

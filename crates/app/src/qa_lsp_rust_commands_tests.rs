@@ -211,15 +211,12 @@ fn qa_rust_command_failures_have_notices_in_turkish(cx: &mut TestAppContext) {
     f.run(CARGO);
     f.wait_notice("Rust dil sunucusu bu komutu desteklemiyor");
     // No answer: the request gives up after its timeout with the existing message.
+    f.wb.update(f.cx, |wb, _| wb.rust_request_timeout = std::time::Duration::from_millis(200));
     f.run(PARENT);
     let (cmd, _) = f.fake.command();
     let expected = format!("experimental/parentModule: {cmd} yanıt vermedi");
     let wb = f.wb.clone();
-    crate::qa_integration_tests::wait_secs(f.cx, 40, "the timeout notice", |cx| {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        cx.executor().advance_clock(std::time::Duration::from_millis(300));
-        notice(&wb, cx) == expected
-    });
+    crate::qa_integration_tests::wait_secs(f.cx, 40, "the timeout notice", |cx| notice(&wb, cx) == expected);
 }
 
 /// AC7: in a file of another language nothing is sent and the notice says what to do.

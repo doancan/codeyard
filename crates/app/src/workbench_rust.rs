@@ -6,6 +6,9 @@ use crate::i18n::t;
 use crate::lsp::{self, METHOD_NOT_FOUND};
 use serde_json::{Value, json};
 
+/// How long a Rust command waits for the language server before it says the server did not answer.
+pub(super) const RUST_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
+
 #[derive(Clone, Copy, PartialEq)]
 enum RustCommand {
     ExpandMacro,
@@ -77,7 +80,11 @@ impl Workbench {
             RustCommand::ParentModule => ("experimental/parentModule", at),
             RustCommand::OpenCargoToml => ("experimental/openCargoToml", json!({ "textDocument": document })),
         };
-        let task = cx.background_executor().spawn(async move { client.request_raw(method, params, Duration::from_secs(15)) });
+        #[cfg(test)]
+        let timeout = self.rust_request_timeout;
+        #[cfg(not(test))]
+        let timeout = RUST_REQUEST_TIMEOUT;
+        let task = cx.background_executor().spawn(async move { client.request_raw(method, params, timeout) });
         let generation = self.lsp.generation;
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;

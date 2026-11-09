@@ -43,6 +43,31 @@ fn window<'a>(
     (wb, cx)
 }
 
+fn make_fifo(path: &std::path::Path) {
+    let made = std::process::Command::new("mkfifo").arg(path).status().is_ok_and(|s| s.success());
+    assert!(made, "mkfifo {}", path.display());
+}
+
+/// Waits (on the real clock: a process outside the test creates it) until `path` exists.
+fn wait_for_file(path: &std::path::Path) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20 * crate::test_sshd::timeout_scale());
+    while !path.exists() {
+        assert!(std::time::Instant::now() < deadline, "waited for {}", path.display());
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
+/// Waits until the test sshd's bridge processes (one per connection that is still attached) are gone: the host has
+/// noticed that the window's connection ended.
+fn wait_for_bridge_gone(sshd: &crate::test_sshd::Sshd) {
+    let pattern = format!("{}/remote/agent.*--attach", sshd.dir.display());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20 * crate::test_sshd::timeout_scale());
+    while std::process::Command::new("pgrep").arg("-f").arg(&pattern).output().is_ok_and(|o| o.status.success()) {
+        assert!(std::time::Instant::now() < deadline, "the bridge of the closed connection is still there");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
 /// The pid the shell writes to `file`.
 fn shell_pid(wb: &Entity<Workbench>, cx: &mut gpui::VisualTestContext, file: &std::path::Path) -> String {
     let line = format!("echo $$ > {}\n", file.display());
@@ -102,11 +127,16 @@ fn a_terminal_outlives_its_window_and_the_next_window_takes_the_same_shell_back(
         wait_ticking(vcx, "its token is saved", |cx| wb.read_with(cx, |wb, cx| wb.terminals[0].read(cx).token().is_some()));
         let pid = shell_pid(&wb, vcx, &dir.join("pid-1"));
         // Output while no window is attached is kept for the next one.
-        wb.update(vcx, |wb, cx| wb.terminals[0].update(cx, |t, _| t.send("sleep 0.5; echo printed-while-closed\n")));
+        // The shell prints only when the test releases it (after the window is gone), then says so with a file.
+        let (release, printed) = (dir.join("release"), dir.join("printed"));
+        make_fifo(&release);
+        let line = format!("read _ < {}; echo printed-while-closed; touch {}\n", release.display(), printed.display());
+        wb.update(vcx, |wb, cx| wb.terminals[0].update(cx, |t, _| t.send(&line)));
         quit(wb, vcx);
+        std::fs::write(&release, "go\n").unwrap();
+        wait_for_file(&printed);
         pid
     };
-    std::thread::sleep(std::time::Duration::from_millis(900));
 
     let (wb, cx) = window(cx, &home, &dir, &sock);
     wait_ticking(cx, "the terminal taken back", |cx| wb.read_with(cx, |wb, _| wb.terminals.len() == 1));
@@ -321,17 +351,22 @@ fn an_ssh_folders_terminal_is_taken_back_after_a_restart(cx: &mut gpui::TestAppC
         });
         let term = wb.read_with(vcx, |wb, _| wb.terminals[0].clone());
         let pid = pid_of(&term, vcx, &dir.join("pid-1"));
-        term.update(vcx, |t, _| t.send("sleep 1; echo printed-while-away\n"));
+        // The shell prints only when the test releases it, after the window is gone.
+        let (release, printed) = (dir.join("release"), dir.join("printed"));
+        make_fifo(&release);
+        term.update(vcx, |t, _| t.send(&format!("read _ < {}; echo printed-while-away; touch {}\n", release.display(), printed.display())));
         // The command reached the host (the shell echoed it) before the app goes.
         crate::qa_integration_tests::wait_secs(vcx, 30, "the command echoed", |cx| {
-            cx.update(|_, cx| term.read(cx).scrollback_text() + &term.read(cx).screen_text()).contains("sleep 1")
+            cx.update(|_, cx| term.read(cx).scrollback_text() + &term.read(cx).screen_text()).contains("read _")
         });
         // Nothing of the window may outlive it here: its connection must go as a quitting app's does.
         drop(term);
         quit_all(wb, vcx);
+        wait_for_bridge_gone(&sshd);
+        std::fs::write(&release, "go\n").unwrap();
+        wait_for_file(&printed);
         pid
     };
-    std::thread::sleep(std::time::Duration::from_secs(1));
     let (wb, cx) = ssh_window(cx, &home, &path);
     crate::qa_integration_tests::wait_secs(cx, 30, "the terminal taken back", |cx| text(&wb, cx).contains("printed-while-away"));
     let shown = text(&wb, cx);
@@ -365,9 +400,9 @@ fn an_ssh_workspaces_terminal_is_taken_back_after_a_restart(cx: &mut gpui::TestA
         let pid = pid_of(&term, vcx, &dir.join("pid-1"));
         drop(term);
         quit_all(wb, vcx);
+        wait_for_bridge_gone(&sshd);
         pid
     };
-    std::thread::sleep(std::time::Duration::from_secs(1));
     let (wb, cx) = ssh_window(cx, &home, &path);
     crate::qa_integration_tests::wait_secs(cx, 30, "the terminal taken back", |cx| text(&wb, cx).contains("Reconnected to terminal session"));
     let term = wb.read_with(cx, |wb, _| wb.terminals[0].clone());
@@ -398,13 +433,16 @@ fn an_ssh_session_kept_for_a_restart_hands_its_shell_to_the_next_connection() {
         let first = host::ssh::connect_session(crate::test_sshd::ALIAS, &bundle, Some(session.clone()), |_| {}).unwrap();
         let pty = first.pty_spawn_ex(spec()).unwrap();
         let token = first.pty_token(pty.id).unwrap();
-        first.pty_input(pty.id, format!("echo $$ > {}; sleep 1; echo printed-while-away\n", marker.display()).into_bytes());
-        read_until(&pty, "sleep 1");
+        let release = sshd.dir.join("release");
+        make_fifo(&release);
+        first.pty_input(pty.id, format!("echo $$ > {}; read _ < {}; echo printed-while-away\n", marker.display(), release.display()).into_bytes());
+        read_until(&pty, "read _");
         first.keep_for(300);
         first.keep_session();
         (pty.id, token)
     };
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    wait_for_bridge_gone(&sshd);
+    std::fs::write(sshd.dir.join("release"), "go\n").unwrap();
     let second = host::ssh::connect_session(crate::test_sshd::ALIAS, &bundle, Some(session), |_| {}).unwrap();
     let (back, _) = second.pty_adopt(id, token.0, token.1).unwrap();
     read_until(&back, "printed-while-away");

@@ -5,8 +5,9 @@
 //! with no resolvable identity (typical CI container) refuses every commit, and a developer's global config
 //! (`commit.gpgsign`, hooks, aliases) leaks into the tests.
 
+use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Once;
+use std::sync::{Once, OnceLock};
 
 const ENV: &[(&str, &str)] = &[
     ("GIT_CONFIG_GLOBAL", "/dev/null"),
@@ -34,6 +35,34 @@ pub(crate) fn git() -> Command {
     let mut c = Command::new("git");
     c.args(["-c", "init.defaultBranch=main"]);
     c
+}
+
+/// An empty repository in `dir` (which exists): what `git init -q` makes, as a copy of one made earlier. For fixtures
+/// with hundreds of repositories, where a process per `git init` is most of the test's time.
+pub(crate) fn init_by_copy(dir: &Path) {
+    static TEMPLATE: OnceLock<PathBuf> = OnceLock::new();
+    let template = TEMPLATE.get_or_init(|| {
+        let template = std::env::temp_dir().join(format!("codeyard-test-git-template-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&template);
+        std::fs::create_dir_all(&template).unwrap();
+        let made = git().args(["init", "-q"]).current_dir(&template).status().unwrap();
+        assert!(made.success(), "git init of the template");
+        template.join(".git")
+    });
+    copy_tree(template, &dir.join(".git"));
+}
+
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
 }
 
 #[cfg(test)]

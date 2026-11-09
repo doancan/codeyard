@@ -67,14 +67,22 @@ fn config_dir(name: &str) -> PathBuf {
     d
 }
 
-fn install(cfg: &Path, manifest: &str) {
+/// The package of the probe with this manifest (the import check of the component takes a while in a debug build).
+fn package(manifest: &str) -> Vec<u8> {
     let entries = vec![
         ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.as_bytes().to_vec(), executable: false },
         ext_pkg::Entry { path: "Cargo.toml".into(), data: Vec::new(), executable: false },
         ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: PROBE.to_vec(), executable: false },
     ];
-    let (bytes, _) = ext_pkg::write(entries).expect("the probe passes the import check");
-    crate::ext::store(cfg).install(&bytes, ext_core::Source::File { path: "/downloads/probe.cyx".into() }).expect("installs");
+    ext_pkg::write(entries).expect("the probe passes the import check").0
+}
+
+fn install_package(cfg: &Path, bytes: &[u8]) {
+    crate::ext::store(cfg).install(bytes, ext_core::Source::File { path: "/downloads/probe.cyx".into() }).expect("installs");
+}
+
+fn install(cfg: &Path, manifest: &str) {
+    install_package(cfg, &package(manifest));
 }
 
 fn setup<'a>(cx: &'a mut TestAppContext, cfg: &Path) -> (Entity<Workbench>, &'a mut VisualTestContext) {
@@ -332,8 +340,14 @@ fn a_hundred_installed_code_extensions_start_nothing(cx: &mut TestAppContext) {
         return;
     }
     let cfg = config_dir("hundred");
-    for i in 0..100 {
-        install(&cfg, &MANIFEST.replace("id = \"you.probe\"", &format!("id = \"you.probe{i}\"")));
+    // Making the packages is independent work; installing them (one index file) is not.
+    let packages: Vec<Vec<u8>> = std::thread::scope(|scope| {
+        let makers: Vec<_> =
+            (0..100).map(|i| scope.spawn(move || package(&MANIFEST.replace("id = \"you.probe\"", &format!("id = \"you.probe{i}\""))))).collect();
+        makers.into_iter().map(|m| m.join().unwrap()).collect()
+    });
+    for bytes in &packages {
+        install_package(&cfg, bytes);
     }
     let (wb, cx) = setup(cx, &cfg);
     cx.executor().advance_clock(Duration::from_secs(5));

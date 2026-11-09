@@ -1312,6 +1312,18 @@ mod tests {
     }
 
     #[test]
+    fn huge_release_notes_are_drawn_only_up_to_a_limit_and_say_so() {
+        // 256 KiB, the most the updater accepts, in the shape that makes the most blocks.
+        let (blocks, _) = render_notes(&"x\n\n".repeat(256 * 1024 / 3), "page");
+        assert!(blocks.len() <= NOTES_RENDER_MAX / 3 + 2, "{} blocks", blocks.len());
+        assert_eq!(markdown::plain_text(&blocks[blocks.len() - 1..]), "The release notes are longer: read the rest on GitHub.");
+        // A note just under the limit is shown whole, without the line.
+        let (blocks, _) = render_notes(&"y\n\n".repeat(NOTES_RENDER_MAX / 3 - 1), "page");
+        assert_eq!(blocks.len(), NOTES_RENDER_MAX / 3 - 1);
+        assert_eq!(markdown::plain_text(&blocks[blocks.len() - 1..]), "y");
+    }
+
+    #[test]
     fn sizes_are_shown_in_megabytes_with_one_decimal() {
         assert_eq!(megabytes(0), "0.0");
         assert_eq!(megabytes(12_897_484), "12.3");
