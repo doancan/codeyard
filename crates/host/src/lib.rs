@@ -5,6 +5,8 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 pub mod askpass;
+mod clock;
+pub use clock::use_skipping_clock;
 pub mod forward;
 mod outbox;
 pub mod ssh;
@@ -1100,14 +1102,15 @@ fn reader_loop(shared: Arc<Shared>, mut reader: BufReader<Box<dyn Read + Send>>,
             let _ = c.kill();
             let _ = c.wait();
         }
-        let deadline = std::time::Instant::now() + reconnect_window();
+        let clock = clock::current();
+        let deadline = clock.now() + reconnect_window();
         let mut delay = std::time::Duration::from_secs(1);
         let mut attempt = 0;
         let mut error = why;
         loop {
             attempt += 1;
             shared.emit(ConnStatus::Reconnecting { attempt, error: error.clone() });
-            std::thread::sleep(delay);
+            clock.sleep(delay);
             if shared.closing.load(Ordering::Relaxed) {
                 shared.fail("closed".into());
                 return;
@@ -1150,7 +1153,7 @@ fn reader_loop(shared: Arc<Shared>, mut reader: BufReader<Box<dyn Read + Send>>,
                 }
                 Err(e) => {
                     error = e.to_string();
-                    if std::time::Instant::now() >= deadline {
+                    if clock.now() >= deadline {
                         shared.fail(format!("gave up reconnecting: {error}"));
                         shared.emit(ConnStatus::Lost(error));
                         return;

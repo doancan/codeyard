@@ -450,6 +450,7 @@ impl Write for Killable {
 #[cfg(unix)]
 #[test]
 fn reconnects_and_terminal_continues() {
+    crate::use_skipping_clock(); // the reconnect backoff is not waited through
     let registry = Arc::new(agent::daemon::Registry::default());
     let switch: Arc<Mutex<Arc<std::sync::atomic::AtomicBool>>> = Arc::default();
     let attempts = Arc::new(AtomicU32::new(0));

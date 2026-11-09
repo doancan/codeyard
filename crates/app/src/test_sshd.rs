@@ -69,6 +69,8 @@ fn skip_tool(tools: &str, state: &str) {
 
 /// `None`: no sshd or agent binary, or the setup failed (the test is skipped, loudly; see `skip`).
 pub fn start(name: &str) -> Option<Sshd> {
+    // A dropped connection is reconnected without waiting through the backoff, so a test takes the same time on a busy machine.
+    host::use_skipping_clock();
     match try_start(name) {
         Ok(s) => Some(s),
         Err(why) => skip(name, &why),
