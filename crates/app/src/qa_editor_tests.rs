@@ -1511,3 +1511,40 @@ fn emmet_does_not_rewrite_ordinary_code(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("tab");
     assert!(text(&ed4, cx).len() < 1000, "huge abbreviation was not expanded");
 }
+
+/// A large file is searched in the background: typing does not wait for the scan, and only the latest query's result is kept.
+#[gpui::test]
+fn qa_find_in_a_large_file_runs_in_the_background_and_drops_stale_results(cx: &mut TestAppContext) {
+    let mut body = "alpha beta gamma\n".repeat(80_000);
+    body.push_str("needle\n");
+    assert!(body.len() > 1_000_000);
+    let f = file("find-large", "a.txt", body.as_bytes());
+    let (wb, cx) = setup(cx);
+    let ed = open(&wb, &f, cx);
+    cx.simulate_keystrokes("cmd-f");
+    let bar = ed.read_with(cx, |e, _| e.find_bar()).unwrap();
+    let status = |cx: &mut VisualTestContext| ed.read_with(cx, |e, cx| e.find_bar().unwrap().read(cx).status_text().map(str::to_string)).unwrap_or_default();
+    // Two queries in a row without letting the first finish: the first one's result must not show.
+    bar.update(cx, |b, cx| b.set_query("alpha", cx));
+    assert_eq!(ed.read_with(cx, |e, _| e.match_count_for_test()), 0, "nothing is scanned on the UI thread");
+    bar.update(cx, |b, cx| b.set_query("needle", cx));
+    cx.run_until_parked();
+    assert_eq!(ed.read_with(cx, |e, _| e.match_count_for_test()), 1);
+    assert!(status(cx).ends_with("of 1"), "{}", status(cx));
+}
+
+/// The word before the cursor is found as before, and a huge unbroken run does not make every keystroke walk all of it.
+#[gpui::test]
+fn qa_word_start_is_bounded_on_a_huge_unbroken_run(cx: &mut TestAppContext) {
+    let (wb, cx) = setup(cx);
+    let f = file("word-start", "a.txt", format!("let some_name = other_{}", "A1b2".repeat(500_000)).as_bytes());
+    let ed = open(&wb, &f, cx);
+    let n = ed.read_with(cx, |e, _| e.text().chars().count());
+    let t = std::time::Instant::now();
+    let start = ed.read_with(cx, |e, _| e.word_start_for_test(n));
+    let budget = 500 * u128::from(crate::test_sshd::timeout_scale());
+    assert!(t.elapsed().as_millis() < budget, "{:?}", t.elapsed());
+    assert!(start > n - 2000, "walked back {} chars", n - start);
+    // A normal word: unchanged.
+    assert_eq!(ed.read_with(cx, |e, _| e.word_start_for_test(8)), 4);
+}

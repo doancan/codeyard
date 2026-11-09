@@ -458,10 +458,21 @@ impl Render for FindBar {
     }
 }
 
+/// From this size on, searching on every keystroke would stall the UI thread: the editor searches in the background.
+const LARGE_FILE_BYTES: usize = 1_000_000;
+
+pub fn is_large(rope: &buffer::Rope) -> bool {
+    rope.len_bytes() > LARGE_FILE_BYTES
+}
+
 /// All matches (character ranges); empty matches are skipped.
 pub fn find_all(buffer: &Buffer, re: &Regex) -> Vec<Range<usize>> {
-    let text = buffer.rope().to_string();
-    let rope = buffer.rope();
+    find_all_in(buffer.rope(), re)
+}
+
+/// `find_all` on a rope (a cheap clone of it can move to another thread).
+pub fn find_all_in(rope: &buffer::Rope, re: &Regex) -> Vec<Range<usize>> {
+    let text = rope.to_string();
     re.find_iter(text.as_bytes()).filter(|m| !m.is_empty()).take(MAX_MATCHES).map(|m| rope.byte_to_char(m.start())..rope.byte_to_char(m.end())).collect()
 }
 
