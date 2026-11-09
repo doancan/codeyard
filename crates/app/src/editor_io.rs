@@ -624,6 +624,7 @@ impl EditorView {
                         this.reset_lsp_data();
                         this.disk_hash = hash;
                         this.conflict = false;
+                        this.deleted_on_disk = false;
                         this.error = None;
                         this.resync_lsp();
                         this.schedule_lsp_extras(300, cx);
