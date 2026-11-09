@@ -145,6 +145,21 @@ fn keys_map_to_xterm_sequences() {
 }
 
 #[test]
+fn alt_letters_are_the_meta_key_unless_alt_composed_another_character() {
+    let m = TermMode::empty();
+    // readline, emacs, vim: Alt+f, Alt+b, Alt+d.
+    for (k, want) in [("alt-f", b"\x1bf".as_slice()), ("alt-b", b"\x1bb"), ("alt-d", b"\x1bd"), ("alt-shift-f", b"\x1bF")] {
+        let mut key = Keystroke::parse(k).unwrap();
+        key.key_char = Some(if k.contains("shift") { want[1..].to_ascii_uppercase() } else { want[1..].to_vec() }.iter().map(|b| *b as char).collect());
+        assert_eq!(key_to_bytes(&key, m).unwrap(), want, "{k}");
+    }
+    // ⌥ on macOS composed another character: it is typed as it is.
+    let mut key = Keystroke::parse("alt-f").unwrap();
+    key.key_char = Some("ƒ".into());
+    assert_eq!(key_to_bytes(&key, m).unwrap(), "ƒ".as_bytes());
+}
+
+#[test]
 fn space_keys_are_sent_to_the_terminal() {
     let m = TermMode::empty();
     assert_eq!(bytes("space", m), Some(b" ".to_vec()));

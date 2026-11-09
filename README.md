@@ -100,7 +100,7 @@ runs only if its SHA-256 is the one the app was built with.
 or newer). To build locally you need Rust's MSVC toolchain and the Visual Studio C++ Build Tools with the Windows SDK (GPUI needs
 `fxc.exe`), then `cargo build --release --locked -p app`; `scripts\bundle-windows.ps1` makes the ZIP and, with Inno Setup 6, the
 installer. `scripts\check-windows.ps1` runs the native checks. Windows SSH needs a key or ssh-agent and a known host entry, and
-in-app port forwarding is unavailable there (use `ssh -L` / `ssh -R` in a terminal). See [platform status](docs/platforms.md).
+in-app port forwarding covers local forwards (`-L`, one ssh process each); reverse forwards (`-R`) are unavailable there (use `ssh -R` in a terminal). See [platform status](docs/platforms.md).
 
 **Linux** is not released yet (it builds; see [platform status](docs/platforms.md#linux-notes)).
 

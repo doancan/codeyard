@@ -2421,6 +2421,59 @@ fn a_forwarded_port_comes_back_with_its_project(cx: &mut TestAppContext) {
     assert_eq!(got, "saved");
 }
 
+/// "3000:8080" on a port that is forwarded already moves it; a local port that cannot be opened leaves the forward on the
+/// port it had, with a notice, and the busy port is not what the project remembers.
+#[cfg(unix)]
+#[gpui::test]
+fn changing_the_local_port_of_a_forward_never_loses_the_forward(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("ports-change") else { return };
+    let (wb, cx) = setup(cx);
+    let tick = |cx: &mut VisualTestContext| cx.executor().advance_clock(std::time::Duration::from_secs(5));
+    wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    wait_for(cx, "connected", |cx| {
+        tick(cx);
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    let app = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let remote = app.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for mut s in app.incoming().flatten() {
+            use std::io::Write;
+            let _ = s.write_all(b"moved");
+        }
+    });
+    let free = || std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let local_of = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.forwards()).into_iter().find(|f| f.remote == remote).map(|f| f.local);
+    wb.update(cx, |wb, cx| wb.forward_port(remote, cx));
+    wait_for(cx, "forwarded", |cx| {
+        cx.run_until_parked();
+        local_of(cx).is_some()
+    });
+
+    // A pair for a forwarded port moves it to the chosen local port.
+    let chosen = free();
+    wb.update(cx, |wb, cx| wb.submit_port_field_for_test(&format!("{remote}:{chosen}"), cx));
+    wait_for(cx, "moved to the chosen port", |cx| {
+        cx.run_until_parked();
+        local_of(cx) == Some(chosen)
+    });
+
+    // A busy local port: the forward comes back on the port it had, and the user is told.
+    let busy = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let busy_port = busy.local_addr().unwrap().port();
+    wb.update(cx, |wb, cx| wb.submit_port_field_for_test(&format!("{remote}:{busy_port}"), cx));
+    wait_for(cx, "back on the old port", |cx| {
+        cx.run_until_parked();
+        local_of(cx) == Some(chosen)
+    });
+    let notice = wb.read_with(cx, |wb, _| wb.notice_text());
+    assert!(notice.as_deref().is_some_and(|n| n.contains(&chosen.to_string())), "{notice:?}");
+    let mut got = String::new();
+    use std::io::Read;
+    std::net::TcpStream::connect(("127.0.0.1", chosen)).unwrap().read_to_string(&mut got).unwrap();
+    assert_eq!(got, "moved");
+}
+
 /// Pasting several lines into a shell without bracketed paste asks first; a marker hidden in the text never reaches the
 /// shell; the answer decides whether anything is sent.
 #[cfg(unix)]

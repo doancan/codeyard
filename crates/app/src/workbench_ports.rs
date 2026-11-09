@@ -32,6 +32,8 @@ pub struct PortsState {
     pub ignored: BTreeSet<u16>,
     /// Ports whose rule says to open the browser, waiting for their forward (opened once per connection).
     pub open_when_ready: BTreeSet<u16>,
+    /// The project's saved forwards wait for the first scan, which tells where each port listens.
+    pub restore_pending: bool,
     pub method: Option<ScanMethod>,
     /// Why the last scan failed (the list shown is the one before).
     pub scan_error: Option<SharedString>,
@@ -47,6 +49,7 @@ impl PortsState {
             baseline: None,
             ignored: BTreeSet::new(),
             open_when_ready: BTreeSet::new(),
+            restore_pending: false,
             method: None,
             scan_error: None,
             task: None,
@@ -92,13 +95,23 @@ impl Workbench {
             this.update(cx, |this, cx| {
                 let mut more = Vec::new();
                 let mut opened = Vec::new();
+                let mut saved = Vec::new();
                 for (id, seq, alias, result) in results {
                     if let Ok(o) = &result {
                         more.extend(this.ports.set.orphan_cancel(id, &alias, o));
                     }
                     let failed = result.as_ref().err().cloned();
                     more.extend(this.ports.set.on_result(id, seq, result));
+                    // A change of the local port that failed: the forward is on its old port again.
+                    if let Some(e) = this.ports.set.take_reverted(id) {
+                        let why = failure_text(&e, None);
+                        let old = this.ports.set.get(id).and_then(|f| f.wanted_local).unwrap_or_default();
+                        this.notice = Some(Notice::Error(crate::i18n::tf("The local port was not changed: {}. Back on localhost:{}", &[&why, &old]).into()));
+                        continue;
+                    }
                     let Some(f) = this.ports.set.get(id) else { continue };
+                    // A forward that fell back from a saved port keeps what was saved.
+                    let (remote, user) = (f.remote, f.origin == Origin::User && (f.strict || f.wanted_local.is_none()));
                     match (&f.state, failed) {
                         (ForwardState::Active, _) => {
                             let local = f.local.unwrap_or(f.remote);
@@ -108,13 +121,22 @@ impl Workbench {
                                 cx.open_url(&url);
                             }
                             opened.push((f.remote, local));
+                            // Saved only once it works: a port that could not be opened must not be remembered.
+                            if user {
+                                saved.push(remote);
+                            }
                         }
                         (ForwardState::Failed(_), Some(e)) => {
                             let why = failure_text(&e, f.wanted_local);
                             this.notice = Some(Notice::Error(crate::i18n::tf("Could not forward port {}: {}", &[&f.remote, &why]).into()));
+                            // No browser tab for a forward that never opened.
+                            this.ports.open_when_ready.remove(&remote);
                         }
                         _ => {}
                     }
+                }
+                for remote in saved {
+                    this.save_forward(remote);
                 }
                 if !quiet {
                     match opened.as_slice() {
@@ -142,6 +164,8 @@ impl Workbench {
     pub(super) fn attach_ports(&mut self, alias: &str, cx: &mut Context<Self>) {
         let effects = self.ports.set.on_attach(alias);
         self.run_port_effects(effects, true, cx);
+        // Another server: what the last scan found there says nothing about this one.
+        self.stop_ports();
         self.ports.ignored.clear();
         self.ports.open_when_ready.clear();
         self.start_ports(cx);
@@ -238,6 +262,7 @@ impl Workbench {
         self.ports.listening.clear();
         self.ports.baseline = None;
         self.ports.scan_error = None;
+        self.ports.restore_pending = false;
     }
 
     fn on_ports(&mut self, found: Result<Vec<ListeningPort>, String>, cx: &mut Context<Self>) {
@@ -249,6 +274,10 @@ impl Workbench {
             Err(e) => {
                 // Keep the last list: a failed scan is not "nothing is listening".
                 self.ports.scan_error = Some(crate::i18n::tf("Could not list the server's ports: {}", &[&e]).into());
+                // Without a scan the saved forwards still come back, aimed at `localhost`.
+                if self.ports.restore_pending {
+                    self.open_saved_forwards(cx);
+                }
                 cx.notify();
                 return;
             }
@@ -297,6 +326,9 @@ impl Workbench {
             self.ports.listening = found;
             cx.notify();
         }
+        if self.ports.restore_pending {
+            self.open_saved_forwards(cx);
+        }
     }
 
     /// Local addresses new forwards listen on (`ports.localBind`).
@@ -313,13 +345,22 @@ impl Workbench {
     fn forward_port_to(&mut self, remote: u16, local: Option<u16>, cx: &mut Context<Self>) {
         let Some(alias) = self.ssh_alias() else { return };
         self.ports.ignored.remove(&remote);
+        // A port that is forwarded already: asking for another local port moves it, asking for the same one says so.
+        if let (Some(local), Some(f)) = (local, self.ports.set.by_remote(&alias, remote)) {
+            if f.is_active() && f.local == Some(local) {
+                self.notice = Some(Notice::Info(crate::i18n::tf("Port {} is forwarded already: localhost:{}", &[&remote, &local]).into()));
+                cx.notify();
+            } else {
+                self.finish_port_local(remote, local.to_string(), cx);
+            }
+            return;
+        }
         let target = self.ports.listening.iter().find(|p| p.port == remote).map_or(RemoteTarget::Localhost, |p| ports::forward_target(&p.binds));
         let attrs = rule_for(&cx.global::<crate::settings::Settings>().ports_rules, remote);
         let mut r = ForwardRequest::user(&alias, remote, target, self.port_bind(cx));
         (r.label, r.protocol, r.wanted_local, r.strict) = (attrs.label, attrs.protocol, local, local.is_some());
         let (_, effects) = self.ports.set.request(r);
         self.run_port_effects(effects, false, cx);
-        self.save_forward(remote);
         cx.notify();
     }
 
@@ -329,6 +370,7 @@ impl Workbench {
         let Some(id) = self.ports.set.by_remote(&alias, remote).map(|f| f.id) else { return };
         let effects = self.ports.set.stop(id);
         self.ports.ignored.insert(remote);
+        self.ports.open_when_ready.remove(&remote);
         if let (Some(s), Some(ws)) = (self.persist.state.as_ref(), self.persist.workspace_id) {
             let _ = s.delete_port_forward(ws, remote);
         }
@@ -336,7 +378,7 @@ impl Workbench {
         cx.notify();
     }
 
-    fn retry_forward(&mut self, remote: u16, cx: &mut Context<Self>) {
+    pub(super) fn retry_forward(&mut self, remote: u16, cx: &mut Context<Self>) {
         let alias = self.ssh_alias().unwrap_or_default();
         let Some(id) = self.ports.set.by_remote(&alias, remote).map(|f| f.id) else { return };
         let effects = self.ports.set.retry(id);
@@ -358,6 +400,11 @@ impl Workbench {
     #[cfg(test)]
     pub fn forwards(&self) -> Vec<Forward> {
         self.ports.set.active()
+    }
+
+    #[cfg(test)]
+    pub fn submit_port_field_for_test(&mut self, text: &str, cx: &mut Context<Self>) -> bool {
+        self.submit_port_field(text, cx)
     }
 
     #[cfg(test)]
@@ -384,6 +431,19 @@ impl Workbench {
 
     /// The project opened over SSH: forward the ports saved for it (quietly; failures show on their rows).
     pub(super) fn restore_forwards(&mut self, cx: &mut Context<Self>) {
+        if self.ssh_alias().is_none() || self.persist.workspace_id.is_none() {
+            return;
+        }
+        // Where each port listens is only known after the first scan (a service bound to one address is reached there).
+        if self.ports.baseline.is_none() {
+            self.ports.restore_pending = true;
+            return;
+        }
+        self.open_saved_forwards(cx);
+    }
+
+    fn open_saved_forwards(&mut self, cx: &mut Context<Self>) {
+        self.ports.restore_pending = false;
         let (Some(alias), Some(ws)) = (self.ssh_alias(), self.persist.workspace_id) else { return };
         let Some(saved) = self.persist.state.as_ref().map(|s| s.port_forwards(ws)) else { return };
         let bind = self.port_bind(cx);
@@ -394,7 +454,8 @@ impl Workbench {
             }
             let target = self.ports.listening.iter().find(|p| p.port == f.remote).map_or(RemoteTarget::Localhost, |p| ports::forward_target(&p.binds));
             let mut r = ForwardRequest::user(&alias, f.remote, target, bind);
-            (r.wanted_local, r.strict, r.label) = (f.local, f.local.is_some(), f.label);
+            // The saved local port is preferred, not required: another program may hold it now.
+            (r.wanted_local, r.label) = (f.local, f.label);
             r.protocol = Protocol::parse(&f.protocol).unwrap_or_default();
             effects.extend(self.ports.set.request(r).1);
         }
@@ -473,7 +534,6 @@ impl Workbench {
             Ok(local) if local > 0 && !self.ports.set.iter().any(|f| f.id != id && f.local == Some(local)) => {
                 let effects = self.ports.set.change_local(id, local);
                 self.run_port_effects(effects, false, cx);
-                self.save_forward(remote);
             }
             _ => self.notice = Some(Notice::Error(crate::i18n::tf("“{}” is not a free local port", &[&text.trim()]).into())),
         }

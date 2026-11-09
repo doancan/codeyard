@@ -26,6 +26,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Ports: connecting to another server no longer keeps the first scan of the previous one, so its already-open ports are
+  not forwarded by mistake and the previous server's baseline does not hide new ones.
+- Ports: `3000:8080` for a port that is forwarded already moves it to that local port (or says it is there already)
+  instead of doing nothing. A local port that cannot be opened puts the forward back on the port it had and says why;
+  a busy port is no longer saved with the project, and a saved local port that is busy at the next start falls back to
+  a free one instead of failing every time.
+- Ports: a project's saved forwards are opened after the first scan, so a service bound to one address is reached
+  there. A forward that failed no longer opens a browser tab later, and a refused local port below 1024 is named as such.
+- Terminal: Alt+letter sends Escape first (readline, emacs and vim meta keys such as Alt+F, Alt+B, Alt+D) on Windows and
+  Linux; ⌥ on macOS still types the character it composes. Pasting on an SSH host pastes text when the clipboard holds
+  both text and a picture of it (a spreadsheet, a document) instead of uploading the picture. After the shell exits,
+  Ctrl+C copies the selected output and PageUp, PageDown, Home and End scroll it instead of closing the tab. Reset
+  Terminal Modes and a program's exit also switch off bracketed paste a killed program left on.
+- Terminal: a terminal that could not be taken back because the connection failed (not because the daemon refused it)
+  is no longer ended, so a running program survives a hiccup. Closing a terminal tab in the editor area, and a token
+  saved for a terminal outside the panel, are written to the session at once.
+- Ports panel: a failed forward has a Retry button; the reason is cut with an ellipsis and shown in full in a tooltip;
+  an interrupted forward has its own icon and says it comes back with the connection; the column headers are translated;
+  the field shows that `3000:8080` is accepted. Screen readers hear Retry and "(terminal, exited)", and an exited
+  terminal's tooltip says so.
+- Windows: the documentation said in-app port forwarding was unavailable; local forwards (`-L`) work, only reverse
+  forwards (`-R`) do not.
 - Command palette and other short lists: a query that appears in a label as typed ranks it first. "reverse lines" no
   longer put *Editor: Reverse Lines* below labels that only contain the letters scattered, because the match started at
   the `r` of "Editor".
@@ -1762,7 +1784,7 @@ No extensions, no telemetry, no account.
 ### Known limitations
 - **No Linux release.** It builds and the app test suite passed once in a container, but there is no installer or CI release job.
 - **Windows is unverified on real hardware** for SSH authentication, mixed-DPI displays, IME input and the installer. Windows SSH needs
-  a key or ssh-agent and a known host entry, and in-app port forwarding is unavailable there.
+  a key or ssh-agent and a known host entry, and in-app reverse port forwarding (`-R`) is unavailable there.
 - **Not notarized and not signed.** macOS builds are ad-hoc signed (right-click, **Open** on first launch); Windows builds are unsigned.
   `scripts/notarize-macos.sh` has not been run.
 - **Apple silicon only** on macOS; there is no Intel build.

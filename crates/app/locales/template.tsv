@@ -1001,6 +1001,7 @@ Forward
 Forward Port	
 Forward a port:	
 Forward ports opened on SSH hosts	
+Forwarded Address	
 Forwarded Ports	
 Friday	
 From the {0} registry, published by {1}	
@@ -1264,6 +1265,7 @@ Keymap preset from an installed extension, as publisher.name/label (empty: Codey
 Keymap preset: {}	
 Kill All Terminals	
 Kill Terminal	
+Label	
 Labels	
 Language	
 Language Badges	
@@ -1705,6 +1707,7 @@ Open ~/.ssh/config
 Open “{}”	
 Opening…	
 Order of files and folders in the explorer	
+Origin	
 Outline	
 Output	
 Output of {}	
@@ -1760,10 +1763,12 @@ Pop (apply and drop)
 Pop Latest Stash	
 Pop Stash…	
 Popped {}	
+Port	
 Port forwarding works while connected to an SSH host.	
 Port mappings	
 Port {0}, {1}	
 Port {}	
+Port {} is forwarded already: localhost:{}	
 Port {} is forwarded to localhost:{} ({} was busy here)	
 Port {} is forwarded: localhost:{}	
 Ports	
@@ -2072,6 +2077,7 @@ Run this search again in the same folder
 Run to Cursor	
 Run {} with any arguments	
 Running	
+Running Process	
 Running code extensions in this window: why they started, how long their calls took, what was denied. Nothing here leaves this computer.	
 Running task: {}	
 Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	
@@ -2480,6 +2486,7 @@ The input “{}” would run an editor command; use promptString or pickString.
 The last background fetch failed: {}	
 The last command exited with code {}	
 The local port is busy	
+The local port was not changed: {}. Back on localhost:{}	
 The managed installation is incomplete or belongs to another catalogue. Reinstall the services to repair it.	
 The new version couldn't be installed from here. You can download it from the release page instead.	
 The number {} cannot be written in JSON	
@@ -2517,6 +2524,7 @@ The server did not answer within 60 seconds.
 The server no longer accepts an account password: use a personal access token as the password (or sign in with the GitHub CLI: gh auth login).	
 The server refused the login: check the account and that the token may push.	
 The server wants credentials that were not given: try again and enter them when asked, or set up an SSH key.	
+The shell has exited	
 The shell may run each line as soon as it arrives.	
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
 The string is not closed	
@@ -2937,7 +2945,7 @@ differs only in letter case
 disabled	
 download failed	
 draft	
-e.g. 3000	
+e.g. 3000 or 3000:8080	
 edit the file by hand	
 editor.formatters.{}: expected “lsp” or an extension id	
 empty body	
@@ -3199,7 +3207,7 @@ variable name, e.g. total (the program stops when it is written)
 via the GitHub API	
 via the gh CLI	
 via the public GitHub API (set GITHUB_TOKEN or use gh for private repositories and check results)	
-waiting for the connection	
+waiting for the connection to come back	
 whole file	
 with subfolders	
 withdrawn	
@@ -3317,6 +3325,7 @@ your words
 {} (saved {}) ↔ editor	
 {} (selection) ↔ Clipboard	
 {} (terminal)	
+{} (terminal, exited)	
 {} (“{}” failed; {} of {} items were transferred before it)	
 {} KB · image preview	
 {} MB · image preview	
