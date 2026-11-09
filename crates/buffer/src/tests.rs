@@ -915,3 +915,25 @@ fn move_last_selection_wraps_and_stops_when_nothing_is_free() {
     assert!(single.select_next_occurrence());
     assert!(!single.move_last_selection_to_next_occurrence(), "no other match");
 }
+
+#[test]
+fn cursor_steps_on_a_huge_single_line_do_not_scan_the_whole_line() {
+    // A minified bundle: one 4 MB line. Each key press must cost about the same as on a short line.
+    let mut b = Buffer::from_str(&"var a=1;".repeat(500_000));
+    b.set_cursor(2_000_000, false);
+    let started = std::time::Instant::now();
+    for _ in 0..50 {
+        b.move_left(false);
+        b.move_right(false);
+        b.move_right(false);
+    }
+    let moving = started.elapsed();
+    let started = std::time::Instant::now();
+    for _ in 0..50 {
+        b.backspace();
+        b.delete();
+    }
+    let deleting = started.elapsed();
+    assert!(moving.as_secs() < 1, "moving: {moving:?}");
+    assert!(deleting.as_secs() < 1, "deleting: {deleting:?}");
+}

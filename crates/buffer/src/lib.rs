@@ -149,6 +149,9 @@ pub struct Buffer {
     mixed_endings: bool,
 }
 
+/// How far around a cursor a grapheme cluster is looked for (a cluster longer than this is cut).
+const GRAPHEME_CONTEXT: usize = 64;
+
 const BOM: &str = "\u{feff}";
 
 /// Sort key (close to VS Code's locale comparison): accents and upper/lower
@@ -935,19 +938,29 @@ impl Buffer {
         i
     }
 
+    /// The text around `idx` on its line, at most `GRAPHEME_CONTEXT` characters each way, and the character index it starts at.
+    /// A cursor step reads this window only: on a 4 MB minified line, segmenting the whole line made every arrow key and
+    /// Backspace take tens of milliseconds.
+    fn grapheme_window(&self, idx: usize) -> (String, usize) {
+        let line = self.rope.char_to_line(idx);
+        let line_start = self.rope.line_to_char(line);
+        let from = line_start.max(idx.saturating_sub(GRAPHEME_CONTEXT));
+        let to = (line_start + self.line_len_chars(line)).min(idx + GRAPHEME_CONTEXT);
+        (self.rope.slice(from..to).to_string(), from)
+    }
+
     fn prev_boundary(&self, idx: usize) -> usize {
         if idx == 0 {
             return 0;
         }
         let line = self.rope.char_to_line(idx);
-        let start = self.rope.line_to_char(line);
-        if idx == start {
+        if idx == self.rope.line_to_char(line) {
             return idx - 1; // to the end of the previous line
         }
-        let text = self.line(line);
-        let byte = char_to_byte(&text, idx - start);
+        let (text, from) = self.grapheme_window(idx);
+        let byte = char_to_byte(&text, idx - from);
         let prev = text.grapheme_indices(true).map(|(b, _)| b).take_while(|&b| b < byte).last().unwrap_or(0);
-        start + text[..prev].chars().count()
+        from + text[..prev].chars().count()
     }
 
     fn next_boundary(&self, idx: usize) -> usize {
@@ -955,15 +968,13 @@ impl Buffer {
             return self.len_chars();
         }
         let line = self.rope.char_to_line(idx);
-        let start = self.rope.line_to_char(line);
-        let text = self.line(line);
-        let col = idx - start;
-        if col >= text.chars().count() {
+        if idx >= self.rope.line_to_char(line) + self.line_len_chars(line) {
             return idx + 1; // skip past the line ending
         }
-        let byte = char_to_byte(&text, col);
+        let (text, from) = self.grapheme_window(idx);
+        let byte = char_to_byte(&text, idx - from);
         let next = text.grapheme_indices(true).map(|(b, _)| b).find(|&b| b > byte).unwrap_or(text.len());
-        start + text[..next].chars().count()
+        from + text[..next].chars().count()
     }
 
     // --- Editing ---
