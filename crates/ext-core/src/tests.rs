@@ -252,6 +252,24 @@ fn verify_finds_changed_files() {
 }
 
 #[test]
+fn reinstalling_repairs_a_changed_file_in_the_store() {
+    let d = Dir::new("repair");
+    let s = d.store();
+    let p = theme("a.one", "1.0.0");
+    let i = s.install(&p, src()).unwrap();
+    let f = s.store_dir(&i.digest).join("themes/t.json");
+    let mut perm = std::fs::metadata(&f).unwrap().permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
+    perm.set_readonly(false);
+    std::fs::set_permissions(&f, perm).unwrap();
+    std::fs::write(&f, "tampered").unwrap();
+    assert_eq!(s.verify(&i.digest).unwrap(), vec!["themes/t.json"]);
+    // The Verify notice tells the user to reinstall: that has to fix it.
+    s.install(&p, src()).unwrap();
+    assert!(s.verify(&i.digest).unwrap().is_empty());
+}
+
+#[test]
 fn invalid_packages_install_nothing() {
     let d = Dir::new("invalid");
     let s = d.store();

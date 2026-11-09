@@ -331,7 +331,7 @@ impl Store {
             }
         }
         let dir = self.store_dir(&pkg.digest);
-        if !dir.join(ext_manifest::FILE_NAME).is_file() {
+        if !self.intact(&pkg.digest) {
             self.unpack(&pkg, &dir)?;
         }
         self.commit_lock(&lock)?;
@@ -354,7 +354,7 @@ impl Store {
         let (mut lock, _) = self.read_lock()?;
         for p in &pkgs {
             let dir = self.store_dir(&p.digest);
-            if !dir.join(ext_manifest::FILE_NAME).is_file() {
+            if !self.intact(&p.digest) {
                 self.unpack(p, &dir)?;
             }
         }
@@ -379,6 +379,12 @@ impl Store {
         self.commit_lock(&lock)?;
         let _ = std::fs::create_dir_all(self.data_dir(&id));
         Ok(Installed { manifest: pkg.manifest, digest: pkg.digest, disabled: entry.disabled, source })
+    }
+
+    /// The package's folder is in the store with every file as the package listed it. A folder that is there but changed
+    /// (a disk error, a hand edit) is not reused: installing the package again replaces it, as **Verify** advises.
+    fn intact(&self, digest: &ContentDigest) -> bool {
+        self.store_dir(digest).join(ext_manifest::FILE_NAME).is_file() && self.verify(digest).is_ok_and(|bad| bad.is_empty())
     }
 
     /// Write the files into `store/.tmp-<digest>-<pid>`, make them read-only and rename the folder into place.
