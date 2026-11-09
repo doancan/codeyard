@@ -249,6 +249,25 @@ fn publishers_yank_restore_and_deprecate_with_signed_statements() {
 }
 
 #[test]
+fn an_older_status_statement_cannot_be_replayed_over_a_newer_one() {
+    // Statements are logged in public: anyone can send one again within its 15 minutes.
+    let t = Test::new("status-replay");
+    let me = github(7, 42);
+    t.publish(&package("you.night", "1.0.0", "Night"), &me).unwrap();
+    let statement = StatusChange::Yank.statement(&ExtId::parse("you.night").unwrap(), &Version::parse("1.0.0").unwrap());
+    let yank = y::frame(&t.authority.sign(&statement, &me, NOW + 10), &statement);
+    t.yard.change_status(&yank, NOW + 60).unwrap();
+    t.status("you.night", "1.0.0", StatusChange::Restore, &me, NOW + 20).unwrap();
+    assert_eq!(t.release("you.night", "1.0.0").status, Status::Ok);
+    let replayed = t.yard.change_status(&yank, NOW + 60);
+    assert!(matches!(&replayed, Err(Error::Forbidden(m)) if m.contains("older")), "{replayed:?}");
+    assert_eq!(t.release("you.night", "1.0.0").status, Status::Ok, "the publisher's later restore stands");
+    // A newer statement still works, and sending the latest one again changes nothing.
+    t.status("you.night", "1.0.0", StatusChange::Yank, &me, NOW + 30).unwrap();
+    assert_eq!(t.release("you.night", "1.0.0").status, Status::Yanked);
+}
+
+#[test]
 fn the_security_role_revokes_and_clears_advisory_fixes() {
     let t = Test::new("operator");
     let me = github(7, 42);
@@ -652,6 +671,16 @@ fn a_rejected_native_program_is_never_listed() {
     // Its version number stays used, for every platform; the publisher is still not trusted for native programs.
     assert!(matches!(t.native("1.0.0", MAC), Err(Error::Forbidden(_))));
     assert!(t.native("1.0.1", LINUX).unwrap().review);
+}
+
+#[test]
+fn a_server_error_does_not_tell_the_client_about_the_server() {
+    let internal = Error::Internal("cannot read /srv/yard/public/index.json: Permission denied (os error 13)".into());
+    assert_eq!(internal.status(), 500);
+    assert_eq!(internal.public_message(), "internal error");
+    // What the publisher can act on is still said.
+    let conflict = Error::Conflict("you.night 1.0.0 was published before".into());
+    assert_eq!(conflict.public_message(), conflict.message());
 }
 
 #[test]

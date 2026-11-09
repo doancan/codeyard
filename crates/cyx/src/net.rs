@@ -26,9 +26,7 @@ impl Response {
 }
 
 fn local(url: &str) -> bool {
-    let rest = url.strip_prefix("http://").unwrap_or_default();
-    let host = rest.split(['/', ':']).next().unwrap_or_default();
-    matches!(host, "localhost" | "127.0.0.1" | "[::1]")
+    ext_core::registry::is_local_http(url)
 }
 
 pub fn request(method: &str, url: &str, headers: &[(&str, &str)], body: Vec<u8>) -> Result<Response, String> {
@@ -65,7 +63,10 @@ mod tests {
     fn plain_http_only_for_this_machine() {
         assert!(super::local("http://127.0.0.1:8080/v1/publish"));
         assert!(super::local("http://localhost/x"));
+        assert!(super::local("http://[::1]:8080/x"));
         assert!(!super::local("http://localhost.evil.test/x"));
+        assert!(!super::local("http://localhost@evil.test/x"));
+        assert!(!super::local("http://127.0.0.1:80@evil.test/x"));
         assert!(!super::local("http://yard.codeyard.dev/x"));
         assert!(super::request("GET", "http://example.com/", &[], Vec::new()).unwrap_err().contains("only https://"));
     }

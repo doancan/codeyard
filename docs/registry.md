@@ -182,7 +182,9 @@ Native programs are code: clients update to them after 48 h like any code update
 Status statements are `codeyard-yard/v1/status
 <id> <version> <yank|restore|deprecate [replacement]>
 `, signed by the
-identity that publishes the extension within the last 15 minutes. A revoked version stays revoked.
+identity that publishes the extension within the last 15 minutes. A statement logged earlier than the last one the
+registry accepted for that version is refused, so a public old statement cannot be sent again to undo a newer one. A
+revoked version stays revoked. A server error (500) answers only "internal error"; the details go to the service's log.
 
 With each package the service writes its details file: `{"manifest": "<codeyard-extension.toml>", "readme":
 "<README.md>"}`, the README cut at a line to 256 KiB (`"readme_cut": true` then), so the Market shows a page without
