@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Source Control: file names with accents or other non-ASCII letters show as written, not as octal escapes, in a
   commit's file list, a stash's file list and a file's history.
+- Source Control: a push refused by a protected branch (GitHub, GitLab) says so and points to a pull request, instead of
+  showing only the server's raw lines.
 - File watching: a slow or hung network share no longer blocks changes to the watched set while a poll is checking it.
 - Commands run by the agent (git and others) that hit the time limit are stopped together with the processes they started.
 - Terminal: when a new terminal cannot get its file handles (out of descriptors), its shell is stopped instead of left running.

@@ -56,6 +56,9 @@ pub fn explain(err: &str) -> Option<String> {
     if is_push_rejected(err) {
         return Some(t("The remote has commits you do not have: pull first (Git: Pull), then push. To overwrite them instead, use Git: Push (Force).").into());
     }
+    if e.contains("protected branch") {
+        return Some(t("The server protects this branch and refuses direct pushes: push to another branch and open a pull request.").into());
+    }
     if e.contains("index.lock") && e.contains("file exists") {
         let lock = quoted_after(err, "Unable to create").unwrap_or(".git/index.lock");
         return Some(tf("Another git process is using this repository. If none is running, a crash left {} behind: delete it and try again.", &[&lock]));
@@ -163,6 +166,18 @@ mod tests {
         assert!(explain("On branch main\n\nnothing to commit, working tree clean").unwrap().starts_with("There is nothing to commit"));
         assert!(explain("no changes added to commit (use \"git add\" and/or \"git commit -a\")").is_some());
         assert!(explain("fatal: No configured push destination.\nEither specify the URL").unwrap().contains("Git: Add Remote"));
+    }
+
+    #[test]
+    fn a_protected_branch_is_not_mistaken_for_a_stale_one() {
+        let github = "remote: error: GH006: Protected branch update failed for refs/heads/main.\nremote: error: Changes must be made through a pull request.\nTo github.com:x/y.git\n ! [remote rejected] main -> main (protected branch hook declined)";
+        let gitlab = "remote: GitLab: You are not allowed to push code to protected branches on this project.\n ! [remote rejected] main -> main (pre-receive hook declined)";
+        for e in [github, gitlab] {
+            let text = explain(e).unwrap();
+            assert!(text.contains("protects") && text.contains("pull request"), "{text}");
+            assert!(!is_push_rejected(e));
+        }
+        assert_eq!(explain(" ! [remote rejected] main -> main (pre-receive hook declined)"), None, "an unknown hook keeps its own words");
     }
 
     #[test]

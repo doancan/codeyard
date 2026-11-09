@@ -3703,3 +3703,4 @@ Undo a commit that is already on {}?	{} üzerinde zaten bulunan bir commit geri 
 {0} of them is already on {1}: the next Sync brings it back.|{0} of them are already on {1}: the next Sync brings them back.	Bunlardan {0} tanesi zaten {1} üzerinde: bir sonraki Sync onları geri getirir.
 {} commit leaves this branch.|{} commits leave this branch.	{} commit bu daldan çıkar.
 {} of them is on no other branch, tag or remote: after the reset only Git's reflog still finds it.|{} of them are on no other branch, tag or remote: after the reset only Git's reflog still finds them.	Bunlardan {} tanesi başka hiçbir dalda, etikette ya da remote'ta yok: reset'ten sonra onları yalnızca Git'in reflog'u bulur.
+The server protects this branch and refuses direct pushes: push to another branch and open a pull request.	Sunucu bu dalı koruyor ve doğrudan push kabul etmiyor: başka bir dala push edip pull request açın.
