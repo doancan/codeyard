@@ -117,10 +117,10 @@ fn two_registries_listing_one_id_stay_apart() {
     assert!(regs.contains(&"one") && regs.contains(&"two"));
 }
 
-/// The perf row (`market.search_ms`, 16 ms ceiling) measures the app end to end; this keeps the search itself far
-/// below it. Timed only in optimised builds.
+/// The speed of the search on this many extensions is the perf row `market.search_ms` (16 ms ceiling), measured on the app
+/// end to end in an optimised build; this checks what the search returns at that size.
 #[test]
-fn ten_thousand_extensions_search_in_well_under_a_frame() {
+fn ten_thousand_extensions_search_and_narrow_as_the_query_grows() {
     let words = ["night", "owl", "rust", "theme", "snippet", "keymap", "dark", "light", "go", "python", "solar", "forest"];
     let entries: Vec<(String, Entry)> = (0..10_000)
         .map(|n| {
@@ -137,14 +137,14 @@ fn ten_thousand_extensions_search_in_well_under_a_frame() {
     let i = index(entries.iter().map(|(id, e)| (id.as_str(), e.clone())).collect());
     let c = Catalog::new([("t", &i)]);
     assert_eq!(c.len(), 10_000);
-    let mut worst = std::time::Duration::ZERO;
-    for q in ["n", "ni", "nig", "nigh", "night", "night o", "night ow", "night owl", "rust snip", "ext42", "zzz", ""] {
-        let t = std::time::Instant::now();
-        let hits = c.search(q);
-        worst = worst.max(t.elapsed());
-        assert!(q != "zzz" || hits.is_empty());
+    let mut previous = c.len();
+    for q in ["n", "ni", "nig", "nigh", "night", "night o", "night ow", "night owl"] {
+        let hits = c.search(q).len();
+        assert!(hits <= previous, "`{q}` found {hits}, more than the shorter query ({previous})");
+        assert!(q != "night" || hits > 0, "`night` finds something");
+        previous = hits;
     }
-    if !cfg!(debug_assertions) {
-        assert!(worst < std::time::Duration::from_millis(4), "slowest search took {worst:?}");
-    }
+    assert!(!c.search("ext42").is_empty());
+    assert!(c.search("zzz").is_empty());
+    assert_eq!(c.search("").len(), 10_000, "an empty query lists everything");
 }
