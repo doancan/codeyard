@@ -50,6 +50,7 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_DAEMON_GRACE`, `CODEYARD_DAEMON_IDLE` | Seconds the server-side agent daemon waits for a lost client and before exiting with no sessions (defaults 300 and 600). |
 | `CODEYARD_SHELL_INTEGRATION`, `CODEYARD_USER_ZDOTDIR` | Internal: set in a terminal's shell when shell integration is on, and (for zsh) where the user's own startup files are, so the integration scripts read them first. A profile's `env` may set `CODEYARD_USER_ZDOTDIR`. |
 | `CODEYARD_ASKPASS_EXE`, `CODEYARD_ASKPASS_SOCK` | Internal: the executable `ssh` runs as `SSH_ASKPASS` and the socket it answers on. Tests point the first at a test binary. |
+| `CODEYARD_FUZZ_FULL` | Set to any value to make `fuzz_parsers_tests.rs` try every opener and shape at its largest size (100,000), not only the nesting ones. |
 | `CODEYARD_QA_DIR`, `CODEYARD_QA_TMP` | Base folders for test scratch files. |
 | `CODEYARD_QA_SEEDS`, `CODEYARD_QA_SEED_BASE` | Number of random sessions and the first seed of `qa_random_new_commands_many_seeds`. |
 | `CODEYARD_BUFFER_FUZZ_SEEDS` | Number of random editing sessions of the buffer's fuzz test (default 200); raise it for a long run. |
