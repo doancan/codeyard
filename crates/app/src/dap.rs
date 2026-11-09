@@ -293,6 +293,19 @@ fn closed_soon(stream: &TcpStream, wait: Duration) -> bool {
     closed
 }
 
+/// How much of the adapter's own output is kept for the error message when it fails to start.
+const OUTPUT_TAIL_BYTES: usize = 2000;
+
+/// Append adapter output to `tail`, keeping only the last `OUTPUT_TAIL_BYTES` (cut on a char boundary).
+fn push_output_tail(tail: &mut String, data: &[u8]) {
+    tail.push_str(&String::from_utf8_lossy(data));
+    let extra = tail.len().saturating_sub(OUTPUT_TAIL_BYTES);
+    if extra > 0 {
+        let cut = (extra..tail.len()).find(|&i| tail.is_char_boundary(i)).unwrap_or(tail.len());
+        tail.drain(..cut);
+    }
+}
+
 /// A random port on the server for the adapter (40000–59999; if taken, the adapter reports a clear error).
 fn remote_port() -> u16 {
     let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(0) as u64;
@@ -380,13 +393,7 @@ impl Session {
                                     }
                                 } else {
                                     // Output of the TCP adapter itself (build error, crash): keep the tail for the error message.
-                                    let mut t = tail.lock().unwrap();
-                                    t.push_str(&String::from_utf8_lossy(&data));
-                                    let extra = t.len().saturating_sub(2000);
-                                    if extra > 0 {
-                                        let cut = (extra..t.len()).find(|&i| t.is_char_boundary(i)).unwrap_or(t.len());
-                                        t.drain(..cut);
-                                    }
+                                    push_output_tail(&mut tail.lock().unwrap(), &data);
                                 }
                             }
                             ProcEvent::Exit(code) => {
