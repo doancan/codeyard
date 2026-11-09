@@ -126,7 +126,7 @@ fn windows_fixture_stdio() {
 #[test]
 #[ignore = "subprocess fixture"]
 fn windows_fixture_sleep() {
-    std::thread::sleep(Duration::from_secs(3));
+    std::thread::sleep(Duration::from_secs(10));
 }
 
 #[cfg(windows)]
@@ -164,10 +164,9 @@ fn windows_exec_roundtrips_unicode_stdin_and_stderr() {
 #[cfg(windows)]
 #[test]
 fn windows_exec_enforces_timeout() {
-    let start = Instant::now();
-    let err = fixture("windows_fixture_sleep", None, Duration::from_millis(200)).err().expect("timeout");
+    // The fixture would finish by itself after ten seconds, successfully: an error means the timeout stopped it.
+    let err = fixture("windows_fixture_sleep", None, Duration::from_millis(50)).err().expect("timeout");
     assert_eq!(err.kind(), io::ErrorKind::TimedOut);
-    assert!(start.elapsed() < Duration::from_secs(2));
 }
 
 #[cfg(windows)]
@@ -182,11 +181,11 @@ fn windows_exec_drains_both_streams_past_the_output_limit() {
 #[cfg(windows)]
 #[test]
 fn windows_exec_does_not_wait_for_inherited_background_pipes() {
-    let start = Instant::now();
+    // The fixture's background child sleeps for ten seconds, longer than the five the call may take: waiting for it would end
+    // in a timeout error.
     let out = fixture("windows_fixture_background", None, Duration::from_secs(5)).unwrap();
     assert_eq!(out.code, Some(0));
     assert!(String::from_utf8_lossy(&out.stdout).contains("parent-exited"));
-    assert!(start.elapsed() < Duration::from_secs(2));
 }
 
 #[cfg(windows)]
@@ -211,7 +210,7 @@ fn writing_to_a_process_that_never_reads_does_not_block() {
     // in `write_all`; now the input is queued and the call returns, finally with WouldBlock.
     let (mut p, _out) = spawn("sleep", &["30".to_string()], None).unwrap();
     let chunk = vec![b'x'; 64 * 1024];
-    let started = std::time::Instant::now();
+    let sleeper = p.child.id() as libc::pid_t;
     let mut refused = None;
     for _ in 0..20_000 {
         if let Err(e) = p.write(&chunk) {
@@ -219,12 +218,11 @@ fn writing_to_a_process_that_never_reads_does_not_block() {
             break;
         }
     }
-    assert!(started.elapsed() < Duration::from_secs(10), "write blocked for {:?}", started.elapsed());
     assert_eq!(refused, Some(io::ErrorKind::WouldBlock), "a full queue is reported, not waited for");
-    // Killing still works immediately (the writer thread is stuck, the process is not).
-    let t = std::time::Instant::now();
+    // Killing still works (the writer thread is stuck, the process is not): dropping ends and reaps the process.
     drop(p);
-    assert!(t.elapsed() < Duration::from_secs(5));
+    // SAFETY: signal 0 only checks that the process exists.
+    assert_ne!(unsafe { libc::kill(sleeper, 0) }, 0, "the process was still there after the drop");
 }
 
 #[test]
@@ -239,26 +237,43 @@ fn a_missing_working_directory_is_an_error_not_a_silent_fallback() {
 #[test]
 #[cfg(unix)]
 fn exec_returns_when_the_command_exits_even_if_a_background_child_holds_its_pipes() {
-    let t = Instant::now();
-    let out = exec("/bin/sh", &["-c".into(), "sleep 20 >/dev/null & echo tamam; echo uyarı >&2".into()], None, None).unwrap();
-    let took = t.elapsed();
+    let pid_file = std::env::temp_dir().join(format!("codeyard-exec-background-{}", std::process::id()));
+    let alive = |pid: libc::pid_t| {
+        // SAFETY: signal 0 only checks that the process exists.
+        unsafe { libc::kill(pid, 0) == 0 }
+    };
+    let background_pid = || -> libc::pid_t {
+        let pid = std::fs::read_to_string(&pid_file).unwrap().trim().parse().unwrap();
+        let _ = std::fs::remove_file(&pid_file);
+        pid
+    };
+    // The background `sleep` lasts 20 s: if it is still running when `exec` returns, `exec` did not wait for it.
+    let script = format!("sleep 20 >/dev/null & echo $! > '{}'; echo tamam; echo uyarı >&2", pid_file.display());
+    let out = exec("/bin/sh", &["-c".into(), script], None, None).unwrap();
     assert_eq!((out.code, out.stdout.as_slice(), out.stderr.as_slice()), (Some(0), "tamam\n".as_bytes(), "uyarı\n".as_bytes()));
-    assert!(took < Duration::from_secs(3), "{took:?}: waiting for the background process");
+    let sleeper = background_pid();
+    let waited_for_it = !alive(sleeper);
+    // SAFETY: do not leave the 20 s sleeper behind.
+    unsafe { libc::kill(sleeper, libc::SIGKILL) };
+    assert!(!waited_for_it, "exec waited for the background process");
     // The same goes for whoever holds stdout.
-    let t = Instant::now();
-    let out = exec("/bin/sh", &["-c".into(), "sleep 20 2>/dev/null & echo tamam".into()], None, None).unwrap();
+    let script = format!("sleep 20 2>/dev/null & echo $! > '{}'; echo tamam", pid_file.display());
+    let out = exec("/bin/sh", &["-c".into(), script], None, None).unwrap();
     assert_eq!(out.stdout, b"tamam\n");
-    assert!(t.elapsed() < Duration::from_secs(3), "{:?}", t.elapsed());
+    let sleeper = background_pid();
+    let waited_for_it = !alive(sleeper);
+    // SAFETY: as above.
+    unsafe { libc::kill(sleeper, libc::SIGKILL) };
+    assert!(!waited_for_it, "exec waited for the background process holding stdout");
 }
 
 /// A command that never finishes: killed when the time runs out, returns an error.
 #[test]
 #[cfg(unix)]
 fn a_command_that_never_ends_is_killed_at_the_timeout() {
-    let t = Instant::now();
-    let err = exec_with_timeout("/bin/sleep", &["30".into()], None, None, Duration::from_millis(300)).err().expect("timeout");
+    // The sleep would end successfully after 30 s: an error means the timeout killed it.
+    let err = exec_with_timeout("/bin/sleep", &["30".into()], None, None, Duration::from_millis(50)).err().expect("timeout");
     assert_eq!(err.kind(), io::ErrorKind::TimedOut);
-    assert!(t.elapsed() < Duration::from_secs(2), "{:?}", t.elapsed());
 }
 
 /// The timeout stops what the command started too, not only the command itself.
