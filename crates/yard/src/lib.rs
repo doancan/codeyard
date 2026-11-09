@@ -126,6 +126,15 @@ impl Error {
         }
     }
 
+    /// What a client is told: the text of every error but a server one, whose paths and database messages stay in
+    /// the server's log.
+    pub fn public_message(&self) -> &str {
+        match self {
+            Error::Internal(_) => "internal error",
+            e => e.message(),
+        }
+    }
+
     pub fn message(&self) -> &str {
         match self {
             Error::Invalid(m) | Error::Forbidden(m) | Error::Conflict(m) | Error::NotFound(m) | Error::TooLarge(m) | Error::Internal(m) => m,

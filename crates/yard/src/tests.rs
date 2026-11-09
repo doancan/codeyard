@@ -655,6 +655,16 @@ fn a_rejected_native_program_is_never_listed() {
 }
 
 #[test]
+fn a_server_error_does_not_tell_the_client_about_the_server() {
+    let internal = Error::Internal("cannot read /srv/yard/public/index.json: Permission denied (os error 13)".into());
+    assert_eq!(internal.status(), 500);
+    assert_eq!(internal.public_message(), "internal error");
+    // What the publisher can act on is still said.
+    let conflict = Error::Conflict("you.night 1.0.0 was published before".into());
+    assert_eq!(conflict.public_message(), conflict.message());
+}
+
+#[test]
 fn a_failed_atomic_write_leaves_no_temporary_file() {
     let dir = std::env::temp_dir().join(format!("codeyard-yard-atomic-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
