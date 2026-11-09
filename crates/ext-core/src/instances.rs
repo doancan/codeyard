@@ -207,10 +207,12 @@ impl Store {
         Ok(())
     }
 
-    /// Forget the instances of an uninstalled extension.
-    pub(crate) fn forget_instances(&self, id: &ExtId) {
+    /// Forget the instances and hosts of every extension that is not installed (`ids`), as for the switches.
+    pub(crate) fn forget_instances_except(&self, ids: &std::collections::BTreeSet<&str>) {
         let mut file = self.read_instances();
-        if file.extensions.remove(id.as_str()).is_some() {
+        let before = file.extensions.len();
+        file.extensions.retain(|id, _| ids.contains(id.as_str()));
+        if file.extensions.len() != before {
             let _ = self.write_instances(&file);
         }
     }

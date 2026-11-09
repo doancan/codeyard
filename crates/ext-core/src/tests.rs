@@ -252,6 +252,100 @@ fn verify_finds_changed_files() {
 }
 
 #[test]
+fn reinstalling_repairs_a_changed_file_in_the_store() {
+    let d = Dir::new("repair");
+    let s = d.store();
+    let p = theme("a.one", "1.0.0");
+    let i = s.install(&p, src()).unwrap();
+    let f = s.store_dir(&i.digest).join("themes/t.json");
+    let mut perm = std::fs::metadata(&f).unwrap().permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
+    perm.set_readonly(false);
+    std::fs::set_permissions(&f, perm).unwrap();
+    std::fs::write(&f, "tampered").unwrap();
+    assert_eq!(s.verify(&i.digest).unwrap(), vec!["themes/t.json"]);
+    // The Verify notice tells the user to reinstall: that has to fix it.
+    s.install(&p, src()).unwrap();
+    assert!(s.verify(&i.digest).unwrap().is_empty());
+}
+
+#[test]
+fn an_update_decided_on_an_old_lock_does_not_overwrite_what_changed_since() {
+    let d = Dir::new("cas");
+    let s = d.store();
+    let one = s.install(&theme("a.one", "1.0.0"), src()).unwrap();
+    // The update was decided against 1.0.0; meanwhile another window installed 3.0.0.
+    let three = s.install(&theme("a.one", "3.0.0"), src()).unwrap();
+    let r = s.install_replacing(&theme("a.one", "2.0.0"), src(), BTreeMap::new(), one.digest);
+    assert!(matches!(r, Err(Error::Changed(_))), "{r:?}");
+    assert_eq!(s.locked().unwrap()[&id("a.one")].digest, three.digest);
+    // Or it was uninstalled: the update must not bring it back.
+    s.uninstall(&id("a.one")).unwrap();
+    let r = s.install_replacing(&theme("a.one", "2.0.0"), src(), BTreeMap::new(), three.digest);
+    assert!(matches!(r, Err(Error::Changed(_))), "{r:?}");
+    assert!(s.locked().unwrap().is_empty());
+    // Still the installed version: it goes through.
+    let one = s.install(&theme("a.one", "1.0.0"), src()).unwrap();
+    s.install_replacing(&theme("a.one", "2.0.0"), src(), BTreeMap::new(), one.digest).unwrap();
+    assert_eq!(s.locked().unwrap()[&id("a.one")].version.to_string(), "2.0.0");
+}
+
+#[test]
+fn a_rollback_decided_on_an_old_lock_does_not_apply_to_what_changed_since() {
+    let d = Dir::new("cas-rollback");
+    let s = d.store();
+    s.install(&theme("a.one", "1.0.0"), src()).unwrap();
+    let two = s.install(&theme("a.one", "2.0.0"), src()).unwrap();
+    s.install(&theme("a.one", "3.0.0"), src()).unwrap();
+    let r = s.rollback_from(&id("a.one"), two.digest);
+    assert!(matches!(r, Err(Error::Changed(_))), "{r:?}");
+    assert_eq!(s.locked().unwrap()[&id("a.one")].version.to_string(), "3.0.0");
+}
+
+fn registry_source(repo: u64) -> Source {
+    let publisher = crate::yard::Publisher {
+        issuer: "https://token.actions.githubusercontent.com".into(),
+        subject: None,
+        owner_id: Some(1),
+        repository_id: Some(repo),
+        workflow: Some(".github/workflows/release.yml".into()),
+    };
+    Source::Registry { registry: "yard".into(), publisher }
+}
+
+#[test]
+fn switches_and_instances_of_a_removed_extension_do_not_outlive_it() {
+    let d = Dir::new("leftovers");
+    let s = d.store();
+    s.install(&theme("a.one", "1.0.0"), src()).unwrap();
+    let off = Permissions { net: vec!["x.example.com".into()], ..Default::default() };
+    s.set_revoked_permissions(&id("a.one"), &src(), &off).unwrap();
+    s.set_revoked_permissions(&id("gone.ext"), &src(), &off).unwrap();
+    s.add_user_host(&id("gone.ext"), &src(), "git.example.com").unwrap();
+    // `gone.ext` was uninstalled by a process that died before it cleaned up (or the lock was synced without it).
+    s.install(&theme("b.two", "1.0.0"), src()).unwrap();
+    let raw = std::fs::read_to_string(s.permissions_path()).unwrap();
+    assert!(raw.contains("a.one") && !raw.contains("gone.ext"), "{raw}");
+    assert!(!std::fs::read_to_string(s.instances_path()).unwrap().contains("gone.ext"));
+}
+
+#[test]
+fn a_rollback_never_lands_on_a_package_from_another_publisher() {
+    let d = Dir::new("rollback-identity");
+    let s = d.store();
+    // A file the user sideloaded, then the registry's package of the same extension.
+    s.install(&theme("a.one", "1.0.0"), src()).unwrap();
+    s.install(&theme("a.one", "2.0.0"), registry_source(7)).unwrap();
+    assert!(matches!(s.rollback(&id("a.one")), Err(Error::NoPrevious(_))), "the sideloaded package must not inherit the registry's identity");
+    // Another publisher's package of the same id, too.
+    s.install(&theme("a.one", "3.0.0"), registry_source(8)).unwrap();
+    assert!(matches!(s.rollback(&id("a.one")), Err(Error::NoPrevious(_))));
+    // The same publisher's earlier version is what a rollback is for.
+    s.install(&theme("a.one", "3.1.0"), registry_source(8)).unwrap();
+    assert_eq!(s.rollback(&id("a.one")).unwrap().manifest.version.to_string(), "3.0.0");
+}
+
+#[test]
 fn invalid_packages_install_nothing() {
     let d = Dir::new("invalid");
     let s = d.store();

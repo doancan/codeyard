@@ -186,10 +186,13 @@ impl Store {
         write_atomic(&self.permissions_path(), &serde_json::to_vec_pretty(&file).expect("permissions serialize"))
     }
 
-    /// Forget the switches of an uninstalled extension.
-    pub(crate) fn forget_permissions(&self, id: &ExtId) {
+    /// Forget the switches of every extension that is not installed (`ids`): an uninstall that died before it got here,
+    /// or a lock synced without the extension, must not leave its switches for a later install.
+    pub(crate) fn forget_permissions_except(&self, ids: &std::collections::BTreeSet<&str>) {
         let mut file = self.read_permissions();
-        if file.extensions.remove(id.as_str()).is_some() {
+        let before = file.extensions.len();
+        file.extensions.retain(|id, _| ids.contains(id.as_str()));
+        if file.extensions.len() != before {
             let _ = write_atomic(&self.permissions_path(), &serde_json::to_vec_pretty(&file).expect("permissions serialize"));
         }
     }

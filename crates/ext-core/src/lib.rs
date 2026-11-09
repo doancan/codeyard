@@ -57,6 +57,9 @@ pub enum Error {
     NotInstalled(ExtId),
     /// Rollback asked for, but there is no previous version in the store.
     NoPrevious(ExtId),
+    /// An update or rollback was decided against an installed version that is no longer the installed one (another
+    /// window changed or removed the extension meanwhile); nothing was changed.
+    Changed(ExtId),
     Io(String, std::io::Error),
 }
 
@@ -67,6 +70,7 @@ impl std::fmt::Display for Error {
             Error::Lock(e) => write!(f, "{e}"),
             Error::NotInstalled(id) => write!(f, "{id} is not installed"),
             Error::NoPrevious(id) => write!(f, "{id} has no previous version to go back to"),
+            Error::Changed(id) => write!(f, "{id} was changed or removed while this was in progress; nothing was changed, try again"),
             Error::Io(what, e) => write!(f, "{what}: {e}"),
         }
     }
@@ -269,7 +273,30 @@ impl Store {
     /// [`install`](Self::install) a per-platform package with the digests of the version's other platforms, as the
     /// registry's index lists them; they go into the lock, so a package fetched later for another platform is checked
     /// against them. The package's own platform must be listed with its digest, or is added.
-    pub fn install_with_targets(&self, bytes: &[u8], source: Source, mut targets: BTreeMap<String, ContentDigest>) -> Result<Installed, Error> {
+    pub fn install_with_targets(&self, bytes: &[u8], source: Source, targets: BTreeMap<String, ContentDigest>) -> Result<Installed, Error> {
+        self.install_checked(bytes, source, targets, None)
+    }
+
+    /// [`install_with_targets`](Self::install_with_targets) as an update of the version whose package is `current`: it
+    /// installs only while that is still the installed one. An update downloads for a while; a user who removed the
+    /// extension or another window that changed it meanwhile is not overruled ([`Error::Changed`]).
+    pub fn install_replacing(
+        &self,
+        bytes: &[u8],
+        source: Source,
+        targets: BTreeMap<String, ContentDigest>,
+        current: ContentDigest,
+    ) -> Result<Installed, Error> {
+        self.install_checked(bytes, source, targets, Some(current))
+    }
+
+    fn install_checked(
+        &self,
+        bytes: &[u8],
+        source: Source,
+        mut targets: BTreeMap<String, ContentDigest>,
+        current: Option<ContentDigest>,
+    ) -> Result<Installed, Error> {
         let pkg = ext_pkg::read(bytes).map_err(Error::Package)?;
         match &pkg.target {
             Some(t) => match targets.get(t) {
@@ -281,7 +308,7 @@ impl Store {
             }
             None => {}
         }
-        self.commit_package(vec![pkg], source, targets)
+        self.commit_package(vec![pkg], source, targets, current)
     }
 
     /// Package a folder and install it (`codeyard --install-extension ./folder`). An extension with native programs is packaged
@@ -303,7 +330,7 @@ impl Store {
             pkgs.swap(0, i);
         }
         let targets = pkgs.iter().filter_map(|p| Some((p.target.clone()?, p.digest))).collect();
-        self.commit_package(pkgs, source, targets)
+        self.commit_package(pkgs, source, targets, None)
     }
 
     /// Add another platform's package of the installed version (fetched when a workspace on that platform needs its
@@ -331,7 +358,7 @@ impl Store {
             }
         }
         let dir = self.store_dir(&pkg.digest);
-        if !dir.join(ext_manifest::FILE_NAME).is_file() {
+        if !self.intact(&pkg.digest) {
             self.unpack(&pkg, &dir)?;
         }
         self.commit_lock(&lock)?;
@@ -348,20 +375,35 @@ impl Store {
     }
 
     /// `pkgs[0]` is the package installed; the others are more platforms of the same version, kept in the store.
-    fn commit_package(&self, pkgs: Vec<ext_pkg::Package>, source: Source, targets: BTreeMap<String, ContentDigest>) -> Result<Installed, Error> {
+    fn commit_package(
+        &self,
+        pkgs: Vec<ext_pkg::Package>,
+        source: Source,
+        targets: BTreeMap<String, ContentDigest>,
+        replacing: Option<ContentDigest>,
+    ) -> Result<Installed, Error> {
         let _guard = self.guard()?;
         self.sweep_temporaries();
         let (mut lock, _) = self.read_lock()?;
+        if let Some(current) = replacing {
+            let id = &pkgs[0].manifest.id;
+            if lock.extensions.get(id).map(|l| l.digest) != Some(current) {
+                return Err(Error::Changed(id.clone()));
+            }
+        }
         for p in &pkgs {
             let dir = self.store_dir(&p.digest);
-            if !dir.join(ext_manifest::FILE_NAME).is_file() {
+            if !self.intact(&p.digest) {
                 self.unpack(p, &dir)?;
             }
         }
         let pkg = pkgs.into_iter().next().expect("one package at least");
         let id = pkg.manifest.id.clone();
         let old = lock.extensions.get(&id);
+        // A rollback keeps the lock entry's source, so it may only go back to a package of the same identity: a sideloaded
+        // file must not come back labelled with a registry publisher's name, switches and keychain entries.
         let previous = match old {
+            Some(o) if grants::identity(&o.source) != grants::identity(&source) => None,
             Some(o) if o.digest != pkg.digest => Some(o.digest),
             Some(o) => o.previous,
             None => None,
@@ -379,6 +421,12 @@ impl Store {
         self.commit_lock(&lock)?;
         let _ = std::fs::create_dir_all(self.data_dir(&id));
         Ok(Installed { manifest: pkg.manifest, digest: pkg.digest, disabled: entry.disabled, source })
+    }
+
+    /// The package's folder is in the store with every file as the package listed it. A folder that is there but changed
+    /// (a disk error, a hand edit) is not reused: installing the package again replaces it, as **Verify** advises.
+    fn intact(&self, digest: &ContentDigest) -> bool {
+        self.store_dir(digest).join(ext_manifest::FILE_NAME).is_file() && self.verify(digest).is_ok_and(|bad| bad.is_empty())
     }
 
     /// Write the files into `store/.tmp-<digest>-<pid>`, make them read-only and rename the folder into place.
@@ -441,16 +489,27 @@ impl Store {
         lock.extensions.remove(id).ok_or_else(|| Error::NotInstalled(id.clone()))?;
         self.commit_lock(&lock)?;
         let _ = remove_tree(&self.data_dir(id));
-        self.forget_permissions(id);
-        self.forget_instances(id);
         Ok(())
     }
 
     /// Go back to the version this one replaced. No network: the previous package is still in the store.
     pub fn rollback(&self, id: &ExtId) -> Result<Installed, Error> {
+        self.rollback_checked(id, None)
+    }
+
+    /// [`rollback`](Self::rollback) of the version whose package is `current`, when that is still the installed one
+    /// ([`Error::Changed`] otherwise).
+    pub fn rollback_from(&self, id: &ExtId, current: ContentDigest) -> Result<Installed, Error> {
+        self.rollback_checked(id, Some(current))
+    }
+
+    fn rollback_checked(&self, id: &ExtId, current: Option<ContentDigest>) -> Result<Installed, Error> {
         let _guard = self.guard()?;
         let (mut lock, _) = self.read_lock()?;
         let cur = lock.extensions.get(id).cloned().ok_or_else(|| Error::NotInstalled(id.clone()))?;
+        if current.is_some_and(|c| c != cur.digest) {
+            return Err(Error::Changed(id.clone()));
+        }
         let prev = cur.previous.ok_or_else(|| Error::NoPrevious(id.clone()))?;
         let text = std::fs::read_to_string(self.store_dir(&prev).join(ext_manifest::FILE_NAME)).map_err(|_| Error::NoPrevious(id.clone()))?;
         let m = ext_manifest::parse(&text).map_err(|_| Error::NoPrevious(id.clone()))?;
@@ -543,8 +602,8 @@ impl Store {
         Ok(bad)
     }
 
-    /// Store folders that neither a current nor a previous version refers to, and data folders of extensions that are
-    /// no longer installed, are removed. Errors are ignored: the next transaction tries again.
+    /// Store folders that neither a current nor a previous version refers to, and the data folders, switches and
+    /// instances of extensions that are no longer installed, are removed. Errors are ignored: the next transaction tries again.
     fn collect_garbage(&self, lock: &Lock) {
         let keep: BTreeSet<String> = lock.digests().map(|d| d.hex()).collect();
         if let Ok(entries) = std::fs::read_dir(self.root.join("store")) {
@@ -563,6 +622,8 @@ impl Store {
                 }
             }
         }
+        self.forget_permissions_except(&ids);
+        self.forget_instances_except(&ids);
     }
 
     /// Temporary folders left by a transaction that died (only ever written under the store lock, so any found while
