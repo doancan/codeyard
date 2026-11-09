@@ -1932,6 +1932,8 @@ fn source_control_graph_details_filter_scope_and_commit_operations(cx: &mut Test
     git_in(&dir, &["commit", "-q", "-m", "main work\n\nlong body"]);
 
     let (wb, cx) = setup(cx);
+    // A small window: every wait redraws the whole workbench, at a cost that follows its size.
+    cx.simulate_resize(gpui::size(gpui::px(700.), gpui::px(400.)));
     open(&wb, &dir, cx);
     cx.simulate_keystrokes("ctrl-shift-g");
     let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
