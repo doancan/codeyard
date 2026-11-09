@@ -407,8 +407,13 @@ impl TerminalView {
     /// holds the bytes back until the end comes, and only the caller can say that the time is up. Applies what was held once
     /// it is; otherwise returns how long until then (`None`: no update pending).
     pub(super) fn release_expired_sync(&mut self) -> Option<std::time::Duration> {
+        self.release_expired_sync_at(std::time::Instant::now())
+    }
+
+    /// [`Self::release_expired_sync`] at the time `now` (tests move the clock instead of waiting).
+    fn release_expired_sync_at(&mut self, now: std::time::Instant) -> Option<std::time::Duration> {
         let deadline = self.parser.sync_timeout().sync_timeout()?;
-        let left = deadline.checked_duration_since(std::time::Instant::now());
+        let left = deadline.checked_duration_since(now);
         if left.is_none() {
             self.parser.stop_sync(&mut self.term);
         }

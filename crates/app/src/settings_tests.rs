@@ -27,15 +27,15 @@ fn a_project_cannot_loosen_the_terminal_clipboard_and_paste_checks() {
     }
 }
 
+/// The work is counted by `hostile_globs_stay_linear` in `ext-manifest`, where the matcher lives; a pattern that went
+/// exponential would not return from here at all.
 #[test]
 fn globs_are_linear_even_for_hostile_patterns() {
-    let t = std::time::Instant::now();
     assert!(!name_matches("*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*b", &"a".repeat(60)));
     assert!(name_matches("*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*", &"a".repeat(60)));
     assert!(!path_matches("**/**/**/**/**/**/**/**/**/**/**/**/x", &vec!["d"; 60].join("/")));
     assert!(path_matches("**/**/**/**/**/**/**/d", &vec!["d"; 60].join("/")));
     assert!(!name_matches(&format!("{}b", "?*".repeat(200)), &"a".repeat(2000)));
-    assert!(t.elapsed().as_millis() < 1000 * u128::from(crate::test_sshd::timeout_scale()), "took {:?}", t.elapsed());
 }
 
 #[test]

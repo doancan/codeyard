@@ -290,8 +290,13 @@ fn editor_grid_deep_highlighted_views_have_bounded_layout_work(cx: &mut TestAppC
     cx.update(|_, cx| cx.global_mut::<Settings>().lsp_enabled = false);
     open(&wb, &file, cx);
     cx.simulate_resize(size(px(480.), px(600.)));
-    let started = std::time::Instant::now();
-    for _ in 1..crate::editor_layout::MAX_GROUPS {
+    // The text a frame hands to the shaper is the work of its layout: one split's frame is the measure, and 32 views must
+    // not cost 32 times that (a duration would depend on how busy the machine is).
+    let shaped_at_start = editor::shaped_text();
+    run(&wb, "View: Split Editor", cx);
+    let one_frame = editor::shaped_text().0 - shaped_at_start.0;
+    assert!(one_frame > 0);
+    for _ in 2..crate::editor_layout::MAX_GROUPS {
         run(&wb, "View: Split Editor", cx);
     }
     let editor = wb.read_with(cx, |wb, _| wb.active_editor().cloned()).unwrap();
@@ -302,11 +307,11 @@ fn editor_grid_deep_highlighted_views_have_bounded_layout_work(cx: &mut TestAppC
     assert_eq!(editor::slot_paint_count(&editor, 0), hidden_before, "a fully clipped view must not be painted");
     assert!(editor::slot_paint_count(&editor, 31) > visible_before, "the visible view must repaint");
     for _ in 1..crate::editor_layout::MAX_GROUPS {
+        let before = editor::shaped_text().0;
         run(&wb, "View: Focus Left Editor Group", cx);
+        let shaped = editor::shaped_text().0 - before;
+        assert!(shaped <= 2 * one_frame, "a focus change shaped {shaped} lines, a frame of two views {one_frame}");
     }
-    let elapsed = started.elapsed();
-    eprintln!("32 highlighted views and 31 focus changes: {elapsed:?}");
-    assert!(elapsed < std::time::Duration::from_secs(15 * crate::test_sshd::timeout_scale()));
     assert_eq!(wb.read_with(cx, |wb, _| wb.tabs.layout.focused()), 0);
     assert_eq!(wb.read_with(cx, |wb, _| wb.all_editors().len()), 1);
 }

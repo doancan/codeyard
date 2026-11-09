@@ -1714,6 +1714,14 @@ impl Buffer {
         }
     }
 
+    pub fn can_undo(&self) -> bool {
+        !self.undo.is_empty()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.redo.is_empty()
+    }
+
     pub fn undo(&mut self) -> bool {
         let Some(e) = self.undo.pop() else { return false };
         // Front to back: everything before each piece is already restored, so `at` is valid.

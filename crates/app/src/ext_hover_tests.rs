@@ -187,11 +187,11 @@ fn a_slow_completion_provider_never_holds_up_typing(cx: &mut TestAppContext) {
     // The first word starts the extension, which sits on the request.
     cx.simulate_input("x");
     wait_for(cx, "the extension to start", |cx| wb.read_with(cx, |wb, _| wb.extension_running_for_test("you.probe")));
-    let t0 = Instant::now();
+    // The keys are in the text when the call returns, before the window runs anything: nothing waited for the provider.
     cx.simulate_input("y z");
+    assert_eq!(ed.read_with(cx, |e, _| e.text()), "xy zslow = 1\n", "typing waited for the provider");
     cx.run_until_parked();
     assert_eq!(ed.read_with(cx, |e, _| e.text()), "xy zslow = 1\n");
-    assert!(t0.elapsed() < Duration::from_secs(1), "typing waited for the provider: {:?}", t0.elapsed());
     // The space left the word: that request was cancelled, and the probe's answer to the cancel is dropped.
     settle(cx, 300);
     assert!(!listed(&ed, cx).iter().any(|(_, s)| s.is_some()), "{:?}", listed(&ed, cx));

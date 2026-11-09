@@ -319,11 +319,11 @@ fn a_slow_provider_does_not_delay_typing(cx: &mut TestAppContext) {
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Editor: Format Document", window, cx));
     wait_for(cx, "the extension to start", |cx| wb.read_with(cx, |wb, _| wb.extension_running_for_test("you.probe")));
     // The probe sits on the request. Typing goes on regardless.
-    let t0 = Instant::now();
+    // The key is in the text when the call returns, before the window runs anything: nothing waited for the provider.
     ed.update(cx, |e, cx| e.insert_at_for_test(0, "x", cx));
+    assert_eq!(text(&ed, cx), "xslow = 1\n", "typing waited for the provider");
     cx.run_until_parked();
     assert_eq!(text(&ed, cx), "xslow = 1\n");
-    assert!(t0.elapsed() < Duration::from_secs(1), "typing waited for the provider: {:?}", t0.elapsed());
     // The keystroke cancelled the request; the probe answers anyway when cancelled, and that answer is dropped.
     settle(cx, 500);
     assert_eq!(text(&ed, cx), "xslow = 1\n", "a cancelled answer is never applied");

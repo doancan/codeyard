@@ -711,8 +711,16 @@ thread_local! {
     /// View being painted: listeners set up during painting switch to this view
     /// first when an event arrives (two groups paint the same editor with different views).
     static RENDER_SLOT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Lines and characters handed to the text shaper so far (tests compare the work of a frame, not its duration).
+    #[cfg(test)]
+    static SHAPED: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
     #[cfg(test)]
     static SLOT_PAINTS: std::cell::RefCell<std::collections::HashMap<(gpui::EntityId, usize), usize>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+#[cfg(test)]
+pub fn shaped_text() -> (usize, usize) {
+    SHAPED.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]
