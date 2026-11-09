@@ -178,7 +178,7 @@ Editor: Transform to Uppercase	Düzenleyici: Büyük Harfe Dönüştür
 Editor: Transform to Title Case	Düzenleyici: Baş Harfleri Büyüt
 Editor: Duplicate Selection	Düzenleyici: Seçimi Çoğalt
 Editor: Trim Trailing Whitespace	Düzenleyici: Sondaki Boşlukları Temizle
-Git: Stage Change at Cursor	Git: İmlecin Altındaki Değişikliği Stage'e Al
+Git: Stage Selected Lines	Git: Seçili Satırları Stage'e Al
 Editor: Delete All Right	Düzenleyici: İmlecin Sağını Tamamen Sil
 Editor: Select to Bracket	Düzenleyici: Parantezin Eşine Kadar Seç
 Editor: Add Line Comment	Düzenleyici: Satır Yorumu Ekle
@@ -198,7 +198,7 @@ Editor: Convert Indentation to Tabs	Düzenleyici: Girintiyi Sekmeye Dönüştür
 View: Toggle Minimap	Görünüm: Mini Haritayı Aç/Kapat
 View: Toggle Sticky Scroll	Görünüm: Yapışkan Kaydırmayı Aç/Kapat
 View: Toggle Render Whitespace	Görünüm: Boşlukları Göstermeyi Aç/Kapat
-Git: Revert Change at Cursor	Git: İmlecin Altındaki Değişikliği Geri Al
+Git: Revert Selected Lines	Git: Seçili Satırları Geri Al
 Editor: Transpose Characters	Düzenleyici: Karakterlerin Yerini Değiştir
 Editor: Transform to camelCase	Düzenleyici: camelCase'e Dönüştür
 Editor: Transform to PascalCase	Düzenleyici: PascalCase'e Dönüştür
@@ -3656,3 +3656,29 @@ If the remote branch moves while this question is open, git refuses.	Bu soru aç
 The server refused the login: check the account and that the token may push.	Sunucu girişi reddetti: hesabı ve jetonun push yetkisi olduğunu kontrol edin.
 {} commit on the remote branch is not in yours and is lost for everyone using it.|{} commits on the remote branch are not in yours and are lost for everyone using it.	Uzak daldaki {} commit sizde yok ve onu kullanan herkes için kaybolur.
 Where a right click goes while a program in the terminal reads the mouse: the terminal's menu or the program (Shift opens the menu)	Terminaldeki bir program fareyi okurken sağ tıkın nereye gideceği: terminalin menüsü ya da program (Shift menüyü açar)
+Clear	Temizle
+Clear the picked lines (Escape)	Seçilen satırları bırak (Escape)
+Enter stages the picked lines	Enter seçilen satırları stage'e alır
+Enter unstages the picked lines	Enter seçilen satırları stage'den çıkarır
+Every change in this file is staged	Bu dosyadaki her değişiklik stage'de
+Nothing in this file is staged	Bu dosyada stage'de bir şey yok
+Nothing to stage in these lines	Bu satırlarda stage'e alınacak bir şey yok
+Nothing to unstage in these lines	Bu satırlarda stage'den çıkarılacak bir şey yok
+Pick lines to stage them, or use a change's button	Stage'e almak için satır seçin ya da değişikliğin düğmesini kullanın
+Pick lines to unstage them, or use a change's button	Stage'den çıkarmak için satır seçin ya da değişikliğin düğmesini kullanın
+Revert Change	Değişikliği Geri Al
+Revert Selected Lines	Seçili Satırları Geri Al
+Stage Change	Değişikliği Stage'e Al
+Stage Lines	Satırları Stage'e Al
+Stage Selected Lines	Seçili Satırları Stage'e Al
+Staged {} line|Staged {} lines	{} satır stage'e alındı
+Staging…	Stage'e alınıyor…
+The file changed since this diff was shown. It has been reloaded: pick the lines again.	Dosya bu fark gösterildikten sonra değişti. Yeniden yüklendi: satırları yeniden seçin.
+This change removes the file: unstage the whole file instead	Bu değişiklik dosyayı siliyor: bunun yerine dosyanın tamamını stage'den çıkarın
+Unstage Change	Değişikliği Stage'den Çıkar
+Unstage Lines	Satırları Stage'den Çıkar
+Unstaged {} line|Unstaged {} lines	{} satır stage'den çıkarıldı
+Unstaging…	Stage'den çıkarılıyor…
+{0}, change {1} of {2}	{0}, değişiklik {1} / {2}
+{} (Enter)	{} (Enter tuşu)
+{} line picked|{} lines picked	{} satır seçildi

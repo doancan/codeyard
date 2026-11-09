@@ -65,6 +65,7 @@ Guides**, **Inlay Hints** and **File: Toggle Auto Save**, which change the runni
 | Go to definition | F12 or ⌘-click | F12 or Ctrl+click |
 | Suggestions / hover | ⌃Space / ⌘K ⌘I | Ctrl+Space / Ctrl+K Ctrl+I |
 | Next / previous change (diff) | F7 / ⇧F7 | F7 / Shift+F7 |
+| Pick the change / stage or unstage the picked lines (diff) | Space / ↵ | Space / Enter |
 | Word left / right (+Shift selects) | ⌥← / ⌥→ | Ctrl+← / Ctrl+→ |
 | Delete word left / right | ⌥⌫ / ⌥⌦ | Ctrl+Backspace / Ctrl+Delete |
 | Select word / line | double / triple click | double / triple click |
@@ -963,6 +964,22 @@ staged. The panel also shows the last commit and who the commits will be made as
 (`user.name <user.email>` of that host's git); if the identity is missing it says so, and a
 refused commit explains how to set it. Clicking a file opens a side-by-side diff; F7 jumps
 between changes. Commits made in the terminal show up on their own.
+
+**Staging lines.** A file's diff from Source Control stages part of a change, not only the whole file. Each changed
+line has a box at its left edge: click it to pick the line, Shift-click to pick every changed line from the last one
+clicked, or press Space to pick the change F7 is on. The header counts the picked lines; **Stage Lines** (or ↵) stages
+them and Escape lets them go. Hovering a change shows a **Stage Change** button for the whole change, and ↵ with nothing
+picked stages the change F7 is on. In the staged diff the same picks and buttons unstage instead. A changed line is
+staged as you see it next to its old line: picking only the new line of a changed pair replaces the old one, an added
+line is added, a removed line is removed. Unstaging every line of a new file takes it out of the index; a rename and a
+deleted file are unstaged as a whole file from Source Control. The diff is read again after each step. If the file or
+the index changed after the diff was shown, nothing is written: the diff reloads and says so, and you pick again.
+Line endings and a byte order mark stay as the index has them.
+
+In the editor, **Git: Stage Selected Lines** and **Git: Revert Selected Lines** (palette, and the editor's right-click
+menu on a changed line) do the same from the text: with a selection, only the selected lines (a removed line belongs to
+the line below it, where the gutter marks it, or to the last line of its change); with no selection, the whole change
+under the cursor. Revert puts the lines back as they are in `HEAD`, and undo brings them back.
 
 The change list also works from the keyboard: Tab moves to it from the message box, ↑/↓/Home/End
 move its cursor, ↵ opens the file's diff (or folds the group), Space stages or unstages the file,

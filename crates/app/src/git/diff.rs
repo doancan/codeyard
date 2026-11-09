@@ -1,10 +1,10 @@
-//! Line diff for the gutter and the diff view, and staging single blocks.
+//! Line diff for the gutter and the diff view, and staging single blocks (through `lines`).
 
 use std::ops::Range;
 
 use host::Host;
 
-use super::{failure_text, git, git_ok};
+use super::git_ok;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LineMark {
@@ -91,49 +91,6 @@ pub fn intraline(old: &str, new: &str) -> (Vec<Range<usize>>, Vec<Range<usize>>)
     (old_marks, new_marks)
 }
 
-/// A change block: line ranges in the old text and the new text (0-based).
-/// For a pure deletion `new` is empty, for a pure addition `old` is empty.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Hunk {
-    pub old: Range<usize>,
-    pub new: Range<usize>,
-}
-
-pub fn hunks(base: &str, current: &str) -> Vec<Hunk> {
-    diff_ops(base, current).into_iter().filter(|(tag, _, _)| *tag != similar::DiffTag::Equal).map(|(_, old, new)| Hunk { old, new }).collect()
-}
-
-/// Blocks intersecting `lo..=hi` (lines of the new text). A deletion block (empty new range)
-/// maps to the line at the deletion point; a cursor on the next line selects it too.
-pub fn hunks_touching(all: &[Hunk], lo: usize, hi: usize) -> Vec<Hunk> {
-    all.iter().filter(|h| if h.new.is_empty() { (lo..=hi).contains(&h.new.start) } else { h.new.start <= hi && lo < h.new.end }).cloned().collect()
-}
-
-/// Apply the selected blocks. `to_current`: start from `base`, put `current`'s lines into the blocks
-/// (stage: index + blocks). Otherwise start from `current`, put `base`'s lines into the blocks
-/// (revert a block). Lines are kept together with their terminators.
-#[cfg(test)]
-pub fn apply_hunks(base: &str, current: &str, chosen: &[Hunk], to_current: bool) -> String {
-    let (a, b): (Vec<&str>, Vec<&str>) = if to_current {
-        (base.split_inclusive('\n').collect(), current.split_inclusive('\n').collect())
-    } else {
-        (current.split_inclusive('\n').collect(), base.split_inclusive('\n').collect())
-    };
-    // The range in `a` and its counterpart in `b`.
-    let mut spans: Vec<(Range<usize>, Range<usize>)> =
-        chosen.iter().map(|h| if to_current { (h.old.clone(), h.new.clone()) } else { (h.new.clone(), h.old.clone()) }).collect();
-    spans.sort_by_key(|(r, _)| r.start);
-    let mut out = String::new();
-    let mut at = 0;
-    for (r, with) in spans {
-        out.extend(a[at.min(a.len())..r.start.min(a.len())].iter().copied());
-        out.extend(b[with.start.min(b.len())..with.end.min(b.len())].iter().copied());
-        at = r.end;
-    }
-    out.extend(a[at.min(a.len())..].iter().copied());
-    out
-}
-
 /// Make the file's index content `content` (empty if absent); file mode is preserved. Does not touch
 /// the working tree: only for "stage these blocks".
 pub fn write_index(host: &dyn Host, root: &str, rel: &str, content: &str) -> Result<(), String> {
@@ -150,89 +107,10 @@ pub fn write_index(host: &dyn Host, root: &str, rel: &str, content: &str) -> Res
     git_ok(host, root, &["update-index", "--add", "--cacheinfo", &info]).map(|_| ())
 }
 
-/// Stage the blocks touching lines `lo..=hi` (write to the index); returns how many blocks there were.
-/// `current`: the text in the editor (may be unsaved). If the file is not in the index it counts as empty.
-pub fn stage_hunks(host: &dyn Host, root: &str, rel: &str, current: &str, lo: usize, hi: usize) -> Result<usize, String> {
-    // Index entry: if conflicted (stage != 0), a symlink or a submodule, leave it alone.
-    let entries = git_ok(host, root, &["ls-files", "-s", "--", rel])?;
-    let mut exists = false;
-    for line in entries.lines() {
-        let mut f = line.split_whitespace();
-        let (mode, _sha, stage) = (f.next().unwrap_or(""), f.next(), f.next().unwrap_or("0"));
-        if stage != "0" {
-            return Err(crate::i18n::t("This file has merge conflicts: resolve them first (Source Control marks it resolved when staged)").into());
-        }
-        if mode == "120000" || mode == "160000" {
-            return Err(crate::i18n::t("Staging changes inside a symlink or submodule is not supported").into());
-        }
-        exists = true;
-    }
-    let raw_bytes = if exists {
-        let spec = format!(":{rel}");
-        let out = git(host, root, &["show", "--no-textconv", &spec])?;
-        if !out.ok() {
-            return Err(failure_text(&out));
-        }
-        out.stdout
-    } else {
-        Vec::new()
-    };
-    let raw =
-        String::from_utf8(raw_bytes).map_err(|_| crate::i18n::t("Staging changes needs a UTF-8 file (this one is stored in another encoding)").to_string())?;
-    if has_lone_cr(&raw) || has_lone_cr(current) {
-        return Err(crate::i18n::t("Staging changes is not supported in files with old-Mac (CR only) line endings").into());
-    }
-    let (bom, raw) = match raw.strip_prefix('\u{feff}') {
-        Some(r) => (true, r.to_string()),
-        None => (false, raw),
-    };
-    let index = raw.replace("\r\n", "\n");
-    let chosen = hunks_touching(&hunks(&index, current), lo, hi);
-    if chosen.is_empty() {
-        return Ok(0);
-    }
-    // Line endings: unchanged lines stay as they are, new lines use the file's dominant style.
-    let crlf = raw.matches("\r\n").count();
-    let lf = raw.matches('\n').count() - crlf;
-    let eol = if crlf > lf { "\r\n" } else { "\n" };
-    let mut text = apply_hunks_raw(&raw, current, &chosen, eol);
-    if bom {
-        text.insert(0, '\u{feff}');
-    }
-    write_index(host, root, rel, &text)?;
-    Ok(chosen.len())
-}
-
 /// Whether any line ends in a bare `\r` (old Mac); diff and rope line counting would disagree.
 pub fn has_lone_cr(s: &str) -> bool {
     let b = s.as_bytes();
     b.iter().enumerate().any(|(i, &c)| c == b'\r' && b.get(i + 1) != Some(&b'\n'))
-}
-
-/// `apply_hunks(.., to_current = true)`: the raw index lines (including CRLF) are kept; the selected
-/// blocks get `current`'s lines written with `eol`. Block ranges are relative to the LF-converted text.
-pub fn apply_hunks_raw(raw: &str, current: &str, chosen: &[Hunk], eol: &str) -> String {
-    let a: Vec<&str> = raw.split_inclusive('\n').collect();
-    let b: Vec<&str> = current.split_inclusive('\n').collect();
-    let mut spans: Vec<(Range<usize>, Range<usize>)> = chosen.iter().map(|h| (h.old.clone(), h.new.clone())).collect();
-    spans.sort_by_key(|(r, _)| r.start);
-    let mut out = String::new();
-    let mut at = 0;
-    for (r, with) in spans {
-        out.extend(a[at.min(a.len())..r.start.min(a.len())].iter().copied());
-        for line in &b[with.start.min(b.len())..with.end.min(b.len())] {
-            match line.strip_suffix('\n') {
-                Some(body) => {
-                    out.push_str(body);
-                    out.push_str(eol);
-                }
-                None => out.push_str(line),
-            }
-        }
-        at = r.end;
-    }
-    out.extend(a[at.min(a.len())..].iter().copied());
-    out
 }
 
 /// Side-by-side diff row: left (old) and right (new) line numbers, 0-based.
@@ -321,8 +199,14 @@ mod tests {
         (1..=n).map(|i| format!("{}\n", change.iter().find(|(k, _)| *k == i).map_or(format!("l{i}"), |(_, t)| t.to_string()))).collect()
     }
 
+    /// The editor's block staging: the blocks touching lines `lo..=hi`, as the number of blocks staged.
+    fn stage_hunks(host: &dyn Host, root: &str, rel: &str, current: &str, lo: usize, hi: usize) -> Result<usize, String> {
+        crate::git::stage_lines(host, root, rel, current, None, |rows| crate::git::rows_for_lines(rows, lo, hi, true)).map(|t| t.blocks)
+    }
+
     #[test]
-    fn hunks_pick_stage_and_revert_by_line() {
+    fn blocks_pick_stage_and_revert_by_line() {
+        use crate::git::{blocks, compose, revert_parts, rows_for_lines};
         let base = nums(12, &[]);
         // Line 3 changed, a line was added after line 8, line 11 was deleted.
         let mut cur: Vec<String> = base.split_inclusive('\n').map(str::to_string).collect();
@@ -330,32 +214,28 @@ mod tests {
         cur.insert(8, "yeni\n".into());
         cur.remove(11);
         let cur = cur.concat();
-        let all = hunks(&base, &cur);
-        assert_eq!(all.len(), 3);
+        let rows = side_by_side(&base, &cur);
+        assert_eq!(blocks(&rows).len(), 3);
         // Only the block at line 3 (0-based 2).
-        let first = hunks_touching(&all, 2, 2);
-        assert_eq!(first.len(), 1);
-        let staged = apply_hunks(&base, &cur, &first, true);
-        assert_eq!(staged, nums(12, &[(3, "L3")]));
+        let first = rows_for_lines(&rows, 2, 2, true);
+        assert_eq!(compose(&rows, &base, &cur, true, &first, None), nums(12, &[(3, "L3")]));
         // All three blocks: index = working text.
-        assert_eq!(apply_hunks(&base, &cur, &all, true), cur);
+        let all = blocks(&rows).into_iter().flatten().collect();
+        assert_eq!(compose(&rows, &base, &cur, true, &all, None), cur);
         // Revert: only the added line goes away.
-        let added = hunks_touching(&all, 8, 8);
-        assert_eq!(added.len(), 1);
-        let reverted = apply_hunks(&base, &cur, &added, false);
-        assert!(!reverted.contains("yeni") && reverted.contains("L3"));
-        // Reverting everything returns to HEAD; the deleted line comes back.
-        assert_eq!(apply_hunks(&base, &cur, &all, false), base);
-        // Empty selection: leave alone.
-        assert!(hunks_touching(&all, 5, 6).is_empty());
-        assert_eq!(apply_hunks(&base, &cur, &[], true), base);
+        let added = rows_for_lines(&rows, 8, 8, true);
+        assert_eq!(revert_parts(&rows, &base, &cur, &added), vec![(8..9, String::new())]);
+        // Untouched lines: nothing picked.
+        assert!(rows_for_lines(&rows, 5, 6, true).is_empty());
     }
 
     #[test]
-    fn hunks_handle_missing_final_newline_and_empty_base() {
-        assert_eq!(apply_hunks("", "a\nb", &hunks("", "a\nb"), true), "a\nb");
-        assert_eq!(apply_hunks("a\nb", "a\nb\nc", &hunks("a\nb", "a\nb\nc"), true), "a\nb\nc");
-        assert_eq!(apply_hunks("a\nb", "a\nb\nc", &hunks("a\nb", "a\nb\nc"), false), "a\nb");
+    fn a_missing_final_newline_and_an_empty_base_stage_whole() {
+        use crate::git::{blocks, compose};
+        for (base, cur) in [("", "a\nb"), ("a\nb", "a\nb\nc")] {
+            let rows = side_by_side(base, cur);
+            assert_eq!(compose(&rows, base, cur, true, &blocks(&rows).into_iter().flatten().collect(), None), cur);
+        }
     }
 
     #[test]

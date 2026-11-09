@@ -150,8 +150,25 @@ impl EditorView {
         self.git_marks.clone()
     }
 
-    /// Stage the changed hunks at the cursor (selection) (like `git add -p`, but per hunk,
-    /// not per line: even if the selection covers part of a hunk, the whole hunk goes in).
+    /// The lines a git line action works on, and whether they are a selection (only those lines) or a cursor (the whole
+    /// change it is in).
+    fn git_lines(&self) -> (usize, usize, bool) {
+        let (lo, hi) = self.cursor_lines();
+        (lo, hi, self.buffer.selection().is_some_and(|r| !r.is_empty()))
+    }
+
+    /// Whether the cursor or the selection is on a changed line (a deletion counts for the line below it): the editor's
+    /// menu offers staging and reverting then. `Some(true)` when it is a selection.
+    pub fn git_change_here(&self) -> Option<bool> {
+        if self.git_root.is_none() || self.scm_owned {
+            return None;
+        }
+        let (lo, hi, selection) = self.git_lines();
+        self.git_marks.get(lo..=hi.min(self.git_marks.len().saturating_sub(1)))?.iter().any(Option::is_some).then_some(selection)
+    }
+
+    /// Stage the selected lines (a selection: only those lines, a deleted line going with the line below it or with the
+    /// last line of its change) or the change at the cursor (no selection: the whole change).
     pub(super) fn stage_hunk(&mut self, _: &StageHunk, _: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.git_root.clone() else { return cx.emit(EditorEvent::Message(t("Not in a git repository").into())) };
         let Some(rel) = self.path.strip_prefix(&format!("{}/", root.trim_end_matches('/'))).map(str::to_string) else {
@@ -165,15 +182,21 @@ impl EditorView {
             return cx.emit(EditorEvent::Message(t("Still staging the previous change…").into()));
         }
         self.stage_busy = true;
-        let (lo, hi) = self.cursor_lines();
+        let (lo, hi, selection) = self.git_lines();
         let (host, text) = (self.host.clone(), self.buffer.rope().to_string());
         cx.spawn(async move |this, cx| {
-            let result = cx.background_executor().spawn(async move { crate::git::stage_hunks(host.as_ref(), &root, &rel, &text, lo, hi) }).await;
+            let result =
+                cx.background_executor()
+                    .spawn(async move {
+                        crate::git::stage_lines(host.as_ref(), &root, &rel, &text, None, |rows| crate::git::rows_for_lines(rows, lo, hi, !selection))
+                    })
+                    .await;
             this.update(cx, |e, cx| {
                 e.stage_busy = false;
                 cx.emit(EditorEvent::Message(match result {
-                    Ok(0) => t("No change here to stage").into(),
-                    Ok(n) => tn("Staged {} change", "Staged {} changes", n, &[]),
+                    Ok(n) if n.lines == 0 => t("No change here to stage").into(),
+                    Ok(n) if selection => tn("Staged {} line", "Staged {} lines", n.lines, &[]),
+                    Ok(n) => tn("Staged {} change", "Staged {} changes", n.blocks, &[]),
                     Err(e) => e,
                 }))
             })
@@ -182,27 +205,24 @@ impl EditorView {
         .detach();
     }
 
-    /// Revert the changed hunks at the cursor (selection) to their HEAD state (undo brings them back).
+    /// Revert the selected lines (or, with no selection, the change at the cursor) to their HEAD state; undo brings
+    /// them back. Lines are picked as for staging.
     pub(super) fn revert_hunk(&mut self, _: &RevertHunk, _: &mut Window, cx: &mut Context<Self>) {
         let Some(base) = self.git_base.as_ref().map(|b| b.to_string()) else { return cx.emit(EditorEvent::Message(t("No git changes to revert").into())) };
         let text = self.buffer.rope().to_string();
         if self.encoding != Encoding::Utf8 || crate::git::has_lone_cr(&base) || crate::git::has_lone_cr(&text) {
             return cx.emit(EditorEvent::Message(t("Reverting a change is not supported in this file (non-UTF-8 or CR-only line endings)").into()));
         }
-        let (lo, hi) = self.cursor_lines();
-        let chosen = crate::git::hunks_touching(&crate::git::hunks(&base, &text), lo, hi);
-        if chosen.is_empty() {
+        let (lo, hi, selection) = self.git_lines();
+        let rows = crate::git::side_by_side(&base, &text);
+        let picked = crate::git::rows_for_lines(&rows, lo, hi, !selection);
+        let parts = crate::git::revert_parts(&rows, &base, &text, &picked);
+        if parts.is_empty() {
             return cx.emit(EditorEvent::Message(t("No change here to revert").into()));
         }
-        let base_lines: Vec<&str> = base.split_inclusive('\n').collect();
-        let parts = chosen
-            .iter()
-            .map(|h| {
-                let from = self.buffer.line_to_char(h.new.start.min(self.buffer.len_lines()));
-                let to = self.buffer.line_to_char(h.new.end.min(self.buffer.len_lines()));
-                (from..to, base_lines[h.old.start.min(base_lines.len())..h.old.end.min(base_lines.len())].concat())
-            })
-            .collect();
+        let lines = self.buffer.len_lines();
+        let parts =
+            parts.into_iter().map(|(r, with)| (self.buffer.line_to_char(r.start.min(lines))..self.buffer.line_to_char(r.end.min(lines)), with)).collect();
         self.buffer.replace_all(parts);
         self.after_edit(cx);
     }

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Source Control: stage and unstage single lines from a file's diff. Click the box beside a changed line (Shift-click
+  for a range, Space for the whole change) and press Enter or **Stage Lines**; a change's own button stages it whole,
+  and the staged diff unstages the same way. A diff older than the file or the index writes nothing and reloads.
+- Editor: **Git: Stage Selected Lines** and **Git: Revert Selected Lines** act on the selected lines only (the whole
+  change when nothing is selected), also from the right-click menu on a changed line. They replace *Stage Change at
+  Cursor* and *Revert Change at Cursor*.
+
 - Terminal: a program that reads the mouse (vim, tmux, htop, Midnight Commander) gets the middle button, with its drags,
   instead of the click being lost. `terminal.rightClick: "program"` gives it the right button too; by default a right
   click still opens the terminal's menu, and with the setting Shift or ⌥ opens it.
