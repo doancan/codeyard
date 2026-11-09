@@ -15,7 +15,7 @@ impl Rng {
 }
 
 /// Openers that can nest: the ones whose depth reaches the stack. Only these are tried at the largest size by default
-/// (`CODEYARD_FUZZ_FULL=1` tries every opener and shape there); the smaller sizes try all of them.
+/// (`CODEYARD_FUZZ_FULL=1` tries every opener and shape there, at 100,000); the smaller sizes try all of them.
 const NESTING_OPENERS: &[&str] = &["[", "{\"a\":", "(", "<a>", "- ", "> ", "[a](", "![x](", "*", "`", "{", "<!--", "/*"];
 
 /// Texts that have broken parsers elsewhere: nesting of every kind of opener, long repetitions, and noise.
@@ -23,7 +23,8 @@ fn hostile_texts() -> Vec<(String, String)> {
     let mut v: Vec<(String, String)> = Vec::new();
     let mut add = |name: String, text: String| v.push((name, text));
     let full = std::env::var_os("CODEYARD_FUZZ_FULL").is_some();
-    for n in [1_000usize, 20_000, 100_000] {
+    // A debug build's frames are large, so nesting 40,000 deep reaches the stack as 100,000 would in a release build.
+    for n in [1_000usize, 20_000, if full { 100_000 } else { 40_000 }] {
         for opener in [
             "[",
             "{\"a\":",

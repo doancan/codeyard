@@ -281,6 +281,9 @@ fn editor_grid_concurrent_opens_share_one_buffer_and_undo_history(cx: &mut TestA
     wb.read_with(cx, |wb, _| assert_eq!(wb.tabs.editors[0], wb.tabs.groups[&0].editors[0]));
 }
 
+/// Nested splits of the highlighted file: enough that the first view is clipped away and each focus change spans several.
+const DEEP_VIEWS: usize = 5;
+
 #[gpui::test]
 fn editor_grid_deep_highlighted_views_have_bounded_layout_work(cx: &mut TestAppContext) {
     let dir = fresh("editor-grid-deep-highlighted");
@@ -290,23 +293,24 @@ fn editor_grid_deep_highlighted_views_have_bounded_layout_work(cx: &mut TestAppC
     cx.update(|_, cx| cx.global_mut::<Settings>().lsp_enabled = false);
     open(&wb, &file, cx);
     cx.simulate_resize(size(px(480.), px(600.)));
-    // The text a frame hands to the shaper is the work of its layout: one split's frame is the measure, and 32 views must
-    // not cost 32 times that (a duration would depend on how busy the machine is).
+    // The text a frame hands to the shaper is the work of its layout: one split's frame is the measure, and a deeper nesting must
+    // not cost more per view (a duration would depend on how busy the machine is). The views halve the width, so the
+    // first is clipped to nothing long before the last.
     let shaped_at_start = editor::shaped_text();
     run(&wb, "View: Split Editor", cx);
     let one_frame = editor::shaped_text().0 - shaped_at_start.0;
     assert!(one_frame > 0);
-    for _ in 2..crate::editor_layout::MAX_GROUPS {
+    for _ in 2..DEEP_VIEWS {
         run(&wb, "View: Split Editor", cx);
     }
     let editor = wb.read_with(cx, |wb, _| wb.active_editor().cloned()).unwrap();
     let hidden_before = editor::slot_paint_count(&editor, 0);
-    let visible_before = editor::slot_paint_count(&editor, 31);
+    let visible_before = editor::slot_paint_count(&editor, DEEP_VIEWS - 1);
     wb.update(cx, |_, cx| cx.notify());
     cx.run_until_parked();
     assert_eq!(editor::slot_paint_count(&editor, 0), hidden_before, "a fully clipped view must not be painted");
-    assert!(editor::slot_paint_count(&editor, 31) > visible_before, "the visible view must repaint");
-    for _ in 1..crate::editor_layout::MAX_GROUPS {
+    assert!(editor::slot_paint_count(&editor, DEEP_VIEWS - 1) > visible_before, "the visible view must repaint");
+    for _ in 1..DEEP_VIEWS {
         let before = editor::shaped_text().0;
         run(&wb, "View: Focus Left Editor Group", cx);
         let shaped = editor::shaped_text().0 - before;

@@ -218,8 +218,10 @@ fn file_watches_see_changes_on_disk(cx: &mut TestAppContext) {
     until(cx, "the watch to stop", move |cx| wb2.read_with(cx, |wb, _| !wb.extension_watching_for_test("you.probe")));
     let before = watched(&wb, cx);
     std::fs::write(root.join("src/later.rs"), "fn later() {}\n").unwrap();
-    for _ in 0..30 {
-        cx.executor().advance_clock(Duration::from_millis(200));
+    // The same six seconds of test time as before, in fewer rounds: the real time is what the file watcher needs to
+    // report a change that nothing asked for.
+    for _ in 0..10 {
+        cx.executor().advance_clock(Duration::from_millis(600));
         cx.run_until_parked();
         std::thread::sleep(Duration::from_millis(50));
     }

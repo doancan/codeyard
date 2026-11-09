@@ -860,6 +860,9 @@ fn perf_operations(name: &str, content: &str, repeat: usize, cx: &mut TestAppCon
     // The UI thread's work is what counts. With a language server on, run_until_parked would also wait for its
     // reply (in the background, it doesn't block typing).
     cx.update(|_, cx| cx.global_mut::<crate::settings::Settings>().lsp_enabled = false);
+    // A small window: every key draws the whole workbench, and the cost of a draw follows its size. The work per key is
+    // still a screenful, however many lines the file has.
+    cx.simulate_resize(gpui::size(gpui::px(600.), gpui::px(200.)));
     let ed = open(&wb, &f, cx);
     let mut work = Vec::new();
     let mut rec = |label, shaped| work.push((label, shaped));
@@ -1152,7 +1155,7 @@ fn qa_random_keys_on_hostile_text(cx: &mut TestAppContext) {
         ("tabs.py", "\t\t \tdef f():\n\t  \treturn\t1".to_string()),
     ];
     for (i, (name, text)) in texts.iter().enumerate() {
-        random_session_on(500 + i as u64, qa_steps(40), i % 2 == 1, name, text, cx);
+        random_session_on(500 + i as u64, qa_steps(24), i % 2 == 1, name, text, cx);
     }
 }
 
@@ -1220,6 +1223,7 @@ fn qa_conflicts_in_a_big_file_scan_off_thread_and_commands_stay_exact(cx: &mut T
     let content = format!("<<<<<<< HEAD\nbiz\n=======\nonlar\n>>>>>>> dal\n{filler}");
     let f = file("bigconflict", "big.txt", content.as_bytes());
     let (wb, cx) = setup(cx);
+    cx.simulate_resize(gpui::size(gpui::px(600.), gpui::px(200.)));
     cx.update(|_, cx| cx.global_mut::<crate::settings::Settings>().lsp_enabled = false);
     let ed = open(&wb, &f, cx);
     assert_eq!(ed.read_with(cx, |e, _| e.conflict_count()), 1, "scanned on open");

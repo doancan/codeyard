@@ -535,6 +535,9 @@ while True:
     m = read()
     if m.get('method') == 'initialize':
         send({'jsonrpc': '2.0', 'id': m['id'], 'result': {'capabilities': {'textDocumentSync': 1, 'codeActionProvider': True}}})
+    elif m.get('method') == 'textDocument/completion':
+        # Typing asks for completions; without an answer the editor waits for its timeout (5 s) before it saves.
+        send({'jsonrpc': '2.0', 'id': m['id'], 'result': None})
     elif m.get('method') == 'textDocument/codeAction':
         uri = m['params']['textDocument']['uri']
         only = m['params']['context'].get('only', [])

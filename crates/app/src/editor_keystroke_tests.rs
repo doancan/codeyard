@@ -43,6 +43,8 @@ fn setup(cx: &mut TestAppContext) -> (Entity<Workbench>, &mut VisualTestContext)
     });
     let (wb, cx) = cx.add_window_view(|window, cx| Workbench::with_state(state::State::in_memory().ok(), None, window, cx));
     wb.update_in(cx, |wb, window, cx| window.focus(&wb.focus_handle(cx)));
+    // A small window: a draw of the whole workbench costs by its size, and no test here is about the layout.
+    cx.simulate_resize(gpui::size(gpui::px(600.), gpui::px(300.)));
     (wb, cx)
 }
 
