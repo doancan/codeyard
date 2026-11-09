@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Language servers that only support full-document sync get the whole text on every change instead of range edits they cannot apply.
 - Terminal: erasing the history (a program's `CSI 3J`, a reset, Clear Terminal) no longer leaves the command dots,
   Jump to Command and Copy Last Output pointing at the wrong rows. Select All over a long scrollback no longer stalls the
   terminal while output arrives, searching a long history waits for the typing to pause, and a command whose text a

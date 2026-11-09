@@ -189,6 +189,8 @@ mod qa_lsp_rust_commands_tests;
 #[cfg(test)]
 mod qa_lsp_settings_tests;
 #[cfg(test)]
+mod qa_lsp_sync_tests;
+#[cfg(test)]
 mod qa_workbench_tests;
 #[cfg(test)]
 mod qa_workspace_file_tests;
