@@ -53,7 +53,7 @@ pub fn stash_push(host: &dyn Host, root: &str, opts: &StashOptions) -> Result<()
 /// That commit and its first parent are what a diff of the stash compares, like any other commit.
 pub fn stash_files(host: &dyn Host, root: &str, stash: &str) -> Result<(String, Vec<(char, String, Option<String>)>), String> {
     let hash = git_ok(host, root, &["rev-parse", "--verify", "-q", &format!("{stash}^{{commit}}")])?.trim().to_string();
-    let out = git_ok(host, root, &["diff", "--name-status", "-M", &format!("{hash}^"), &hash])?;
+    let out = git_ok(host, root, &["-c", "core.quotepath=off", "diff", "--name-status", "-M", &format!("{hash}^"), &hash])?;
     Ok((hash, crate::graph::parse_name_status(&out)))
 }
 

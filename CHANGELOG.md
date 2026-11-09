@@ -27,13 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Extensions: the registry downloader in the app allows plain http only to this machine, read the way a client reads the host (`http://localhost.evil.test` is not).
-### Fixed
-
 - Debugger: a `launch.json` (or any other JSON-with-comments settings file) saved with a byte order mark is read instead of silently showing no configurations.
 - Ports: the panel lists the listening ports of Windows SSH servers (read with `netstat`, in any system language) instead of reporting that ports cannot be listed.
 - Debugger: breakpoints follow a file or folder that is renamed or moved, and are dropped when it is deleted, instead of staying behind at the old path.
 - Test explorer: Rust results are read from coloured output (`CARGO_TERM_COLOR=always`) and from tests that print with `--nocapture`, instead of being reported as not run.
 - Rust: when `cargo` is not installed, or rustup has no toolchain selected or installed, debugging and the test explorer now say what to do instead of showing a raw OS error.
+- Source Control: file names with accents or other non-ASCII letters show as written, not as octal escapes, in a
+  commit's file list, a stash's file list and a file's history.
+- Source Control: a push refused by a protected branch (GitHub, GitLab) says so and points to a pull request, instead of
+  showing only the server's raw lines.
 - File watching: a slow or hung network share no longer blocks changes to the watched set while a poll is checking it.
 - Commands run by the agent (git and others) that hit the time limit are stopped together with the processes they started.
 - Terminal: when a new terminal cannot get its file handles (out of descriptors), its shell is stopped instead of left running.

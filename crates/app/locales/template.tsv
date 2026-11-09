@@ -2523,6 +2523,7 @@ The secondary side bar shows no view.
 The selection is neither a JWT nor a Unix timestamp	
 The server did not answer within 60 seconds.	
 The server no longer accepts an account password: use a personal access token as the password (or sign in with the GitHub CLI: gh auth login).	
+The server protects this branch and refuses direct pushes: push to another branch and open a pull request.	
 The server refused the login: check the account and that the token may push.	
 The server wants credentials that were not given: try again and enter them when asked, or set up an SSH key.	
 The shell has exited	
