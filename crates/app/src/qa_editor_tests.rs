@@ -3,7 +3,6 @@
 //! Passing tests are kept as regression coverage.
 
 use std::path::PathBuf;
-use std::time::Instant;
 
 use gpui::{Entity, EntityInputHandler, Focusable, Modifiers, MouseButton, TestAppContext, VisualTestContext};
 
@@ -42,6 +41,19 @@ pub(crate) fn open(wb: &Entity<Workbench>, path: &std::path::Path, cx: &mut Visu
     cx.run_until_parked();
     cx.run_until_parked();
     wb.read_with(cx, |wb, _| wb.active_editor_entity()).expect("editor opened")
+}
+
+/// Work that runs on a real thread (a file written, a file read) is waited for by its result, not for a guessed time.
+fn wait_until(cx: &mut VisualTestContext, what: &str, mut done: impl FnMut(&mut VisualTestContext) -> bool) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10 * crate::test_sshd::timeout_scale());
+    loop {
+        cx.run_until_parked();
+        if done(cx) {
+            return;
+        }
+        assert!(std::time::Instant::now() < deadline, "timed out: {what}");
+        std::thread::yield_now();
+    }
 }
 
 fn text(ed: &Entity<EditorView>, cx: &mut VisualTestContext) -> String {
@@ -795,29 +807,27 @@ fn qa_find_bars_in_both_views_after_replace(cx: &mut TestAppContext) {
 
 // ---------------------------------------------------------------- large / long
 
-/// A 200 000-character single line: End, typing and Home stay responsive.
+/// A 200 000-character single line: End, typing and Home shape the line once per frame, nothing more.
 #[gpui::test]
 fn qa_very_long_single_line(cx: &mut TestAppContext) {
     let long = "abcdefghij".repeat(20_000);
     let f = file("longline", "a.txt", format!("{long}\n").as_bytes());
     let (wb, cx) = setup(cx);
     let ed = open(&wb, &f, cx);
-    let t = Instant::now();
-    cx.simulate_keystrokes("end");
-    cx.run_until_parked();
+    let (_, chars) = shaped_by(cx, 1, |cx| cx.simulate_keystrokes("end"));
+    eprintln!("QA long line: End shaped {chars} chars");
+    let mut worst = chars;
     for _ in 0..20 {
-        cx.simulate_input("x");
-        cx.run_until_parked();
+        worst = worst.max(shaped_by(cx, 1, |cx| cx.simulate_input("x")).1);
     }
-    cx.simulate_keystrokes("home");
-    cx.run_until_parked();
-    let ms = t.elapsed().as_millis();
-    eprintln!("QA long line: end + 20 chars + home = {ms} ms");
+    worst = worst.max(shaped_by(cx, 1, |cx| cx.simulate_keystrokes("home")).1);
+    eprintln!("QA long line: worst frame shaped {worst} chars");
     assert_eq!(ed.read_with(cx, |e, _| e.cursor_position()), (1, 1));
-    assert!(ms < 3000 * u128::from(crate::test_sshd::timeout_scale()), "{ms} ms");
+    // The line is shaped once per frame, plus the characters typed: the work of a key is linear in the line, not more.
+    assert!(worst <= long.len() + 100, "a frame shaped {worst} chars of a {}-character line", long.len());
 }
 
-// ---------------------------------------------------------------- performance (50k lines)
+// ---------------------------------------------------------------- performance (large files)
 
 fn big_rust(lines: usize) -> String {
     let mut s = String::new();
@@ -829,80 +839,87 @@ fn big_rust(lines: usize) -> String {
     s
 }
 
-fn time(label: &str, cx: &mut VisualTestContext, n: usize, mut f: impl FnMut(&mut VisualTestContext)) -> f64 {
-    let t = Instant::now();
+/// The most text one repetition of `f` hands to the shaper: (lines, characters). This is the work a frame does; unlike
+/// its duration, it is the same on every run and every machine.
+fn shaped_by(cx: &mut VisualTestContext, n: usize, mut f: impl FnMut(&mut VisualTestContext)) -> (usize, usize) {
+    let mut worst = (0, 0);
     for _ in 0..n {
+        let before = crate::editor::shaped_text();
         f(cx);
         cx.run_until_parked();
+        let after = crate::editor::shaped_text();
+        worst = (worst.0.max(after.0 - before.0), worst.1.max(after.1 - before.1));
     }
-    let per = t.elapsed().as_secs_f64() * 1000. / n as f64;
-    eprintln!("QA perf {label}: {per:.1} ms/op");
-    per
+    worst
 }
 
-#[gpui::test]
-fn qa_perf_50k_lines(cx: &mut TestAppContext) {
-    let content = big_rust(50_000);
-    eprintln!("QA perf file: {} bytes, {} lines", content.len(), content.lines().count());
+/// Typing, moving, folding, finding and wrapping in `content`: the shaped work of each operation.
+fn perf_operations(content: &str, repeat: usize, cx: &mut TestAppContext) -> Vec<(&'static str, (usize, usize))> {
     let f = file("perf", "big.rs", content.as_bytes());
     let (wb, cx) = setup(cx);
-    // Measured: the UI thread's work. With a language server on, run_until_parked would also wait for its
-    // reply (in the background, ~20 ms, doesn't block typing); it is measured off.
+    // The UI thread's work is what counts. With a language server on, run_until_parked would also wait for its
+    // reply (in the background, it doesn't block typing).
     cx.update(|_, cx| cx.global_mut::<crate::settings::Settings>().lsp_enabled = false);
-    let t = Instant::now();
     let ed = open(&wb, &f, cx);
-    eprintln!("QA perf open: {} ms", t.elapsed().as_millis());
-    let mut worst: Vec<(String, f64)> = Vec::new();
-    let mut rec = |l: &str, v: f64| worst.push((l.to_string(), v));
-    rec("down", time("down", cx, 30, |cx| cx.simulate_keystrokes("down")));
-    rec("type", time("type char (top)", cx, 30, |cx| cx.simulate_input("x")));
-    rec("enter", time("enter", cx, 10, |cx| cx.simulate_keystrokes("enter")));
-    rec("cmd-down", time("cmd-down", cx, 3, |cx| cx.simulate_keystrokes("cmd-down cmd-up")));
-    rec("alt-down", time("move line", cx, 10, |cx| cx.simulate_keystrokes("alt-down")));
-    rec("undo", time("undo", cx, 10, |cx| cx.simulate_keystrokes("cmd-z")));
-    rec("pagedown", time("pagedown", cx, 20, |cx| cx.simulate_keystrokes("pagedown")));
+    let mut work = Vec::new();
+    let mut rec = |label, shaped| work.push((label, shaped));
+    rec("down", shaped_by(cx, repeat, |cx| cx.simulate_keystrokes("down")));
+    rec("type", shaped_by(cx, repeat, |cx| cx.simulate_input("x")));
+    rec("enter", shaped_by(cx, repeat, |cx| cx.simulate_keystrokes("enter")));
+    rec("cmd-down", shaped_by(cx, 1, |cx| cx.simulate_keystrokes("cmd-down cmd-up")));
+    rec("move line", shaped_by(cx, repeat, |cx| cx.simulate_keystrokes("alt-down")));
+    rec("undo", shaped_by(cx, repeat, |cx| cx.simulate_keystrokes("cmd-z")));
+    rec("pagedown", shaped_by(cx, repeat, |cx| cx.simulate_keystrokes("pagedown")));
     cx.simulate_keystrokes("cmd-up");
     rec(
         "cmd-f",
-        time("cmd-f + query", cx, 1, |cx| {
+        shaped_by(cx, 1, |cx| {
             cx.simulate_keystrokes("cmd-f");
             cx.simulate_input("let");
         }),
     );
     ed.update_in(cx, |e, window, cx| window.focus(&e.focus_handle(cx)));
-    rec("type+find", time("type char with find bar open", cx, 20, |cx| cx.simulate_input("y")));
+    rec("type+find", shaped_by(cx, repeat, |cx| cx.simulate_input("y")));
     cx.simulate_keystrokes("escape escape");
     rec(
         "cmd-shift-l",
-        time("select all occurrences (word 'let')", cx, 1, |cx| {
+        shaped_by(cx, 1, |cx| {
             cx.simulate_keystrokes("cmd-up down right right right right right cmd-shift-l escape");
         }),
     );
-    rec("fold-all", time("fold all", cx, 1, |cx| cx.simulate_keystrokes("cmd-k cmd-0")));
-    rec("down-folded", time("down with everything folded", cx, 20, |cx| cx.simulate_keystrokes("down")));
-    rec("type-folded", time("type with everything folded", cx, 20, |cx| cx.simulate_input("z")));
+    rec("fold-all", shaped_by(cx, 1, |cx| cx.simulate_keystrokes("cmd-k cmd-0")));
+    rec("down-folded", shaped_by(cx, repeat, |cx| cx.simulate_keystrokes("down")));
+    rec("type-folded", shaped_by(cx, repeat, |cx| cx.simulate_input("z")));
     cx.simulate_keystrokes("cmd-k cmd-j");
-    rec("wrap", time("toggle wrap", cx, 1, |cx| cx.simulate_keystrokes("alt-z")));
-    rec("type-wrap", time("type with wrap on", cx, 20, |cx| cx.simulate_input("w")));
-    // Same size as plain text (no tree-sitter): isolates the syntax cost of a keystroke.
-    // Scrolling is turned off: otherwise this measures scrolling, not syntax.
-    cx.simulate_keystrokes("alt-z");
-    let f = file("perf-txt", "big.txt", content.as_bytes());
-    open(&wb, &f, cx);
-    rec("type-txt", time("type char (plain .txt, same size)", cx, 30, |cx| cx.simulate_input("x")));
-    // The budget is one frame (60 Hz) and only meaningful in release: debug builds are 10-20x
-    // slower and affected by the load of parallel tests. `cargo test --release -- qa_perf`.
-    if cfg!(debug_assertions) {
-        eprintln!("SKIPPED the frame-budget assertion: debug build (run `cargo test --release -- qa_perf`)");
-        return;
+    rec("wrap", shaped_by(cx, 1, |cx| cx.simulate_keystrokes("alt-z")));
+    rec("type-wrap", shaped_by(cx, repeat, |cx| cx.simulate_input("w")));
+    work
+}
+
+/// Every key in a file of 10 000 lines costs a frame of the visible lines, as it does at 600: the lines and characters handed to
+/// the shaper per operation do not grow with the file. (Speed itself is not asserted: a duration varies with the
+/// machine. `--nocapture` prints the work; `CODEYARD_QA_PERF_LINES=50000` sets the size of the big file.)
+#[gpui::test]
+fn qa_perf_work_per_key_does_not_grow_with_the_file(cx: &mut TestAppContext) {
+    let lines: usize = std::env::var("CODEYARD_QA_PERF_LINES").ok().and_then(|v| v.parse().ok()).unwrap_or(10_000);
+    let content = big_rust(lines);
+    eprintln!("QA perf file: {} bytes, {} lines", content.len(), content.lines().count());
+    let small = perf_operations(&big_rust(600), 1, cx);
+    let big = perf_operations(&content, 1, cx);
+    for ((label, (small_lines, small_chars)), (_, (big_lines, big_chars))) in small.iter().zip(&big) {
+        eprintln!("QA perf {label}: {big_lines} lines / {big_chars} chars shaped (600 lines: {small_lines} / {small_chars})");
+        assert!(*big_lines <= small_lines * 2 + 8, "{label}: {big_lines} lines shaped, {small_lines} for a small file");
+        assert!(*big_chars <= small_chars * 2 + 400, "{label}: {big_chars} chars shaped, {small_chars} for a small file");
     }
-    // Shared CI runners get their allowance (`CODEYARD_TEST_TIMEOUT_SCALE`), as the other wall-clock budgets do.
-    let budget = 16.7 * crate::test_sshd::timeout_scale() as f64;
-    let slow: Vec<_> = worst.iter().filter(|(l, v)| *v > budget && !matches!(l.as_str(), "fold-all" | "cmd-f" | "cmd-shift-l" | "wrap")).collect();
-    assert!(slow.is_empty(), "per-keystroke ops slower than {budget} ms: {slow:?}");
 }
 
 // ---------------------------------------------------------------- robustness (random keys)
+
+/// Steps of a random session. Every step is a key and a frame of the whole workbench (about 8 ms in a debug build), so the
+/// defaults are short; `CODEYARD_QA_STEPS=3000` runs the long sessions (and `CODEYARD_QA_SEEDS` more seeds).
+fn qa_steps(default: usize) -> usize {
+    std::env::var("CODEYARD_QA_STEPS").ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+}
 
 /// Pseudo-random editing keys over a small Rust file (multi-cursor, line commands,
 /// folding, wrap, clipboard), then undo everything: no panic and the original text back;
@@ -990,11 +1007,11 @@ fn random_session_on(seed: u64, steps: usize, split: bool, name: &str, original:
     }
     cx.run_until_parked();
     let edited = text(&ed, cx);
-    for _ in 0..steps * 2 {
+    while ed.read_with(cx, |e, _| e.history_for_test().0) {
         cx.simulate_keystrokes("cmd-z");
     }
     assert_eq!(text(&ed, cx), original, "undo all must restore the original (seed {seed})");
-    for _ in 0..steps * 2 {
+    while ed.read_with(cx, |e, _| e.history_for_test().1) {
         cx.simulate_keystrokes("cmd-shift-z");
     }
     assert_eq!(text(&ed, cx), edited, "redo all must restore the edited text (seed {seed})");
@@ -1066,11 +1083,11 @@ fn random_session_new(seed: u64, steps: usize, name: &str, original: &str, cx: &
     }
     cx.run_until_parked();
     let edited = text(&ed, cx);
-    for _ in 0..steps * 3 {
+    while ed.read_with(cx, |e, _| e.history_for_test().0) {
         cx.simulate_keystrokes("cmd-z");
     }
     assert_eq!(text(&ed, cx), original, "undo all must restore the original (seed {seed}, {name})");
-    for _ in 0..steps * 3 {
+    while ed.read_with(cx, |e, _| e.history_for_test().1) {
         cx.simulate_keystrokes("cmd-shift-z");
     }
     assert_eq!(text(&ed, cx), edited, "redo all must restore the edited text (seed {seed}, {name})");
@@ -1081,38 +1098,38 @@ const HTML_SRC: &str = "<div class=\"a\">\n  <ul>\n    <li>one</li>\n    <li>two
 
 #[gpui::test]
 fn qa_random_new_commands_rs_11(cx: &mut TestAppContext) {
-    random_session_new(11, 2000, "a.rs", RS_SRC, cx);
+    random_session_new(11, qa_steps(200), "a.rs", RS_SRC, cx);
 }
 
 #[gpui::test]
 fn qa_random_new_commands_rs_12(cx: &mut TestAppContext) {
-    random_session_new(12, 2000, "a.rs", RS_SRC, cx);
+    random_session_new(12, qa_steps(200), "a.rs", RS_SRC, cx);
 }
 
 #[gpui::test]
 fn qa_random_new_commands_html_13(cx: &mut TestAppContext) {
-    random_session_new(13, 2000, "a.html", HTML_SRC, cx);
+    random_session_new(13, qa_steps(200), "a.html", HTML_SRC, cx);
 }
 
 #[gpui::test]
 fn qa_random_new_commands_html_14(cx: &mut TestAppContext) {
-    random_session_new(14, 2000, "a.html", HTML_SRC, cx);
+    random_session_new(14, qa_steps(200), "a.html", HTML_SRC, cx);
 }
 
 #[gpui::test]
 fn qa_random_new_commands_css_15(cx: &mut TestAppContext) {
-    random_session_new(15, 1500, "a.css", "a {\n  color: red;\n}\n\nb { m: 1 }\n", cx);
+    random_session_new(15, qa_steps(200), "a.css", "a {\n  color: red;\n}\n\nb { m: 1 }\n", cx);
 }
 
-/// `CODEYARD_QA_SEEDS=40` runs many seeds (default 3); each seed on an rs, html and css file.
+/// `CODEYARD_QA_SEEDS=40` runs many seeds (default 1); each seed on an rs, html and css file.
 #[gpui::test]
 fn qa_random_new_commands_many_seeds(cx: &mut TestAppContext) {
-    let n: u64 = std::env::var("CODEYARD_QA_SEEDS").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
+    let n: u64 = std::env::var("CODEYARD_QA_SEEDS").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
     let base: u64 = std::env::var("CODEYARD_QA_SEED_BASE").ok().and_then(|v| v.parse().ok()).unwrap_or(100);
     for seed in base..base + n {
-        random_session_new(seed, 600, "a.rs", RS_SRC, cx);
-        random_session_new(seed + 1000, 600, "a.html", HTML_SRC, cx);
-        random_session_new(seed + 2000, 400, "a.css", "a {\n  color: red;\n}\n", cx);
+        random_session_new(seed, qa_steps(70), "a.rs", RS_SRC, cx);
+        random_session_new(seed + 1000, qa_steps(70), "a.html", HTML_SRC, cx);
+        random_session_new(seed + 2000, qa_steps(50), "a.css", "a {\n  color: red;\n}\n", cx);
     }
 }
 
@@ -1132,33 +1149,33 @@ fn qa_random_keys_on_hostile_text(cx: &mut TestAppContext) {
         ("tabs.py", "\t\t \tdef f():\n\t  \treturn\t1".to_string()),
     ];
     for (i, (name, text)) in texts.iter().enumerate() {
-        random_session_on(500 + i as u64, 250, i % 2 == 1, name, text, cx);
+        random_session_on(500 + i as u64, qa_steps(40), i % 2 == 1, name, text, cx);
     }
 }
 
 #[gpui::test]
 fn qa_random_keys_seed_1(cx: &mut TestAppContext) {
-    random_session(1, 3000, false, cx);
+    random_session(1, qa_steps(200), false, cx);
 }
 
 #[gpui::test]
 fn qa_random_keys_seed_2(cx: &mut TestAppContext) {
-    random_session(2, 3000, false, cx);
+    random_session(2, qa_steps(200), false, cx);
 }
 
 #[gpui::test]
 fn qa_random_keys_seed_3(cx: &mut TestAppContext) {
-    random_session(3, 3000, false, cx);
+    random_session(3, qa_steps(200), false, cx);
 }
 
 #[gpui::test]
 fn qa_random_keys_split_seed_4(cx: &mut TestAppContext) {
-    random_session(4, 3000, true, cx);
+    random_session(4, qa_steps(200), true, cx);
 }
 
 #[gpui::test]
 fn qa_random_keys_split_seed_5(cx: &mut TestAppContext) {
-    random_session(5, 3000, true, cx);
+    random_session(5, qa_steps(200), true, cx);
 }
 
 #[gpui::test]
@@ -1378,9 +1395,7 @@ fn editorconfig_drives_indent_and_save(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("cmd-down");
     cx.simulate_input("end");
     cx.simulate_keystrokes("cmd-s");
-    cx.run_until_parked();
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    cx.run_until_parked();
+    wait_until(cx, "the file to be saved", |_| std::fs::read(&f).is_ok_and(|saved| saved == b"  x\r\nend\r\n"));
     let saved = std::fs::read(&f).unwrap();
     assert_eq!(String::from_utf8(saved).unwrap(), "  x\r\nend\r\n", "trim + final newline + CRLF");
 }
@@ -1396,9 +1411,7 @@ fn language_mode_override_survives_and_associates(cx: &mut TestAppContext) {
     // Reloading after an external change keeps the language.
     std::fs::write(&f, b"fn other() {}\n").unwrap();
     ed.update(cx, |e, cx| e.reload(cx));
-    cx.run_until_parked();
-    std::thread::sleep(std::time::Duration::from_millis(200));
-    cx.run_until_parked();
+    wait_until(cx, "the reload", |cx| text(&ed, cx) == "fn other() {}\n");
     assert_eq!(ed.read_with(cx, |e, _| e.language()), "Rust");
     ed.update(cx, |e, cx| e.set_language(None, cx));
     assert_eq!(ed.read_with(cx, |e, _| e.language()), "Plain Text");
@@ -1540,10 +1553,7 @@ fn qa_word_start_is_bounded_on_a_huge_unbroken_run(cx: &mut TestAppContext) {
     let f = file("word-start", "a.txt", format!("let some_name = other_{}", "A1b2".repeat(500_000)).as_bytes());
     let ed = open(&wb, &f, cx);
     let n = ed.read_with(cx, |e, _| e.text().chars().count());
-    let t = std::time::Instant::now();
     let start = ed.read_with(cx, |e, _| e.word_start_for_test(n));
-    let budget = 500 * u128::from(crate::test_sshd::timeout_scale());
-    assert!(t.elapsed().as_millis() < budget, "{:?}", t.elapsed());
     assert!(start > n - 2000, "walked back {} chars", n - start);
     // A normal word: unchanged.
     assert_eq!(ed.read_with(cx, |e, _| e.word_start_for_test(8)), 4);

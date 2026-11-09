@@ -53,6 +53,7 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_QA_DIR`, `CODEYARD_QA_TMP` | Base folders for test scratch files. |
 | `CODEYARD_QA_SEEDS`, `CODEYARD_QA_SEED_BASE` | Number of random sessions and the first seed of `qa_random_new_commands_many_seeds`. |
 | `CODEYARD_BUFFER_FUZZ_SEEDS` | Number of random editing sessions of the buffer's fuzz test (default 200); raise it for a long run. |
+| `CODEYARD_QA_STEPS`, `CODEYARD_QA_PERF_LINES` | Steps of every `qa_random_*` session (the defaults are short; `3000` is a long run) and the number of lines of the big file in `qa_perf_work_per_key_does_not_grow_with_the_file` (default 10000). |
 | `CODEYARD_REQUIRE_SSHD` | Set to `1` to make the SSH integration tests fail instead of skipping when no usable `sshd` or agent binary is found. Without it a skipped test prints a `SKIPPED` line and passes. CI sets it on the jobs that ship `sshd`. |
 | `CODEYARD_REQUIRE_WASM` | Set to `1` to make the tests that build code extensions (`cyx` tests of `examples/extensions/`, and the app's test that draws views made by `cyx new view`) fail instead of skipping when the `wasm32-wasip2` target, Node.js 22 or newer, a built `cyx` or a built `codeyard-exthost` is missing. CI sets it on the Linux job, the only one with that target and Node.js, and for the app's template view test on the Linux app job. |
 | `CODEYARD_CYX` | Path of the `cyx` the app's template view test runs (`ext_template_views_tests.rs`); by default the one beside `codeyard-exthost` in `target/`. |

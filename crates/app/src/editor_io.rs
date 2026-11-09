@@ -157,6 +157,12 @@ impl EditorView {
         self.buffer.selections()
     }
 
+    /// QA: whether an undo / redo step is left.
+    #[cfg(test)]
+    pub fn history_for_test(&self) -> (bool, bool) {
+        (self.buffer.can_undo(), self.buffer.can_redo())
+    }
+
     /// The first and last line (1-based) of the selection, or of the cursor's line when nothing is selected.
     pub fn selected_lines(&self) -> (usize, usize) {
         let Some(range) = self.buffer.selection() else {
