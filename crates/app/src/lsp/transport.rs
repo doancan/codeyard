@@ -402,54 +402,71 @@ fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host
         eprintln!("lsp<- {} {} bytes", method.unwrap_or("(response)"), msg.to_string().len());
     }
     match (msg.get("id"), method) {
-        // Response.
-        (Some(id), None) => {
-            let Some(id) = id.as_i64() else { return };
-            if let Some(tx) = pending.lock().unwrap().remove(&id) {
-                let result = match msg.get("error") {
-                    Some(e) => Err(RpcError { code: e["code"].as_i64(), message: clip_text(e["message"].as_str().unwrap_or("error"), MAX_MESSAGE_CHARS) }),
-                    None => Ok(msg.get("result").cloned().unwrap_or(Value::Null)),
-                };
-                let _ = tx.send(result);
-            }
+        (Some(id), None) => deliver_response(&msg, id, pending),
+        (Some(id), Some(method)) => answer_server_request(&msg, id, method, events, host, proc, settings),
+        (None, Some(method)) => handle_notification(&msg, method, events),
+        (None, None) => {}
+    }
+}
+
+fn deliver_response(msg: &Value, id: &Value, pending: &Pending) {
+    let Some(id) = id.as_i64() else { return };
+    let Some(tx) = pending.lock().unwrap().remove(&id) else { return };
+    let result = match msg.get("error") {
+        Some(e) => Err(RpcError { code: e["code"].as_i64(), message: clip_text(e["message"].as_str().unwrap_or("error"), MAX_MESSAGE_CHARS) }),
+        None => Ok(msg.get("result").cloned().unwrap_or(Value::Null)),
+    };
+    let _ = tx.send(result);
+}
+
+/// Request from the server: some servers wait if it is not answered.
+fn answer_server_request(
+    msg: &Value,
+    id: &Value,
+    method: &str,
+    events: &mpsc::Sender<ServerEvent>,
+    host: &Arc<dyn Host>,
+    proc: u32,
+    settings: &SharedSettings,
+) {
+    let result = match method {
+        "workspace/configuration" => {
+            let settings = settings.lock().unwrap().clone();
+            configuration_reply(&settings, &msg["params"])
         }
-        // Request from the server: some servers wait if it is not answered.
-        (Some(id), Some(method)) => {
-            let result = match method {
-                "workspace/configuration" => {
-                    let settings = settings.lock().unwrap().clone();
-                    configuration_reply(&settings, &msg["params"])
-                }
-                "window/workDoneProgress/create" | "client/registerCapability" | "client/unregisterCapability" => Value::Null,
-                "workspace/workspaceFolders" => Value::Null,
-                "window/showMessageRequest" => {
-                    let p = &msg["params"];
-                    let actions = p["actions"]
-                        .as_array()
-                        .map(|a| a.iter().filter_map(|x| x["title"].as_str().map(|t| clip_text(t, MAX_ACTION_CHARS))).take(MAX_ACTIONS).collect())
-                        .unwrap_or_default();
-                    let message = clip_text(p["message"].as_str().unwrap_or_default(), MAX_MESSAGE_CHARS);
-                    let _ = events.send(ServerEvent::Question { id: id.clone(), message, actions });
-                    return; // the UI answers once the user chooses
-                }
-                "workspace/applyEdit" => {
-                    let _ = events.send(ServerEvent::ApplyEdit { id: id.clone(), edit: msg["params"]["edit"].clone() });
-                    return; // the UI answers once the edit is applied
-                }
-                _ => {
-                    let reply = json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32601, "message": "not supported" } });
-                    host.proc_input(proc, encode(&reply));
-                    return;
-                }
-            };
-            host.proc_input(proc, encode(&json!({ "jsonrpc": "2.0", "id": id, "result": result })));
+        "window/workDoneProgress/create" | "client/registerCapability" | "client/unregisterCapability" => Value::Null,
+        "workspace/workspaceFolders" => Value::Null,
+        "window/showMessageRequest" => {
+            let p = &msg["params"];
+            let actions = p["actions"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|x| x["title"].as_str().map(|t| clip_text(t, MAX_ACTION_CHARS))).take(MAX_ACTIONS).collect())
+                .unwrap_or_default();
+            let message = clip_text(p["message"].as_str().unwrap_or_default(), MAX_MESSAGE_CHARS);
+            let _ = events.send(ServerEvent::Question { id: id.clone(), message, actions });
+            return; // the UI answers once the user chooses
         }
-        (None, Some("textDocument/publishDiagnostics")) => {
+        "workspace/applyEdit" => {
+            let _ = events.send(ServerEvent::ApplyEdit { id: id.clone(), edit: msg["params"]["edit"].clone() });
+            return; // the UI answers once the edit is applied
+        }
+        _ => {
+            let reply = json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32601, "message": "not supported" } });
+            host.proc_input(proc, encode(&reply));
+            return;
+        }
+    };
+    host.proc_input(proc, encode(&json!({ "jsonrpc": "2.0", "id": id, "result": result })));
+}
+
+fn handle_notification(msg: &Value, method: &str, events: &mpsc::Sender<ServerEvent>) {
+    match method {
+        "textDocument/publishDiagnostics" => {
             if let Some((path, diagnostics)) = parse_diagnostics(&msg["params"]) {
                 let _ = events.send(ServerEvent::Diagnostics { path, diagnostics });
             }
         }
-        (None, Some("$/progress")) => {
+        "$/progress" => {
             let v = &msg["params"]["value"];
             let text = match v["kind"].as_str() {
                 Some("end") => None,
@@ -464,11 +481,11 @@ fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host
             let _ = events.send(ServerEvent::Progress(text));
         }
         // 1 error, 2 warning; information messages are noise.
-        (None, Some("window/logMessage")) => {
+        "window/logMessage" => {
             let p = &msg["params"];
             let _ = events.send(ServerEvent::Log { level: p["type"].as_u64().unwrap_or(4) as u8, text: p["message"].as_str().unwrap_or_default().to_string() });
         }
-        (None, Some("window/showMessage")) if msg["params"]["type"].as_u64().is_some_and(|t| t <= 2) => {
+        "window/showMessage" if msg["params"]["type"].as_u64().is_some_and(|t| t <= 2) => {
             let _ = events.send(ServerEvent::Message(clip_text(msg["params"]["message"].as_str().unwrap_or_default(), MAX_MESSAGE_CHARS)));
         }
         _ => {}

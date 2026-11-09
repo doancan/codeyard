@@ -3,6 +3,43 @@
 use super::*;
 use crate::i18n::{t, tf};
 
+/// Above this many lines, whole-document requests are skipped and hints cover only a window around the cursor.
+const BIG_FILE_LINES: usize = 3000;
+/// Lines on each side of the cursor covered by inlay hints in a big file.
+const HINT_WINDOW_LINES: usize = 300;
+const EXTRAS_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+const COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+const HIGHLIGHT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
+const HOVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+/// Go to definition / implementation and similar lookups the user is waiting for.
+const NAVIGATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const HIERARCHY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+const FORMAT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+const MAX_LENS_RESOLVES: usize = 10;
+
+/// Hints of the same line joined into one label.
+fn group_inlay_labels(hints: Vec<crate::lsp::InlayHint>) -> std::collections::HashMap<usize, String> {
+    let mut by_line: std::collections::HashMap<usize, String> = std::collections::HashMap::new();
+    for hint in hints {
+        let slot = by_line.entry(hint.line).or_default();
+        if !slot.is_empty() {
+            slot.push_str("  ");
+        }
+        slot.push_str(&hint.label);
+    }
+    by_line
+}
+
+/// The highlight role of an LSP semantic token type; types without a role keep the syntax color.
+fn semantic_role(kind: &str) -> Option<Role> {
+    match kind {
+        "function" | "method" | "macro" | "decorator" => Some(Role::Function),
+        "type" | "class" | "struct" | "enum" | "interface" | "typeParameter" | "namespace" => Some(Role::Type),
+        "enumMember" => Some(Role::Number),
+        _ => None,
+    }
+}
+
 impl EditorView {
     /// Connect to the server: open the document (full text), after that only changes are sent.
     pub fn set_lsp(&mut self, client: Option<Arc<crate::lsp::Client>>, lang: &'static str, cx: &mut Context<Self>) {
@@ -77,7 +114,7 @@ impl EditorView {
             client.request(
                 "workspace/executeCommand",
                 serde_json::json!({ "command": name, "arguments": if args.is_array() { args } else { serde_json::json!([]) } }),
-                std::time::Duration::from_secs(15),
+                COMMAND_TIMEOUT,
             )
         });
         cx.spawn(async move |this, cx| {
@@ -113,10 +150,7 @@ impl EditorView {
             }) else {
                 return;
             };
-            let result = cx
-                .background_executor()
-                .spawn(async move { client.request("textDocument/documentHighlight", params, std::time::Duration::from_secs(4)) })
-                .await;
+            let result = cx.background_executor().spawn(async move { client.request("textDocument/documentHighlight", params, HIGHLIGHT_TIMEOUT) }).await;
             this.update(cx, |e, cx| {
                 if let Ok(v) = result {
                     let mut ranges: Vec<Range<usize>> = v
@@ -222,7 +256,7 @@ impl EditorView {
             return;
         };
         // On a large file, hints only around the cursor; whole-document requests are skipped (expensive).
-        let big = self.buffer.len_lines() > 3000;
+        let big = self.buffer.len_lines() > BIG_FILE_LINES;
         let s = cx.global::<Settings>();
         let want_inlay = s.inlay_hints && client.supports("inlayHintProvider");
         let want_fold = !big && client.supports("foldingRangeProvider");
@@ -243,11 +277,11 @@ impl EditorView {
             let Ok(Some((uri, range, lines))) = this.update(cx, |e, _| {
                 e.sync_lsp();
                 let lines = e.buffer.len_lines();
-                let (from, to) = if lines <= 3000 {
+                let (from, to) = if lines <= BIG_FILE_LINES {
                     (0, e.buffer.len_chars())
                 } else {
                     let l = e.buffer.char_to_line(e.buffer.cursor());
-                    (e.buffer.line_to_char(l.saturating_sub(300)), e.buffer.line_to_char((l + 300).min(lines)))
+                    (e.buffer.line_to_char(l.saturating_sub(HINT_WINDOW_LINES)), e.buffer.line_to_char((l + HINT_WINDOW_LINES).min(lines)))
                 };
                 let (a, b) = (e.buffer.lsp_position(from), e.buffer.lsp_position(to));
                 let range = serde_json::json!({ "start": { "line": a.0, "character": a.1 }, "end": { "line": b.0, "character": b.1 } });
@@ -259,7 +293,7 @@ impl EditorView {
             let result = cx
                 .background_executor()
                 .spawn(async move {
-                    let t = std::time::Duration::from_secs(8);
+                    let t = EXTRAS_REQUEST_TIMEOUT;
                     let doc = serde_json::json!({ "uri": uri });
                     let live = || guard.load(SeqCst) == mine;
                     let mut errors: Vec<String> = Vec::new();
@@ -295,8 +329,8 @@ impl EditorView {
                         let (mut done, todo) = ask("textDocument/codeLens", serde_json::json!({ "textDocument": doc }))
                             .map(|v| crate::lsp::parse_code_lenses(&v))
                             .unwrap_or_default();
-                        // Resolve lenses without commands: at most 10 (each is a separate request).
-                        for item in todo.into_iter().take(10) {
+                        // Resolve lenses without commands: a bounded number (each is a separate request).
+                        for item in todo.into_iter().take(MAX_LENS_RESOLVES) {
                             if let Some(r) = ask("codeLens/resolve", item) {
                                 done.extend(crate::lsp::parse_code_lenses(&serde_json::json!([r])).0);
                             }
@@ -324,15 +358,7 @@ impl EditorView {
                     e.log_lsp_failure(err, cx);
                 }
                 if let Some(h) = hints {
-                    let mut by_line: std::collections::HashMap<usize, String> = std::collections::HashMap::new();
-                    for hint in h {
-                        let slot = by_line.entry(hint.line).or_default();
-                        if !slot.is_empty() {
-                            slot.push_str("  ");
-                        }
-                        slot.push_str(&hint.label);
-                    }
-                    e.inlays = by_line;
+                    e.inlays = group_inlay_labels(h);
                 }
                 if let Some(f) = folds {
                     e.lsp_folds = f;
@@ -348,12 +374,7 @@ impl EditorView {
                 if let Some(tokens) = sem {
                     let mut by_line: std::collections::HashMap<usize, Vec<(u32, u32, Role)>> = std::collections::HashMap::new();
                     for t in tokens {
-                        let role = match t.kind.as_str() {
-                            "function" | "method" | "macro" | "decorator" => Role::Function,
-                            "type" | "class" | "struct" | "enum" | "interface" | "typeParameter" | "namespace" => Role::Type,
-                            "enumMember" => Role::Number,
-                            _ => continue,
-                        };
+                        let Some(role) = semantic_role(&t.kind) else { continue };
                         by_line.entry(t.line).or_default().push((t.start, t.len, role));
                     }
                     e.sem = by_line;
@@ -694,7 +715,7 @@ impl EditorView {
                 Some(c) => {
                     let params = serde_json::json!({ "textDocument": { "uri": uri }, "position": { "line": line, "character": col } });
                     cx.background_executor()
-                        .spawn(async move { c.request("textDocument/hover", params, std::time::Duration::from_secs(5)) })
+                        .spawn(async move { c.request("textDocument/hover", params, HOVER_TIMEOUT) })
                         .await
                         .ok()
                         .and_then(|v| crate::lsp::hover_text(&v))
@@ -762,7 +783,7 @@ impl EditorView {
         self.sync_lsp();
         let (line, col) = self.buffer.lsp_position(ix);
         let params = serde_json::json!({ "textDocument": { "uri": crate::lsp::path_to_uri(&self.path) }, "position": { "line": line, "character": col } });
-        let task = cx.background_executor().spawn(async move { client.request(method, params, std::time::Duration::from_secs(10)) });
+        let task = cx.background_executor().spawn(async move { client.request(method, params, NAVIGATION_TIMEOUT) });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |_, cx| match result.map(|v| crate::lsp::parse_locations(&v)) {
@@ -819,7 +840,7 @@ impl EditorView {
         // Definition in the same file: read from the unsaved buffer (the lines on disk may have shifted).
         let (own_path, own_text) = (self.path.clone(), self.buffer.rope().to_string());
         let task = cx.background_executor().spawn(async move {
-            let locs = crate::lsp::parse_locations(&client.request("textDocument/definition", params, std::time::Duration::from_secs(10))?);
+            let locs = crate::lsp::parse_locations(&client.request("textDocument/definition", params, NAVIGATION_TIMEOUT)?);
             let Some((path, (l, c))) = locs.first().cloned() else { return Ok(None) };
             let data = if path == own_path { own_text.into_bytes() } else { host.read(&path).map_err(|e| e.to_string())?.0 };
             let text = String::from_utf8_lossy(&data);
@@ -862,7 +883,7 @@ impl EditorView {
         let (line, col) = self.buffer.lsp_position(self.buffer.cursor());
         let params = serde_json::json!({ "textDocument": { "uri": crate::lsp::path_to_uri(&self.path) }, "position": { "line": line, "character": col } });
         let task = cx.background_executor().spawn(async move {
-            let t = std::time::Duration::from_secs(15);
+            let t = HIERARCHY_TIMEOUT;
             let items = client.request(prepare, params, t)?;
             let Some(item) = items.as_array().and_then(|a| a.first()).cloned() else { return Ok(Vec::new()) };
             let result = client.request(method, serde_json::json!({ "item": item }), t)?;
@@ -900,7 +921,7 @@ impl EditorView {
     /// (edits computed against old positions must not corrupt other text).
     pub(super) fn apply_lsp_format(&mut self, method: &'static str, client: Arc<crate::lsp::Client>, params: serde_json::Value, cx: &mut Context<Self>) {
         let epoch = self.lsp_epoch.load(std::sync::atomic::Ordering::SeqCst);
-        let task = cx.background_executor().spawn(async move { client.request(method, params, std::time::Duration::from_secs(2)) });
+        let task = cx.background_executor().spawn(async move { client.request(method, params, FORMAT_TIMEOUT) });
         cx.spawn(async move |this, cx| {
             let Ok(v) = task.await else { return };
             this.update(cx, |e, cx| {
