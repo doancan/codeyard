@@ -306,7 +306,7 @@ fn free_port() -> Result<u16, String> {
 }
 
 impl Session {
-    fn build(writer: Writer, proc: Option<(Arc<dyn Host>, u32)>, addr: Option<SocketAddr>, events: mpsc::Sender<DapEvent>) -> Arc<Session> {
+    fn build(writer: Writer, proc: Option<(Arc<dyn Host>, u32)>, addr: Option<SocketAddr>, events: mpsc::Sender<DapEvent>, direct: bool) -> Arc<Session> {
         Arc::new_cyclic(|me| Session {
             writer: Arc::new(writer),
             proc,
@@ -325,7 +325,7 @@ impl Session {
             exception_pref: Mutex::new(None),
             attached: AtomicBool::new(false),
             terminal: AtomicBool::new(false),
-            direct: false,
+            direct,
             me: me.clone(),
             forward: Mutex::new(None),
         })
@@ -405,7 +405,7 @@ impl Session {
                 })?;
         }
         let session = match transport {
-            Transport::Stdio => Session::build(Writer::Proc { host: host.clone(), id }, Some((host.clone(), id)), None, events),
+            Transport::Stdio => Session::build(Writer::Proc { host: host.clone(), id }, Some((host.clone(), id)), None, events, false),
             Transport::Connect | Transport::Accept => {
                 let started = std::time::Instant::now();
                 let fail = |why: &str| {
@@ -446,7 +446,8 @@ impl Session {
                     Ok(r) => r,
                     Err(e) => return fail(&e.to_string()),
                 };
-                let s = Session::build(Writer::Tcp(Mutex::new(stream)), Some((host.clone(), id)), Some(SocketAddr::from(([127, 0, 0, 1], port))), events);
+                let s =
+                    Session::build(Writer::Tcp(Mutex::new(stream)), Some((host.clone(), id)), Some(SocketAddr::from(([127, 0, 0, 1], port))), events, false);
                 *s.forward.lock().unwrap() = forward;
                 *slot.lock().unwrap() = Arc::downgrade(&s);
                 s.spawn_tcp_reader(reader);
@@ -498,28 +499,7 @@ impl Session {
         };
         let _ = stream.set_nodelay(true);
         let reader = stream.try_clone().map_err(|e| e.to_string())?;
-        let s = Arc::new_cyclic(|me| Session {
-            writer: Arc::new(Writer::Tcp(Mutex::new(stream))),
-            proc: None,
-            next_seq: AtomicI64::new(1),
-            pending: Arc::default(),
-            alive: Arc::new(AtomicBool::new(true)),
-            initialized: Arc::new((Mutex::new(false), Condvar::new())),
-            capabilities: Mutex::new(Value::Null),
-            addr: Some(target),
-            events,
-            child: Mutex::new(None),
-            adapter_id: Mutex::new(String::new()),
-            breakpoints: Mutex::new(BTreeMap::new()),
-            functions: Mutex::new(Vec::new()),
-            root: Mutex::new(None),
-            exception_pref: Mutex::new(None),
-            attached: AtomicBool::new(false),
-            terminal: AtomicBool::new(false),
-            direct: true,
-            forward: Mutex::new(None),
-            me: me.clone(),
-        });
+        let s = Session::build(Writer::Tcp(Mutex::new(stream)), None, Some(target), events, true);
         *s.forward.lock().unwrap() = remote.then_some((alias, Transport::Connect, port, local));
         s.spawn_tcp_reader(reader);
         Ok(s)
@@ -531,7 +511,7 @@ impl Session {
         let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(10)).map_err(|e| e.to_string())?;
         let _ = stream.set_nodelay(true);
         let reader = stream.try_clone().map_err(|e| e.to_string())?;
-        let child = Session::build(Writer::Tcp(Mutex::new(stream)), None, Some(addr), self.events.clone());
+        let child = Session::build(Writer::Tcp(Mutex::new(stream)), None, Some(addr), self.events.clone(), false);
         child.spawn_tcp_reader(reader);
         Ok(child)
     }
