@@ -631,8 +631,8 @@ fn polling_many_repositories_is_bounded(cx: &mut TestAppContext) {
     let _ = std::fs::remove_dir_all(&w);
     std::fs::create_dir_all(&w).unwrap();
     let w = crate::ui::canonical_for_test(&w);
-    // More than the slots of one poll (8), so that some wait: three more are enough to show the queue.
-    let repos = crate::workbench::repos_glue::MAX_REFRESHES + 4;
+    // More than the slots of one poll, so that some wait: two more than the slots leave one waiting.
+    let repos = crate::workbench::repos_glue::MAX_REFRESHES + 2;
     for i in 0..repos {
         let d = w.join(format!("r{i:02}"));
         std::fs::create_dir_all(&d).unwrap();
