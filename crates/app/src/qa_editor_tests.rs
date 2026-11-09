@@ -854,8 +854,8 @@ fn shaped_by(cx: &mut VisualTestContext, n: usize, mut f: impl FnMut(&mut Visual
 }
 
 /// Typing, moving, folding, finding and wrapping in `content`: the shaped work of each operation.
-fn perf_operations(content: &str, repeat: usize, cx: &mut TestAppContext) -> Vec<(&'static str, (usize, usize))> {
-    let f = file("perf", "big.rs", content.as_bytes());
+fn perf_operations(name: &str, content: &str, repeat: usize, cx: &mut TestAppContext) -> Vec<(&'static str, (usize, usize))> {
+    let f = file(name, "big.rs", content.as_bytes());
     let (wb, cx) = setup(cx);
     // The UI thread's work is what counts. With a language server on, run_until_parked would also wait for its
     // reply (in the background, it doesn't block typing).
@@ -904,12 +904,15 @@ fn qa_perf_work_per_key_does_not_grow_with_the_file(cx: &mut TestAppContext) {
     let lines: usize = std::env::var("CODEYARD_QA_PERF_LINES").ok().and_then(|v| v.parse().ok()).unwrap_or(10_000);
     let content = big_rust(lines);
     eprintln!("QA perf file: {} bytes, {} lines", content.len(), content.lines().count());
-    let small = perf_operations(&big_rust(600), 1, cx);
-    let big = perf_operations(&content, 1, cx);
+    let small = perf_operations("perf-small", &big_rust(600), 1, cx);
+    let big = perf_operations("perf-big", &content, 1, cx);
+    // One frame of the small file is the allowance for a stray frame: the windows have file watchers on real threads,
+    // and an event of one may draw a frame during an operation. The work of 10 000 lines would be far more.
+    let (frame_lines, frame_chars) = small[0].1;
     for ((label, (small_lines, small_chars)), (_, (big_lines, big_chars))) in small.iter().zip(&big) {
         eprintln!("QA perf {label}: {big_lines} lines / {big_chars} chars shaped (600 lines: {small_lines} / {small_chars})");
-        assert!(*big_lines <= small_lines * 2 + 8, "{label}: {big_lines} lines shaped, {small_lines} for a small file");
-        assert!(*big_chars <= small_chars * 2 + 400, "{label}: {big_chars} chars shaped, {small_chars} for a small file");
+        assert!(*big_lines <= small_lines * 2 + frame_lines, "{label}: {big_lines} lines shaped, {small_lines} for a small file");
+        assert!(*big_chars <= small_chars * 2 + frame_chars, "{label}: {big_chars} chars shaped, {small_chars} for a small file");
     }
 }
 
