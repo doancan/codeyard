@@ -94,3 +94,11 @@ each, with no runtime shaders: `typing.keystroke_frame_words_ms` p95 22.6 → 22
 the change either, so the 34.4 against 28.5 ms of the 2026-10-31 record (a runtime-shader build) did not show here. Both of its builds were
 made with `--features gpui/runtime_shaders` (that Mac has no Metal compiler), which compiles the shaders at startup;
 release builds do not.
+
+## The Market rows before 0.9.0
+
+Until 0.9.0 the Market rows (`market.search_ms`, `market.search_frame_ms`) measured an empty catalogue: the downloader read
+the status of an answer from after the last `HTTP/` in it, and the fixture server (Python's `http.server`, `Server:
+SimpleHTTP/0.6`) contains one in its own header, so the index was refused and the 40 searches ran over nothing (0.3 ms).
+From 0.9.0 the catalogue of 10 000 is read and searched (about 4 ms median and 9 ms p95 in a release build on a Mac Studio). A comparison with a baseline older than 0.9.0 shows that as a regression on those two rows; it is not
+one. Compare with `docs/benchmarks/perf-0.9.0.json` or a later release.
