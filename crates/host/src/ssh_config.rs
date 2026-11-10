@@ -117,6 +117,10 @@ pub fn render_block(h: &NewHost) -> String {
 }
 
 fn backup_and_write(path: &Path, new_text: &str) -> Result<(), String> {
+    // Every save copies the config to the same `.codeyard-bak` and renames over the config. Windows refuses a copy or
+    // rename on a file another save holds open (os error 32), so the saves of one process (several windows) take turns.
+    static SAVING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _turn = SAVING.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     // For a symlinked config (dotfiles repo) modify the target, not the link; a rename would otherwise
     // replace the link with a regular file.
     let real = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
