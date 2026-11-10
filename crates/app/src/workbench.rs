@@ -1177,21 +1177,7 @@ impl Workbench {
             }),
             // The first-run update question waits for a quiet keyboard (a letter typed a moment ago must not answer it).
             cx.observe_keystrokes(|this, _, _, _| this.update.last_key = Some(this.update.backend.now())),
-            // The trust question is modal: a shortcut does not act behind it. An interceptor runs before the action of a key binding
-            // (a key listener runs after it), and stopping it there keeps the action from running.
-            {
-                let this = cx.entity().downgrade();
-                cx.intercept_keystrokes(move |event, window, cx| {
-                    let Some(this) = this.upgrade() else { return };
-                    let this = this.read(cx);
-                    if this.cfg.trust_ask.dialog.is_some()
-                        && this.focus_handle.contains_focused(window, cx)
-                        && trust_glue::trust_dialog_blocks(&event.keystroke)
-                    {
-                        cx.stop_propagation();
-                    }
-                })
-            },
+            trust_glue::hold_shortcuts_behind_the_question(cx),
             // The Dock menu lists the windows front one first: it changes whenever one comes forward.
             cx.observe_window_activation(window, |this, window, cx| {
                 #[cfg(target_os = "macos")]

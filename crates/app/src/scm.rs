@@ -124,10 +124,7 @@ pub struct GraphData {
 }
 
 #[cfg(test)]
-thread_local! {
-    /// Change rows built so far (tests count the work of a frame, not its duration).
-    pub(crate) static ROWS_BUILT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-}
+thread_local!(pub(crate) static ROWS_BUILT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) });
 
 pub struct ScmPanel {
     /// Where the controls and the change list's lines were painted in the last frame, for the accessibility tree.
