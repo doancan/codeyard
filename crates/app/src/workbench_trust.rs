@@ -10,6 +10,7 @@ gpui::actions!(workbench, [ManageWorkspaceTrust]);
 
 #[path = "workbench_trust_dialog.rs"]
 mod dialog;
+pub(super) use dialog::trust_dialog_blocks;
 use dialog::{DONT_TRUST, TRUST, TRUST_PARENT, TrustDialog};
 pub use dialog::{TrustDialogConfirm, TrustDialogDismiss, TrustDialogNext, TrustDialogPrev};
 

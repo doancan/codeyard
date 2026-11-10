@@ -70,6 +70,15 @@ impl TrustDialog {
     }
 }
 
+/// Whether a keystroke is held back while the trust question is open: a shortcut (⌘, Ctrl or Alt with a key) is, except the ones
+/// that leave or hide the application or its window, which stay what they are everywhere. Plain keys, Return, Space, Tab and
+/// Escape are the card's own and reach it.
+pub(in crate::workbench) fn trust_dialog_blocks(k: &gpui::Keystroke) -> bool {
+    const LEAVES: [&str; 4] = ["q", "w", "h", "m"];
+    let m = &k.modifiers;
+    (m.platform || m.control || m.alt) && !(m.platform && !m.control && !m.alt && LEAVES.contains(&k.key.as_str()))
+}
+
 /// What Restricted Mode switches off (the table in docs/architecture.md, "Workspace Trust, in one place").
 fn restricted() -> [&'static str; 3] {
     [t("Tasks, tests and debugging"), t("Language servers"), t("Project settings that start programs")]

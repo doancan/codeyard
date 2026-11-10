@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Workspace Trust: while the question is open, a shortcut (⌘, for Settings, ⌘N and the like) no longer acts behind it. Its own keys, and quitting, hiding or closing the window, still work.
+
 ## [0.9.0] - 2026-11-10
 
 ### Added

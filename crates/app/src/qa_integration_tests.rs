@@ -2991,6 +2991,25 @@ fn the_trust_question_starts_on_dont_trust_and_escape_trusts_nothing(cx: &mut Te
     assert!(!restricted(&wb, cx), "Tab then Return trusts the folder");
 }
 
+/// The trust question is modal: while it is open a shortcut must not open pages behind it, or the answer ends up hidden by a
+/// tab the user did not ask for. Keys that belong to the card, and quitting, still work.
+#[gpui::test]
+fn shortcuts_do_nothing_behind_the_trust_question(cx: &mut TestAppContext) {
+    let (wb, cx) = setup_asking(cx, "qa-trust-modal");
+    let dir = qa_dir("qa-trust-modal-project");
+    open(&wb, &dir, cx);
+    cx.run_until_parked();
+    assert!(asking(&wb, cx));
+    cx.simulate_keystrokes("cmd-,");
+    cx.run_until_parked();
+    assert!(asking(&wb, cx), "the question is still open");
+    assert!(wb.read_with(cx, |wb, _| wb.settings_page_for_test()).is_none(), "Settings did not open behind it");
+    // Its own keys still answer it.
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    assert!(!asking(&wb, cx), "Escape answers the question");
+}
+
 /// Compare Selection with Clipboard: nothing selected says so; with a selection the diff is titled with the file.
 #[gpui::test]
 fn the_selection_can_be_compared_with_the_clipboard(cx: &mut TestAppContext) {
