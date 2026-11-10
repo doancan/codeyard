@@ -77,7 +77,8 @@ fresh_profile() {
     return
   fi
   mkdir -p "$TMP/config"
-  printf '{"update.check":"manual"}\n' > "$TMP/config/settings.jsonc"
+  # No trust question: on a fresh profile it opens as a modal card and takes the keys the typing scenarios send.
+  printf '{"update.check":"manual","security.workspaceTrust.startupPrompt":"never"}\n' > "$TMP/config/settings.jsonc"
 }
 
 # A profile with 100 installed, inactive extensions, built once per run with the candidate: 50 themes made by `cyx new`
