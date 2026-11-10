@@ -88,8 +88,23 @@ fn wait_for_bridge_gone(sshd: &crate::test_sshd::Sshd) {
 /// The pid the shell writes to `file`.
 fn shell_pid(wb: &Entity<Workbench>, cx: &mut gpui::VisualTestContext, file: &std::path::Path) -> String {
     let line = format!("echo $$ > {}\n", file.display());
-    wb.update(cx, |wb, cx| wb.terminals[0].update(cx, |t, _| t.send(&line)));
-    wait_ticking(cx, "the shell wrote its pid", |_| std::fs::read_to_string(file).is_ok_and(|s| s.ends_with('\n')));
+    // Typed again every few seconds until it has run: a shell that is still starting, over ssh or on a busy machine, may not have
+    // taken the first one. Writing the pid again changes nothing.
+    let mut sent = None::<std::time::Instant>;
+    crate::qa_integration_tests::wait_secs_describing(
+        cx,
+        20,
+        "the shell wrote its pid",
+        |cx| format!("the terminal shows {:?}", text(wb, cx)),
+        |cx| {
+            cx.executor().advance_clock(std::time::Duration::from_millis(300));
+            if sent.is_none_or(|at| at.elapsed() > std::time::Duration::from_secs(3)) {
+                wb.update(cx, |wb, cx| wb.terminals[0].update(cx, |t, _| t.send(&line)));
+                sent = Some(std::time::Instant::now());
+            }
+            std::fs::read_to_string(file).is_ok_and(|s| s.ends_with('\n'))
+        },
+    );
     std::fs::read_to_string(file).unwrap().trim().to_string()
 }
 
