@@ -305,6 +305,20 @@ fn reloading_a_file_that_came_back_clears_the_deleted_mark(cx: &mut TestAppConte
     assert_eq!(ed.read_with(cx, |e, _| e.status_for_test()), None);
 }
 
+/// A page opened by a shortcut takes the keyboard from the palette: ⌘, opens Settings, and the palette must not stay over it.
+#[gpui::test]
+fn the_palette_closes_when_a_shortcut_opens_settings(cx: &mut TestAppContext) {
+    let dir = fresh("palette-settings");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    cx.simulate_keystrokes("cmd-shift-p");
+    assert!(wb.read_with(cx, |wb, _| wb.has_overlay_for_test()), "the palette is open");
+    cx.simulate_keystrokes("cmd-,");
+    cx.run_until_parked();
+    assert!(wb.read_with(cx, |wb, _| wb.settings_page_for_test()).is_some(), "Settings opened");
+    assert!(!wb.read_with(cx, |wb, _| wb.has_overlay_for_test()), "the palette did not stay over it");
+}
+
 /// Renaming a file with unsaved changes (and a hot-exit backup) and restarting: only
 /// the renamed file should come back. A stale backup under the old name would
 /// resurrect a phantom "deleted" tab.

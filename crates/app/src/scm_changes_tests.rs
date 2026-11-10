@@ -1,7 +1,5 @@
 use super::*;
 
-use std::time::{Duration, Instant};
-
 use gpui::{Entity, Focusable as _, TestAppContext, VisualTestContext};
 
 use crate::git::{Change, Mark};
@@ -28,22 +26,6 @@ fn set(panel: &Entity<ScmPanel>, st: Arc<Status>, cx: &mut VisualTestContext) {
     cx.run_until_parked();
 }
 
-/// Median time to draw the panel once with `n` changes.
-fn frame(n: usize, cx: &mut TestAppContext) -> Duration {
-    let (panel, cx) = panel(cx);
-    set(&panel, status(n), cx);
-    let mut times: Vec<Duration> = (0..5)
-        .map(|_| {
-            let start = Instant::now();
-            panel.update(cx, |_, cx| cx.notify());
-            cx.run_until_parked();
-            start.elapsed()
-        })
-        .collect();
-    times.sort();
-    times[2]
-}
-
 #[test]
 fn lines_group_conflicts_staged_and_changes_and_skip_closed_groups() {
     let st = Status {
@@ -58,20 +40,25 @@ fn lines_group_conflicts_staged_and_changes_and_skip_closed_groups() {
     assert_eq!(change_lines(&Status::default(), |_| true), [g(Changes, 0), Empty]);
 }
 
-/// Before the list was virtualized a debug build took ~240 ms (1k) and ~2.3 s (10k) per frame; now the cost no
-/// longer grows with the number of changes. The bound is loose for slow CI machines.
-#[gpui::test]
-fn ten_thousand_changes_draw_within_the_frame_budget(cx: &mut TestAppContext) {
-    let t = frame(10_000, cx);
-    eprintln!("scm frame with 10k changes: {t:?}");
-    assert!(t < Duration::from_millis(150), "{t:?}");
+/// Change rows built to draw the panel once with `n` changes.
+fn rows_built(n: usize, cx: &mut TestAppContext) -> usize {
+    let (panel, cx) = panel(cx);
+    set(&panel, status(n), cx);
+    crate::scm::ROWS_BUILT.with(|rows| rows.set(0));
+    panel.update(cx, |_, cx| cx.notify());
+    cx.run_until_parked();
+    crate::scm::ROWS_BUILT.with(std::cell::Cell::get)
 }
 
+/// Before the list was virtualized a frame built a row for every change (a debug build took ~240 ms for 1 000 and ~2.3 s for 10 000);
+/// now it builds the rows in view, however many changes there are. Counted, not timed.
 #[gpui::test]
-fn one_thousand_changes_draw_within_the_frame_budget(cx: &mut TestAppContext) {
-    let t = frame(1_000, cx);
-    eprintln!("scm frame with 1k changes: {t:?}");
-    assert!(t < Duration::from_millis(150), "{t:?}");
+fn a_frame_builds_the_rows_in_view_however_many_changes_there_are(cx: &mut TestAppContext) {
+    let few = rows_built(1_000, cx);
+    let many = rows_built(10_000, cx);
+    assert!(few > 0, "the list drew rows");
+    assert_eq!(few, many, "the rows built follow the window, not the number of changes");
+    assert!(many < 100, "{many} rows built for one frame");
 }
 
 #[gpui::test]

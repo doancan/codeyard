@@ -21,6 +21,9 @@
 //! - `CODEYARD_PERF_WORDS=<n>`: after the first frame settles, type the completion scenario's `n` keys into the focused
 //!   editor, with no extension asked, and record keystroke → frame under `typing.keystroke_frame_words_ms`: the
 //!   completion row's reference (words typed at the top of the file cost the editor more than one long word).
+//! - `CODEYARD_PERF_FIND=<n>`: after the first frame settles, open Find in the open file (the perf run gives it a 10 MB one),
+//!   then type `n` keys into the Find bar (a short word, then erasing it, over and over) and record keystroke → frame under
+//!   `find.keystroke_frame_ms`: searching a big file must not make typing in the bar wait.
 //! - `CODEYARD_PERF_VIEWS=<n>`: after the first frame settles, open the first declared extension view, wait until it is
 //!   drawn and holds the keyboard, then press PageDown `n` times (`views.keystroke_frame_ms`, below).
 //! - `CODEYARD_PERF_RELOAD=<n>`: with `--extension-dev <folder>`, run the extension's first command, then `n + 1` times
@@ -136,6 +139,8 @@ pub fn view_key(window: &Window) {
 
 /// Keys the completion scenario types, and its reference without extensions: a new word every third key.
 const WORD_KEYS: [&str; 3] = ["a", "b", "space"];
+/// The Find scenario's keys: a word typed and erased again and again.
+const FIND_KEYS: [&str; 6] = ["f", "n", "space", "backspace", "backspace", "backspace"];
 
 /// Keys the Market scenario types: a word letter by letter, then erased, so every key changes the query.
 fn market_key(i: usize) -> &'static str {
@@ -320,6 +325,7 @@ pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
     let providers: usize = std::env::var("CODEYARD_PERF_PROVIDERS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let completion: usize = std::env::var("CODEYARD_PERF_COMPLETION").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let words: usize = std::env::var("CODEYARD_PERF_WORDS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let find: usize = std::env::var("CODEYARD_PERF_FIND").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let lenses: usize = std::env::var("CODEYARD_PERF_LENSES").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let views: usize = std::env::var("CODEYARD_PERF_VIEWS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let reload: usize = std::env::var("CODEYARD_PERF_RELOAD").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
@@ -336,6 +342,13 @@ pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
                     if words > 0 {
                         cx.background_executor().timer(SETTLE).await;
                         type_these(handle, words, &WORD_KEYS, "typing.keystroke_frame_words_ms", cx).await;
+                    }
+                    if find > 0 {
+                        cx.background_executor().timer(SETTLE).await;
+                        cx.update_window(handle.into(), |_, window, cx| window.dispatch_keystroke(Keystroke::parse("cmd-f").expect("valid keystroke"), cx))
+                            .ok();
+                        cx.background_executor().timer(SETTLE).await;
+                        type_these(handle, find, &FIND_KEYS, "find.keystroke_frame_ms", cx).await;
                     }
                     if decorations > 0 || providers > 0 {
                         extension_scenario(handle, decorations, providers, cx).await;

@@ -272,7 +272,11 @@ fn a_restart_starts_a_new_shell_in_the_group_without_replaying_anything(cx: &mut
     // The new shell runs what it is given in order: once a command typed now has run, anything replayed would have too.
     let ready = dir.join("ready");
     term.update(vcx, |t, _| t.send(&format!("echo x > \"{}\"\r", ready.display())));
-    assert!(wait(vcx, |_| ready.exists()), "the new shell takes input");
+    assert!(
+        wait(vcx, |_| ready.exists()),
+        "the new shell takes input; the terminal shows {:?}",
+        vcx.update(|_, cx| term.read(cx).scrollback_text() + &term.read(cx).screen_text())
+    );
     assert!(!marker.exists(), "no command of the previous session ran again");
     wb.update(vcx, |wb, cx| wb.close_all_terminals(cx));
 }

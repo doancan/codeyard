@@ -54,6 +54,9 @@ impl Workbench {
         // Operational signals take priority over secondary editor metadata.
         let detail_width = width - busy as f32 * 140.;
         let labels = width >= 1100.;
+        // What the notice can have: the bar without the items beside it (left ones, the resources button, and the editor's details
+        // that show from these widths on).
+        let notice_max = (width - 400. - if detail_width >= 720. { 120. } else { 0. } - if detail_width >= 1100. { 200. } else { 0. }).max(140.);
         let branch = self.vcs.branch.clone();
         let restricted = self.restricted_root(cx).is_some();
         // Errors go in the card at bottom right (error_toast); only info here.
@@ -293,7 +296,9 @@ impl Workbench {
                     .min_w_0()
                     .overflow_hidden()
                     .whitespace_nowrap()
-                    .when_some(notice, |d, (m, color)| d.child(div().px(px(SB_PAD)).text_color(c(color)).truncate().child(m))),
+                    // `w`, not `max_w`: the text is cut with an ellipsis only when its width is known as it is measured; a maximum is applied
+                    // after the text was measured as wide as it is, and the box would just cut it off at its edge.
+                    .when_some(notice, |d, (m, color)| d.child(div().w(px(notice_max)).px(px(SB_PAD)).text_color(c(color)).truncate().child(m))),
             )
             .children(self.web_preview_status(p, cx))
             .children(self.extension_status_items(p, cx))

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-10
+
+### Fixed
+
+- Source Control: in a short window or at a large interface scale the changes list keeps room for at least four lines (up to seven when there are that many); the worktrees and graph sections under it shrink first, so a change is no longer cut off at its second row.
+- Command Palette: pressing ⌘, over the palette opens Settings and closes the palette, instead of leaving it on top of the page.
+- Status bar: a long notice is cut with an ellipsis before the items beside it, instead of being clipped at their edge.
+- Language servers: a server whose command does not exist always gets the "isn't available" message with how to install it or set `lsp.servers`; when the process had already ended by the time of the first request, the notice used to read "command: language server is not running" instead.
+- Workspace Trust: while the question is open, a shortcut (⌘, for Settings, ⌘N and the like) no longer acts behind it. Its own keys, and quitting, hiding or closing the window, still work.
+
 ## [0.9.0] - 2026-11-10
 
 ### Added
@@ -28,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Extensions: a registry served by a program that names itself with `HTTP/` in its `Server` header (Python's `http.server` does) could not be read: the status of the answer was taken from after the last `HTTP/` in it, so every request looked like a refusal.
 - Extensions: the registry downloader checks every redirect like the first address, so a local http registry cannot send it on to plain http elsewhere.
 - Extensions: the registry downloader in the app allows plain http only to this machine, read the way a client reads the host (`http://localhost.evil.test` is not).
 - Debugger: a `launch.json` (or any other JSON-with-comments settings file) saved with a byte order mark is read instead of silently showing no configurations.
@@ -1854,7 +1865,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/doancan/codeyard/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/doancan/codeyard/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/doancan/codeyard/compare/v0.7.6...v0.8.0
 [0.7.6]: https://github.com/doancan/codeyard/compare/v0.7.5...v0.7.6

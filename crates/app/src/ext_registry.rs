@@ -431,7 +431,9 @@ mod curl_tests {
                     ("/away", _) => write!(s, "HTTP/1.1 302 Found\r\nLocation: http://example.com/index.json\r\nContent-Length: 0\r\n\r\n"),
                     ("/moved", _) => write!(s, "HTTP/1.1 301 Moved\r\nLocation: /index.json\r\nContent-Length: 0\r\n\r\n"),
                     ("/index.json", Some("\"v1\"")) => write!(s, "HTTP/1.1 304 Not Modified\r\nETag: \"v1\"\r\n\r\n"),
-                    ("/index.json", _) => write!(s, "HTTP/1.1 200 OK\r\nETag: \"v1\"\r\nContent-Length: 5\r\n\r\nhello"),
+                    // A server that names itself with "HTTP/" in its header, like Python's http.server (`SimpleHTTP/0.6`): the status is
+                    // the one of the status line, not what follows the last "HTTP/" of the answer.
+                    ("/index.json", _) => write!(s, "HTTP/1.1 200 OK\r\nServer: SimpleHTTP/0.6 Python/3.12\r\nETag: \"v1\"\r\nContent-Length: 5\r\n\r\nhello"),
                     _ => write!(s, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"),
                 };
             }

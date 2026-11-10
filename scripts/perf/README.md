@@ -32,6 +32,7 @@ agree on every call.
 | `startup.extensions_ms` | loading 100 installed, inactive extensions at startup (50 themes made by `cyx new`, 50 code extensions packaged with `cyx package --no-build`); the run fails if one of them starts | p95 | +10% and +1 ms; ceiling 5 ms |
 | `typing.keystroke_frame_ms` | key press to the drawn frame, 10k-line Rust file with highlighting; 40 keys per run | p95 | +10% |
 | `typing.keystroke_frame_words_ms` | as `typing.keystroke_frame_ms`, with the keys of `typing.keystroke_frame_completion_ms` (`a`, `b`, space) and no extension: the reference for that row. Words typed at the top of the file make tree-sitter recover from the error across the whole file, so a reparse often runs past its 4 ms budget and finishes in the background; the redraw that follows can land just before the next key, which then waits for it. Plain typing (one long word) never does that; 40 keys per run | p95 | +10% |
+| `find.keystroke_frame_ms` | key press in the Find bar to the drawn frame, a 10 MB Rust file (`CODEYARD_PERF_FIND`; Find searches a file over 1 MB off the UI thread); 40 keys per run | p95 | +10% |
 | `typing.keystroke_frame_decorations_ms` | as `typing.keystroke_frame_ms`, with 2 installed extensions decorating the file (the decoration provider `crates/ext-host/testdata/decorator.wasm`, about 1000 marks each); 40 keys per run | p95 | +10%; ceiling: plain typing +10% |
 | `typing.keystroke_frame_completion_ms` | as `typing.keystroke_frame_ms`, with 1 installed extension completing Rust (the same provider, `crates/ext-host/testdata/decorator.wasm`, answering 50 items at once); a new word every third key, so it is asked again and again (its 50 items, `perf_item_<n>`, never match the typed words, so no list is drawn); 40 keys per run | p95 | +10%; ceiling: `typing.keystroke_frame_words_ms` +10% |
 | `typing.keystroke_frame_lenses_ms` | as `typing.keystroke_frame_ms`, with 1 installed extension giving code lenses and inlay hints for the lines in view (`decorator.wasm` again: a lens on every fifth line and a hint on every line, asked again after each pause in typing); 40 keys per run | p95 | +10%; ceiling: plain typing +10% |
@@ -94,3 +95,11 @@ each, with no runtime shaders: `typing.keystroke_frame_words_ms` p95 22.6 → 22
 the change either, so the 34.4 against 28.5 ms of the 2026-10-31 record (a runtime-shader build) did not show here. Both of its builds were
 made with `--features gpui/runtime_shaders` (that Mac has no Metal compiler), which compiles the shaders at startup;
 release builds do not.
+
+## The Market rows before 0.9.0
+
+Until 0.9.0 the Market rows (`market.search_ms`, `market.search_frame_ms`) measured an empty catalogue: the downloader read
+the status of an answer from after the last `HTTP/` in it, and the fixture server (Python's `http.server`, `Server:
+SimpleHTTP/0.6`) contains one in its own header, so the index was refused and the 40 searches ran over nothing (0.3 ms).
+From 0.9.0 the catalogue of 10 000 is read and searched (about 4 ms median and 9 ms p95 in a release build on a Mac Studio). A comparison with a baseline older than 0.9.0 shows that as a regression on those two rows; it is not
+one. Compare with `docs/benchmarks/perf-0.9.0.json` or a later release.

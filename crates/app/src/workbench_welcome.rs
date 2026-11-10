@@ -176,6 +176,10 @@ impl Workbench {
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
+        // The page takes the keyboard: a palette still open (the shortcut was pressed over it) would stay on top of it.
+        if matches!(self.overlay, Some(super::Overlay { kind: super::OverlayKind::Palette { .. }, .. })) {
+            self.overlay = None;
+        }
         view.read(cx).focus_search(window, cx);
         cx.notify();
     }

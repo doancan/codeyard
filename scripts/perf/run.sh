@@ -77,7 +77,8 @@ fresh_profile() {
     return
   fi
   mkdir -p "$TMP/config"
-  printf '{"update.check":"manual"}\n' > "$TMP/config/settings.jsonc"
+  # No trust question: on a fresh profile it opens as a modal card and takes the keys the typing scenarios send.
+  printf '{"update.check":"manual","security.workspaceTrust.startupPrompt":"never"}\n' > "$TMP/config/settings.jsonc"
 }
 
 # A profile with 100 installed, inactive extensions, built once per run with the candidate: 50 themes made by `cyx new`
@@ -195,6 +196,8 @@ for k in "${!names[@]}"; do
 done
 
 for n in "${names[@]}"; do : > "$TMP/$n.jsonl"; done
+# A 10 MB Rust file (the 10k-line one twenty times over) for the Find scenario: Find searches a file over 1 MB in the background.
+for _ in $(seq 20); do cat crates/app/testdata/big.rs; done > "$TMP/big-find.rs"
 
 # Timing scenarios, interleaved so that thermal state and background load hit every build alike; the order alternates
 # so that neither build always runs first. A build without the hooks (a release before them) is timed once only.
@@ -238,6 +241,14 @@ for i in $(seq 1 "$runs"); do
       exit 1
     fi
     grep '"typing\.keystroke_frame_words_ms"' "$TMP/words.jsonl" >> "$CODEYARD_PERF" || true
+    # Find in a 10 MB file: the search runs off the UI thread, so typing in the Find bar is as quick as typing in the editor.
+    : > "$TMP/find.jsonl"
+    CODEYARD_PERF="$TMP/find.jsonl" CODEYARD_PERF_FIND=40 run_scripted "$OUT/codeyard-${names[$k]}" "$TMP/big-find.rs"
+    if has_hook "$k" CODEYARD_PERF_FIND && [ "$(count find.keystroke_frame_ms "$TMP/find.jsonl")" != 40 ]; then
+      echo "perf: the Find run of ${names[$k]} did not draw 40 keys; the window must be visible" >&2
+      exit 1
+    fi
+    grep '"find\.keystroke_frame_ms"' "$TMP/find.jsonl" >> "$CODEYARD_PERF" || true
     # 100 installed extensions: only the time to load them counts.
     : > "$TMP/ext.jsonl"
     CODEYARD_PERF="$TMP/ext.jsonl" PROFILE_FROM="$EXT_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}"

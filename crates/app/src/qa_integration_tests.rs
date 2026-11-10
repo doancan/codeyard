@@ -2682,7 +2682,13 @@ fn language_servers_wait_for_trust(cx: &mut TestAppContext) {
     assert!(!notice(&wb, cx).contains("isn't available"), "no server start was even attempted");
     // Trusting starts them (here the configured command does not exist, which proves a start was attempted).
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Workspace: Trust This Folder", window, cx));
-    wait_for(cx, "server start attempted after trust", |cx| notice(&wb, cx).contains("isn't available"));
+    wait_secs_describing(
+        cx,
+        10,
+        "server start attempted after trust",
+        |cx| format!("the notice is {:?}", notice(&wb, cx)),
+        |cx| notice(&wb, cx).contains("isn't available"),
+    );
 }
 
 /// Running or debugging tests runs the project's code (a Rust test is built first, which runs its build script): in an
@@ -2989,6 +2995,25 @@ fn the_trust_question_starts_on_dont_trust_and_escape_trusts_nothing(cx: &mut Te
     cx.run_until_parked();
     assert!(!asking(&wb, cx));
     assert!(!restricted(&wb, cx), "Tab then Return trusts the folder");
+}
+
+/// The trust question is modal: while it is open a shortcut must not open pages behind it, or the answer ends up hidden by a
+/// tab the user did not ask for. Keys that belong to the card, and quitting, still work.
+#[gpui::test]
+fn shortcuts_do_nothing_behind_the_trust_question(cx: &mut TestAppContext) {
+    let (wb, cx) = setup_asking(cx, "qa-trust-modal");
+    let dir = qa_dir("qa-trust-modal-project");
+    open(&wb, &dir, cx);
+    cx.run_until_parked();
+    assert!(asking(&wb, cx));
+    cx.simulate_keystrokes("cmd-,");
+    cx.run_until_parked();
+    assert!(asking(&wb, cx), "the question is still open");
+    assert!(wb.read_with(cx, |wb, _| wb.settings_page_for_test()).is_none(), "Settings did not open behind it");
+    // Its own keys still answer it.
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    assert!(!asking(&wb, cx), "Escape answers the question");
 }
 
 /// Compare Selection with Clipboard: nothing selected says so; with a selection the diff is titled with the file.

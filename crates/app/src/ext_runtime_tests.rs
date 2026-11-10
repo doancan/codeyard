@@ -79,10 +79,12 @@ fn an_extension_starts_answers_and_stops() {
     assert!(matches!(next(&rx), Event::Exited { crashed: false, .. }));
     // Compiled once: a second lookup is a cache hit with the same file.
     let cache = Cache::new(&dir);
-    let t = Instant::now();
+    let first = cache.compiled(&exthost().unwrap(), PROBE).unwrap();
+    let stamp = std::fs::metadata(&first.0).unwrap().modified().unwrap();
     let again = cache.compiled(&exthost().unwrap(), PROBE).unwrap();
-    assert!(again.0.exists());
-    assert!(t.elapsed() < Duration::from_secs(1));
+    // The same file, not written again: a hit, whatever the time it took.
+    assert_eq!(again.0, first.0);
+    assert_eq!(std::fs::metadata(&again.0).unwrap().modified().unwrap(), stamp, "the second lookup compiled again");
 }
 
 #[test]

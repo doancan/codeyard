@@ -123,6 +123,9 @@ pub struct GraphData {
     rows: Vec<GraphRow>,
 }
 
+#[cfg(test)]
+thread_local!(pub(crate) static ROWS_BUILT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) });
+
 pub struct ScmPanel {
     /// Where the controls and the change list's lines were painted in the last frame, for the accessibility tree.
     a11y_frames: crate::painted::RowBounds<AccessFrame>,
@@ -493,6 +496,8 @@ impl ScmPanel {
 
     /// A changed file. `repo`: the row belongs to that repository of the aggregated list (every action goes there).
     fn row(&self, ix: usize, change: &Change, staged: bool, repo: Option<RepoKey>, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        #[cfg(test)]
+        ROWS_BUILT.with(|n| n.set(n.get() + 1));
         let p = *palette(cx);
         let mark = if staged { change.staged } else { change.unstaged }.unwrap_or(Mark::Modified);
         let name = ui::file_name(&change.path).to_string();
