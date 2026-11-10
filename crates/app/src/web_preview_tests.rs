@@ -3,6 +3,23 @@ use super::*;
 // These socket tests share the application-wide request worker limit.
 static SOCKET_TESTS: Mutex<()> = Mutex::new(());
 
+/// Takes the lock of the socket tests. A test that failed while holding it must not fail every test after it with a poisoned
+/// lock: what the lock protects is a limit, not data a panic could have left half written.
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    SOCKET_TESTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Whether the stopped server no longer answers on `addr`. The port may have been taken by another test since it was released:
+/// a listener that is not this server, which does not answer a request without the preview's cookie the way this one does (403).
+fn stopped_server_is_gone(addr: std::net::SocketAddr) -> bool {
+    let Ok(mut stream) = TcpStream::connect(addr) else { return true };
+    stream.set_read_timeout(Some(Duration::from_millis(500))).unwrap();
+    let _ = write!(stream, "GET / HTTP/1.1\r\nHost: {addr}\r\n\r\n");
+    let mut response = String::new();
+    let _ = stream.read_to_string(&mut response);
+    !response.starts_with("HTTP/1.1 403")
+}
+
 fn fixture(name: &str) -> (Server, std::path::PathBuf, mpsc::Receiver<Event>) {
     configured_fixture(name, Config::default())
 }
@@ -17,7 +34,7 @@ fn configured_fixture(name: &str, config: Config) -> (Server, std::path::PathBuf
 
 #[test]
 fn web_preview_fixed_port_reports_conflicts_and_can_restart() {
-    let _serial = SOCKET_TESTS.lock().unwrap();
+    let _serial = serial();
     let root = crate::qa_workbench_tests::fresh("preview-fixed-port");
     std::fs::write(root.join("index.html"), "fixed port").unwrap();
     // Another test (or program) can bind the port in the moment between releasing it and starting on it: the run is
@@ -48,7 +65,7 @@ fn web_preview_fixed_port_reports_conflicts_and_can_restart() {
 
 #[test]
 fn web_preview_wildcard_host_keeps_host_and_origin_validation() {
-    let _serial = SOCKET_TESTS.lock().unwrap();
+    let _serial = serial();
     let config = Config { host: std::net::Ipv4Addr::UNSPECIFIED.into(), ..Config::default() };
     let (server, _, _events) = configured_fixture("preview-network", config);
     assert!(server.listen_addr().ip().is_unspecified());
@@ -62,7 +79,7 @@ fn web_preview_wildcard_host_keeps_host_and_origin_validation() {
 
 #[test]
 fn web_preview_ipv6_url_and_authentication() {
-    let _serial = SOCKET_TESTS.lock().unwrap();
+    let _serial = serial();
     if TcpListener::bind((std::net::Ipv6Addr::LOCALHOST, 0)).is_err() {
         eprintln!("IPv6 loopback is unavailable on this machine");
         return;
@@ -75,7 +92,7 @@ fn web_preview_ipv6_url_and_authentication() {
 
 #[test]
 fn web_preview_live_reload_options_control_script_and_watches() {
-    let _serial = SOCKET_TESTS.lock().unwrap();
+    let _serial = serial();
     let config = Config { live_reload: false, ..Config::default() };
     let (server, _, events) = configured_fixture("preview-no-live", config);
     let html = request(&server, "GET", "/", true, None);
@@ -103,7 +120,7 @@ pub(crate) fn request(server: &Server, method: &str, path: &str, authorized: boo
 
 #[test]
 fn web_preview_http_auth_root_assets_head_and_shutdown() {
-    let _serial = SOCKET_TESTS.lock().unwrap();
+    let _serial = serial();
     let (mut server, _, _rx) = fixture("preview-http");
     assert!(request(&server, "GET", "/", false, None).starts_with("HTTP/1.1 403"));
     let entry = server.url("index.html").strip_prefix(&format!("http://{}", server.addr)).unwrap().to_string();
@@ -127,12 +144,12 @@ fn web_preview_http_auth_root_assets_head_and_shutdown() {
     assert!(request(&server, "GET", "/index.html", true, Some(&origin)).starts_with("HTTP/1.1 403"));
     let addr = server.addr;
     server.stop();
-    assert!(TcpStream::connect(addr).is_err());
+    assert!(stopped_server_is_gone(addr), "the stopped server still answers on {addr}");
 }
 
 #[test]
 fn web_preview_paths_reject_traversal_dotfiles_special_names_and_unknown_types() {
-    let _serial = SOCKET_TESTS.lock().unwrap();
+    let _serial = serial();
     let (server, root, _rx) = fixture("preview-paths");
     std::fs::write(root.join("secret.pem"), "private").unwrap();
     std::fs::write(root.join(".env"), "secret").unwrap();
@@ -155,7 +172,7 @@ fn web_preview_paths_reject_traversal_dotfiles_special_names_and_unknown_types()
 
 #[test]
 fn web_preview_redirects_preserve_query_parameters() {
-    let _serial = SOCKET_TESTS.lock().unwrap();
+    let _serial = serial();
     let (server, root, _rx) = fixture("preview-query");
     std::fs::create_dir(root.join("nested")).unwrap();
     std::fs::write(root.join("nested/index.html"), "nested").unwrap();
@@ -172,7 +189,7 @@ fn web_preview_redirects_preserve_query_parameters() {
 
 #[test]
 fn web_preview_nested_asset_uses_one_agent_request() {
-    let _serial = SOCKET_TESTS.lock().unwrap();
+    let _serial = serial();
     use proto::{Frame, Request};
     let root = crate::qa_workbench_tests::fresh("preview-one-request");
     std::fs::create_dir_all(root.join("assets/css")).unwrap();
@@ -207,7 +224,7 @@ fn web_preview_nested_asset_uses_one_agent_request() {
 
 #[test]
 fn web_preview_tracks_served_files_and_distinguishes_css_reload() {
-    let _serial = SOCKET_TESTS.lock().unwrap();
+    let _serial = serial();
     let (server, root, rx) = fixture("preview-changes");
     request(&server, "GET", "/style.css", true, None);
     assert!(matches!(rx.recv_timeout(Duration::from_secs(1)).unwrap(), Event::Watch));
@@ -228,7 +245,7 @@ fn web_preview_tracks_served_files_and_distinguishes_css_reload() {
 #[cfg(unix)]
 #[test]
 fn web_preview_never_follows_symlinks_outside_the_served_root() {
-    let _serial = SOCKET_TESTS.lock().unwrap();
+    let _serial = serial();
     let (server, root, _rx) = fixture("preview-links");
     let outside = crate::qa_workbench_tests::fresh("preview-private");
     std::fs::write(outside.join("secret.html"), "private contents").unwrap();
@@ -241,7 +258,7 @@ fn web_preview_never_follows_symlinks_outside_the_served_root() {
 
 #[test]
 fn web_preview_module_is_user_only_and_off_by_default() {
-    let _serial = SOCKET_TESTS.lock().unwrap();
+    let _serial = serial();
     use crate::settings::{Settings, parse_layers_trusted};
     assert!(!Settings::default().web_preview_enabled);
     for trusted in [true, false] {
@@ -256,7 +273,7 @@ fn web_preview_module_is_user_only_and_off_by_default() {
 
 #[test]
 fn web_preview_changes_does_not_hold_the_lock_during_response_io() {
-    let _serial = SOCKET_TESTS.lock().unwrap();
+    let _serial = serial();
     struct CheckWriter<'state>(&'state Shared, Vec<u8>);
     impl Write for CheckWriter<'_> {
         fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
