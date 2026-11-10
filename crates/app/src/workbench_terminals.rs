@@ -63,6 +63,18 @@ fn index_after_move(active: usize, from: usize, to: usize) -> usize {
     }
 }
 
+/// Longest profile or shell name shown in the launch menu: a longer one would stretch the menu past the window.
+const MENU_NAME_MAX: usize = 40;
+
+/// `name` as one menu label, cut with an ellipsis when it is long.
+fn menu_name(name: &str) -> String {
+    if name.chars().count() <= MENU_NAME_MAX {
+        return name.to_string();
+    }
+    let head: String = name.chars().take(MENU_NAME_MAX - 1).collect();
+    format!("{head}…")
+}
+
 /// The launch menu's profile and shell entries (the default profile ticked) and what each starts: profiles first, then the
 /// machine's shells that no profile already runs.
 fn launch_menu_entries(profiles: &[Profile], shells: &[String], default: Option<&str>) -> (Vec<crate::menu::MenuItem>, Vec<Launch>) {
@@ -70,11 +82,11 @@ fn launch_menu_entries(profiles: &[Profile], shells: &[String], default: Option<
     let mut items = Vec::new();
     let mut launches = Vec::new();
     for p in profiles {
-        items.push(MenuItem::new(&p.name).checked(default == Some(p.name.as_str())));
+        items.push(MenuItem::new(&menu_name(&p.name)).checked(default == Some(p.name.as_str())));
         launches.push(launch_of(p));
     }
     for sh in shells.iter().filter(|sh| !profiles.iter().any(|p| &p.path == *sh)) {
-        items.push(MenuItem::new(crate::ui::file_name(sh)));
+        items.push(MenuItem::new(&menu_name(crate::ui::file_name(sh))));
         launches.push(Launch { shell: Some(sh.clone()), ..Launch::default() });
     }
     (items, launches)
@@ -130,6 +142,9 @@ impl TermRow {
             Activity::Running(_) => lines.push(crate::i18n::t("A command is running").into()),
             Activity::Failed(code) => lines.push(crate::i18n::tf("The last command exited with code {}", &[code])),
             Activity::Idle => {}
+        }
+        if self.exited {
+            lines.push(crate::i18n::t("The shell has exited").into());
         }
         lines.join("\n")
     }
@@ -279,38 +294,47 @@ impl Workbench {
     /// Listen to a terminal of this window (closing, titles, links, paste questions, its menu, its saved token).
     pub(super) fn adopt_terminal(&mut self, term: &Entity<TerminalView>, window: &mut Window, cx: &mut Context<Self>) {
         let weak = term.downgrade();
-        self._subs.push(cx.subscribe_in(term, window, move |this, source, event: &TerminalEvent, window, cx| match event {
-            TerminalEvent::CloseRequested => {
-                // The shell has exited: nothing runs any more, close without asking.
-                match this.terminals.iter().position(|t| t.downgrade() == weak) {
-                    Some(ix) => this.close_terminal(ix, window, cx),
-                    None => this.close_editor_terminal(source, cx),
+        // A closed terminal's subscription goes with it, so a window that opens and closes terminals all day keeps none.
+        self.term_subs.retain(|(w, _)| w.upgrade().is_some());
+        self.term_subs.push((
+            weak.clone(),
+            cx.subscribe_in(term, window, move |this, source, event: &TerminalEvent, window, cx| match event {
+                TerminalEvent::CloseRequested => {
+                    // The shell has exited: nothing runs any more, close without asking.
+                    match this.terminals.iter().position(|t| t.downgrade() == weak) {
+                        Some(ix) => this.close_terminal(ix, window, cx),
+                        None => this.close_editor_terminal(source, cx),
+                    }
                 }
-            }
-            TerminalEvent::TitleChanged | TerminalEvent::Exited | TerminalEvent::ActivityChanged => cx.notify(),
-            TerminalEvent::Attention(message) => this.terminal_wants_attention(source, message.clone(), window, cx),
-            TerminalEvent::LongCommandFinished { command, code } => this.long_command_finished(source, command, *code, window, cx),
-            TerminalEvent::Kept => this.persist_terminals(cx),
-            TerminalEvent::ImagePasteFailed(error) => {
-                this.notice = Some(Notice::Error(crate::i18n::tf("Could not paste: {}", &[error]).into()));
-                cx.notify();
-            }
-            TerminalEvent::ConfirmPaste { data, lines } => {
-                let (term, data) = (source.clone(), data.clone());
-                let title = crate::i18n::tn("Paste {} line into the terminal?", "Paste {} lines into the terminal?", *lines, &[]);
-                let detail = crate::i18n::t("The shell may run each line as soon as it arrives.");
-                this.confirm(window, &title, detail, crate::i18n::t("Paste"), cx, move |_, cx| term.update(cx, |t, _| t.paste_confirmed(data)));
-            }
-            TerminalEvent::OpenLink(link) => this.open_link(link.clone(), window, cx),
-            TerminalEvent::ContextMenu(position) => {
-                // The menu acts on the panel's active terminal: a terminal elsewhere has none.
-                let Some(ix) = this.terminals.iter().position(|t| t.downgrade() == weak) else { return };
-                if ix != this.active_terminal {
-                    this.select_terminal(ix, window, cx);
+                TerminalEvent::TitleChanged | TerminalEvent::Exited | TerminalEvent::ActivityChanged => cx.notify(),
+                TerminalEvent::Attention(message) => this.terminal_wants_attention(source, message.clone(), window, cx),
+                TerminalEvent::LongCommandFinished { command, code } => this.long_command_finished(source, command, *code, window, cx),
+                TerminalEvent::Kept => {
+                    this.persist_terminals(cx);
+                    // A terminal in the editor area or a detached window has its token saved with those, not with the panel's.
+                    this.persist_moved_terminals(cx);
                 }
-                this.open_terminal_menu(*position, window, cx);
-            }
-        }));
+                TerminalEvent::ImagePasteFailed(error) => {
+                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not paste: {}", &[error]).into()));
+                    cx.notify();
+                }
+                TerminalEvent::ConfirmPaste { data, lines } => {
+                    let (term, data) = (source.clone(), data.clone());
+                    let title = crate::i18n::tn("Paste {} line into the terminal?", "Paste {} lines into the terminal?", *lines, &[]);
+                    let detail = crate::i18n::t("The shell may run each line as soon as it arrives.");
+                    this.confirm(window, &title, detail, crate::i18n::t("Paste"), cx, move |_, cx| term.update(cx, |t, _| t.paste_confirmed(data)));
+                }
+                TerminalEvent::OpenLink(link) => this.open_link(link.clone(), window, cx),
+                TerminalEvent::ContextMenu(position) => {
+                    // The menu acts on the panel's active terminal: a terminal elsewhere has none.
+                    let Some(ix) = this.terminals.iter().position(|t| t.downgrade() == weak) else { return };
+                    if ix != this.active_terminal {
+                        this.select_terminal(ix, window, cx);
+                    }
+                    this.open_terminal_menu(*position, window, cx);
+                }
+            }),
+        ));
     }
 
     /// Split the active terminal: a new terminal in the folder its shell is in now goes next to it.
@@ -319,8 +343,14 @@ impl Workbench {
         let start = prev.as_ref().and_then(|t| t.read(cx).start_dir()).or_else(|| self.roots.primary.read(cx).root().map(str::to_string));
         // The folder the shell last reported (shell integration), else the one its process is in.
         let said = prev.as_ref().and_then(|t| t.read(cx).live_cwd());
-        let handle = prev.as_ref().and_then(|t| t.read(cx).pty_handle()).filter(|_| said.is_none());
-        let ask = cx.background_executor().spawn(async move { said.or_else(|| handle.and_then(|(host, id)| host.pty_status(id).cwd)) });
+        let handle = prev.as_ref().and_then(|t| t.read(cx).pty_handle());
+        // What a shell reports is not always a folder of this terminal's machine (a shell inside `ssh` names the other
+        // machine's): it is used only where the machine has such a folder.
+        let ask = cx.background_executor().spawn(async move {
+            let exists =
+                |dir: &str| handle.as_ref().is_none_or(|(host, _)| host.stat(dir).is_ok_and(|m| matches!(m.kind, proto::Kind::Dir | proto::Kind::Symlink)));
+            said.filter(|dir| exists(dir)).or_else(|| handle.and_then(|(host, id)| host.pty_status(id).cwd))
+        });
         cx.spawn_in(window, async move |this, cx| {
             let cwd = ask.await.or(start);
             this.update_in(cx, |this, window, cx| {
@@ -1005,6 +1035,15 @@ mod tests {
     }
 
     #[test]
+    fn a_long_profile_name_is_cut_for_the_menu() {
+        assert_eq!(menu_name("zsh"), "zsh");
+        let long = "x".repeat(100);
+        let cut = menu_name(&long);
+        assert_eq!(cut.chars().count(), MENU_NAME_MAX);
+        assert!(cut.ends_with('…'));
+    }
+
+    #[test]
     fn a_row_shows_what_its_terminal_is_doing() {
         use crate::terminal::{Activity, Finished};
         let row = |activity, unseen| TermRow { label: "zsh".into(), mark: None, exited: false, activity, unseen, cwd: Some("/srv/app".into()) };
@@ -1015,6 +1054,8 @@ mod tests {
         assert!(row(Activity::Failed(2), None).indicator(&p).is_some());
         assert_eq!(row(Activity::Running("$ make".into()), None).tooltip(), "zsh\n/srv/app\nRunning: $ make");
         assert_eq!(row(Activity::Failed(2), None).tooltip(), "zsh\n/srv/app\nThe last command exited with code 2");
+        let gone = TermRow { exited: true, ..row(Activity::Idle, None) };
+        assert_eq!(gone.tooltip(), "zsh\n/srv/app\nThe shell has exited", "a closed shell says so, not only by its colour");
     }
 }
 

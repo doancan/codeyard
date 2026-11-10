@@ -247,5 +247,6 @@ impl Workbench {
             }
         }
         self.favorites_moved(&path, Some(&target), cx);
+        self.breakpoints_moved(&path, Some(&target), cx);
     }
 }

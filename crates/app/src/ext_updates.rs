@@ -331,7 +331,7 @@ fn install(from: &From, id: &ExtId, l: &Locked, current: &Manifest, release: &Re
         return Ok(Some(Offer::NewPublisher { version, publisher: d.signed.publisher, was }));
     }
     let source = Source::Registry { registry: reg.name.clone(), publisher: d.signed.publisher };
-    crate::ext::store(cfg_dir).install_with_targets(&d.bytes, source, d.targets).map_err(|e| e.to_string())?;
+    crate::ext::store(cfg_dir).install_replacing(&d.bytes, source, d.targets, l.digest).map_err(|e| e.to_string())?;
     Ok(None)
 }
 
@@ -339,7 +339,7 @@ fn install(from: &From, id: &ExtId, l: &Locked, current: &Manifest, release: &Re
 /// the same checks as an update.
 fn roll_back(from: &From, id: &ExtId, l: &Locked, current: &Manifest, target: &Release) -> Result<Option<Offer>, String> {
     if l.previous.is_some_and(|p| p.hex() == target.digest || target.targets.values().any(|t| t.digest == p.hex())) {
-        return crate::ext::store(from.cfg_dir).rollback(id).map(|_| None).map_err(|e| e.to_string());
+        return crate::ext::store(from.cfg_dir).rollback_from(id, l.digest).map(|_| None).map_err(|e| e.to_string());
     }
     install(from, id, l, current, target, None)
 }

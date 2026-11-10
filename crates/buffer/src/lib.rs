@@ -83,6 +83,8 @@ pub const MAX_UNDO_STEPS: usize = 10_000;
 pub const MAX_UNDO_BYTES: usize = 64 * 1024 * 1024;
 /// Once the step limit is exceeded, this many extra are tolerated, then trimmed in bulk.
 const UNDO_SLACK: usize = 500;
+/// A single undo step this large triggers the byte limit check immediately.
+const LARGE_UNDO_STEP_BYTES: usize = 1024 * 1024;
 
 /// One piece of an edit group; `at` is the coordinate in the document before the edit.
 #[derive(Debug, Clone)]
@@ -148,6 +150,9 @@ pub struct Buffer {
     /// Line endings were mixed when the file was opened (LF + CRLF, or a lone CR): on save, all revert to the first line's format.
     mixed_endings: bool,
 }
+
+/// How far around a cursor a grapheme cluster is looked for (a cluster longer than this is cut).
+const GRAPHEME_CONTEXT: usize = 64;
 
 const BOM: &str = "\u{feff}";
 
@@ -519,7 +524,7 @@ impl Buffer {
     pub fn char_at_visual_col(&self, line: usize, vcol: usize, tab: usize) -> usize {
         let tab = tab.max(1);
         let mut w = 0usize;
-        for (i, ch) in self.line(line).chars().enumerate() {
+        for (i, ch) in self.rope.line(line).chars().enumerate() {
             if ch == '\n' || ch == '\r' {
                 return i;
             }
@@ -539,7 +544,7 @@ impl Buffer {
     pub fn visual_col(&self, line: usize, col: usize, tab: usize) -> usize {
         let tab = tab.max(1);
         let mut w = 0usize;
-        for ch in self.line(line).chars().take(col) {
+        for ch in self.rope.line(line).chars().take(col.min(self.line_len_chars(line))) {
             w += if ch == '\t' { tab - w % tab } else { 1 };
         }
         w
@@ -935,19 +940,29 @@ impl Buffer {
         i
     }
 
+    /// The text around `idx` on its line, at most `GRAPHEME_CONTEXT` characters each way, and the character index it starts at.
+    /// A cursor step reads this window only: on a 4 MB minified line, segmenting the whole line made every arrow key and
+    /// Backspace take tens of milliseconds.
+    fn grapheme_window(&self, idx: usize) -> (String, usize) {
+        let line = self.rope.char_to_line(idx);
+        let line_start = self.rope.line_to_char(line);
+        let from = line_start.max(idx.saturating_sub(GRAPHEME_CONTEXT));
+        let to = (line_start + self.line_len_chars(line)).min(idx + GRAPHEME_CONTEXT);
+        (self.rope.slice(from..to).to_string(), from)
+    }
+
     fn prev_boundary(&self, idx: usize) -> usize {
         if idx == 0 {
             return 0;
         }
         let line = self.rope.char_to_line(idx);
-        let start = self.rope.line_to_char(line);
-        if idx == start {
+        if idx == self.rope.line_to_char(line) {
             return idx - 1; // to the end of the previous line
         }
-        let text = self.line(line);
-        let byte = char_to_byte(&text, idx - start);
+        let (text, from) = self.grapheme_window(idx);
+        let byte = char_to_byte(&text, idx - from);
         let prev = text.grapheme_indices(true).map(|(b, _)| b).take_while(|&b| b < byte).last().unwrap_or(0);
-        start + text[..prev].chars().count()
+        from + text[..prev].chars().count()
     }
 
     fn next_boundary(&self, idx: usize) -> usize {
@@ -955,15 +970,13 @@ impl Buffer {
             return self.len_chars();
         }
         let line = self.rope.char_to_line(idx);
-        let start = self.rope.line_to_char(line);
-        let text = self.line(line);
-        let col = idx - start;
-        if col >= text.chars().count() {
+        if idx >= self.rope.line_to_char(line) + self.line_len_chars(line) {
             return idx + 1; // skip past the line ending
         }
-        let byte = char_to_byte(&text, col);
+        let (text, from) = self.grapheme_window(idx);
+        let byte = char_to_byte(&text, idx - from);
         let next = text.grapheme_indices(true).map(|(b, _)| b).find(|&b| b > byte).unwrap_or(text.len());
-        start + text[..next].chars().count()
+        from + text[..next].chars().count()
     }
 
     // --- Editing ---
@@ -1670,11 +1683,12 @@ impl Buffer {
             let drop = self.undo.len() - MAX_UNDO_STEPS;
             self.undo.drain(..drop);
         }
-        // Byte limit: measured every 64 steps, not on every key.
-        if !self.undo.len().is_multiple_of(64) {
+        // Byte limit: measured every 64 steps, not on every key, and right away after a step that is big by itself
+        // (a replace-all on a large file: waiting for the 64th step could hold gigabytes).
+        let size = |e: &Edit| e.parts.iter().map(|p| p.removed.len() + p.inserted.len()).sum::<usize>();
+        if !self.undo.len().is_multiple_of(64) && self.undo.last().is_none_or(|e| size(e) < LARGE_UNDO_STEP_BYTES) {
             return;
         }
-        let size = |e: &Edit| e.parts.iter().map(|p| p.removed.len() + p.inserted.len()).sum::<usize>();
         let mut keep = 0usize; // number of steps to keep, counted from the end
         let mut bytes = 0usize;
         for e in self.undo.iter().rev() {
@@ -1698,6 +1712,14 @@ impl Buffer {
         {
             last.chain = true;
         }
+    }
+
+    pub fn can_undo(&self) -> bool {
+        !self.undo.is_empty()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.redo.is_empty()
     }
 
     pub fn undo(&mut self) -> bool {

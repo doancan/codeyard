@@ -126,6 +126,15 @@ impl Error {
         }
     }
 
+    /// What a client is told: the text of every error but a server one, whose paths and database messages stay in
+    /// the server's log.
+    pub fn public_message(&self) -> &str {
+        match self {
+            Error::Internal(_) => "internal error",
+            e => e.message(),
+        }
+    }
+
     pub fn message(&self) -> &str {
         match self {
             Error::Invalid(m) | Error::Forbidden(m) | Error::Conflict(m) | Error::NotFound(m) | Error::TooLarge(m) | Error::Internal(m) => m,
@@ -456,6 +465,12 @@ impl Yard {
         if matches!(current, Status::Revoked { .. }) {
             return Err(Error::Forbidden(format!("{id} {version} was revoked by the registry; only the registry can change that")));
         }
+        // Bundles are public in Rekor, so anyone can send an old statement again within its 15 minutes: only one logged
+        // at or after the last accepted one counts, and the latest sent twice changes nothing more.
+        if signed.logged < db::status_logged(&tx, &id, &version).map_err(internal("database"))? {
+            return Err(Error::Forbidden(format!("a newer statement for {id} {version} was accepted; this one is older")));
+        }
+        db::set_status_logged(&tx, &id, &version, signed.logged).map_err(internal("database"))?;
         let status = match change {
             StatusChange::Yank => Status::Yanked,
             StatusChange::Restore => Status::Ok,
@@ -597,8 +612,17 @@ pub fn sig_path(file: &Path) -> PathBuf {
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), Error> {
-    let tmp = path.with_extension(format!("tmp{}", std::process::id()));
-    std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path)).map_err(|e| Error::Internal(format!("cannot write {}: {e}", path.display())))
+    use std::io::Write as _;
+    let mut name = path.as_os_str().to_owned();
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    name.push(format!(".tmp{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    let tmp = PathBuf::from(name);
+    // Synced before the rename: after a crash the new name must never point at an empty or partial file.
+    let result = std::fs::File::create(&tmp).and_then(|mut f| f.write_all(bytes).and_then(|()| f.sync_all())).and_then(|()| std::fs::rename(&tmp, path));
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result.map_err(|e| Error::Internal(format!("cannot write {}: {e}", path.display())))
 }
 
 fn hex(bytes: &[u8]) -> String {

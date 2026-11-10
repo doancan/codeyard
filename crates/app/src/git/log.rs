@@ -57,7 +57,7 @@ pub fn parse_log(out: &str) -> Vec<LogEntry> {
 /// A file's history (follows renames), newest first.
 pub fn file_log(host: &dyn Host, root: &str, rel: &str, limit: usize) -> Result<Vec<LogEntry>, String> {
     let n = format!("-n{limit}");
-    git_ok(host, root, &["log", "--follow", &n, LOG_FORMAT, "--name-only", "--", rel]).map(|o| parse_log(&o))
+    git_ok(host, root, &["--literal-pathspecs", "-c", "core.quotepath=off", "log", "--follow", &n, LOG_FORMAT, "--name-only", "--", rel]).map(|o| parse_log(&o))
 }
 
 /// The commit that last changed the line. `contents`: unsaved text (so lines do not shift).
@@ -132,6 +132,23 @@ pub fn relative_time(secs: i64) -> String {
 mod tests {
     use super::*;
     use crate::git::{repo, show};
+
+    /// `[ab].txt` is a glob for `a.txt` too: the history of one file must not contain the other's commits.
+    #[test]
+    fn file_history_of_a_name_with_glob_characters_is_that_files_only() {
+        let Some((dir, run)) = repo("log-glob") else { return };
+        let host = host::local();
+        let root = dir.to_string_lossy().into_owned();
+        std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+        run(&["add", "-A"]).unwrap();
+        run(&["commit", "-q", "-m", "add a"]).unwrap();
+        std::fs::write(dir.join("[ab].txt"), "odd\n").unwrap();
+        run(&["--literal-pathspecs", "add", "-A"]).unwrap();
+        run(&["commit", "-q", "-m", "add odd"]).unwrap();
+        let log = file_log(&host, &root, "[ab].txt", 10).unwrap();
+        assert_eq!(log.iter().map(|e| e.subject.as_str()).collect::<Vec<_>>(), ["add odd"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn parses_log_and_blame() {

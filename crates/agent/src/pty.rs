@@ -97,6 +97,10 @@ pub struct Pty {
 }
 
 #[cfg(windows)]
+#[path = "pty_job.rs"]
+mod job;
+
+#[cfg(windows)]
 mod windows {
     use super::*;
     use portable_pty::{CommandBuilder, PtySize, native_pty_system};
@@ -107,7 +111,10 @@ mod windows {
 
     pub fn spawn_with(spec: Spawn) -> io::Result<(Pty, Box<dyn io::Read + Send>)> {
         let Spawn { cols, rows, cwd, shell, args, env, .. } = spec;
+        // The console host the pseudo console starts, and the shell, end with this process (pty_job.rs).
+        let hosts = super::job::console_hosts();
         let pair = native_pty_system().openpty(size(cols, rows)).map_err(io::Error::other)?;
+        super::job::adopt_new_console_hosts(&hosts);
         let shell = shell.filter(|s| !s.is_empty()).map(std::ffi::OsString::from).or_else(|| std::env::var_os("COMSPEC")).unwrap_or_else(|| "cmd.exe".into());
         let mut cmd = CommandBuilder::new(shell);
         for a in args.unwrap_or_default() {
@@ -130,7 +137,11 @@ mod windows {
         // with CREATE_NEW_PROCESS_GROUP, or the relaunch after an update), no program in the terminal would stop on
         // Ctrl+C. Take it normally again before the shell starts.
         unsafe { windows_sys::Win32::System::Console::SetConsoleCtrlHandler(None, 0) };
-        let child = std::sync::Arc::new(std::sync::Mutex::new(pair.slave.spawn_command(cmd).map_err(io::Error::other)?));
+        let child = pair.slave.spawn_command(cmd).map_err(io::Error::other)?;
+        if let Some(pid) = child.process_id() {
+            super::job::adopt(pid);
+        }
+        let child = std::sync::Arc::new(std::sync::Mutex::new(child));
         drop(pair.slave);
         let master = std::sync::Arc::new(std::sync::Mutex::new(Some(pair.master)));
         let (monitor_child, monitor_master) = (child.clone(), master.clone());
@@ -237,9 +248,21 @@ mod imp {
         let child = cmd.spawn()?;
         // `setsid` made the shell the leader of its own session and process group.
         crate::guard::pty_started(child.id());
-        let master = File::from(master);
-        let reader = master.try_clone()?;
-        let mut writer = master.try_clone()?;
+        attach(child, File::from(master), File::try_clone)
+    }
+
+    /// Give the started shell its reader and writer threads. If a handle cannot be made (out of file descriptors), the shell is
+    /// stopped and reaped here: it is not yet owned by a `Pty`, whose `Drop` would otherwise do it.
+    pub(super) fn attach(mut child: Child, master: File, try_clone: impl Fn(&File) -> io::Result<File>) -> io::Result<(Pty, File)> {
+        let (reader, mut writer) = match try_clone(&master).and_then(|reader| Ok((reader, try_clone(&master)?))) {
+            Ok(handles) => handles,
+            Err(e) => {
+                crate::guard::forget(child.id());
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(e);
+            }
+        };
         let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(512);
         std::thread::spawn(move || {
             while let Ok(chunk) = rx.recv() {
@@ -311,7 +334,7 @@ impl Pty {
         {
             // The shell leaves the process guard before it is reaped (its group id may be reused after that).
             crate::guard::forget(self.child.id());
-            self.child.wait().ok().and_then(|s| s.code())
+            self.child.wait().ok().and_then(crate::proc::exit_code)
         }
         #[cfg(windows)]
         {
@@ -420,6 +443,26 @@ mod tests {
         let busy = wait_for(&p, "a program in the foreground", |s| s.busy == Some(true));
         assert_eq!(busy.name.as_deref(), Some("sleep"));
         p.kill();
+    }
+
+    #[test]
+    fn a_shell_killed_by_a_signal_reports_128_plus_the_signal() {
+        let spec = Spawn { cols: 80, rows: 24, shell: Some("/bin/sh".into()), args: Some(Vec::new()), ..Spawn::default() };
+        let (mut p, _reader) = spawn_with(spec).unwrap();
+        p.kill();
+        assert_eq!(p.wait(), Some(128 + libc::SIGKILL), "same code as a killed process in proc.rs");
+    }
+
+    #[test]
+    fn a_shell_is_reaped_when_its_terminal_handles_cannot_be_made() {
+        let child = std::process::Command::new("/bin/sleep").arg("30").spawn().unwrap();
+        let pid = child.id() as libc::pid_t;
+        let master = File::open("/dev/null").unwrap();
+        let failing = |_: &File| Err(io::Error::from_raw_os_error(libc::EMFILE));
+        assert!(imp::attach(child, master, failing).is_err());
+        // SAFETY: signal 0 only checks that the process exists.
+        let alive = unsafe { libc::kill(pid, 0) } == 0;
+        assert!(!alive, "the shell must be killed and reaped, not left as a zombie");
     }
 
     #[test]

@@ -246,7 +246,9 @@ fn a_session_is_kept_as_long_as_its_client_asked() {
     let pty = spawn_shell(&mut kept);
     let long: i32 = shell_pid(&mut kept, pty, "long").parse().unwrap();
     proto::write_frame(&mut kept.w, &Frame { id: 0, body: Request::KeepFor { secs: 600 } }).unwrap();
-    std::thread::sleep(Duration::from_millis(200));
+    // An answered call means both `KeepFor` frames were read before the connections go.
+    gone.call(Request::PtyList, &mut String::new());
+    kept.call(Request::PtyList, &mut String::new());
     drop((gone, kept));
     let deadline = Instant::now() + Duration::from_secs(3);
     while alive(short) {

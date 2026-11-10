@@ -235,7 +235,9 @@ pub fn log(host: &dyn Host, root: &str, limit: usize, scope: Scope) -> Result<Ve
 
 /// Files a commit changed: (status letter, path, old path).
 pub fn changed_files(host: &dyn Host, root: &str, hash: &str) -> Result<Vec<(char, String, Option<String>)>, String> {
-    let out = host.exec("git", &["show", "--name-status", "--format=", "-M", "--first-parent", hash], Some(root), None).map_err(|e| e.to_string())?;
+    let out = host
+        .exec("git", &["-c", "core.quotepath=off", "show", "--name-status", "--format=", "-M", "--first-parent", hash], Some(root), None)
+        .map_err(|e| e.to_string())?;
     if !out.ok() {
         return Err(out.stderr_str());
     }
@@ -333,7 +335,8 @@ pub fn parse_changes(out: &str) -> Vec<FileChange> {
 pub fn commit_detail(host: &dyn Host, root: &str, hash: &str) -> Result<CommitDetail, String> {
     let head = crate::git::git_ok(host, root, &["show", "-s", "--date=format:%Y-%m-%d %H:%M", "--format=%an%x1f%ae%x1f%ad%x1f%P%x1f%B", hash])?;
     let mut d = parse_detail_head(&head, hash);
-    d.files = parse_changes(&crate::git::git_ok(host, root, &["show", "--raw", "--numstat", "--format=", "-M", "--first-parent", hash])?);
+    d.files =
+        parse_changes(&crate::git::git_ok(host, root, &["-c", "core.quotepath=off", "show", "--raw", "--numstat", "--format=", "-M", "--first-parent", hash])?);
     Ok(d)
 }
 
@@ -402,7 +405,11 @@ pub fn run_op(host: &dyn Host, root: &str, hash: &str, op: &CommitOp) -> Result<
                 crate::i18n::tf("Revert stopped and was undone: {}", &[&e.lines().next().unwrap_or("conflict")])
             })
         }
-        CommitOp::Reset(mode) => git(&["reset", mode.flag(), hash]).map(|_| crate::i18n::tf("Reset to {0} ({1})", &[&short, &&mode.flag()[2..]])),
+        CommitOp::Reset(mode) => {
+            // The old tip is named, so the commits that left the branch can be found again (`git reset <hash>`).
+            let was = crate::git::short_head(host, root);
+            git(&["reset", mode.flag(), hash]).map(|_| crate::i18n::tf("Reset to {0} ({1}); the branch was at {2}", &[&short, &&mode.flag()[2..], &was]))
+        }
     }
 }
 

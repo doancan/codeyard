@@ -96,6 +96,7 @@ struct PortSnap {
     url: Option<String>,
     address: Option<String>,
     listening_only: bool,
+    failed: bool,
 }
 
 /// The Ports panel while it is shown: its rows, or why there are none.
@@ -300,6 +301,35 @@ impl ShortcutsSnap {
     }
 }
 
+/// What a reader of the Ports list must also hear: why there are no rows, that the list shown is the one before a failed
+/// scan, and that the rows stop at a limit.
+fn port_notes(total: usize, scan_error: Option<&str>) -> Option<String> {
+    let mut notes = Vec::new();
+    if total == 0 {
+        notes.push(t("Nothing is listening on the server yet.").to_string());
+    }
+    if let Some(e) = scan_error {
+        notes.push(e.to_string());
+    }
+    if total > MAX_PORTS {
+        notes.push(tf("{} more ports are not listed here", &[&(total - MAX_PORTS)]));
+    }
+    (!notes.is_empty()).then(|| notes.join(" "))
+}
+
+#[cfg(test)]
+mod port_note_tests {
+    use super::*;
+
+    #[test]
+    fn a_failed_scan_and_a_cut_list_are_said_also_when_there_are_rows() {
+        assert_eq!(port_notes(3, None), None);
+        assert_eq!(port_notes(3, Some("scan failed")).as_deref(), Some("scan failed"), "the list shown is the one before");
+        assert!(port_notes(0, Some("scan failed")).is_some_and(|n| n.contains("Nothing") && n.contains("scan failed")));
+        assert!(port_notes(MAX_PORTS + 7, None).is_some_and(|n| n.contains('7')), "the rows stop at a limit");
+    }
+}
+
 impl PortsSnap {
     fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, geometry: &Geometry) -> NodeId {
         let mut kids = Vec::new();
@@ -339,6 +369,9 @@ impl PortsSnap {
             } else {
                 if row.address.is_some() {
                     add(2, t("Copy Address"));
+                }
+                if row.failed {
+                    add(5, t("Retry"));
                 }
                 add(3, t("Stop Forwarding"));
             }
@@ -411,13 +444,7 @@ impl Workbench {
         };
         let field = Some((self.ports.field.read(cx).text().to_string(), self.ports.field.focus_handle(cx).is_focused(window)));
         let all = port_rows(&self.ports.set, &self.ports.listening, &alias);
-        let empty = all.is_empty().then(|| {
-            let mut why = t("Nothing is listening on the server yet.").to_string();
-            if let Some(e) = &self.ports.scan_error {
-                why = format!("{why} {e}");
-            }
-            why
-        });
+        let empty = port_notes(all.len(), self.ports.scan_error.as_ref().map(|e| e.as_ref()));
         let rows = all
             .iter()
             .take(MAX_PORTS)
@@ -425,7 +452,7 @@ impl Workbench {
                 let state = match &r.state {
                     RowState::Active => r.address.clone().unwrap_or_default(),
                     RowState::Pending => t("forwarding…").into(),
-                    RowState::Interrupted => t("waiting for the connection").into(),
+                    RowState::Interrupted => t("waiting for the connection to come back").into(),
                     RowState::Failed(why) => why.clone(),
                     RowState::Listening => t("Not forwarded").into(),
                 };
@@ -446,6 +473,7 @@ impl Workbench {
                     url: r.url(),
                     address: r.address.clone().filter(|_| r.state == RowState::Active),
                     listening_only: r.state == RowState::Listening,
+                    failed: matches!(r.state, RowState::Failed(_)),
                 }
             })
             .collect();
@@ -557,6 +585,7 @@ impl Workbench {
             }
             3 if row.forward.is_some() => self.stop_forward(row.port, cx),
             4 if row.listening_only => self.forward_port(row.port, cx),
+            5 if row.failed && row.forward.is_some() => self.retry_forward(row.port, cx),
             _ => {}
         }
     }

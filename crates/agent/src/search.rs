@@ -11,6 +11,8 @@ use regex::bytes::{Regex, RegexBuilder};
 /// Larger files are not searched (minified bundles, logs, data files).
 const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 /// The preview is limited to this many characters; the match is centered.
+/// A single-file search keeps at most this much of one line; the rest of a longer line is not searched.
+const MAX_LINE_BYTES: usize = 1024 * 1024;
 const PREVIEW_CHARS: usize = 240;
 
 pub struct Summary {
@@ -123,10 +125,11 @@ pub fn run(q: &SearchQuery, root: &Path, cancel: &AtomicBool, mut emit: impl FnM
                     if before + n > max {
                         let allowed = max - before;
                         let mut kept = 0u32;
-                        matches.retain(|m| {
+                        matches.retain_mut(|m| {
                             let take = kept < allowed;
                             if take {
-                                kept += (m.ranges.len() as u32).min(allowed - kept);
+                                m.ranges.truncate((allowed - kept) as usize);
+                                kept += m.ranges.len() as u32;
                             }
                             take
                         });
@@ -148,7 +151,6 @@ pub fn run(q: &SearchQuery, root: &Path, cancel: &AtomicBool, mut emit: impl FnM
 }
 
 fn search_one_file(re: &Regex, path: &Path, max: u32, cancel: &AtomicBool, mut emit: impl FnMut(FileMatches)) -> Result<Summary, Error> {
-    use std::io::BufRead;
     let file = std::fs::File::open(path).map_err(|e| Error::NotFound(format!("{}: {e}", path.display())))?;
     let mut reader = std::io::BufReader::with_capacity(256 * 1024, file);
     let mut line = Vec::new();
@@ -161,11 +163,11 @@ fn search_one_file(re: &Regex, path: &Path, max: u32, cancel: &AtomicBool, mut e
         }
     };
     loop {
-        if count >= max || (line_no % 4096 == 0 && cancel.load(Ordering::Relaxed)) {
+        if count >= max || cancel.load(Ordering::Relaxed) {
             break;
         }
         line.clear();
-        if reader.read_until(b'\n', &mut line).map_err(|e| Error::Other(e.to_string()))? == 0 {
+        if read_line_capped(&mut reader, &mut line, MAX_LINE_BYTES).map_err(|e| Error::Other(e.to_string()))? == 0 {
             break;
         }
         line_no += 1;
@@ -174,7 +176,8 @@ fn search_one_file(re: &Regex, path: &Path, max: u32, cancel: &AtomicBool, mut e
         }
         let text = line.strip_suffix(b"\n").unwrap_or(&line);
         let text = text.strip_suffix(b"\r").unwrap_or(text);
-        let ranges: Vec<(usize, usize)> = re.find_iter(text).map(|m| (m.start(), m.end())).filter(|(a, b)| b > a).collect();
+        let allowed = (max - count) as usize;
+        let ranges: Vec<(usize, usize)> = re.find_iter(text).map(|m| (m.start(), m.end())).filter(|(a, b)| b > a).take(allowed).collect();
         if ranges.is_empty() {
             continue;
         }
@@ -188,6 +191,29 @@ fn search_one_file(re: &Regex, path: &Path, max: u32, cancel: &AtomicBool, mut e
     Ok(Summary { files: 1, matches: count, truncated: count >= max, cancelled: cancel.load(Ordering::Relaxed) })
 }
 
+/// Reads one line (up to and including `\n`) into `line`, keeping at most `cap` bytes of it; the rest of a longer line is
+/// consumed and dropped. Returns the bytes consumed, 0 at the end of the file.
+fn read_line_capped(reader: &mut impl std::io::BufRead, line: &mut Vec<u8>, cap: usize) -> std::io::Result<usize> {
+    let mut consumed = 0;
+    loop {
+        let buf = reader.fill_buf()?;
+        if buf.is_empty() {
+            return Ok(consumed);
+        }
+        let (used, done) = match buf.iter().position(|&b| b == b'\n') {
+            Some(i) => (i + 1, true),
+            None => (buf.len(), false),
+        };
+        let keep = used.min(cap.saturating_sub(line.len()));
+        line.extend_from_slice(&buf[..keep]);
+        reader.consume(used);
+        consumed += used;
+        if done {
+            return Ok(consumed);
+        }
+    }
+}
+
 /// Search line by line within a file.
 pub fn search_bytes(re: &Regex, data: &[u8], limit: usize) -> Vec<LineMatch> {
     let mut out = Vec::new();
@@ -197,7 +223,7 @@ pub fn search_bytes(re: &Regex, data: &[u8], limit: usize) -> Vec<LineMatch> {
             break;
         }
         let line = line.strip_suffix(b"\r").unwrap_or(line);
-        let ranges: Vec<(usize, usize)> = re.find_iter(line).map(|m| (m.start(), m.end())).filter(|(a, b)| b > a).collect();
+        let ranges: Vec<(usize, usize)> = re.find_iter(line).map(|m| (m.start(), m.end())).filter(|(a, b)| b > a).take(limit - count).collect();
         if ranges.is_empty() {
             continue;
         }
@@ -245,6 +271,9 @@ fn preview(line_no: u32, line: &[u8], ranges: &[(usize, usize)]) -> LineMatch {
         remapped = ranges.iter().map(|&(a, b)| (lossy_offset(line, a, false), lossy_offset(line, b, true))).collect();
         &remapped
     };
+    // A byte pattern (`(?-u:\xa9)`) can match inside a character: widen the range to the whole character, so that the client
+    // can slice the preview with it.
+    let ranges: Vec<(usize, usize)> = ranges.iter().map(|&(a, b)| (text.floor_char_boundary(a), text.ceil_char_boundary(b))).collect();
     let column = text[..text.floor_char_boundary(ranges[0].0)].chars().count() as u32;
     // Drop leading whitespace (so indentation doesn't take up preview space).
     let indent = text.len() - text.trim_start().len();
@@ -307,6 +336,46 @@ mod tests {
         assert_eq!(sum.matches, 0);
     }
 
+    fn ranges_in(got: &[FileMatches]) -> usize {
+        got.iter().flat_map(|f| &f.matches).map(|m| m.ranges.len()).sum()
+    }
+
+    #[test]
+    fn many_matches_on_one_line_do_not_overshoot_max_results() {
+        let dir = std::env::temp_dir().join(format!("codeyard-agent-overshoot-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.txt"), "x ".repeat(50) + "\n").unwrap();
+        let mut query = q("x");
+        query.max_results = 3;
+        let (mut single, mut folder) = (Vec::new(), Vec::new());
+        let sum = run(&query, &dir.join("a.txt"), &AtomicBool::new(false), |fm| single.push(fm)).unwrap();
+        assert_eq!((sum.matches, ranges_in(&single)), (3, 3));
+        let sum = run(&query, &dir, &AtomicBool::new(false), |fm| folder.push(fm)).unwrap();
+        assert_eq!((sum.matches, ranges_in(&folder)), (3, 3));
+        let re = compile(&query).unwrap();
+        let found = search_bytes(&re, "x ".repeat(50).as_bytes(), 3);
+        assert_eq!(found.iter().map(|m| m.ranges.len()).sum::<usize>(), 3);
+    }
+
+    #[test]
+    fn a_huge_line_is_capped_and_the_next_lines_still_count() {
+        let dir = std::env::temp_dir().join(format!("codeyard-agent-longline-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("long.log");
+        let mut text = "a".repeat(MAX_LINE_BYTES * 3);
+        text.push_str("needle\nsecond needle\n");
+        std::fs::write(&f, &text).unwrap();
+        let mut got = Vec::new();
+        let sum = run(&q("needle"), &f, &AtomicBool::new(false), |fm| got.push(fm)).unwrap();
+        // The match past the cap is not searched; the following line keeps its number.
+        assert_eq!(sum.matches, 1);
+        assert_eq!(got[0].matches[0].line, 2);
+        let mut line = Vec::new();
+        let mut reader = std::io::Cursor::new(text.into_bytes());
+        read_line_capped(&mut reader, &mut line, MAX_LINE_BYTES).unwrap();
+        assert_eq!(line.len(), MAX_LINE_BYTES);
+    }
+
     #[test]
     fn literal_is_escaped_and_case_insensitive() {
         let re = compile(&q("a.b(")).unwrap();
@@ -366,6 +435,20 @@ mod tests {
         let m = &search_bytes(&compile(&regex).unwrap(), b"x\xe2\x82y", 10)[0];
         let (a, b) = m.ranges[0];
         assert_eq!(&m.preview[a as usize..b as usize], "\u{FFFD}");
+    }
+
+    #[test]
+    fn a_byte_pattern_matching_inside_a_character_keeps_the_preview_sliceable() {
+        // `(?-u:\xa9)` matches the second byte of `é`: the range must not start or end inside the character, in a short
+        // line and in a long one (which is clipped around the match).
+        let regex = SearchQuery { regex: true, ..q(r"(?-u:\xa9)") };
+        let re = compile(&regex).unwrap();
+        for line in ["aéb".to_string(), format!("{}é{}", "ü".repeat(400), "z".repeat(400))] {
+            let m = &search_bytes(&re, line.as_bytes(), 10)[0];
+            for &(a, b) in &m.ranges {
+                assert_eq!(&m.preview[a as usize..b as usize], "é", "{line:.12}");
+            }
+        }
     }
 
     #[test]

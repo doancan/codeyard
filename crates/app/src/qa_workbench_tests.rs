@@ -289,6 +289,22 @@ fn qa_delete_file_with_unsaved_changes_keeps_the_text(cx: &mut TestAppContext) {
     assert_eq!(text.as_deref(), Some("unsaved work disk\n"), "the unsaved text must survive the delete");
 }
 
+/// A file that was deleted and came back is read again: the tab must stop saying it is deleted, or the next save skips
+/// the check for changes made on disk meanwhile.
+#[gpui::test]
+fn reloading_a_file_that_came_back_clears_the_deleted_mark(cx: &mut TestAppContext) {
+    let dir = fresh("reload-deleted");
+    std::fs::write(dir.join("a.txt"), "disk\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("a.txt"), cx);
+    let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
+    ed.update(cx, |e, _| e.mark_deleted_on_disk());
+    assert_eq!(ed.read_with(cx, |e, _| e.status_for_test()).as_deref(), Some("deleted"));
+    ed.update(cx, |e, cx| e.reload(cx));
+    cx.run_until_parked();
+    assert_eq!(ed.read_with(cx, |e, _| e.status_for_test()), None);
+}
+
 /// Renaming a file with unsaved changes (and a hot-exit backup) and restarting: only
 /// the renamed file should come back. A stale backup under the old name would
 /// resurrect a phantom "deleted" tab.

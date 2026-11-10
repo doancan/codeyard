@@ -7,6 +7,126 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-10
+
+### Added
+
+- Source Control: stage and unstage single lines from a file's diff. Click the box beside a changed line (Shift-click
+  for a range, Space for the whole change) and press Enter or **Stage Lines**; a change's own button stages it whole,
+  and the staged diff unstages the same way. A diff older than the file or the index writes nothing and reloads.
+- Editor: **Git: Stage Selected Lines** and **Git: Revert Selected Lines** act on the selected lines only (the whole
+  change when nothing is selected), also from the right-click menu on a changed line. They replace *Stage Change at
+  Cursor* and *Revert Change at Cursor*.
+- Source Control: *Undo Last Commit* and the graph's resets say what they take off the branch before it happens. Undoing
+  a pushed commit, or a soft or mixed reset past pushed commits, asks first (the next Sync would bring them back); a hard
+  reset says how many commits exist on no other branch, tag or remote. The answer applies only if the branch has not
+  moved meanwhile, and every result names the commit the branch was at.
+
+- Terminal: a program that reads the mouse (vim, tmux, htop, Midnight Commander) gets the middle button, with its drags,
+  instead of the click being lost. `terminal.rightClick: "program"` gives it the right button too; by default a right
+  click still opens the terminal's menu, and with the setting Shift or ⌥ opens it.
+
+### Fixed
+
+- Extensions: the registry downloader checks every redirect like the first address, so a local http registry cannot send it on to plain http elsewhere.
+- Extensions: the registry downloader in the app allows plain http only to this machine, read the way a client reads the host (`http://localhost.evil.test` is not).
+- Debugger: a `launch.json` (or any other JSON-with-comments settings file) saved with a byte order mark is read instead of silently showing no configurations.
+- Ports: the panel lists the listening ports of Windows SSH servers (read with `netstat`, in any system language) instead of reporting that ports cannot be listed.
+- Debugger: breakpoints follow a file or folder that is renamed or moved, and are dropped when it is deleted, instead of staying behind at the old path.
+- Test explorer: Rust results are read from coloured output (`CARGO_TERM_COLOR=always`) and from tests that print with `--nocapture`, instead of being reported as not run.
+- Rust: when `cargo` is not installed, or rustup has no toolchain selected or installed, debugging and the test explorer now say what to do instead of showing a raw OS error.
+- Source Control: file names with accents or other non-ASCII letters show as written, not as octal escapes, in a
+  commit's file list, a stash's file list and a file's history.
+- Source Control: a push refused by a protected branch (GitHub, GitLab) says so and points to a pull request, instead of
+  showing only the server's raw lines.
+- File watching: a slow or hung network share no longer blocks changes to the watched set while a poll is checking it.
+- Commands run by the agent (git and others) that hit the time limit are stopped together with the processes they started.
+- Terminal: when a new terminal cannot get its file handles (out of descriptors), its shell is stopped instead of left running.
+- Terminal: a shell killed by a signal now reports exit code 128 plus the signal, like other processes, instead of no code.
+- SSH config: saving the config from two windows at once no longer fails because they shared one temporary file; the
+  temporary file is flushed before it replaces the config and is removed if the write fails.
+- Yard: a registry file that cannot be written or renamed no longer leaves a half-written temporary file beside it, and
+  the new file is flushed to disk before it replaces the old one.
+- Search: finding in a very large file no longer loads a whole minified line (hundreds of MB) into memory, and Cancel
+  takes effect at once instead of after thousands of lines. Only the first 1 MiB of a line is searched.
+- Search: a search no longer returns more matches than the result limit when one line holds many of them.
+- Editor: typing next to a very long unbroken run of letters and digits (base64, minified code) no longer stalls while the editor looks for the word to complete.
+- Editor: spell checking in a large Markdown file finds the code fences without copying every line after each edit.
+- Editor: Find in a file over 1 MB searches in the background instead of freezing typing on every keystroke.
+- Yard: an old yank, restore or deprecate statement (they are public in the transparency log) can no longer be sent again within its 15 minutes to undo the publisher's later one.
+- Yard: a server error (500) no longer sends file paths or database messages to the client; it says "internal error" and the details go to the server's log.
+- cyx: `http://localhost@example.com` (user info) was taken for this machine, so `--registry` could send a publish over plain http to another host; plain http is now accepted only when the host really is `localhost`, `127.0.0.1` or `[::1]`.
+- Yard: a file write that fails (disk full, a folder in the way) no longer leaves its `.tmp<pid>` file in the public folder.
+- Extensions: a registry address like `http://localhost.example.com` or `http://localhost@example.com` is no longer taken for this machine; plain `http://` is accepted only for `localhost`, `127.0.0.1` and `[::1]`.
+- Extensions: a failed write of a registry's cached index or Market page no longer leaves its `.tmp<pid>` file behind.
+- Extensions: a package file larger than any package may be (or a device file) is refused when installing instead of being read whole into memory first.
+- Extensions: installing a folder whose files add up to more than the package limit is refused from their sizes, before any file is read into memory.
+- Extensions: going back to the previous version never lands on a package from a different publisher or a sideloaded file; a rollback is offered only between packages of the same identity.
+- Extensions: the switches and self-managed instances of an extension are forgotten when it is no longer installed, even if the process that uninstalled it died before cleaning up, so a later install does not inherit them.
+- Extensions: an automatic update or rollback that was decided before another window changed or removed the extension no longer overwrites that change or brings a removed extension back.
+- Extensions: installing a package again repairs its files in the store when one is missing or changed, as the Verify notice advises; it used to reuse the damaged folder.
+- Editor: reloading a file that was deleted and came back clears its "deleted" mark, so the next save checks for changes made on disk again.
+- Search: highlight ranges that a remote search agent sends outside the line's text, or inside a character, no longer crash the results list or Open; they are moved onto whole characters.
+- Search with a byte pattern (`(?-u:\xa9)`) that matches inside a character no longer returns a highlight range that cuts the character, which could crash the results list.
+- Undo history of a large file no longer holds a copy of the file for each of the first 63 big edits (such as Replace All); the memory cap now applies right after a big edit.
+- Arrow keys, Backspace and Delete are instant on a huge single-line file (a minified bundle); each press used to segment the whole line.
+- Select previous occurrence and Move last selection to next occurrence no longer take seconds with tens of thousands of selections.
+- SSH: adding a host no longer replaces `~/.ssh/config` with just the new host when the file cannot be read as UTF-8
+  (a comment in a legacy encoding, say); it reports the error and leaves the file alone.
+- Language servers that only support full-document sync get the whole text on every change instead of range edits they cannot apply.
+- Source Control: staging, unstaging or discarding a file whose name contains `*`, `?` or `[...]` also touched other files that matched the name as a pattern; names are now taken literally.
+- Terminal: erasing the history (a program's `CSI 3J`, a reset, Clear Terminal) no longer leaves the command dots,
+  Jump to Command and Copy Last Output pointing at the wrong rows. Select All over a long scrollback no longer stalls the
+  terminal while output arrives, searching a long history waits for the typing to pause, and a command whose text a
+  full-screen program redrew away is not looked for again on every chunk of output.
+- Terminal: hovering a link a program marked (OSC 8) shows where it really goes. Splitting a terminal whose shell sits in
+  `ssh` opens in the terminal's own folder instead of failing on the other machine's path. A dropped-output note can no
+  longer be swallowed by an escape sequence it cut in half. A terminal's token for restoring it after a restart is asked
+  for again when the first ask fails. Closed terminals no longer leave their subscription behind, and a failure to start
+  the output thread no longer panics.
+- Ports panel: a failed scan and a cut list are told to screen readers also while there are rows; a listening port's menu
+  has Copy Port Number. Long profile and shell names are cut in the New Terminal menu.
+- Ports: connecting to another server no longer keeps the first scan of the previous one, so its already-open ports are
+  not forwarded by mistake and the previous server's baseline does not hide new ones.
+- Ports: `3000:8080` for a port that is forwarded already moves it to that local port (or says it is there already)
+  instead of doing nothing. A local port that cannot be opened puts the forward back on the port it had and says why;
+  a busy port is no longer saved with the project, and a saved local port that is busy at the next start falls back to
+  a free one instead of failing every time.
+- Ports: a project's saved forwards are opened after the first scan, so a service bound to one address is reached
+  there. A forward that failed no longer opens a browser tab later, and a refused local port below 1024 is named as such.
+- Terminal: Alt+letter sends Escape first (readline, emacs and vim meta keys such as Alt+F, Alt+B, Alt+D) on Windows and
+  Linux; ⌥ on macOS still types the character it composes. Pasting on an SSH host pastes text when the clipboard holds
+  both text and a picture of it (a spreadsheet, a document) instead of uploading the picture. After the shell exits,
+  Ctrl+C copies the selected output and PageUp, PageDown, Home and End scroll it instead of closing the tab. Reset
+  Terminal Modes and a program's exit also switch off bracketed paste a killed program left on.
+- Terminal: a terminal that could not be taken back because the connection failed (not because the daemon refused it)
+  is no longer ended, so a running program survives a hiccup. Closing a terminal tab in the editor area, and a token
+  saved for a terminal outside the panel, are written to the session at once.
+- Ports panel: a failed forward has a Retry button; the reason is cut with an ellipsis and shown in full in a tooltip;
+  an interrupted forward has its own icon and says it comes back with the connection; the column headers are translated;
+  the field shows that `3000:8080` is accepted. Screen readers hear Retry and "(terminal, exited)", and an exited
+  terminal's tooltip says so.
+- Windows: the documentation said in-app port forwarding was unavailable; local forwards (`-L`) work, only reverse
+  forwards (`-R`) do not.
+- Command palette and other short lists: a query that appears in a label as typed ranks it first. "reverse lines" no
+  longer put *Editor: Reverse Lines* below labels that only contain the letters scattered, because the match started at
+  the `r` of "Editor".
+- Windows and Linux: a menu of the menu bar opens under the left edge of its title wherever the title is clicked, and stays
+  under the bar in a window too short for it (it scrolls). A long menu such as View was pushed up over the bar and the
+  title bar, and could close at once as the click was let go over it.
+- Selecting and copying in Claude Code's fullscreen view, tmux and vim, over SSH too. A drag in a program that reads the
+  mouse now reaches it cell by cell (`?1002h`, `?1003h`), so the program can select text without Shift, and the copy it
+  makes over SSH (OSC 52) reaches the clipboard: `terminal.allowClipboardWrite` is now `copy` by default, which takes a
+  program's clipboard write right after you copy in it (let go of a drag or a double-click, or press Ctrl+C). Output on
+  its own, such as a file printed with `cat`, still cannot replace the clipboard. `always` and `off` (and the old
+  `true` / `false`) still work.
+- Windows 10 and Windows Server: quitting or crashing with terminals open no longer leaves their console hosts
+  (`conhost.exe`) running at a full CPU core each. A terminal's console host and shell now end with the process that
+  opened them; terminals kept for the next start live in the terminal daemon and end with it.
+- Source Control: staging, unstaging or discarding a very large selection failed with "Argument list too long" (on Windows already at a few hundred files); the files go to git in groups now.
+- Save with Encoding: a UTF-8 file with a BOM could not be saved as UTF-16 or a single-byte encoding (the BOM was rejected as an unwritable character).
+- File history: a file whose name contains `*`, `?` or `[...]` listed the commits of other files that matched the name as a pattern.
+
 ## [0.8.0] - 2026-11-06
 
 ### Added
@@ -1727,14 +1847,15 @@ No extensions, no telemetry, no account.
 ### Known limitations
 - **No Linux release.** It builds and the app test suite passed once in a container, but there is no installer or CI release job.
 - **Windows is unverified on real hardware** for SSH authentication, mixed-DPI displays, IME input and the installer. Windows SSH needs
-  a key or ssh-agent and a known host entry, and in-app port forwarding is unavailable there.
+  a key or ssh-agent and a known host entry, and in-app reverse port forwarding (`-R`) is unavailable there.
 - **Not notarized and not signed.** macOS builds are ad-hoc signed (right-click, **Open** on first launch); Windows builds are unsigned.
   `scripts/notarize-macos.sh` has not been run.
 - **Apple silicon only** on macOS; there is no Intel build.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/doancan/codeyard/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/doancan/codeyard/compare/v0.7.6...v0.8.0
 [0.7.6]: https://github.com/doancan/codeyard/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/doancan/codeyard/compare/v0.7.4...v0.7.5

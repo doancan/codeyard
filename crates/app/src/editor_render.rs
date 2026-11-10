@@ -1089,6 +1089,8 @@ impl Element for LineElement {
         let font_size = style.font_size.to_pixels(window.rem_size());
         let space = TextRun { len: 1, font: style.font(), color: c(p.text).into(), background_color: None, underline: None, strikethrough: None };
         let col_w = window.text_system().shape_line(" ".into(), font_size, &[space], None).width;
+        #[cfg(test)]
+        SHAPED.with(|shaped| shaped.set((shaped.get().0 + 1, shaped.get().1 + self.text.chars().count())));
         Some((window.text_system().shape_line(self.text.clone(), font_size, &runs, None), col_w))
     }
 

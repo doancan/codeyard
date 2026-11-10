@@ -1,7 +1,7 @@
 //! Git: the system `git` runs through the agent, with the same code path
 //! locally and over SSH. Only commands and output parsing live here (independent of the UI): `status` is the
 //! working tree and commits, `branch` branches/remotes/rebase/merge, `sync` pull/push/fetch/publish, `log` history and blame, `diff` the line
-//! diff and block staging, `stash` the stash. The runner below is shared; everything else is re-exported.
+//! diff and block staging, `lines` staging and unstaging single lines, `stash` the stash. The runner below is shared; everything else is re-exported.
 
 use host::Host;
 
@@ -9,11 +9,13 @@ mod branch;
 mod diff;
 mod explain;
 mod ignore;
+mod lines;
 mod log;
 mod patch;
 mod permalink;
 mod pull;
 mod refs;
+mod rewind;
 mod stash;
 mod status;
 mod sync;
@@ -24,11 +26,13 @@ pub use branch::*;
 pub use diff::*;
 pub use explain::{credentials_rejected, explain, is_checkout_blocked, needs_credentials};
 pub use ignore::*;
+pub use lines::*;
 pub use log::*;
 pub use patch::{apply_patch, changes_patch};
 pub use permalink::file_url as web_file_url;
 pub use pull::checkout_pull;
 pub use refs::*;
+pub use rewind::*;
 pub use stash::*;
 pub use status::*;
 pub use sync::*;
@@ -122,6 +126,29 @@ mod tests {
         let msg = run_op(&host, &root, &merge, &CommitOp::CherryPick).expect("cherry-pick of a merge commit");
         assert!(msg.starts_with("Cherry-picked"), "{msg}");
         assert!(dir.join("s.txt").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Without `core.quotepath=off` git prints non-ASCII names as `"\303\247ay.txt"` (quoted, octal): every list of a
+    /// commit's or a stash's files must show and open the real name.
+    #[test]
+    fn non_ascii_file_names_are_not_octal_escaped_in_commit_stash_and_history_lists() {
+        use crate::graph::{changed_files, commit_detail};
+        let Some((dir, run)) = repo("quotepath") else { return };
+        let host = host::local();
+        let root = dir.to_string_lossy().into_owned();
+        let name = "\u{e7}ay \u{fc}/\u{f6}.txt";
+        std::fs::create_dir_all(dir.join("\u{e7}ay \u{fc}")).unwrap();
+        std::fs::write(dir.join(name), "one\n").unwrap();
+        run(&["add", "-A"]).unwrap();
+        run(&["commit", "-q", "-m", "unicode"]).unwrap();
+        let head = run(&["rev-parse", "HEAD"]).unwrap().trim().to_string();
+        assert_eq!(changed_files(&host, &root, &head).unwrap()[0].1, name);
+        assert_eq!(commit_detail(&host, &root, &head).unwrap().files[0].path, name);
+        assert_eq!(file_log(&host, &root, name, 5).unwrap()[0].path, name);
+        std::fs::write(dir.join(name), "two\n").unwrap();
+        stash(&host, &root, false).unwrap();
+        assert_eq!(stash_files(&host, &root, "stash@{0}").unwrap().1[0].1, name);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

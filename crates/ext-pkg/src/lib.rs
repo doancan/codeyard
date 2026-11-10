@@ -427,6 +427,18 @@ pub fn read(bytes: &[u8]) -> Result<Package, Error> {
     Ok(Package { manifest, files, digest, component, target })
 }
 
+/// Read a `.cyx` file: at most the largest package there may be, so a file of any other size (or a device) is refused
+/// without being read into memory.
+pub fn read_file(path: &Path) -> Result<Vec<u8>, Error> {
+    let file = std::fs::File::open(path).map_err(Error::Io)?;
+    let mut bytes = Vec::new();
+    file.take(limits::TARGET_PACKAGE_BYTES + 1).read_to_end(&mut bytes).map_err(Error::Io)?;
+    if bytes.len() as u64 > limits::TARGET_PACKAGE_BYTES {
+        return Err(Error::TooLarge(format!("the package is larger than {} MiB compressed", limits::TARGET_PACKAGE_BYTES >> 20)));
+    }
+    Ok(bytes)
+}
+
 /// Collect an extension folder for `write`: the files a package holds (`rules`: no secrets, version control,
 /// dependencies, build input, tests, packages such as the one `cyx package` wrote last time, nor what `.cyxignore`
 /// names), with their executable bit. The `native/` folder is not collected as such. Symlinks are refused rather than
@@ -537,57 +549,77 @@ pub fn folder_target(root: &Path) -> Option<String> {
     targets.iter().find(|t| Some(t.as_str()) == here).or(targets.first()).cloned()
 }
 
-/// Walk `root`; `top` is false for a `native/<triple>/` folder, where the top-of-folder rules do not apply.
+/// A file `collect_tree` found and will read once the folder is known to fit the package limits.
+struct Found {
+    rel: String,
+    path: std::path::PathBuf,
+    name: String,
+    executable: bool,
+}
+
+/// Walk `root`; `top` is false for a `native/<triple>/` folder, where the top-of-folder rules do not apply. The files are
+/// listed and their sizes added up before any is read, so a folder of huge files is refused without holding them in memory.
 fn collect_tree(root: &Path, top: bool, ignore: &rules::Ignore, out: &mut Collected) -> Result<(), Error> {
-    fn walk(root: &Path, dir: &Path, top: bool, ignore: &rules::Ignore, out: &mut Collected) -> Result<(), Error> {
-        let mut names: Vec<_> = std::fs::read_dir(dir).map_err(Error::Io)?.collect::<Result<_, _>>().map_err(Error::Io)?;
-        names.sort_by_key(|e| e.file_name());
-        for item in names {
-            let path = item.path();
-            let rel = path.strip_prefix(root).expect("walked under root").to_string_lossy().replace('\\', "/");
-            let meta = std::fs::symlink_metadata(&path).map_err(Error::Io)?;
-            if top && dir == root && item.file_name() == NATIVE_DIR && meta.is_dir() {
+    let mut found = Vec::new();
+    let mut bytes = out.files.iter().map(|e| e.data.len() as u64).sum::<u64>();
+    list_tree(root, root, top, ignore, out, &mut found, &mut bytes)?;
+    for f in found {
+        let data = std::fs::read(&f.path).map_err(Error::Io)?;
+        if let Some(leak) = rules::leak_in(&f.name, &data) {
+            let (what, fix) = match leak {
+                rules::Leak::PrivateKey => ("holds a private key".to_string(), "move it out of the extension folder"),
+                rules::Leak::Token(kind) => (format!("holds what looks like a {kind} access token"), "remove it"),
+            };
+            return Err(Error::Path {
+                path: f.rel,
+                reason: format!("{what}, and a package must never hold one: {fix}, or list the file in .cyxignore to leave it out"),
+            });
+        }
+        out.files.push(Entry { path: f.rel, data, executable: f.executable });
+    }
+    Ok(())
+}
+
+fn list_tree(root: &Path, dir: &Path, top: bool, ignore: &rules::Ignore, out: &mut Collected, found: &mut Vec<Found>, bytes: &mut u64) -> Result<(), Error> {
+    let mut names: Vec<_> = std::fs::read_dir(dir).map_err(Error::Io)?.collect::<Result<_, _>>().map_err(Error::Io)?;
+    names.sort_by_key(|e| e.file_name());
+    for item in names {
+        let path = item.path();
+        let rel = path.strip_prefix(root).expect("walked under root").to_string_lossy().replace('\\', "/");
+        let meta = std::fs::symlink_metadata(&path).map_err(Error::Io)?;
+        if top && dir == root && item.file_name() == NATIVE_DIR && meta.is_dir() {
+            continue;
+        }
+        match rules::rule(&rel, meta.is_dir(), top, ignore) {
+            rules::Rule::Keep => {}
+            rules::Rule::Skip => continue,
+            rules::Rule::Secret => {
+                out.secrets.push(rel);
                 continue;
             }
-            match rules::rule(&rel, meta.is_dir(), top, ignore) {
-                rules::Rule::Keep => {}
-                rules::Rule::Skip => continue,
-                rules::Rule::Secret => {
-                    out.secrets.push(rel);
-                    continue;
-                }
-            }
-            if meta.file_type().is_symlink() {
-                return Err(Error::Path { path: rel, reason: "is a symbolic link; copy the file into the extension instead".into() });
-            }
-            if meta.is_dir() {
-                walk(root, &path, top, ignore, out)?;
-            } else if meta.is_file() {
-                if meta.len() > limits::PACKAGE_FILE_BYTES {
-                    return Err(Error::TooLarge(format!("'{rel}' is larger than {} MiB", limits::PACKAGE_FILE_BYTES >> 20)));
-                }
-                let data = std::fs::read(&path).map_err(Error::Io)?;
-                if let Some(leak) = rules::leak_in(item.file_name().to_string_lossy().as_ref(), &data) {
-                    let (what, fix) = match leak {
-                        rules::Leak::PrivateKey => ("holds a private key".to_string(), "move it out of the extension folder"),
-                        rules::Leak::Token(kind) => (format!("holds what looks like a {kind} access token"), "remove it"),
-                    };
-                    return Err(Error::Path {
-                        path: rel,
-                        reason: format!("{what}, and a package must never hold one: {fix}, or list the file in .cyxignore to leave it out"),
-                    });
-                }
-                out.files.push(Entry { path: rel, data, executable: is_executable(&meta) });
-                if out.files.len() > limits::PACKAGE_FILES {
-                    return Err(Error::TooLarge(format!("the folder has more than {} files", limits::PACKAGE_FILES)));
-                }
-            } else {
-                return Err(Error::Path { path: rel, reason: "is not a regular file".into() });
-            }
         }
-        Ok(())
+        if meta.file_type().is_symlink() {
+            return Err(Error::Path { path: rel, reason: "is a symbolic link; copy the file into the extension instead".into() });
+        }
+        if meta.is_dir() {
+            list_tree(root, &path, top, ignore, out, found, bytes)?;
+        } else if meta.is_file() {
+            if meta.len() > limits::PACKAGE_FILE_BYTES {
+                return Err(Error::TooLarge(format!("'{rel}' is larger than {} MiB", limits::PACKAGE_FILE_BYTES >> 20)));
+            }
+            *bytes = bytes.saturating_add(meta.len());
+            if *bytes > limits::PACKAGE_UNPACKED_BYTES {
+                return Err(Error::TooLarge(format!("the files add up to more than {} MiB", limits::PACKAGE_UNPACKED_BYTES >> 20)));
+            }
+            if out.files.len() + found.len() >= limits::PACKAGE_FILES {
+                return Err(Error::TooLarge(format!("the folder has more than {} files", limits::PACKAGE_FILES)));
+            }
+            found.push(Found { rel, path, name: item.file_name().to_string_lossy().into_owned(), executable: is_executable(&meta) });
+        } else {
+            return Err(Error::Path { path: rel, reason: "is not a regular file".into() });
+        }
     }
-    walk(root, root, top, ignore, out)
+    Ok(())
 }
 
 #[cfg(unix)]

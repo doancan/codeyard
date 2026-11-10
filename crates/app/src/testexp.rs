@@ -95,16 +95,34 @@ pub fn parse_results(kind: Kind, output: &str) -> BTreeMap<String, TestResult> {
 fn parse_libtest(output: &str) -> BTreeMap<String, TestResult> {
     let mut out = BTreeMap::new();
     let mut repeated = HashSet::new();
+    // Colour codes (`CARGO_TERM_COLOR=always`) sit around the verdict and the panic text.
+    let output = crate::lsp::strip_ansi(output);
     let lines: Vec<&str> = output.lines().collect();
+    fn verdict_of(v: &str) -> Option<Outcome> {
+        match v.trim() {
+            "ok" => Some(Outcome::Passed),
+            "FAILED" => Some(Outcome::Failed),
+            v if v.starts_with("ignored") => Some(Outcome::Skipped),
+            _ => None,
+        }
+    }
+    // With `--nocapture` the test's own output comes between `test name ... ` and its verdict, which then has a line to itself.
+    let mut awaiting: Option<&str> = None;
     for l in &lines {
-        let Some(rest) = l.strip_prefix("test ") else { continue };
-        let Some((id, verdict)) = rest.split_once(" ... ") else { continue };
-        let outcome = match verdict.trim() {
-            "ok" => Outcome::Passed,
-            "FAILED" => Outcome::Failed,
-            v if v.starts_with("ignored") => Outcome::Skipped,
-            _ => continue,
+        let (id, outcome) = match l.strip_prefix("test ").and_then(|rest| rest.split_once(" ... ")) {
+            Some((id, verdict)) => match verdict_of(verdict) {
+                Some(outcome) => (id, outcome),
+                None => {
+                    awaiting = Some(id);
+                    continue;
+                }
+            },
+            None => match (awaiting, l.trim()) {
+                (Some(id), "ok" | "FAILED") => (id, verdict_of(l).unwrap_or(Outcome::Failed)),
+                _ => continue,
+            },
         };
+        awaiting = None;
         let id = id.trim().to_string();
         if out.contains_key(&id) {
             repeated.insert(id.clone());

@@ -582,7 +582,7 @@ impl SearchPanel {
     fn open(&mut self, fi: usize, mi: usize, cx: &mut Context<Self>) {
         let Some(f) = self.results.get(fi).filter(|_| self.root.is_some()) else { return };
         let m = &f.matches[mi];
-        let len = m.ranges.first().map_or(0, |(a, b)| m.preview[*a as usize..*b as usize].chars().count() as u32);
+        let len = m.ranges.first().and_then(|r| char_range(&m.preview, *r)).map_or(0, |r| m.preview[r].chars().count() as u32);
         cx.emit(SearchEvent::Open { path: self.abs(&f.path), line: m.line, column: m.column, len });
     }
 
@@ -1029,20 +1029,29 @@ impl Render for SearchPanel {
     }
 }
 
+/// A highlight range as the search agent sent it, moved onto character boundaries inside `preview`.
+/// A remote agent is not trusted to send ranges that are valid for the text it sent.
+fn char_range(preview: &str, (start, end): (u32, u32)) -> Option<std::ops::Range<usize>> {
+    let start = preview.floor_char_boundary(start as usize);
+    let end = preview.ceil_char_boundary((end as usize).min(preview.len()));
+    (start < end).then_some(start..end)
+}
+
 /// Start the preview about 12 characters before the first match (if remote); highlight
 /// ranges (bytes) shift too.
 pub(crate) fn trim_preview(preview: &str, ranges: &[(u32, u32)]) -> (String, Vec<std::ops::Range<usize>>) {
     const KEEP_BEFORE: usize = 12;
     const MAX_LEAD: usize = 40;
-    let first = ranges.first().map_or(0, |r| r.0 as usize).min(preview.len());
+    let ranges: Vec<_> = ranges.iter().filter_map(|&r| char_range(preview, r)).collect();
+    let first = ranges.first().map_or(0, |r| r.start);
     if first <= MAX_LEAD {
-        return (preview.to_string(), ranges.iter().map(|&(a, b)| a as usize..b as usize).collect());
+        return (preview.to_string(), ranges);
     }
     // On a character boundary, KEEP_BEFORE characters before the match.
     let start = preview[..first].char_indices().rev().nth(KEEP_BEFORE - 1).map_or(0, |(i, _)| i);
-    let shift = start as isize - "…".len() as isize;
     let text = format!("…{}", &preview[start..]);
-    let ranges = ranges.iter().filter(|r| r.0 as usize >= start).map(|&(a, b)| (a as isize - shift) as usize..(b as isize - shift) as usize).collect();
+    let shift = |at: usize| at + "…".len() - start;
+    let ranges = ranges.into_iter().filter(|r| r.start >= start).map(|r| shift(r.start)..shift(r.end)).collect();
     (text, ranges)
 }
 
@@ -1056,5 +1065,17 @@ mod preview_tests {
         assert_eq!(&text[ranges[0].clone()], "omega");
         let (same, r) = super::trim_preview("a omega", &[(2, 7)]);
         assert_eq!((same.as_str(), r), ("a omega", vec![2..7]));
+    }
+
+    #[test]
+    fn ranges_from_an_agent_that_do_not_fit_the_text_never_panic() {
+        let line = "çay içelim";
+        // Inside "ç" (2 bytes), past the end, reversed and empty.
+        let (text, ranges) = super::trim_preview(line, &[(1, 4), (3, 4_000), (9, 2), (5, 5)]);
+        assert_eq!(text, line);
+        assert!(ranges.iter().all(|r| line.is_char_boundary(r.start) && line.is_char_boundary(r.end) && r.start < r.end));
+        let far = format!("{}ş{}", "x".repeat(70), "y".repeat(10));
+        let (text, ranges) = super::trim_preview(&far, &[(71, 72), (90_000, 90_001)]);
+        assert!(ranges.iter().all(|r| text.get(r.clone()).is_some()));
     }
 }

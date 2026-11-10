@@ -52,6 +52,19 @@ impl Workbench {
         cx.notify();
     }
 
+    /// A file or folder was renamed (`to`) or deleted (`None`): its breakpoints follow it or go, in the store, the saved list
+    /// and the running sessions (which must stop breaking at the old path).
+    pub(in crate::workbench) fn breakpoints_moved(&mut self, from: &str, to: Option<&str>, cx: &mut Context<Self>) {
+        for (old, new) in self.dbg.bps.relocate(from, to) {
+            self.save_breakpoints(&old, cx);
+            self.push_breakpoints(&old);
+            if let Some(new) = new {
+                self.breakpoints_changed_in_store(&new, true, cx);
+            }
+        }
+        cx.notify();
+    }
+
     /// Give a newly opened editor this file's breakpoints and the stopped line.
     pub(in crate::workbench) fn apply_breakpoints_to(&mut self, ed: &Entity<crate::editor::EditorView>, cx: &mut Context<Self>) {
         let path = ed.read(cx).path.clone();

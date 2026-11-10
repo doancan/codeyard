@@ -405,6 +405,7 @@ impl Workbench {
                     }
                 }
                 this.favorites_moved(&path, Some(&target), cx);
+                this.breakpoints_moved(&path, Some(&target), cx);
                 this.schedule_backup(cx);
                 this.persist_session(cx);
                 cx.notify();
@@ -623,5 +624,6 @@ impl Workbench {
             self.remove_editor(ix, window, cx);
         }
         self.favorites_moved(&path, None, cx);
+        self.breakpoints_moved(&path, None, cx);
     }
 }

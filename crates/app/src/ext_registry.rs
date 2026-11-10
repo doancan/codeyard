@@ -129,53 +129,103 @@ pub fn now() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
 
-/// `curl`, as the updater runs it: https only (http only to this machine), bounded size and time.
+/// The protocols `curl` may use for `url`: https, and plain http only to this machine (read the way a client reads the host,
+/// so `http://localhost.evil.test` and `http://localhost@evil.test` are not it).
+fn allowed_protocols(url: &str) -> &'static str {
+    if registry::is_local_http(url) { "=https,http" } else { "=https" }
+}
+
+/// Redirects followed for one download.
+const MAX_REDIRECTS: usize = 5;
+
+/// What one request answered.
+enum Hop {
+    Done(Got),
+    Redirect(String),
+}
+
+/// The absolute address a `Location` header points to, seen from `base`.
+fn resolve_location(base: &str, location: &str) -> Option<String> {
+    if location.contains("://") {
+        return Some(location.to_string());
+    }
+    let (scheme, rest) = base.split_once("://")?;
+    let (authority, path) = rest.split_once('/').map_or((rest, ""), |(a, p)| (a, p));
+    let path = path.split(['?', '#']).next().unwrap_or_default();
+    Some(match location.strip_prefix('/') {
+        Some(absolute) => format!("{scheme}://{authority}/{absolute}"),
+        None => {
+            let dir = path.rsplit_once('/').map_or("", |(d, _)| d);
+            let dir = if dir.is_empty() { String::new() } else { format!("{dir}/") };
+            format!("{scheme}://{authority}/{dir}{location}")
+        }
+    })
+}
+
+/// `curl`, as the updater runs it: https only (http only to this machine), bounded size and time. Redirects are followed here,
+/// one request at a time, so every address is checked like the first one: a local http registry cannot send the client on to
+/// plain http elsewhere.
 struct Curl;
 
 impl Fetch for Curl {
     fn get(&self, url: &str, etag: Option<&str>, limit: usize) -> Result<Got, String> {
-        let local = url.starts_with("http://localhost") || url.starts_with("http://127.0.0.1");
-        let dir = tempdir()?;
-        let (headers, body) = (dir.join("headers"), dir.join("body"));
-        let mut c = Command::new("curl");
-        c.args(["-q", "--silent", "--show-error", "--location", "--max-redirs", "5", "--connect-timeout", "15", "--max-time", "120", "--tlsv1.2"]);
-        c.args(["--proto", if local { "=https,http" } else { "=https" }, "--proto-redir", if local { "=https,http" } else { "=https" }]);
-        c.args(["--max-filesize", &limit.to_string(), "--dump-header"]).arg(&headers).arg("--output").arg(&body);
-        if let Some(tag) = etag {
-            c.args(["--header", &format!("If-None-Match: {tag}")]);
-        }
-        c.args(["--url", url]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-        }
-        let out = c.output().map_err(|e| format!("cannot run curl: {e}"))?;
-        let result = (|| {
-            if !out.status.success() {
-                return Err(format!("{url}: {}", String::from_utf8_lossy(&out.stderr).trim()));
-            }
-            let head = std::fs::read_to_string(&headers).unwrap_or_default();
-            // After redirects the last response counts.
-            let last = head.rsplit("HTTP/").next().unwrap_or_default();
-            let status: u16 = last.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
-            let etag = last.lines().find_map(|l| l.split_once(':').filter(|(k, _)| k.eq_ignore_ascii_case("etag")).map(|(_, v)| v.trim().to_string()));
-            match status {
-                304 => Ok(Got::NotModified),
-                200..=299 => {
-                    let mut bytes = Vec::new();
-                    std::fs::File::open(&body).and_then(|f| f.take(limit as u64 + 1).read_to_end(&mut bytes)).map_err(|e| e.to_string())?;
-                    if bytes.len() > limit {
-                        return Err(format!("{url}: larger than {limit} bytes"));
+        let mut current = url.to_string();
+        for _ in 0..=MAX_REDIRECTS {
+            match request(&current, etag, limit)? {
+                Hop::Done(got) => return Ok(got),
+                Hop::Redirect(location) => {
+                    let next = resolve_location(&current, &location).ok_or_else(|| format!("{current}: the redirect to {location} cannot be followed"))?;
+                    if allowed_protocols(&next) == "=https" && !next.starts_with("https://") {
+                        return Err(format!("{current}: redirected to {next}, which is not https"));
                     }
-                    Ok(Got::Body { bytes, etag })
+                    current = next;
                 }
-                s => Err(format!("{url}: the server answered {s}")),
             }
-        })();
-        let _ = std::fs::remove_dir_all(&dir);
-        result
+        }
+        Err(format!("{url}: more than {MAX_REDIRECTS} redirects"))
     }
+}
+
+/// One `curl` request, redirects not followed.
+fn request(url: &str, etag: Option<&str>, limit: usize) -> Result<Hop, String> {
+    let dir = tempdir()?;
+    let (headers, body) = (dir.join("headers"), dir.join("body"));
+    let mut c = Command::new("curl");
+    c.args(["-q", "--silent", "--show-error", "--connect-timeout", "15", "--max-time", "120", "--tlsv1.2", "--proto", allowed_protocols(url)]);
+    c.args(["--max-filesize", &limit.to_string(), "--dump-header"]).arg(&headers).arg("--output").arg(&body);
+    if let Some(tag) = etag {
+        c.args(["--header", &format!("If-None-Match: {tag}")]);
+    }
+    c.args(["--url", url]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let out = c.output().map_err(|e| format!("cannot run curl: {e}"))?;
+    let result = (|| {
+        if !out.status.success() {
+            return Err(format!("{url}: {}", String::from_utf8_lossy(&out.stderr).trim()));
+        }
+        let head = std::fs::read_to_string(&headers).unwrap_or_default();
+        let header = |name: &str| head.lines().find_map(|l| l.split_once(':').filter(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.trim().to_string()));
+        let status: u16 = head.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+        match status {
+            304 => Ok(Hop::Done(Got::NotModified)),
+            301 | 302 | 303 | 307 | 308 => header("location").map(Hop::Redirect).ok_or_else(|| format!("{url}: the server redirected without saying where")),
+            200..=299 => {
+                let mut bytes = Vec::new();
+                std::fs::File::open(&body).and_then(|f| f.take(limit as u64 + 1).read_to_end(&mut bytes)).map_err(|e| e.to_string())?;
+                if bytes.len() > limit {
+                    return Err(format!("{url}: larger than {limit} bytes"));
+                }
+                Ok(Hop::Done(Got::Body { bytes, etag: header("etag") }))
+            }
+            s => Err(format!("{url}: the server answered {s}")),
+        }
+    })();
+    let _ = std::fs::remove_dir_all(&dir);
+    result
 }
 
 fn tempdir() -> Result<PathBuf, String> {
@@ -378,6 +428,7 @@ mod curl_tests {
                 }
                 let mut s = stream;
                 let _ = match (path.as_str(), tag.as_deref()) {
+                    ("/away", _) => write!(s, "HTTP/1.1 302 Found\r\nLocation: http://example.com/index.json\r\nContent-Length: 0\r\n\r\n"),
                     ("/moved", _) => write!(s, "HTTP/1.1 301 Moved\r\nLocation: /index.json\r\nContent-Length: 0\r\n\r\n"),
                     ("/index.json", Some("\"v1\"")) => write!(s, "HTTP/1.1 304 Not Modified\r\nETag: \"v1\"\r\n\r\n"),
                     ("/index.json", _) => write!(s, "HTTP/1.1 200 OK\r\nETag: \"v1\"\r\nContent-Length: 5\r\n\r\nhello"),
@@ -403,5 +454,35 @@ mod curl_tests {
         assert!(Curl.get(&format!("{base}/index.json"), None, 3).is_err(), "over the size limit");
         // Plain http is for this machine only.
         assert!(Curl.get("http://example.com/index.json", None, 100).is_err());
+        // A local registry cannot send the client on to plain http elsewhere.
+        let away = Curl.get(&format!("{base}/away"), None, 100).unwrap_err();
+        assert!(away.contains("not https"), "{away}");
+    }
+
+    #[test]
+    fn a_redirect_is_checked_like_the_first_address() {
+        // Relative and absolute locations, seen from the address that sent them.
+        assert_eq!(resolve_location("http://127.0.0.1:1/a/b.json?x=1", "/c.json").as_deref(), Some("http://127.0.0.1:1/c.json"));
+        assert_eq!(resolve_location("http://127.0.0.1:1/a/b.json", "c.json").as_deref(), Some("http://127.0.0.1:1/a/c.json"));
+        assert_eq!(resolve_location("https://h.test", "d.json").as_deref(), Some("https://h.test/d.json"));
+        assert_eq!(resolve_location("http://127.0.0.1:1/a", "http://other.test/x").as_deref(), Some("http://other.test/x"));
+        assert_eq!(resolve_location("not a url", "x"), None);
+    }
+}
+
+#[cfg(test)]
+mod protocol_tests {
+    use super::allowed_protocols;
+
+    #[test]
+    fn plain_http_is_allowed_only_to_this_machine() {
+        for url in ["http://localhost/index.json", "http://127.0.0.1:8080/x", "http://[::1]:9/x"] {
+            assert_eq!(allowed_protocols(url), "=https,http", "{url}");
+        }
+        for url in
+            ["https://example.org/x", "http://localhost.evil.test/x", "http://localhost@evil.test/x", "http://127.0.0.1.evil.test/x", "http://example.org/x"]
+        {
+            assert_eq!(allowed_protocols(url), "=https", "{url}");
+        }
     }
 }

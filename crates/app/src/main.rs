@@ -43,6 +43,7 @@ mod datalens_tests;
 mod datalens_ui_tests;
 mod debug_config;
 mod diff;
+mod diff_stage;
 mod display;
 mod docker;
 #[cfg(test)]
@@ -188,6 +189,8 @@ mod qa_lsp_rust_commands_tests;
 #[cfg(test)]
 mod qa_lsp_settings_tests;
 #[cfg(test)]
+mod qa_lsp_sync_tests;
+#[cfg(test)]
 mod qa_workbench_tests;
 #[cfg(test)]
 mod qa_workspace_file_tests;
@@ -290,6 +293,7 @@ fn bind_keys(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("f11", ToggleFullScreen, None), KeyBinding::new("ctrl-f11", DebugStepInto, None)]);
     #[cfg(target_os = "macos")]
     cx.bind_keys([KeyBinding::new("f11", DebugStepInto, None)]);
+    cx.bind_keys(diff::key_bindings());
     cx.bind_keys([
         KeyBinding::new("secondary-o", OpenFolder, None),
         KeyBinding::new("secondary-b", ToggleSidebar, None),
@@ -338,10 +342,6 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-2", FocusRightGroup, None),
         KeyBinding::new("secondary-shift-m", ShowProblems, None),
         KeyBinding::new("secondary-alt-r", SendRequest, None),
-        KeyBinding::new("alt-f5", diff::PrevChange, Some("DiffView")),
-        KeyBinding::new("f7", diff::NextChange, Some("DiffView")),
-        KeyBinding::new("shift-f7", diff::PrevChange, Some("DiffView")),
-        KeyBinding::new("secondary-k secondary-i", diff::ToggleInline, Some("DiffView")),
         // Text field
         KeyBinding::new("left", input::FieldLeft, Some("TextField")),
         KeyBinding::new("right", input::FieldRight, Some("TextField")),

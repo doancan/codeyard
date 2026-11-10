@@ -95,6 +95,11 @@ impl Registry {
         result
     }
 
+    /// Whether any session has a connection attached right now.
+    pub fn any_attached(&self) -> bool {
+        self.sessions.locked().values().any(|e| e.session.out.is_attached())
+    }
+
     /// Close disconnected sessions whose grace (their own `KeepFor`, else `grace`) has expired. Returns whether any
     /// session is left.
     pub fn reap(&self, grace: Duration) -> bool {
@@ -161,6 +166,11 @@ mod unix {
 
     /// Daemon: listen on the socket. Returns immediately if a daemon is already running.
     pub fn run(socket: &Path) -> io::Result<()> {
+        run_with(socket, Arc::new(Registry::default()))
+    }
+
+    /// [`run`] over a registry the caller keeps, so it can look at the sessions (tests wait for a detach with it).
+    pub fn run_with(socket: &Path, registry: Arc<Registry>) -> io::Result<()> {
         if let Some(dir) = socket.parent() {
             std::fs::create_dir_all(dir)?;
             std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
@@ -176,7 +186,6 @@ mod unix {
         }
         let listener = short(socket, |p| UnixListener::bind(p))?;
         std::fs::set_permissions(socket, std::fs::Permissions::from_mode(0o600))?;
-        let registry = Arc::new(Registry::default());
         let sock = socket.to_path_buf();
         start_reaper(registry.clone(), move || {
             let _ = std::fs::remove_file(&sock);
@@ -297,7 +306,7 @@ mod unix {
 }
 
 #[cfg(unix)]
-pub use unix::{attach, connect_or_start, run};
+pub use unix::{attach, connect_or_start, run, run_with};
 
 #[cfg(windows)]
 #[path = "daemon_windows.rs"]

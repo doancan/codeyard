@@ -853,6 +853,9 @@ pub struct Workbench {
     /// Test: `git status` never returns (hung git).
     #[cfg(test)]
     pub git_status_hangs: bool,
+    /// Test: how long a Rust command waits for the language server (a server that never answers is real time).
+    #[cfg(test)]
+    pub rust_request_timeout: Duration,
     /// Debug session and its settings (see workbench_debug.rs).
     dbg: state_glue::DebugUi,
     /// Last task, plus problems parsed from its terminal and output (see workbench_tasks.rs).
@@ -884,6 +887,8 @@ pub struct Workbench {
     data: data_glue::DataState,
     focus_handle: FocusHandle,
     _subs: Vec<Subscription>,
+    /// Subscriptions to terminals, each with its terminal: dropped once the terminal is gone.
+    term_subs: Vec<(gpui::WeakEntity<TerminalView>, Subscription)>,
 }
 
 impl Focusable for Workbench {
@@ -1072,7 +1077,7 @@ impl Workbench {
         if let Some(text) = state.as_ref().and_then(|s| s.get("scm_sections")) {
             scm.update(cx, |s, cx| s.restore_sections(&text, cx));
         }
-        let port_field = cx.new(|cx| crate::input::TextField::new(crate::i18n::tr("e.g. 3000"), cx));
+        let port_field = cx.new(|cx| crate::input::TextField::new(crate::i18n::tr("e.g. 3000 or 3000:8080"), cx));
         let subs = vec![
             cx.subscribe_in(&tree, window, |this, _, event: &TreeEvent, window, cx| this.on_tree_event(event, window, cx)),
             cx.subscribe_in(&search, window, |this, _, event: &SearchEvent, window, cx| match event {
@@ -1248,6 +1253,8 @@ impl Workbench {
             menu: None,
             #[cfg(test)]
             git_status_hangs: false,
+            #[cfg(test)]
+            rust_request_timeout: rust_glue::RUST_REQUEST_TIMEOUT,
             terminals: Vec::new(),
             term_launches: Vec::new(),
             term_split: None,
@@ -1398,6 +1405,8 @@ impl Workbench {
                 asks: Default::default(),
                 transfer: None,
                 view: Default::default(),
+                #[cfg(test)]
+                resumed_reconnects: 0,
             },
             roots: state_glue::RootsState {
                 primary: tree,
@@ -1421,6 +1430,7 @@ impl Workbench {
             data: Default::default(),
             focus_handle: cx.focus_handle(),
             _subs: subs,
+            term_subs: Vec::new(),
         };
         wb.apply_theme(&theme_choice, window, cx);
         wb.reload_config(window, cx);

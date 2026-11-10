@@ -140,30 +140,41 @@ fn backup_and_write(path: &Path, new_text: &str) -> Result<(), String> {
         bak.push(".codeyard-bak");
         std::fs::copy(path, &bak).map_err(|e| format!("could not back up {}: {e}", path.display()))?;
     }
+    // Unique per call: two saves in one process (several windows) must not share one temporary file.
+    static NEXT_TMP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let mut tmp = path.as_os_str().to_owned();
-    tmp.push(format!(".codeyard-tmp{}", std::process::id()));
+    tmp.push(format!(".codeyard-tmp{}-{}", std::process::id(), NEXT_TMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
     let tmp = PathBuf::from(tmp);
-    std::fs::write(&tmp, body.as_bytes()).map_err(|e| format!("{}: {e}", tmp.display()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mode = existing_mode.map_or(0o600, |m| m.permissions().mode() & 0o777);
-        let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(mode));
+    let staged = (|| {
+        use std::io::Write as _;
+        let mut file = std::fs::File::create(&tmp).map_err(|e| format!("{}: {e}", tmp.display()))?;
+        file.write_all(body.as_bytes()).and_then(|()| file.sync_all()).map_err(|e| format!("{}: {e}", tmp.display()))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = existing_mode.map_or(0o600, |m| m.permissions().mode() & 0o777);
+            let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(mode));
+        }
+        #[cfg(not(unix))]
+        let _ = existing_mode;
+        std::fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))
+    })();
+    if staged.is_err() {
+        let _ = std::fs::remove_file(&tmp);
     }
-    #[cfg(not(unix))]
-    let _ = existing_mode;
-    std::fs::rename(&tmp, path)
-        .inspect_err(|_| {
-            let _ = std::fs::remove_file(&tmp);
-        })
-        .map_err(|e| format!("{}: {e}", path.display()))
+    staged
 }
 
 /// Add a new `Host` block. Errors if the name exists (never overwrites).
 pub fn add_host(path: &Path, h: &NewHost) -> Result<(), String> {
     validate(h)?;
     // Line endings are normalised to LF; the file's own style (CRLF) is restored on write.
-    let text = std::fs::read_to_string(path).unwrap_or_default().replace("\r\n", "\n");
+    // Only a missing file starts empty: any other failure (a legacy-encoded comment, no permission) must not end in the file being replaced.
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text.replace("\r\n", "\n"),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
     if parse_config(&text).iter().any(|x| x.alias.eq_ignore_ascii_case(&h.alias)) {
         return Err(format!("A host named “{}” already exists in {}", h.alias, path.display()));
     }
@@ -209,14 +220,14 @@ pub fn remove_host(path: &Path, alias: &str) -> Result<bool, String> {
         while keep_end > at + 1 && lines[keep_end - 1].trim().is_empty() {
             keep_end -= 1;
         }
-        out.extend(lines[..start].iter().map(|s| s.to_string()));
-        out.extend(lines[keep_end..].iter().map(|s| s.to_string()));
+        out.extend(lines[..start].iter().copied().map(String::from));
+        out.extend(lines[keep_end..].iter().copied().map(String::from));
     } else {
         let rest: Vec<&String> = tokens.iter().filter(|a| *a != alias).collect();
         let indent: String = lines[at].chars().take_while(|c| c.is_whitespace()).collect();
-        out.extend(lines[..at].iter().map(|s| s.to_string()));
+        out.extend(lines[..at].iter().copied().map(String::from));
         out.push(format!("{indent}Host {}", rest.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(" ")));
-        out.extend(lines[at + 1..].iter().map(|s| s.to_string()));
+        out.extend(lines[at + 1..].iter().copied().map(String::from));
     }
     let mut new_text = out.join("\n");
     if !new_text.is_empty() {
@@ -376,7 +387,7 @@ pub fn set_field(path: &Path, alias: &str, field: Field, value: Option<&str>) ->
     let (at, end) = block_of(&lines, alias)?;
     let key = field.key().to_ascii_lowercase();
     let is_field = |l: &str| directive(l).is_some_and(|(k, _)| k == key);
-    let mut out: Vec<String> = lines[..=at].iter().map(|s| s.to_string()).collect();
+    let mut out: Vec<String> = lines[..=at].iter().copied().map(String::from).collect();
     let mut placed = false;
     let indent_of = |l: &str| l.chars().take_while(|c| c.is_whitespace()).collect::<String>();
     let mut indent = "    ".to_string();
@@ -402,7 +413,7 @@ pub fn set_field(path: &Path, alias: &str, field: Field, value: Option<&str>) ->
         }
         out.insert(insert_at, format!("{indent}{} {}", field.key(), quote_value(v)));
     }
-    out.extend(lines[end..].iter().map(|s| s.to_string()));
+    out.extend(lines[end..].iter().copied().map(String::from));
     let mut new_text = out.join("\n");
     new_text.push('\n');
     if new_text == text {
@@ -486,6 +497,22 @@ mod tests {
     }
 
     #[test]
+    fn concurrent_saves_never_fail_on_a_shared_temporary_file() {
+        let p = tmp("concurrent");
+        std::fs::write(&p, "Host a\n    HostName a.example.com\n").unwrap();
+        let p = &p;
+        for round in 0..20 {
+            let results: Vec<Result<(), String>> = std::thread::scope(|scope| {
+                let handles: Vec<_> = (0..8).map(|i| scope.spawn(move || backup_and_write(p, &format!("Host h{round}-{i}\n    HostName x\n")))).collect();
+                handles.into_iter().map(|h| h.join().unwrap()).collect()
+            });
+            assert!(results.iter().all(Result::is_ok), "{results:?}");
+        }
+        let names: Vec<_> = std::fs::read_dir(p.parent().unwrap()).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        assert!(names.iter().all(|n| !n.contains("codeyard-tmp")), "{names:?}");
+    }
+
+    #[test]
     fn parses_user_host_port_and_alias() {
         let h = parse_target("deploy@10.0.0.5:2222 as prod").unwrap();
         assert_eq!((h.alias.as_str(), h.hostname.as_str(), h.user.as_deref(), h.port), ("prod", "10.0.0.5", Some("deploy"), Some(2222)));
@@ -520,6 +547,19 @@ mod tests {
         // Duplicate refused, file untouched.
         assert!(add_host(&p, &h).unwrap_err().contains("already exists"));
         assert_eq!(std::fs::read_to_string(&p).unwrap(), text);
+    }
+
+    #[test]
+    fn add_never_replaces_a_config_it_cannot_read_as_text() {
+        let p = tmp("add-latin1");
+        let original = b"# t\xfcrk\xe7e yorum
+Host old
+    HostName old.example.com
+";
+        std::fs::write(&p, original).unwrap();
+        let err = add_host(&p, &parse_target("a@b").unwrap()).unwrap_err();
+        assert!(err.contains(&p.display().to_string()), "{err}");
+        assert_eq!(std::fs::read(&p).unwrap(), original, "the user's config is untouched");
     }
 
     #[test]

@@ -127,14 +127,51 @@ mod tests {
         }
     }
 
+    /// How many times the matcher looks at a pattern item, to compare with the size of the problem. A count is the same on
+    /// every run and machine; a duration is not.
+    fn looks(p: &[&str], n: &[&str], star: &str) -> usize {
+        let count = std::cell::Cell::new(0);
+        wildcard(
+            p,
+            n,
+            |s| {
+                count.set(count.get() + 1);
+                *s == star
+            },
+            |a, b| {
+                count.set(count.get() + 1);
+                *a == "?" || a == b
+            },
+        );
+        count.get()
+    }
+
     #[test]
     fn hostile_globs_stay_linear() {
-        let t = std::time::Instant::now();
+        // Two pointers backtracking to the last star never look at more than a few times glob x input items; an
+        // exponential matcher would be orders of magnitude over this on every one of these.
+        let chars = |s: &str| -> Vec<String> { s.chars().map(String::from).collect() };
+        let cases = [
+            ("*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*b".to_string(), "a".repeat(60)),
+            (format!("{}b", "?*".repeat(200)), "a".repeat(2000)),
+            ("**/**/**/**/**/**/**/**/**/**/**/**/x".to_string(), vec!["d"; 60].join("/")),
+            ("**/**/**/**/**/**/**/d".to_string(), vec!["d"; 60].join("/")),
+        ];
+        for (glob, name) in cases {
+            let (p, n): (Vec<String>, Vec<String>) = if glob.contains('/') {
+                (glob.split('/').map(String::from).collect(), name.split('/').map(String::from).collect())
+            } else {
+                (chars(&glob), chars(&name))
+            };
+            let (p, n): (Vec<&str>, Vec<&str>) = (p.iter().map(String::as_str).collect(), n.iter().map(String::as_str).collect());
+            let star = if glob.contains('/') { "**" } else { "*" };
+            let looked = looks(&p, &n, star);
+            assert!(looked <= 3 * (p.len() + 1) * (n.len() + 1), "{glob}: {looked} looks for {} x {} items", p.len(), n.len());
+        }
         assert!(!name_matches("*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*b", &"a".repeat(60)));
         assert!(!path_matches("**/**/**/**/**/**/**/**/**/**/**/**/x", &vec!["d"; 60].join("/")));
         assert!(path_matches("**/**/**/**/**/**/**/d", &vec!["d"; 60].join("/")));
         assert!(!name_matches(&format!("{}b", "?*".repeat(200)), &"a".repeat(2000)));
-        assert!(t.elapsed().as_secs() < 2, "took {:?}", t.elapsed());
     }
 
     #[test]

@@ -103,7 +103,25 @@ fn source_control_and_editor_questions() {
     assert!(q.acts(Some(1)));
     assert!(q.detail.unwrap().starts_with("Repository: /repo"));
     assert_eq!(discard(&["a", "b"], true, None).title, "Discard changes in 2 files?");
-    check(&hard_reset("1a2b3c4", None), PromptLevel::Warning, "Hard reset to 1a2b3c4?", &["Reset", "Cancel"], 1, Some(0));
+    check(&hard_reset("1a2b3c4", None, None), PromptLevel::Warning, "Hard reset to 1a2b3c4?", &["Reset", "Cancel"], 1, Some(0));
+    // Counted: what leaves, what exists nowhere else, what Sync brings back.
+    let leaving = crate::git::Leaving { head: "h".into(), count: 3, upstream: Some("origin/main".into()), pushed: 1, only_here: 2 };
+    let q = hard_reset("1a2b3c4", None, Some(&leaving));
+    assert_eq!(
+        q.detail.as_deref(),
+        Some(
+            "3 commits leave this branch.\n2 of them are on no other branch, tag or remote: after the reset only Git's reflog still finds them.\n1 of them is already on origin/main: the next Sync brings it back.\nEvery uncommitted change is lost. This can't be undone."
+        )
+    );
+    let quiet = crate::git::Leaving { head: "h".into(), count: 1, upstream: None, pushed: 0, only_here: 0 };
+    assert_eq!(
+        hard_reset("1a2b3c4", Some("/r"), Some(&quiet)).detail.as_deref(),
+        Some("Repository: /r\n1 commit leaves this branch.\nEvery uncommitted change is lost. This can't be undone.")
+    );
+    check(&undo_pushed("origin/main", None), PromptLevel::Warning, "Undo a commit that is already on origin/main?", &["Undo Commit", "Cancel"], 1, Some(0));
+    assert!(undo_pushed("origin/main", Some("/r")).detail.unwrap().starts_with("Repository: /r\nThe commit stays on origin/main"));
+    check(&reset_pushed(2, "origin/dev", None), PromptLevel::Warning, "Reset past 2 commits that are already on origin/dev?", &["Reset", "Cancel"], 1, Some(0));
+    assert_eq!(reset_pushed(1, "origin/dev", None).title, "Reset past 1 commit that is already on origin/dev?");
     check(&git("Delete branch “x”?", "It is gone.", "Delete Branch"), PromptLevel::Warning, "Delete branch “x”?", &["Delete Branch", "Cancel"], 1, Some(0));
     check(
         &structural_replace("Replace 3 matches?", "Some files", &["Skip Those Files", "Replace Anyway"]),

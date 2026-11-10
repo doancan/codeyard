@@ -157,6 +157,12 @@ impl EditorView {
         self.buffer.selections()
     }
 
+    /// QA: whether an undo / redo step is left.
+    #[cfg(test)]
+    pub fn history_for_test(&self) -> (bool, bool) {
+        (self.buffer.can_undo(), self.buffer.can_redo())
+    }
+
     /// The first and last line (1-based) of the selection, or of the cursor's line when nothing is selected.
     pub fn selected_lines(&self) -> (usize, usize) {
         let Some(range) = self.buffer.selection() else {
@@ -543,7 +549,11 @@ impl EditorView {
         let bytes = self.buffer.to_bytes();
         match self.encoding {
             Encoding::Utf8 => Ok(bytes),
-            enc => crate::encoding::encode(std::str::from_utf8(&bytes).unwrap_or_default(), enc),
+            // A UTF-8 BOM is not text in another encoding: UTF-16 writes its own, single-byte encodings have none.
+            enc => {
+                let text = std::str::from_utf8(&bytes).unwrap_or_default();
+                crate::encoding::encode(text.strip_prefix('\u{feff}').unwrap_or(text), enc)
+            }
         }
     }
 
@@ -620,6 +630,7 @@ impl EditorView {
                         this.reset_lsp_data();
                         this.disk_hash = hash;
                         this.conflict = false;
+                        this.deleted_on_disk = false;
                         this.error = None;
                         this.resync_lsp();
                         this.schedule_lsp_extras(300, cx);

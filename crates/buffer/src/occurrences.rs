@@ -3,6 +3,21 @@
 
 use super::*;
 
+// Selections looked at by `overlaps_none` on this thread; the tests count them instead of timing the search.
+#[cfg(test)]
+thread_local!(pub(crate) static OVERLAP_PROBES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) });
+
+/// Whether no selection overlaps `r`. The selections are sorted and do not overlap each other, so a binary search finds the
+/// only one that can (scanning all of them for every candidate took seconds with tens of thousands of matches).
+fn overlaps_none(sels: &[Sel], r: &Range<usize>) -> bool {
+    let i = sels.partition_point(|s| {
+        #[cfg(test)]
+        OVERLAP_PROBES.with(|n| n.set(n.get() + 1));
+        s.end() <= r.start
+    });
+    !sels.get(i).is_some_and(|s| s.start() < r.end)
+}
+
 impl Buffer {
     /// ⌘D: with no selection, select the word at the cursor; otherwise also add a selection at the next
     /// occurrence of the selected text (wrapping around at the end, skipping already-selected ones).
@@ -20,12 +35,7 @@ impl Buffer {
         let all = self.occurrences(&needle, self.word_search);
         let from = self.sels.iter().map(Sel::end).max().unwrap_or(0);
         // First unselected match after the cursor; wraps around at the end.
-        // Selections are sorted and non-overlapping: binary search looks at one neighbor at most (previously all selections were
-        // scanned for every candidate; with tens of thousands of matches ⌘D took seconds).
-        let free = |r: &Range<usize>| {
-            let i = self.sels.partition_point(|s| s.end() <= r.start);
-            !self.sels.get(i).is_some_and(|s| s.start() < r.end)
-        };
+        let free = |r: &Range<usize>| overlaps_none(&self.sels, r);
         let next = all.iter().find(|r| r.start >= from && free(r)).or_else(|| all.iter().find(|r| free(r))).cloned();
         match next {
             Some(r) => {
@@ -51,7 +61,7 @@ impl Buffer {
         let needle = self.rope.slice(range).to_string();
         let all = self.occurrences(&needle, self.word_search);
         let from = self.sels.iter().map(Sel::start).min().unwrap_or(0);
-        let free = |r: &Range<usize>| !self.sels.iter().any(|s| s.start() < r.end && r.start < s.end());
+        let free = |r: &Range<usize>| overlaps_none(&self.sels, r);
         let prev = all.iter().rev().find(|r| r.end <= from && free(r)).or_else(|| all.iter().rev().find(|r| free(r))).cloned();
         match prev {
             Some(r) => {
@@ -72,7 +82,7 @@ impl Buffer {
         let needle = self.rope.slice(range.clone()).to_string();
         let all = self.occurrences(&needle, self.word_search);
         let others: Vec<Sel> = self.sels.iter().enumerate().filter(|(i, _)| *i != self.primary).map(|(_, s)| *s).collect();
-        let free = |r: &Range<usize>| *r != range && !others.iter().any(|s| s.start() < r.end && r.start < s.end());
+        let free = |r: &Range<usize>| *r != range && overlaps_none(&others, r);
         let next = all.iter().find(|r| r.start >= range.end && free(r)).or_else(|| all.iter().find(|r| free(r))).cloned();
         let Some(r) = next else { return false };
         let word = self.word_search;

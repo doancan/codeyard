@@ -52,13 +52,21 @@ mod clear;
 mod colors;
 #[path = "terminal_find.rs"]
 mod find;
+#[path = "terminal_keys.rs"]
+mod keys;
 #[path = "terminal_marks.rs"]
 mod marks;
 #[path = "terminal_modes.rs"]
 mod modes;
 
+pub use keys::key_to_bytes;
+#[cfg(test)]
+use keys::macos_line_editing;
 pub use marks::{Activity, Finished};
 
+#[path = "terminal_mouse.rs"]
+mod mouse;
+use mouse::selects_text;
 #[path = "terminal_restore.rs"]
 mod restore;
 #[path = "terminal_revival.rs"]
@@ -245,8 +253,12 @@ pub struct TerminalView {
     /// "Hold Shift to select": shown for a moment when a drag went to a program that reads the mouse; when it last showed.
     shift_hint: bool,
     shift_hint_last: Option<std::time::Instant>,
+    /// The left button as a program that reads the mouse sees it (terminal_mouse.rs).
+    program_mouse: mouse::ProgramMouse,
     /// Link hovered while ⌘ is held: (screen row, columns).
     hover_link: Option<(usize, std::ops::Range<usize>)>,
+    /// Where the link under the pointer (OSC 8: any text can stand for any address) really goes.
+    hover_uri: Option<SharedString>,
     /// The find bar, while it is open.
     find: Option<find::FindState>,
     /// Font size and line height from `terminal.fontSize` (set on every render, so zoom and setting changes apply at once).
@@ -353,8 +365,10 @@ impl TerminalView {
             clear_carry: Vec::new(),
             shift_hint: false,
             shift_hint_last: None,
+            program_mouse: Default::default(),
             find: None,
             hover_link: None,
+            hover_uri: None,
             metrics: {
                 let s = cx.global::<crate::settings::Settings>();
                 metrics(s.terminal_font_size, s.terminal_line_height)
@@ -398,8 +412,13 @@ impl TerminalView {
     /// holds the bytes back until the end comes, and only the caller can say that the time is up. Applies what was held once
     /// it is; otherwise returns how long until then (`None`: no update pending).
     pub(super) fn release_expired_sync(&mut self) -> Option<std::time::Duration> {
+        self.release_expired_sync_at(std::time::Instant::now())
+    }
+
+    /// [`Self::release_expired_sync`] at the time `now` (tests move the clock instead of waiting).
+    fn release_expired_sync_at(&mut self, now: std::time::Instant) -> Option<std::time::Duration> {
         let deadline = self.parser.sync_timeout().sync_timeout()?;
-        let left = deadline.checked_duration_since(std::time::Instant::now());
+        let left = deadline.checked_duration_since(now);
         if left.is_none() {
             self.parser.stop_sync(&mut self.term);
         }
@@ -442,9 +461,9 @@ impl TerminalView {
                 TermEvent::Title(_) | TermEvent::ResetTitle if self.title_locked => {}
                 TermEvent::Title(t) => self.set_title(t.into(), cx),
                 TermEvent::ResetTitle => self.set_title("terminal".into(), cx),
-                // OSC 52: only when the setting allows it (a program could otherwise replace what the user copied).
+                // OSC 52: as the setting says; by default right after a copy in the program (terminal_mouse.rs).
                 TermEvent::ClipboardStore(..) => {
-                    let allowed = cx.global::<crate::settings::Settings>().terminal_allow_clipboard_write;
+                    let allowed = self.takes_clipboard_write(&cx.global::<crate::settings::Settings>().terminal_allow_clipboard_write);
                     if let Some(s) = clipboard_text(ev, allowed) {
                         cx.write_to_clipboard(ClipboardItem::new_string(s))
                     }
@@ -471,7 +490,7 @@ impl TerminalView {
         if self.exit.is_none() {
             // Nothing reads the mouse any more (the program is gone, or the SSH connection dropped under it): without this the
             // clicks go nowhere and the last output cannot be selected and copied.
-            self.feed(b"\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?1l\x1b>");
+            self.feed(b"\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?2004l\x1b[?1l\x1b>");
             self.selecting = false;
             self.exit = Some(code);
             cx.emit(TerminalEvent::Exited);
@@ -636,13 +655,6 @@ impl TerminalView {
         if self.find_has_focus(window, cx) {
             return;
         }
-        if self.exit.is_some() || self.error.is_some() {
-            if !ev.keystroke.modifiers.platform {
-                cx.stop_propagation();
-                cx.emit(TerminalEvent::CloseRequested);
-            }
-            return;
-        }
         // On Windows and Linux, Ctrl+C copies selected terminal text. Without a
         // selection it must still reach the program as the interrupt character.
         let k = &ev.keystroke;
@@ -660,6 +672,15 @@ impl TerminalView {
             cx.notify();
             return;
         }
+        // The shell is gone: a key closes the tab, except those that read the output left behind (the copy above, paging).
+        if self.exit.is_some() || self.error.is_some() {
+            let reading = matches!(k.key.as_str(), "pageup" | "pagedown" | "home" | "end");
+            if !k.modifiers.platform && !reading {
+                cx.stop_propagation();
+                cx.emit(TerminalEvent::CloseRequested);
+            }
+            return;
+        }
         // A remote program cannot read the local image clipboard itself.
         // Preserve Ctrl+V for programs when there is no image on the clipboard.
         if k.key == "v"
@@ -668,13 +689,17 @@ impl TerminalView {
             && !k.modifiers.alt
             && !k.modifiers.platform
             && self.host.is_remote()
-            && let Some(image) = cx.read_from_clipboard().and_then(Self::clipboard_image)
+            && let Some(image) = cx.read_from_clipboard().filter(|item| item.text().is_none_or(|t| t.trim().is_empty())).and_then(Self::clipboard_image)
         {
             cx.stop_propagation();
             self.paste_image(image, cx);
             return;
         }
         let Some(bytes) = key_to_bytes(&ev.keystroke, *self.term.mode()) else { return };
+        // Ctrl+C with a selection inside the program copies it there (Claude Code), over SSH through OSC 52.
+        if k.key == "c" && k.modifiers.control && !k.modifiers.alt && !k.modifiers.platform {
+            self.program_mouse.note_copy_key();
+        }
         cx.stop_propagation();
         self.term.selection = None;
         self.term.scroll_display(Scroll::Bottom);
@@ -699,34 +724,14 @@ impl TerminalView {
         (GridPoint::new(Line(row - offset), Column(col)), side)
     }
 
-    /// xterm sequence if the program wants the mouse (htop, vim `mouse=a`, tmux): SGR or the legacy
-    /// format. `button`: 0 left, 64/65 wheel up/down. `None` if it doesn't.
-    fn mouse_report(&self, button: u8, pressed: bool, pos: Point<Pixels>, mods: &gpui::Modifiers) -> Option<Vec<u8>> {
-        let mode = *self.term.mode();
-        if !mode.intersects(TermMode::MOUSE_MODE) {
-            return None;
-        }
-        let (origin, cell_w) = self.grid;
-        let line_h = self.line_h();
-        let col = (((pos.x - origin.x) / cell_w).max(0.).floor() as usize).min(self.size.cols.saturating_sub(1)) + 1;
-        let row = ((pos.y - origin.y) / line_h).max(0.).floor().min((self.size.rows - 1) as f32) as usize + 1;
-        let mut b = button;
-        if mods.shift {
-            b += 4;
-        }
-        if mods.alt {
-            b += 8;
-        }
-        if mods.control {
-            b += 16;
-        }
-        Some(if mode.contains(TermMode::SGR_MOUSE) {
-            format!("\x1b[<{b};{col};{row}{}", if pressed { 'M' } else { 'm' }).into_bytes()
-        } else {
-            // Legacy format: release is "3", coordinates are bytes offset by 32 (at most 223).
-            let b = if pressed { b } else { 3 };
-            vec![0x1b, b'[', b'M', 32 + b, (32 + col.min(223)) as u8, (32 + row.min(223)) as u8]
-        })
+    /// The address of a link the program marked (OSC 8) under the position, whether or not it opens.
+    fn marked_link_uri(&self, pos: Point<Pixels>) -> Option<String> {
+        self.uri_at(self.grid_point(pos).0)
+    }
+
+    fn uri_at(&self, at: GridPoint) -> Option<String> {
+        let uri = self.term.grid()[at.line][at.column].hyperlink()?.uri().to_string();
+        Some(uri.chars().filter(|c| !c.is_control()).take(300).collect())
     }
 
     /// Link at the position: (screen row, columns, link). The row is read cell by cell.
@@ -761,10 +766,7 @@ impl TerminalView {
             return;
         }
         // The program wants the mouse: the click goes to it (⇧ still selects text, like VS Code).
-        if !selects_text(&ev.modifiers)
-            && let Some(bytes) = self.mouse_report(0, true, ev.position, &ev.modifiers)
-        {
-            self.write(bytes);
+        if !selects_text(&ev.modifiers) && self.report_press(ev.position, &ev.modifiers, ev.click_count) {
             return;
         }
         let (at, side) = self.grid_point(ev.position);
@@ -790,6 +792,15 @@ impl TerminalView {
             self.hover_link = hover;
             cx.notify();
         }
+        let uri = self.marked_link_uri(ev.position).map(SharedString::from);
+        if uri != self.hover_uri {
+            self.hover_uri = uri;
+            cx.notify();
+        }
+        // Drags and moves the program follows (Claude Code selects text this way).
+        if !self.selecting && self.report_motion(ev) {
+            return;
+        }
         if !self.selecting || ev.pressed_button != Some(MouseButton::Left) {
             self.selecting = false;
             if ev.pressed_button == Some(MouseButton::Left) && !selects_text(&ev.modifiers) && self.term.mode().intersects(TermMode::MOUSE_MODE) {
@@ -805,11 +816,7 @@ impl TerminalView {
     }
 
     fn on_mouse_up(&mut self, ev: &gpui::MouseUpEvent, cx: &mut Context<Self>) {
-        if !selects_text(&ev.modifiers)
-            && !self.selecting
-            && let Some(bytes) = self.mouse_report(0, false, ev.position, &ev.modifiers)
-        {
-            self.write(bytes);
+        if !selects_text(&ev.modifiers) && !self.selecting && self.report_release(ev.position, &ev.modifiers) {
             return;
         }
         let was_selecting = std::mem::take(&mut self.selecting);
@@ -819,6 +826,10 @@ impl TerminalView {
         } else if was_selecting {
             self.copy_on_select(cx);
         }
+    }
+
+    fn on_other_button_up(&mut self, ev: &gpui::MouseUpEvent, _: &mut Window, _: &mut Context<Self>) {
+        self.report_other_button(ev.button, false, ev.position, &ev.modifiers);
     }
 
     #[cfg(test)]
@@ -910,7 +921,9 @@ impl TerminalView {
 
     fn paste(&mut self, _: &TermPaste, _: &mut Window, cx: &mut Context<Self>) {
         let Some(item) = cx.read_from_clipboard() else { return };
+        // Text wins: a spreadsheet or a document puts a picture of the selection on the clipboard beside its text.
         if self.host.is_remote()
+            && item.text().is_none_or(|t| t.trim().is_empty())
             && let Some(image) = Self::clipboard_image(item.clone())
         {
             self.paste_image(image, cx);
@@ -973,121 +986,10 @@ impl TerminalView {
     /// Clear scrollback and ask the shell to redraw the screen (Ctrl+L).
     pub fn clear_all(&mut self, cx: &mut Context<Self>) {
         self.term.grid_mut().clear_history();
+        self.forget_marks();
         self.write(b"\x0c".to_vec());
         cx.notify();
     }
-}
-
-/// Shift or ⌥ held: the drag selects text even while the program reads the mouse (Terminal.app and iTerm use ⌥ for this).
-fn selects_text(m: &gpui::Modifiers) -> bool {
-    m.shift || m.alt
-}
-
-/// macOS line editing, as in Terminal.app: ⌘← / ⌘→ go to the start / end of the line, ⌥← / ⌥→ move by word,
-/// ⌘⌫ deletes to the start of the line, ⌘⌦ to its end, ⌥⌦ deletes the next word. They are the readline / zle keys
-/// (Ctrl+A, Ctrl+E, Esc b, Esc f, Ctrl+U, Ctrl+K, Esc d), so they work in bash, zsh, fish and most REPLs. Full-screen programs
-/// (vim, less) get the plain xterm keys instead: Ctrl+A there would mean something else.
-pub fn macos_line_editing(k: &gpui::Keystroke, mode: TermMode) -> Option<&'static [u8]> {
-    let m = &k.modifiers;
-    if m.shift || m.control {
-        return None;
-    }
-    // Full-screen programs get Home / End instead of readline's Ctrl+A / Ctrl+E.
-    if mode.contains(TermMode::ALT_SCREEN) {
-        let app = mode.contains(TermMode::APP_CURSOR);
-        return match (k.key.as_str(), m.platform, m.alt) {
-            ("left", true, false) => Some(if app { b"\x1bOH" } else { b"\x1b[H" }),
-            ("right", true, false) => Some(if app { b"\x1bOF" } else { b"\x1b[F" }),
-            _ => None,
-        };
-    }
-    Some(match (k.key.as_str(), m.platform, m.alt) {
-        ("left", true, false) => b"\x01",
-        ("right", true, false) => b"\x05",
-        ("backspace", true, false) => b"\x15",
-        ("delete", true, false) => b"\x0b",
-        ("left", false, true) => b"\x1bb",
-        ("right", false, true) => b"\x1bf",
-        ("delete", false, true) => b"\x1bd",
-        _ => return None,
-    })
-}
-
-/// Key → terminal bytes (xterm sequences). ⌘ keys are left to the app, except the macOS line editing keys.
-pub fn key_to_bytes(k: &gpui::Keystroke, mode: TermMode) -> Option<Vec<u8>> {
-    let m = &k.modifiers;
-    if cfg!(target_os = "macos")
-        && let Some(bytes) = macos_line_editing(k, mode)
-    {
-        return Some(bytes.to_vec());
-    }
-    if m.platform {
-        return None;
-    }
-    let app_cursor = mode.contains(TermMode::APP_CURSOR);
-    // xterm modifier code: 1 + shift + 2·alt + 4·ctrl
-    let modcode = 1 + m.shift as u8 + 2 * m.alt as u8 + 4 * m.control as u8;
-    let csi = |final_byte: char| -> Vec<u8> {
-        if modcode > 1 {
-            format!("\x1b[1;{modcode}{final_byte}").into_bytes()
-        } else if app_cursor {
-            format!("\x1bO{final_byte}").into_bytes()
-        } else {
-            format!("\x1b[{final_byte}").into_bytes()
-        }
-    };
-    let tilde = |n: u8| -> Vec<u8> { if modcode > 1 { format!("\x1b[{n};{modcode}~").into_bytes() } else { format!("\x1b[{n}~").into_bytes() } };
-    let bytes = match k.key.as_str() {
-        "enter" => b"\r".to_vec(),
-        "backspace" if m.alt => b"\x1b\x7f".to_vec(),
-        "backspace" if m.control => b"\x08".to_vec(),
-        "backspace" => b"\x7f".to_vec(),
-        "tab" if m.shift => b"\x1b[Z".to_vec(),
-        "tab" => b"\t".to_vec(),
-        "escape" => b"\x1b".to_vec(),
-        "up" => csi('A'),
-        "down" => csi('B'),
-        "right" => csi('C'),
-        "left" => csi('D'),
-        "home" => csi('H'),
-        "end" => csi('F'),
-        "insert" => tilde(2),
-        "delete" => tilde(3),
-        "pageup" => tilde(5),
-        "pagedown" => tilde(6),
-        "f1" => b"\x1bOP".to_vec(),
-        "f2" => b"\x1bOQ".to_vec(),
-        "f3" => b"\x1bOR".to_vec(),
-        "f4" => b"\x1bOS".to_vec(),
-        "f5" => tilde(15),
-        "f6" => tilde(17),
-        "f7" => tilde(18),
-        "f8" => tilde(19),
-        "f9" => tilde(20),
-        "f10" => tilde(21),
-        "f11" => tilde(23),
-        "f12" => tilde(24),
-        "space" if m.control => vec![0],
-        "space" => b" ".to_vec(),
-        key if m.control && key.chars().count() == 1 => {
-            let ch = key.chars().next()?.to_ascii_lowercase();
-            match ch {
-                'a'..='z' => vec![ch as u8 - b'a' + 1],
-                '[' => vec![0x1b],
-                '\\' => vec![0x1c],
-                ']' => vec![0x1d],
-                '/' | '_' | '-' => vec![0x1f],
-                '2' | '@' => vec![0],
-                _ => return None,
-            }
-        }
-        _ => {
-            // Typed character (ğ, ş... on a Turkish keyboard; includes ones produced with ⌥ on macOS).
-            let typed = k.key_char.clone().or_else(|| (k.key.chars().count() == 1).then(|| k.key.clone()))?;
-            typed.into_bytes()
-        }
-    };
-    Some(bytes)
 }
 
 // --- Drawing ---
@@ -1398,12 +1300,12 @@ impl Render for TerminalView {
             .on_key_down(cx.listener(Self::on_key_down))
             .on_scroll_wheel(cx.listener(Self::on_scroll))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
-            // Middle click pastes (a program that reads the mouse keeps it; Shift or ⌥ pastes anyway).
+            // Middle click pastes; a program that reads the mouse gets it instead (Shift or ⌥ pastes anyway).
             .on_mouse_down(
                 MouseButton::Middle,
                 cx.listener(|this, ev: &MouseDownEvent, window, cx| {
-                    if selects_text(&ev.modifiers) || !this.term.mode().intersects(TermMode::MOUSE_MODE) {
-                        window.focus(&this.focus_handle);
+                    window.focus(&this.focus_handle);
+                    if selects_text(&ev.modifiers) || !this.report_other_button(MouseButton::Middle, true, ev.position, &ev.modifiers) {
                         this.paste(&TermPaste, window, cx);
                     }
                 }),
@@ -1412,16 +1314,29 @@ impl Render for TerminalView {
             .on_mouse_down(
                 MouseButton::Right,
                 cx.listener(|this, ev: &MouseDownEvent, window, cx| {
-                    // Always ours, also while a program reads the mouse (Claude Code, htop, vim with mouse=a, over SSH too):
-                    // otherwise there is no way to copy or paste with the mouse in those programs.
+                    // Ours by default, also while a program reads the mouse (Claude Code, htop, vim with mouse=a, over SSH too):
+                    // otherwise there is no way to copy or paste with the mouse in those programs. `terminal.rightClick:
+                    // "program"` gives it to such a program instead, and Shift or ⌥ still opens the menu.
                     window.focus(&this.focus_handle);
-                    cx.emit(TerminalEvent::ContextMenu(ev.position));
+                    let to_program = cx.global::<crate::settings::Settings>().terminal_right_click == "program" && !selects_text(&ev.modifiers);
+                    if !(to_program && this.report_other_button(MouseButton::Right, true, ev.position, &ev.modifiers)) {
+                        cx.emit(TerminalEvent::ContextMenu(ev.position));
+                    }
                 }),
             )
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .when(self.hover_link.is_some(), |d| d.cursor(gpui::CursorStyle::PointingHand))
+            .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
+                if !*hovered && this.hover_uri.take().is_some() {
+                    cx.notify();
+                }
+            }))
             .on_mouse_up(MouseButton::Left, cx.listener(|this, ev, _, cx| this.on_mouse_up(ev, cx)))
             .on_mouse_up_out(MouseButton::Left, cx.listener(|this, ev, _, cx| this.on_mouse_up(ev, cx)))
+            .on_mouse_up(MouseButton::Middle, cx.listener(Self::on_other_button_up))
+            .on_mouse_up_out(MouseButton::Middle, cx.listener(Self::on_other_button_up))
+            .on_mouse_up(MouseButton::Right, cx.listener(Self::on_other_button_up))
+            .on_mouse_up_out(MouseButton::Right, cx.listener(Self::on_other_button_up))
             .relative()
             .size_full()
             .bg(c(p.bg))
@@ -1454,6 +1369,25 @@ impl Render for TerminalView {
                             }),
                         )
                         .child(crate::i18n::t("Jump to Bottom")),
+                )
+            })
+            .when_some(self.hover_uri.clone(), |d, uri| {
+                d.child(
+                    div()
+                        .absolute()
+                        .bottom(px(theme::SPACE[3]))
+                        .left(px(theme::SPACE[5]))
+                        .max_w_full()
+                        .px(px(theme::SPACE[3]))
+                        .py(px(theme::SPACE[1]))
+                        .rounded(px(theme::radius::SM))
+                        .bg(c(p.surface_raised))
+                        .text_color(c(p.text))
+                        .text_size(px(crate::ui::text::XS.0))
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .child(uri),
                 )
             })
             .when(self.shift_hint, |d| {

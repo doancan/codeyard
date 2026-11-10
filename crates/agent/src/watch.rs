@@ -66,20 +66,31 @@ impl Watcher {
 
     /// One round: return what changed.
     pub fn poll(&self) -> Vec<(String, ChangeKind)> {
+        self.poll_with(stamp)
+    }
+
+    /// The lock is held only to copy the paths and to store the results, never while `stat` runs: a slow share must not block `set`.
+    fn poll_with(&self, stat: impl Fn(&PathBuf) -> Option<Stamp>) -> Vec<(String, ChangeKind)> {
+        let watched: Vec<(String, PathBuf, Option<Stamp>)> = self.paths.locked().iter().map(|(key, (full, last))| (key.clone(), full.clone(), *last)).collect();
+        let seen: Vec<_> = watched.into_iter().map(|(key, full, last)| (stat(&full), key, full, last)).collect();
         let mut map = self.paths.locked();
         let mut out = Vec::new();
-        for (key, (full, last)) in map.iter_mut() {
-            let now = stamp(full);
-            let kind = match (*last, now) {
+        for (now, key, full, last) in seen {
+            // `set` may have removed or replaced the path meanwhile; its own baseline then stands.
+            let Some((current, stored)) = map.get_mut(&key) else { continue };
+            if *current != full {
+                continue;
+            }
+            let kind = match (last, now) {
                 (None, Some(_)) => Some(ChangeKind::Created),
                 (Some(_), None) => Some(ChangeKind::Removed),
                 (Some(a), Some(b)) if a != b => Some(ChangeKind::Modified),
                 _ => None,
             };
             if let Some(k) = kind {
-                out.push((key.clone(), k));
+                out.push((key, k));
             }
-            *last = now;
+            *stored = now;
         }
         out.sort();
         out
@@ -133,6 +144,28 @@ mod tests {
         assert!(w.poll().contains(&(key(&f), ChangeKind::Removed)));
     }
 
+    #[test]
+    fn a_slow_stat_does_not_block_changing_the_watched_set() {
+        let d = big_tree("slow", 1, 1);
+        let f = d.join("d000").join("f00000.txt");
+        let w = Arc::new(Watcher::default());
+        w.set(vec![(f.to_string_lossy().into_owned(), f.clone())]);
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let other = d.clone();
+        let w2 = w.clone();
+        w.poll_with(|p| {
+            let (w3, tx, other) = (w2.clone(), done_tx.clone(), other.clone());
+            std::thread::spawn(move || {
+                w3.set(vec![("other".into(), other)]);
+                let _ = tx.send(());
+            });
+            let finished = done_rx.recv_timeout(Duration::from_secs(3)).is_ok();
+            assert!(finished, "set() waited for the poll's stat of {p:?}");
+            stamp(p)
+        });
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
     fn big_tree(name: &str, dirs: usize, files_per_dir: usize) -> PathBuf {
         let d = std::env::temp_dir().join(format!("codeyard-watch-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
@@ -146,12 +179,11 @@ mod tests {
         d
     }
 
-    /// Measurement behind the claim "polls a small path set once a second": a poll stats only the paths it was given, so its
-    /// cost follows the watched set, not the size of the tree. 50 000 files exist next to 200 watched paths; the numbers go to
-    /// the test output (`--nocapture`) and the bounds are generous so a loaded CI machine does not flake.
+    /// The claim "polls a small path set once a second": a poll stats exactly the paths it was given, once each, so its
+    /// cost follows the watched set and not the size of the tree around it. The number of stats is counted, not timed.
     #[test]
     fn poll_cost_follows_the_watched_set_not_the_tree() {
-        let d = big_tree("cost", 50, 1000); // 50 000 files
+        let d = big_tree("cost", 50, 20); // 1 000 files around the 200 watched paths
         let mut watched: Vec<(String, PathBuf)> = Vec::new();
         for i in 0..50 {
             let dir = d.join(format!("d{i:03}"));
@@ -164,34 +196,17 @@ mod tests {
         let w = Watcher::default();
         w.set(watched.clone());
         assert!(w.poll().is_empty());
-        let start = std::time::Instant::now();
+        let stats = std::sync::atomic::AtomicUsize::new(0);
         for _ in 0..20 {
-            assert!(w.poll().is_empty());
+            let changes = w.poll_with(|p| {
+                stats.fetch_add(1, Ordering::Relaxed);
+                assert!(watched.iter().any(|(_, w)| w == p), "{p:?} is not a watched path");
+                stamp(p)
+            });
+            assert!(changes.is_empty());
         }
-        let per_poll = start.elapsed() / 20;
-        eprintln!("poll of {} paths in a tree of 50 000 files: {per_poll:?}", watched.len());
-        assert!(per_poll < Duration::from_millis(250), "a poll of 200 paths took {per_poll:?}");
-
-        // The same set in a tiny tree costs about the same: the tree size is irrelevant to a poll.
-        let tiny = big_tree("tiny", 50, 3);
-        let tiny_set: Vec<(String, PathBuf)> = watched
-            .iter()
-            .map(|(_, p)| {
-                let rel = p.strip_prefix(&d).unwrap().to_path_buf();
-                let q = tiny.join(rel);
-                (q.to_string_lossy().into_owned(), q)
-            })
-            .filter(|(_, p)| p.exists())
-            .collect();
-        let w2 = Watcher::default();
-        w2.set(tiny_set.clone());
-        let start = std::time::Instant::now();
-        for _ in 0..20 {
-            w2.poll();
-        }
-        eprintln!("poll of {} paths in a tree of 150 files: {:?}", tiny_set.len(), start.elapsed() / 20);
+        assert_eq!(stats.load(Ordering::Relaxed), 20 * watched.len(), "one stat per watched path and poll");
         let _ = std::fs::remove_dir_all(&d);
-        let _ = std::fs::remove_dir_all(&tiny);
     }
 
     /// The agent never watches more than `MAX_PATHS`; the rest of a longer request is ignored (documented, not silent in the
@@ -210,20 +225,16 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
     }
 
-    /// What the Windows branch does on every poll for every watched directory: read, sort and hash all of its names. Measured
-    /// here on any platform for a 20 000-entry directory; the digest also has to change when an entry is added or renamed.
+    /// What the Windows branch does on every poll for every watched directory: read, sort and hash all of its names. The
+    /// digest has to stay put while nothing changes and change when an entry is renamed, in a directory of a few thousand.
     #[test]
-    fn entry_digest_cost_of_a_huge_directory() {
-        let d = big_tree("digest", 1, 20_000);
+    fn entry_digest_of_a_big_directory_follows_its_names() {
+        let d = big_tree("digest", 1, 2_000);
         let dir = d.join("d000");
-        let start = std::time::Instant::now();
         let a = entries_digest(&dir).unwrap();
-        let first = start.elapsed();
-        let start = std::time::Instant::now();
         for _ in 0..5 {
             assert_eq!(entries_digest(&dir), Some(a), "stable while nothing changes");
         }
-        eprintln!("entries_digest of a directory with 20 000 files: first {first:?}, then {:?} each", start.elapsed() / 5);
         std::fs::rename(dir.join("f00000.txt"), dir.join("renamed.txt")).unwrap();
         assert_ne!(entries_digest(&dir), Some(a), "a rename changes the digest");
         let _ = std::fs::remove_dir_all(&d);

@@ -184,9 +184,13 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // them back (0: they end with the app; at most 1440).
   // "terminal.persistentSessionTimeout": 5,
   "terminal.scrollSensitivity": 2,
-  // Let programs in the terminal write to the clipboard (OSC 52). Off by default: a program you run, or a file you cat, could replace
-  // what you copied.
-  // "terminal.allowClipboardWrite": false,
+  // When programs in the terminal may write to the clipboard (OSC 52). "copy": only right after you copy in the program (let go
+  // of a drag or a double-click in it, or press Ctrl+C), as Claude Code does over SSH; a file you cat cannot replace what you
+  // copied. "always" or "off".
+  // "terminal.allowClipboardWrite": "copy",
+  // A right click opens the terminal's menu, also in programs that read the mouse (Claude Code, vim, tmux, htop); "program"
+  // gives it to such a program instead (Shift or ⌥ still opens the menu). A middle click goes to such a program anyway.
+  // "terminal.rightClick": "menu",
   // Pasting: "auto" removes control characters unless the shell reads the paste as text (bracketed paste), "always" or
   // "off"; bracketed-paste markers inside pasted text are always removed. A paste of several lines asks first
   // ("unbracketed": when the shell would run each line at once, "always" or "never").

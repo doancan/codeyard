@@ -178,7 +178,7 @@ Editor: Transform to Uppercase	Düzenleyici: Büyük Harfe Dönüştür
 Editor: Transform to Title Case	Düzenleyici: Baş Harfleri Büyüt
 Editor: Duplicate Selection	Düzenleyici: Seçimi Çoğalt
 Editor: Trim Trailing Whitespace	Düzenleyici: Sondaki Boşlukları Temizle
-Git: Stage Change at Cursor	Git: İmlecin Altındaki Değişikliği Stage'e Al
+Git: Stage Selected Lines	Git: Seçili Satırları Stage'e Al
 Editor: Delete All Right	Düzenleyici: İmlecin Sağını Tamamen Sil
 Editor: Select to Bracket	Düzenleyici: Parantezin Eşine Kadar Seç
 Editor: Add Line Comment	Düzenleyici: Satır Yorumu Ekle
@@ -198,7 +198,7 @@ Editor: Convert Indentation to Tabs	Düzenleyici: Girintiyi Sekmeye Dönüştür
 View: Toggle Minimap	Görünüm: Mini Haritayı Aç/Kapat
 View: Toggle Sticky Scroll	Görünüm: Yapışkan Kaydırmayı Aç/Kapat
 View: Toggle Render Whitespace	Görünüm: Boşlukları Göstermeyi Aç/Kapat
-Git: Revert Change at Cursor	Git: İmlecin Altındaki Değişikliği Geri Al
+Git: Revert Selected Lines	Git: Seçili Satırları Geri Al
 Editor: Transpose Characters	Düzenleyici: Karakterlerin Yerini Değiştir
 Editor: Transform to camelCase	Düzenleyici: camelCase'e Dönüştür
 Editor: Transform to PascalCase	Düzenleyici: PascalCase'e Dönüştür
@@ -539,7 +539,6 @@ Could not read the commit: {}	Commit okunamadı: {}
 {} still has merge conflict markers. Resolve them (Accept Current / Incoming / Both) and save first.	{} içinde hâlâ birleştirme çakışma işaretleri var. Önce bunları çözün (Geçerli / Gelen / İkisini de Kabul Et) ve kaydedin.
 No changes to discard	Atılacak değişiklik yok
 Amended {}	Düzeltildi: {}
-Undid commit “{}”	Commit geri alındı: “{}”
 Stashed changes	Değişiklikler stash'lendi
 Popped {}	{} pop edildi
 Applied {}	{} uygulandı
@@ -627,7 +626,6 @@ Cherry-picked {}	{} cherry-pick edildi
 Cherry-pick stopped and was undone: {}	Cherry-pick durdu ve geri alındı: {}
 Reverted {}	{} revert edildi
 Revert stopped and was undone: {}	Revert durdu ve geri alındı: {}
-Reset to {0} ({1})	{0} noktasına reset yapıldı ({1})
 
 # ---- Git branch, checkout, tag, stash and remote flows: prompts, pickers and results ----
 Create branch	Dal oluştur
@@ -1541,6 +1539,8 @@ Keep Going	Devam Et
 Port {} is forwarded: localhost:{}	Bağlantı noktası {0} yönlendirildi: localhost:{1}
 Port {} is forwarded to localhost:{} ({} was busy here)	Bağlantı noktası {0}, localhost:{1} adresine yönlendirildi ({2} burada meşguldü)
 Could not forward port {}: {}	Bağlantı noktası {0} yönlendirilemedi: {1}
+The local port was not changed: {}. Back on localhost:{}	Yerel bağlantı noktası değiştirilemedi: {0}. localhost:{1} adresine geri dönüldü
+Port {} is forwarded already: localhost:{}	{0} numaralı bağlantı noktası zaten yönlendiriliyor: localhost:{1}
 Port forwarding works while connected to an SSH host.	Bağlantı noktası yönlendirme, bir SSH sunucusuna bağlıyken çalışır.
 Open in Browser	Tarayıcıda Aç
 Stop	Durdur
@@ -1553,7 +1553,14 @@ The local port is busy	Yerel bağlantı noktası meşgul
 Ports below 1024 need extra privileges on this computer	1024'ün altındaki bağlantı noktaları bu bilgisayarda ek yetki gerektirir
 The SSH connection is gone: reconnect to forward again	SSH bağlantısı koptu: yeniden yönlendirmek için tekrar bağlanın
 forwarding…	yönlendiriliyor…
-waiting for the connection	bağlantı bekleniyor
+Copy Port Number	Bağlantı Noktası Numarasını Kopyala
+{} more ports are not listed here	Listede gösterilmeyen {0} bağlantı noktası daha var
+Port	Bağ. noktası
+Label	Etiket
+Forwarded Address	Yönlendirilen adres
+Running Process	Çalışan işlem
+Origin	Kaynak
+waiting for the connection to come back	bağlantının geri gelmesi bekleniyor
 Retry	Yeniden Dene
 {} ports are forwarded	{0} bağlantı noktası yönlendirildi
 Auto Forwarded	Otomatik Yönlendirildi
@@ -1573,7 +1580,7 @@ ports.rules.{}: expected a port or a range such as 3000-3010	ports.rules.{0}: bi
 ports.rules.{}: expected an object with label, onForward or protocol	ports.rules.{0}: label, onForward ya da protocol içeren bir nesne bekleniyordu
 ports.rules.{}.{}: unexpected value	ports.rules.{0}.{1}: beklenmeyen değer
 Where forwarded ports listen: this computer only, or every network interface	Yönlendirilen bağlantı noktalarının dinlediği yer: yalnızca bu bilgisayar ya da tüm ağ arayüzleri
-e.g. 3000	örn. 3000
+e.g. 3000 or 3000:8080	örn. 3000 veya 3000:8080
 # ---- Debugger: panel, start, breakpoints, watches, exceptions, messages ----
 Could not run “{}”: {}	“{0}” çalıştırılamadı: {1}
 Build failed: {}	Derleme başarısız: {}
@@ -2190,7 +2197,7 @@ Data: Query…	Veri: Sorgula…
 Data: Copy Path at Cursor	Veri: İmlecin Yolunu Kopyala
 Data: Decode Selection…	Veri: Seçimi Çöz…
 debug output was dropped: the debugger could not keep up	Hata ayıklama çıktısı atıldı: hata ayıklayıcı yetişemedi
-Let programs in the terminal write to the clipboard	Terminaldeki programların panoya yazmasına izin ver
+Let programs in the terminal write to the clipboard: right after you copy in them, always, or never	Terminaldeki programların panoya yazmasına izin ver: onlarda kopyaladıktan hemen sonra, her zaman ya da hiçbir zaman
 # --- git-sync ---
 Sync Changes {}	Değişiklikleri Eşitle {}
 Publish Branch	Dalı Yayımla
@@ -3297,6 +3304,8 @@ Reconnected to terminal session	Terminal oturumuna yeniden bağlanıldı
 another Codeyard window has them; started new shells	bunlar başka bir Codeyard penceresinde; yeni kabuklar başlatıldı
 {} bytes of output were lost while no window was attached	Hiçbir pencere bağlı değilken {} bayt çıktı kayboldu
 {} (terminal)	{} (terminal sekmesi)
+{} (terminal, exited)	{} (terminal sekmesi, sonlandı)
+The shell has exited	Kabuk sonlandı
 # ---- Problems accessibility ----
 Information	Bilgi
 Problems: {}	Sorunlar: {}
@@ -3655,3 +3664,46 @@ Commits that exist only on the remote branch are lost for everyone using it.	Yal
 If the remote branch moves while this question is open, git refuses.	Bu soru açıkken uzak dal ilerlerse git reddeder.
 The server refused the login: check the account and that the token may push.	Sunucu girişi reddetti: hesabı ve jetonun push yetkisi olduğunu kontrol edin.
 {} commit on the remote branch is not in yours and is lost for everyone using it.|{} commits on the remote branch are not in yours and are lost for everyone using it.	Uzak daldaki {} commit sizde yok ve onu kullanan herkes için kaybolur.
+Where a right click goes while a program in the terminal reads the mouse: the terminal's menu or the program (Shift opens the menu)	Terminaldeki bir program fareyi okurken sağ tıkın nereye gideceği: terminalin menüsü ya da program (Shift menüyü açar)
+Clear	Temizle
+Clear the picked lines (Escape)	Seçilen satırları bırak (Escape)
+Enter stages the picked lines	Enter seçilen satırları stage'e alır
+Enter unstages the picked lines	Enter seçilen satırları stage'den çıkarır
+Every change in this file is staged	Bu dosyadaki her değişiklik stage'de
+Nothing in this file is staged	Bu dosyada stage'de bir şey yok
+Nothing to stage in these lines	Bu satırlarda stage'e alınacak bir şey yok
+Nothing to unstage in these lines	Bu satırlarda stage'den çıkarılacak bir şey yok
+Pick lines to stage them, or use a change's button	Stage'e almak için satır seçin ya da değişikliğin düğmesini kullanın
+Pick lines to unstage them, or use a change's button	Stage'den çıkarmak için satır seçin ya da değişikliğin düğmesini kullanın
+Revert Change	Değişikliği Geri Al
+Revert Selected Lines	Seçili Satırları Geri Al
+Stage Change	Değişikliği Stage'e Al
+Stage Lines	Satırları Stage'e Al
+Stage Selected Lines	Seçili Satırları Stage'e Al
+Staged {} line|Staged {} lines	{} satır stage'e alındı
+Staging…	Stage'e alınıyor…
+The file changed since this diff was shown. It has been reloaded: pick the lines again.	Dosya bu fark gösterildikten sonra değişti. Yeniden yüklendi: satırları yeniden seçin.
+This change removes the file: unstage the whole file instead	Bu değişiklik dosyayı siliyor: bunun yerine dosyanın tamamını stage'den çıkarın
+Unstage Change	Değişikliği Stage'den Çıkar
+Unstage Lines	Satırları Stage'den Çıkar
+Unstaged {} line|Unstaged {} lines	{} satır stage'den çıkarıldı
+Unstaging…	Stage'den çıkarılıyor…
+{0}, change {1} of {2}	{0}, değişiklik {1} / {2}
+{} (Enter)	{} (Enter tuşu)
+{} line picked|{} lines picked	{} satır seçildi
+Every uncommitted change is lost. This can't be undone.	Commit edilmemiş her değişiklik kaybolur. Bu işlem geri alınamaz.
+Reset past {0} commit that is already on {1}?|Reset past {0} commits that are already on {1}?	{1} üzerinde zaten bulunan {0} commit'in gerisine reset yapılsın mı?
+Reset to {0} ({1}); the branch was at {2}	{0} noktasına reset yapıldı ({1}); dal önceden {2} üzerindeydi
+The branch moved while the question was open. Nothing was changed.	Soru açıkken dal ilerledi. Hiçbir şey değiştirilmedi.
+The commit stays on {}: the next Sync brings it back. To remove it there too, push with force after undoing (Git: Push (Force)…).	Commit {} üzerinde kalır: bir sonraki Sync onu geri getirir. Oradan da kaldırmak için geri aldıktan sonra zorla push yapın (Git: Push (Force)…).
+They stay on {}: the next Sync brings them back. To remove them there too, push with force after the reset (Git: Push (Force)…).	Bunlar {} üzerinde kalır: bir sonraki Sync onları geri getirir. Oradan da kaldırmak için reset'ten sonra zorla push yapın (Git: Push (Force)…).
+Undid commit “{0}” (the branch was at {1})	“{0}” commit'i geri alındı (dal önceden {1} üzerindeydi)
+Undo Commit	Commit'i Geri Al
+Undo a commit that is already on {}?	{} üzerinde zaten bulunan bir commit geri alınsın mı?
+{0} of them is already on {1}: the next Sync brings it back.|{0} of them are already on {1}: the next Sync brings them back.	Bunlardan {0} tanesi zaten {1} üzerinde: bir sonraki Sync onları geri getirir.
+{} commit leaves this branch.|{} commits leave this branch.	{} commit bu daldan çıkar.
+{} of them is on no other branch, tag or remote: after the reset only Git's reflog still finds it.|{} of them are on no other branch, tag or remote: after the reset only Git's reflog still finds them.	Bunlardan {} tanesi başka hiçbir dalda, etikette ya da remote'ta yok: reset'ten sonra onları yalnızca Git'in reflog'u bulur.
+The server protects this branch and refuses direct pushes: push to another branch and open a pull request.	Sunucu bu dalı koruyor ve doğrudan push kabul etmiyor: başka bir dala push edip pull request açın.
+Cargo was not found. Install Rust from https://rustup.rs and make sure `cargo` is on the PATH of this machine.	Cargo bulunamadı. Rust'ı https://rustup.rs adresinden kurun ve `cargo`'nun bu makinenin PATH'inde olduğundan emin olun.
+No Rust toolchain is selected. Run `rustup default stable` in a terminal.	Seçili bir Rust araç zinciri yok. Bir terminalde `rustup default stable` çalıştırın.
+The project's Rust toolchain is not installed. Run `rustup toolchain install` in the project folder.	Projenin Rust araç zinciri kurulu değil. Proje klasöründe `rustup toolchain install` çalıştırın.

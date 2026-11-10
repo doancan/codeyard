@@ -61,7 +61,10 @@ The tree, in the order a screen reader walks it:
   Close); the folder comparison (the option chips as `CheckBox`es, Stop, Scan Again, Copy Report and Export, each row
   a `TreeItem` with both sides and its status as description, expanded for a folder, with Copy to the right or left
   and Delete from either side); the diff (a heading with the comparison and counts, Toggle inline view, every line
-  drawn as a `ListItem` "Added, line 3: text", side by side or inline); the large-file view (its header, every line
+  drawn as a `ListItem` "Added, line 3: text", side by side or inline; in Source Control's diffs also each changed
+  line as a `CheckBox` named after both of its sides that picks it for staging, each change's Stage Change or Unstage
+  Change button ("Stage Change, change 2 of 3"), the picked count, Clear, Stage Lines and the result as a `Status`);
+  the large-file view (its header, every line
   drawn as a `ListItem` "line 12: text", selected when it is the found line, Follow as a `CheckBox`, the new-lines
   button, the find field as a `SearchInput` that takes the keyboard and its count); the Markdown preview (each
   block as a `Heading` or `Paragraph` with its text, each link as a `Link` with its address that opens it as a click

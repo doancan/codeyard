@@ -265,7 +265,10 @@ async fn blocking(yard: Arc<Yard>, f: impl FnOnce(&Yard) -> Result<Vec<u8>, Erro
 }
 
 fn error(e: Error) -> Response<Full<Bytes>> {
-    text(StatusCode::from_u16(e.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), e.message())
+    if let Error::Internal(m) = &e {
+        eprintln!("yard: internal error: {m}");
+    }
+    text(StatusCode::from_u16(e.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), e.public_message())
 }
 
 fn text(status: StatusCode, body: &str) -> Response<Full<Bytes>> {

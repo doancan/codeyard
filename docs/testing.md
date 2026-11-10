@@ -28,9 +28,10 @@ the 2026-10-27 local run passed 1,516 tests, with three documented manual/data-d
   - program output: test runners, compilers, git, port scanners, GitHub;
   - language-server and debug-adapter replies of random shape, and their framing in any chunking;
   - the terminal stream in random chunks.
-  `feeding_a_tui_stream_is_fast` (terminal tests) feeds 11 MB of a Claude-like screen redraw (long coloured rows, cursor moves)
-  and checks that chunked and whole feeding give the same screen; it prints the time (`--nocapture`) for comparing a change to the
-  terminal's output path. For frame cost, run the app with a program that redraws in place and take a CPU sample (`sample <pid> 6`).
+  `feeding_a_tui_stream_in_one_piece_or_in_chunks_gives_the_same_screen` (terminal tests) feeds 11 MB of a Claude-like screen
+  redraw (long coloured rows, cursor moves) and checks that chunked and whole feeding give the same screen. Tests do not assert
+  durations: for the cost of the terminal's output path or of a frame, run the app with a program that redraws in place and take
+  a CPU sample (`sample <pid> 6`).
   The protocol crate decodes mutated frames in both directions. Two tests drive the terminal with hostile output while
   scrolled back.
   The extension crates (`crates/ext-*`, `fuzz_tests.rs`) parse what strangers publish, so they also run longer:
@@ -38,6 +39,9 @@ the 2026-10-27 local run passed 1,516 tests, with three documented manual/data-d
   4 hours every night, with a new seed each run (`CODEYARD_FUZZ_SECS`, `CODEYARD_FUZZ_SEED`).
 - **Random sessions**: `CODEYARD_QA_SEEDS=N cargo test … qa_random_new_commands_many_seeds` types random keys and
   commands, then undoes everything and checks the original text, then redoes and checks the edited text.
+  The default sessions are short (a step draws a whole workbench frame); `CODEYARD_QA_STEPS=3000` runs long ones.
+- **Scheduler orders**: a test marked `#[gpui::test(iterations = N)]` runs N scheduler seeds. The defaults are small
+  (each iteration builds a workbench); `ITERATIONS=100` runs more seeds, and `SEED=n` replays one.
 
 ## Rules
 

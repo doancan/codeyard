@@ -282,10 +282,10 @@ fn a_file_changed_since_it_was_read_is_not_overwritten(cx: &mut TestAppContext) 
     open(&wb, &dir, cx);
     std::fs::write(&f, b"fn a() { bar(1); }\n").unwrap();
     let p = Arc::new(pattern("Rust", "foo($X)"));
+    wb.update_in(cx, |wb, _, _| wb.clear_notice_for_test());
     wb.update(cx, |wb, cx| wb.replace_structural_now(vec![path_str(&f)], family("Rust"), p, "baz($X)".into(), cx));
-    cx.run_until_parked();
-    std::thread::sleep(std::time::Duration::from_millis(200));
-    cx.run_until_parked();
+    // The replace reports when it is done, whatever it wrote.
+    wait(cx, "the replace to finish", |cx| wb.read_with(cx, |wb, _| wb.notice_text()).is_some());
     assert_eq!(disk(&f), b"fn a() { bar(1); }\n");
 }
 

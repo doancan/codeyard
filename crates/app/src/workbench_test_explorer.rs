@@ -315,11 +315,15 @@ impl Workbench {
             None => {
                 let host = self.remote.host.clone();
                 let t = cx.new(|cx| TerminalView::output_only(host, crate::i18n::t("Test Results").into(), cx));
-                self._subs.push(cx.subscribe_in(&t, window, |this, _, event: &TerminalEvent, window, cx| match event {
-                    TerminalEvent::OpenLink(link) => this.open_link(link.clone(), window, cx),
-                    TerminalEvent::TitleChanged | TerminalEvent::Exited => cx.notify(),
-                    _ => {}
-                }));
+                self.term_subs.retain(|(w, _)| w.upgrade().is_some());
+                self.term_subs.push((
+                    t.downgrade(),
+                    cx.subscribe_in(&t, window, |this, _, event: &TerminalEvent, window, cx| match event {
+                        TerminalEvent::OpenLink(link) => this.open_link(link.clone(), window, cx),
+                        TerminalEvent::TitleChanged | TerminalEvent::Exited => cx.notify(),
+                        _ => {}
+                    }),
+                ));
                 self.terminals.push(t.clone());
                 self.jobs.tests.output = Some(t.clone());
                 t
@@ -410,7 +414,9 @@ impl Workbench {
                     let mut args = testexp::cargo_select_args(&test.command)?;
                     args.insert(0, "test".into());
                     args.extend(["--no-run".into(), "--message-format=json".into()]);
-                    let output = host.exec("cargo", &args.iter().map(String::as_str).collect::<Vec<_>>(), Some(&r), None).map_err(|e| e.to_string())?;
+                    let output = host
+                        .exec("cargo", &args.iter().map(String::as_str).collect::<Vec<_>>(), Some(&r), None)
+                        .map_err(|e| crate::cargo_project::explain_failure(&e.to_string()))?;
                     let text = format!("{}\n{}", output.stdout_str(), output.stderr_str());
                     testexp::built_test_executables(&text, output.code).map(|bins| (bins, test))
                 });

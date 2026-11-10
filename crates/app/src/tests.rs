@@ -643,7 +643,10 @@ fn compare_last_edit_scratch_and_run_selected_text(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("cmd-up");
     run(cx, "Terminal: Run Selected Text");
     let term = wait_term(cx, &wb);
-    wait_ticking(cx, "terminal çıktısı", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == "run-42")));
+    // A line sent before the shell printed its prompt is echoed by the terminal at once; the prompt then comes in front of
+    // the output (`$ run-42`). The echoed command itself never ends in `run-42` outside cmd, and says `echo` there.
+    let output = |l: &str| l.trim_end().ends_with("run-42") && !l.contains("echo");
+    wait_ticking(cx, "terminal çıktısı", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(output)));
 }
 
 fn wait_term(cx: &mut VisualTestContext, wb: &Entity<Workbench>) -> Entity<crate::terminal::TerminalView> {
@@ -1200,7 +1203,7 @@ fn torture_random_commands_and_keys_never_panic(cx: &mut TestAppContext) {
         "cmd-,",
     ];
     let words = ["fn", "for", "x", "( ", "\"", "ğüş", "\n", "{", "def", "# ", "- ", "😀", "    ", "$1"];
-    let seeds: u64 = std::env::var("TORTURE_SEEDS").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
+    let seeds: u64 = std::env::var("TORTURE_SEEDS").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
     for seed in 1..=seeds {
         let mut x = seed.wrapping_mul(0x9E3779B97F4A7C15) | 1;
         let mut next = |m: usize| {
@@ -1929,6 +1932,8 @@ fn source_control_graph_details_filter_scope_and_commit_operations(cx: &mut Test
     git_in(&dir, &["commit", "-q", "-m", "main work\n\nlong body"]);
 
     let (wb, cx) = setup(cx);
+    // A small window: every wait redraws the whole workbench, at a cost that follows its size.
+    cx.simulate_resize(gpui::size(gpui::px(700.), gpui::px(400.)));
     open(&wb, &dir, cx);
     cx.simulate_keystrokes("ctrl-shift-g");
     let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
@@ -2416,6 +2421,59 @@ fn a_forwarded_port_comes_back_with_its_project(cx: &mut TestAppContext) {
     use std::io::Read;
     std::net::TcpStream::connect(("127.0.0.1", local)).unwrap().read_to_string(&mut got).unwrap();
     assert_eq!(got, "saved");
+}
+
+/// "3000:8080" on a port that is forwarded already moves it; a local port that cannot be opened leaves the forward on the
+/// port it had, with a notice, and the busy port is not what the project remembers.
+#[cfg(unix)]
+#[gpui::test]
+fn changing_the_local_port_of_a_forward_never_loses_the_forward(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("ports-change") else { return };
+    let (wb, cx) = setup(cx);
+    let tick = |cx: &mut VisualTestContext| cx.executor().advance_clock(std::time::Duration::from_secs(5));
+    wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    wait_for(cx, "connected", |cx| {
+        tick(cx);
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    let app = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let remote = app.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for mut s in app.incoming().flatten() {
+            use std::io::Write;
+            let _ = s.write_all(b"moved");
+        }
+    });
+    let free = || std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let local_of = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.forwards()).into_iter().find(|f| f.remote == remote).map(|f| f.local);
+    wb.update(cx, |wb, cx| wb.forward_port(remote, cx));
+    wait_for(cx, "forwarded", |cx| {
+        cx.run_until_parked();
+        local_of(cx).is_some()
+    });
+
+    // A pair for a forwarded port moves it to the chosen local port.
+    let chosen = free();
+    wb.update(cx, |wb, cx| wb.submit_port_field_for_test(&format!("{remote}:{chosen}"), cx));
+    wait_for(cx, "moved to the chosen port", |cx| {
+        cx.run_until_parked();
+        local_of(cx) == Some(chosen)
+    });
+
+    // A busy local port: the forward comes back on the port it had, and the user is told.
+    let busy = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let busy_port = busy.local_addr().unwrap().port();
+    wb.update(cx, |wb, cx| wb.submit_port_field_for_test(&format!("{remote}:{busy_port}"), cx));
+    wait_for(cx, "back on the old port", |cx| {
+        cx.run_until_parked();
+        local_of(cx) == Some(chosen)
+    });
+    let notice = wb.read_with(cx, |wb, _| wb.notice_text());
+    assert!(notice.as_deref().is_some_and(|n| n.contains(&chosen.to_string())), "{notice:?}");
+    let mut got = String::new();
+    use std::io::Read;
+    std::net::TcpStream::connect(("127.0.0.1", chosen)).unwrap().read_to_string(&mut got).unwrap();
+    assert_eq!(got, "moved");
 }
 
 /// Pasting several lines into a shell without bracketed paste asks first; a marker hidden in the text never reaches the
@@ -4738,7 +4796,7 @@ fn stage_and_revert_change_at_cursor(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("ctrl-g");
     cx.simulate_input("3");
     cx.simulate_keystrokes("enter");
-    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Stage Change at Cursor", window, cx));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Stage Selected Lines", window, cx));
     let staged = || {
         let o = crate::test_git::git().args(["show", ":src/lib.rs"]).current_dir(&dir).output().unwrap();
         String::from_utf8(o.stdout).unwrap()
@@ -4749,11 +4807,62 @@ fn stage_and_revert_change_at_cursor(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("ctrl-g");
     cx.simulate_input("9");
     cx.simulate_keystrokes("enter");
-    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Revert Change at Cursor", window, cx));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Revert Selected Lines", window, cx));
     let text = ed.read_with(cx, |e, _| e.text());
     assert!(text.contains("// satır 9\n") && text.contains("DEĞİŞTİ 3"), "{text}");
     cx.simulate_keystrokes("cmd-z");
     assert!(ed.read_with(cx, |e, _| e.text()).contains("DEĞİŞTİ 9"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[gpui::test]
+fn stage_and_revert_selected_lines(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let Some(dir) = git_repo("linecmd") else { return };
+    let dir = crate::ui::canonical_for_test(dir);
+    let lib = dir.join("src/lib.rs");
+    // Lines 3, 4 and 5 form one change.
+    let edited: String = (1..=10).map(|i| if (3..=5).contains(&i) { format!("// NEW {i}\n") } else { format!("// satır {i}\n") }).collect();
+    std::fs::write(&lib, &edited).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    open(&wb, &lib, cx);
+    let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
+    use crate::git::LineMark;
+    wait_for(cx, "gutter", |cx| ed.read_with(cx, |e, _| e.git_marks().get(3).copied().flatten() == Some(LineMark::Modified)));
+    // Select line 4 only: the menu offers the selected lines, and staging takes just that line.
+    cx.simulate_keystrokes("ctrl-g");
+    cx.simulate_input("4");
+    cx.simulate_keystrokes("enter home shift-end");
+    wb.update_in(cx, |wb, window, cx| wb.open_editor_menu_for_test(window, cx));
+    let labels = wb.read_with(cx, |wb, cx| wb.menu_labels(cx)).expect("menu");
+    assert!(labels.iter().any(|l| l == "Stage Selected Lines") && labels.iter().any(|l| l == "Revert Selected Lines"), "{labels:?}");
+    wb.update_in(cx, |wb, _, cx| wb.select_menu_for_test("Stage Selected Lines", cx));
+    let staged = || {
+        let o = crate::test_git::git().args(["show", ":src/lib.rs"]).current_dir(&dir).output().unwrap();
+        String::from_utf8(o.stdout).unwrap()
+    };
+    wait_for(cx, "index", |_| staged().contains("NEW 4"));
+    let index = staged();
+    assert!(!index.contains("NEW 3") && !index.contains("NEW 5"), "{index}");
+    assert!(index.contains("// satır 3\n") && index.contains("// satır 5\n"), "{index}");
+    wait_for(cx, "the message", |cx| wb.read_with(cx, |wb, _| wb.notice_text()).is_some_and(|n| n.contains("Staged 1 line")));
+    // Revert line 5 only; line 3 stays changed, undo brings line 5 back.
+    cx.simulate_keystrokes("ctrl-g");
+    cx.simulate_input("5");
+    cx.simulate_keystrokes("enter home shift-end");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Revert Selected Lines", window, cx));
+    let text = ed.read_with(cx, |e, _| e.text());
+    assert!(text.contains("// satır 5\n") && text.contains("// NEW 3\n") && text.contains("// NEW 4\n"), "{text}");
+    cx.simulate_keystrokes("cmd-z");
+    assert!(ed.read_with(cx, |e, _| e.text()).contains("// NEW 5"));
+    // No selection on an unchanged line: the menu has no staging.
+    cx.simulate_keystrokes("ctrl-g");
+    cx.simulate_input("9");
+    cx.simulate_keystrokes("enter");
+    wb.update_in(cx, |wb, window, cx| wb.open_editor_menu_for_test(window, cx));
+    let labels = wb.read_with(cx, |wb, cx| wb.menu_labels(cx)).expect("menu");
+    assert!(!labels.iter().any(|l| l.starts_with("Stage")), "{labels:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

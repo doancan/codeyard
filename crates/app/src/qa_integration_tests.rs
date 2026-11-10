@@ -52,7 +52,19 @@ fn open(wb: &Entity<Workbench>, path: &Path, cx: &mut VisualTestContext) {
     cx.run_until_parked();
 }
 
-pub(crate) fn wait_secs(cx: &mut VisualTestContext, secs: u64, what: &str, mut done: impl FnMut(&mut VisualTestContext) -> bool) {
+pub(crate) fn wait_secs(cx: &mut VisualTestContext, secs: u64, what: &str, done: impl FnMut(&mut VisualTestContext) -> bool) {
+    wait_secs_describing(cx, secs, what, |_| String::new(), done);
+}
+
+/// Like [`wait_secs`], and a timeout also says what the application looked like then (`state`), so a failure on a busy machine
+/// explains itself instead of only saying that time ran out.
+pub(crate) fn wait_secs_describing(
+    cx: &mut VisualTestContext,
+    secs: u64,
+    what: &str,
+    state: impl Fn(&mut VisualTestContext) -> String,
+    mut done: impl FnMut(&mut VisualTestContext) -> bool,
+) {
     let limit = Duration::from_secs(secs * crate::test_sshd::timeout_scale());
     let start = std::time::Instant::now();
     loop {
@@ -60,7 +72,10 @@ pub(crate) fn wait_secs(cx: &mut VisualTestContext, secs: u64, what: &str, mut d
         if done(cx) {
             return;
         }
-        assert!(start.elapsed() < limit, "timeout: {what}");
+        if start.elapsed() >= limit {
+            let state = state(cx);
+            panic!("timeout: {what}{}{state}", if state.is_empty() { "" } else { " — " });
+        }
         std::thread::sleep(Duration::from_millis(20));
     }
 }
@@ -374,12 +389,10 @@ fn qa_lsp_crash_loop_by_signal_is_bounded(cx: &mut TestAppContext) {
     open(&wb, &dir.join("main.c"), cx);
     let count = || std::fs::read_to_string(&starts).map(|s| s.lines().count()).unwrap_or(0);
     // Let it crash and restart for a while (restart timer is 1 s on the fake clock).
-    let start = std::time::Instant::now();
-    while start.elapsed() < Duration::from_secs(15) && count() < 8 && !notice(&wb, cx).contains("keeps crashing") {
+    wait_secs(cx, 15, "the crash-loop notice", |cx| {
         cx.executor().advance_clock(Duration::from_millis(1500));
-        cx.run_until_parked();
-        std::thread::sleep(Duration::from_millis(100));
-    }
+        notice(&wb, cx).contains("keeps crashing")
+    });
     let n = count();
     assert!(n <= 4, "server was started {n} times (signal crashes are never counted); notice: {:?}", notice(&wb, cx));
     assert!(notice(&wb, cx).contains("keeps crashing"), "{:?}", notice(&wb, cx));
@@ -522,6 +535,9 @@ while True:
     m = read()
     if m.get('method') == 'initialize':
         send({'jsonrpc': '2.0', 'id': m['id'], 'result': {'capabilities': {'textDocumentSync': 1, 'codeActionProvider': True}}})
+    elif m.get('method') == 'textDocument/completion':
+        # Typing asks for completions; without an answer the editor waits for its timeout (5 s) before it saves.
+        send({'jsonrpc': '2.0', 'id': m['id'], 'result': None})
     elif m.get('method') == 'textDocument/codeAction':
         uri = m['params']['textDocument']['uri']
         only = m['params']['context'].get('only', [])
@@ -650,10 +666,7 @@ fn qa_lsp_format_on_paste_is_off_by_default(cx: &mut TestAppContext) {
     wait_for(cx, "server", |cx| ed.read_with(cx, |e, _| e.lsp_client().is_some()));
     cx.write_to_clipboard(gpui::ClipboardItem::new_string("int  x;".into()));
     cx.simulate_keystrokes("cmd-v");
-    for _ in 0..10 {
-        cx.run_until_parked();
-        std::thread::sleep(Duration::from_millis(30));
-    }
+    cx.run_until_parked();
     assert_eq!(ed.read_with(cx, |e, _| e.text()), "int  x;");
 }
 
@@ -1864,7 +1877,6 @@ fn qa_terminal_pty_size_matches_grid(cx: &mut TestAppContext) {
         if rows == text.split('\n').count() {
             return;
         }
-        std::thread::sleep(Duration::from_millis(250));
         cx.run_until_parked();
     }
     panic!("pty rows vs grid rows never matched: {last}");
@@ -1882,9 +1894,10 @@ fn qa_terminal_wheel_in_alternate_screen_sends_arrows(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-termaltscroll");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
-    type_line(cx, "printf '\\033[?1049h'; cat -v");
-    std::thread::sleep(Duration::from_millis(300));
-    cx.run_until_parked();
+    // The marker is printed after the mode switch, so seeing it means the terminal is in the alternate screen. It is computed
+    // (`$((40+2))`): the typed command line is echoed too, and the marker as typed would show before the switch happened.
+    type_line(cx, "printf '\\033[?1049h'; echo ALT-$((40+2)); cat -v");
+    wait_for(cx, "alternate screen", |cx| term.read_with(cx, |t, _| t.screen_text().contains("ALT-42")));
     let at = term.read_with(cx, |t, _| t.cell_center(5, 5));
     for _ in 0..3 {
         cx.simulate_event(gpui::ScrollWheelEvent {
@@ -1903,7 +1916,8 @@ fn qa_terminal_wheel_in_alternate_screen_sends_arrows(cx: &mut TestAppContext) {
 
 fn echoed(cx: &mut VisualTestContext, term: &Entity<crate::terminal::TerminalView>, what: &str) -> bool {
     let start = std::time::Instant::now();
-    while start.elapsed() < Duration::from_secs(3) {
+    // Returns as soon as the program echoed it; the limit only bounds a failing run, so a loaded machine must not trip it.
+    while start.elapsed() < Duration::from_secs(10 * crate::test_sshd::timeout_scale()) {
         cx.run_until_parked();
         if term.read_with(cx, |t, _| t.screen_text().contains(what)) {
             return true;
@@ -1924,9 +1938,10 @@ fn qa_terminal_mouse_reporting_reaches_program(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-termmouse");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
-    type_line(cx, "printf '\\033[?1000h'; cat -v");
-    std::thread::sleep(Duration::from_millis(300));
-    cx.run_until_parked();
+    // The marker is printed after the mode switch, so seeing it means mouse reporting is on. It is computed (`$((40+2))`): the
+    // typed command line is echoed too, and the marker as typed would show before the switch happened.
+    type_line(cx, "printf '\\033[?1000h'; echo MOUSE-$((40+2)); cat -v");
+    wait_for(cx, "mouse reporting", |cx| term.read_with(cx, |t, _| t.screen_text().contains("MOUSE-42")));
     let at = term.read_with(cx, |t, _| t.cell_center(8, 10));
     cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
@@ -2038,12 +2053,16 @@ fn qa_ssh_git_terminal_and_reconnect(cx: &mut TestAppContext) {
 
     // Drop the transport (the fixture's bridge process, started by us).
     let _ = std::process::Command::new("pkill").arg("-f").arg(format!("{}/remote/agent.*--attach", sshd.dir.display())).status();
-    std::thread::sleep(Duration::from_secs(2));
-    wait_secs(cx, 40, "reconnected", |cx| {
-        tick(cx);
-        notice(&wb, cx).starts_with("Reconnected")
-    });
-    assert_eq!(notice(&wb, cx), "Reconnected. Terminals kept running.");
+    // The connection coming back is read from a counter, not from the notice: the notice goes away after a few seconds of the
+    // fake clock, which a polling loop that ticks it can pass between two looks.
+    wait_secs_describing(
+        cx,
+        40,
+        "reconnected",
+        |cx| format!("notice {:?}, connection {}", notice(&wb, cx), wb.read_with(cx, |wb, _| wb.conn_label_for_test())),
+        |cx| wb.read_with(cx, |wb, _| wb.resumed_reconnects_for_test()) >= 1,
+    );
+    assert_eq!(wb.read_with(cx, |wb, _| wb.conn_label_for_test()), "connected");
     type_line(cx, "echo tekrar-$((1+1))");
     wait_secs(cx, 20, "terminal after reconnect", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == "tekrar-2")));
 }

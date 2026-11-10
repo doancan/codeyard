@@ -103,8 +103,12 @@ pub struct Settings {
     /// (`terminal.persistentSessionTimeout`; 0: not kept).
     pub terminal_persistent_session_timeout: u64,
     pub terminal_scroll_sensitivity: f32,
-    /// Whether a program in the terminal may put text on the clipboard (OSC 52).
-    pub terminal_allow_clipboard_write: bool,
+    /// When a program in the terminal may put text on the clipboard (OSC 52): "copy" (right after you copy in it: a drag or a
+    /// double-click let go, or Ctrl+C), "always" or "off".
+    pub terminal_allow_clipboard_write: String,
+    /// Where a right click goes while a program reads the mouse: "menu" (the terminal's menu) or "program"
+    /// (`terminal.rightClick`; Shift or ⌥ still opens the menu).
+    pub terminal_right_click: String,
     /// zsh, bash and fish mark prompts, commands and their folder (`terminal.shellIntegration`).
     pub terminal_shell_integration: bool,
     /// The bell and program notifications (OSC 9/777) flag the terminal and the taskbar (`terminal.notifications`).
@@ -360,7 +364,8 @@ impl Default for Settings {
             terminal_persistent_scrollback: 0,
             terminal_persistent_session_timeout: 5,
             terminal_scroll_sensitivity: 2.,
-            terminal_allow_clipboard_write: false,
+            terminal_allow_clipboard_write: "copy".into(),
+            terminal_right_click: "menu".into(),
             terminal_shell_integration: true,
             terminal_notifications: true,
             terminal_copy_on_selection: "agents".into(),
@@ -1221,6 +1226,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.profiles.linux",
         "terminal.profiles.windows",
         "terminal.allowClipboardWrite",
+        "terminal.rightClick",
         "terminal.allowClearHistory",
         "window.restoreSession",
         "window.startup",

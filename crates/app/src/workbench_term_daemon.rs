@@ -123,11 +123,18 @@ enum Refused {
 /// any more (listed, not taken back, and not newer than the saved ones: a terminal opened since belongs to this window).
 fn adopt_all(host: &dyn Host, tokens: &[(Slot, SavedPty)]) -> Back {
     let mut back = Vec::new();
+    // A terminal is given up only when the daemon says it is not ours (unknown, or another token). A failed connection
+    // proves nothing: the shell may still be ours, and killing it would end the user's running programs.
+    let mut sure = true;
     for (slot, token) in tokens {
-        let r = host.pty_adopt(token.pty, token.instance.clone(), token.secret.clone());
-        if let Ok((pty, dropped)) = r {
-            back.push((*slot, pty, dropped));
+        match host.pty_adopt(token.pty, token.instance.clone(), token.secret.clone()) {
+            Ok((pty, dropped)) => back.push((*slot, pty, dropped)),
+            Err(host::HostError::Op(proto::Error::NotFound(_) | proto::Error::PermissionDenied(_) | proto::Error::AlreadyExists(_))) => {}
+            Err(_) => sure = false,
         }
+    }
+    if !sure {
+        return back;
     }
     let newest = tokens.iter().map(|(_, t)| t.pty).max().unwrap_or(0);
     for id in host.pty_list().unwrap_or_default() {

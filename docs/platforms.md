@@ -74,7 +74,7 @@ Windows x64 is built and released as a ZIP and a setup EXE (unsigned, so SmartSc
   (`releasing.md`). The packaging check moves only the EXE to an empty directory and verifies both recorded hashes. Release
   CI also records its supplied macOS agents.
 - Native OpenSSH has no ControlMaster sockets: SSH needs a key or ssh-agent and an existing known-host entry (the password and
-  host-key prompt bridge is Unix-only), and in-app port forwarding is unavailable; use `ssh -L` / `ssh -R` in a terminal.
+  host-key prompt bridge is Unix-only), and in-app port forwarding is limited to local forwards (`-L`, each with its own ssh process); reverse forwards (`-R`, also used by debug adapters that dial the client) are unavailable: use `ssh -R` in a terminal.
 - Rust debugging with the MSVC toolchain (`*-pc-windows-msvc`): lldb reads the PDB debug information there, which the
   toolchain's lldb formatters are not made for, so they are not loaded and `String`, `Vec` and `HashMap` show their fields.
   The `*-pc-windows-gnu` toolchains get them as on other systems.

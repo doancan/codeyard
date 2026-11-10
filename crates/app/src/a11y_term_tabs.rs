@@ -47,6 +47,7 @@ pub(crate) struct TermTabSnap {
     pub(super) entity: gpui::EntityId,
     pub(crate) title: String,
     pub(crate) active: bool,
+    pub(crate) exited: bool,
 }
 
 /// Append the terminal tabs after the `before` tabs of a list of `total`.
@@ -54,7 +55,7 @@ pub(super) fn append_tabs(tabs: &[TermTabSnap], before: usize, total: usize, ids
     for (i, s) in tabs.iter().enumerate() {
         let id = NodeId(TERM_TAB + i as u64);
         let mut tab = Node::new(Role::Tab);
-        tab.set_label(tf("{} (terminal)", &[&s.title]));
+        tab.set_label(if s.exited { tf("{} (terminal, exited)", &[&s.title]) } else { tf("{} (terminal)", &[&s.title]) });
         tab.set_selected(s.active);
         tab.set_position_in_set(before + i + 1);
         tab.set_size_of_set(total);
@@ -72,7 +73,12 @@ impl Workbench {
         self.tabs
             .terminals
             .iter()
-            .map(|t| TermTabSnap { entity: t.entity_id(), title: t.read(cx).title.to_string(), active: front.as_ref() == Some(t) })
+            .map(|t| TermTabSnap {
+                entity: t.entity_id(),
+                title: t.read(cx).title.to_string(),
+                active: front.as_ref() == Some(t),
+                exited: t.read(cx).has_exited(),
+            })
             .collect()
     }
 

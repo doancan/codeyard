@@ -23,6 +23,8 @@ pub enum PortMenuCmd {
     Stop,
     /// A listening port that is not forwarded yet.
     Forward,
+    /// The server's port number of a row.
+    CopyPort,
 }
 
 /// State of a row as shown.
@@ -104,7 +106,7 @@ const W_PORT: f32 = 96.;
 const W_LABEL: f32 = 140.;
 const W_ADDRESS: f32 = 170.;
 const W_ORIGIN: f32 = 90.;
-const W_ACTIONS: f32 = 104.;
+const W_ACTIONS: f32 = 132.;
 
 impl Workbench {
     /// Right-click or "…" on a row.
@@ -117,9 +119,10 @@ impl Workbench {
     ) {
         let active = row.state == RowState::Active;
         if row.state == RowState::Listening {
-            let items = vec![MenuItem::new(crate::i18n::t("Forward Port"))];
+            let items = vec![MenuItem::new(crate::i18n::t("Forward Port")), MenuItem::new(crate::i18n::t("Copy Port Number"))];
             let target = MenuTarget { path: row.port.to_string(), is_dir: false, tab: None };
-            return self.show_menu(items, vec![MenuCmd::Port(PortMenuCmd::Forward)], Vec::new(), target, position, window, cx);
+            let commands = vec![MenuCmd::Port(PortMenuCmd::Forward), MenuCmd::Port(PortMenuCmd::CopyPort)];
+            return self.show_menu(items, commands, Vec::new(), target, position, window, cx);
         }
         let items = vec![
             MenuItem::new(crate::i18n::t("Open in Browser")).enabled(row.url().is_some()),
@@ -129,7 +132,7 @@ impl Workbench {
             MenuItem::new(crate::i18n::t("Protocol: HTTP")).checked(row.protocol == Protocol::Http).separator(),
             MenuItem::new(crate::i18n::t("Protocol: HTTPS")).checked(row.protocol == Protocol::Https),
             MenuItem::new(crate::i18n::t("Protocol: TCP")).checked(row.protocol == Protocol::Tcp),
-            MenuItem::new(crate::i18n::t("Retry")).enabled(matches!(row.state, RowState::Failed(_) | RowState::Interrupted)).separator(),
+            MenuItem::new(crate::i18n::t("Retry")).enabled(matches!(row.state, RowState::Failed(_))).separator(),
             MenuItem::new(crate::i18n::t("Stop Forwarding")),
         ];
         let commands = [
@@ -154,17 +157,28 @@ impl Workbench {
         let (glyph, color) = match &row.state {
             RowState::Active => ("plug", p.success),
             RowState::Pending => ("loader", p.text_muted),
-            RowState::Interrupted => ("plug", p.warning),
+            RowState::Interrupted => ("alert", p.warning),
             RowState::Failed(_) => ("circle-x", p.danger),
             RowState::Listening => ("server", p.text_muted),
         };
-        let cell = |w: f32| div().w(px(w)).flex_none().min_w_0().overflow_hidden().whitespace_nowrap().pr(px(theme::SPACE[4]));
+        let cell = |w: f32| div().w(px(w)).flex_none().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().pr(px(theme::SPACE[4]));
         let muted = |s: SharedString| div().text_color(c(p.text_muted)).child(s);
         let address: AnyElement = match (&row.state, &row.address) {
             (RowState::Active, Some(a)) => div().font_family(ui::MONO_FONT).text_color(c(p.accent)).child(a.clone()).into_any_element(),
             (RowState::Pending, _) => muted(crate::i18n::t("forwarding…").into()).into_any_element(),
-            (RowState::Interrupted, _) => muted(crate::i18n::t("waiting for the connection").into()).into_any_element(),
-            (RowState::Failed(why), _) => div().text_color(c(p.danger)).child(why.clone()).into_any_element(),
+            (RowState::Interrupted, _) => muted(crate::i18n::t("waiting for the connection to come back").into()).into_any_element(),
+            (RowState::Failed(why), _) => {
+                // Cut to the column with an ellipsis: the whole reason is in the tooltip.
+                let full: SharedString = why.clone().into();
+                div()
+                    .id(("port-why", ix))
+                    .text_color(c(p.danger))
+                    .text_ellipsis()
+                    .overflow_hidden()
+                    .child(why.clone())
+                    .tooltip(move |_, cx| cx.new(|_| super::super::Tooltip(full.clone())).into())
+                    .into_any_element()
+            }
             _ => div().into_any_element(),
         };
         let origin = match row.origin {
@@ -202,6 +216,16 @@ impl Workbench {
                     a11y::RowFrame::Port,
                     ix,
                     2,
+                    cx,
+                ));
+            }
+            if matches!(row.state, RowState::Failed(_)) {
+                actions = actions.child(a11y::row_button(
+                    ui::icon_button(("port-retry", ix), "refresh-cw", crate::i18n::t("Retry"), p)
+                        .on_click(cx.listener(move |this, _, _, cx| this.retry_forward(port, cx))),
+                    a11y::RowFrame::Port,
+                    ix,
+                    5,
                     cx,
                 ));
             }
@@ -259,6 +283,7 @@ impl Workbench {
                     .min_w_0()
                     .overflow_hidden()
                     .whitespace_nowrap()
+                    .text_ellipsis()
                     .pr(px(theme::SPACE[4]))
                     .text_color(c(p.text_muted))
                     .child(row.process.clone().unwrap_or_default()),
@@ -291,11 +316,11 @@ impl Workbench {
             .text_size(px(text::XXS.0))
             .font_weight(gpui::FontWeight::SEMIBOLD)
             .text_color(c(p.text_muted))
-            .child(header_cell(Some(W_PORT), "Port"))
-            .child(header_cell(Some(W_LABEL), "Label"))
-            .child(header_cell(Some(W_ADDRESS), "Forwarded Address"))
-            .child(header_cell(None, "Running Process"))
-            .child(header_cell(Some(W_ORIGIN), "Origin"))
+            .child(header_cell(Some(W_PORT), crate::i18n::tr("Port")))
+            .child(header_cell(Some(W_LABEL), crate::i18n::tr("Label")))
+            .child(header_cell(Some(W_ADDRESS), crate::i18n::tr("Forwarded Address")))
+            .child(header_cell(None, crate::i18n::tr("Running Process")))
+            .child(header_cell(Some(W_ORIGIN), crate::i18n::tr("Origin")))
             .child(div().w(px(W_ACTIONS)).flex_none());
         let body: AnyElement = if rows.is_empty() {
             div()
@@ -340,7 +365,7 @@ impl Workbench {
                     .gap(px(theme::SPACE[4]))
                     .px(px(theme::SPACE[6]))
                     .child(div().text_color(c(p.text_muted)).child(crate::i18n::t("Forward a port:")))
-                    .child(ui::input_box("ports-field-box", p, p.bg, false).w(px(140.)).child(self.ports.field.clone()))
+                    .child(ui::input_box("ports-field-box", p, p.bg, false).w(px(200.)).child(self.ports.field.clone()))
                     .children(
                         self.ports.scan_error.clone().map(|e| div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_color(c(p.warning)).child(e)),
                     ),

@@ -1135,25 +1135,53 @@ impl ScmPanel {
     /// A history action pinned to `repo`, the repository whose graph the menu or the input was opened on (`None`: the
     /// one whose history is on screen now). It runs there, revalidated, or nowhere: a hard reset's question names the
     /// repository and the answer applies to it even if the selection moves while the question is open.
+    /// A reset first counts the commits it takes off the branch: a hard reset always asks and says how many exist
+    /// nowhere else; a soft or mixed one asks only when some are already on the upstream. The answer applies to the
+    /// `HEAD` that was counted, or to nothing.
     pub fn commit_op_in(&mut self, repo: Option<Target>, hash: String, op: CommitOp, window: &mut Window, cx: &mut Context<Self>) {
         let Some(target) = repo.or_else(|| self.history.clone()).or_else(|| self.target(None).ok()) else { return };
-        if op == CommitOp::Reset(graph::ResetMode::Hard) {
-            let short = hash[..hash.len().min(7)].to_string();
-            let repository = (self.repos.len() > 1).then_some(target.root.as_str());
-            let answer = crate::questions::hard_reset(&short, repository).ask(window, cx);
-            cx.spawn(async move |this, cx| {
-                if answer.await == Some(0) {
-                    this.update(cx, |this, cx| this.run_commit_op(target, hash, op, cx)).ok();
-                }
+        let CommitOp::Reset(mode) = op else { return self.run_commit_op(target, hash, op, None, cx) };
+        let (host, root, at) = (self.host.clone(), target.root.clone(), hash.clone());
+        let count = cx.background_executor().spawn(async move { crate::git::leaving(host.as_ref(), &root, &at).ok() });
+        let multi = self.repos.len() > 1;
+        cx.spawn_in(window, async move |this, cx| {
+            let leaving = count.await;
+            this.update_in(cx, |this, window, cx| {
+                let short = hash[..hash.len().min(7)].to_string();
+                let repository = multi.then_some(target.root.as_str());
+                let question = match (mode, &leaving) {
+                    (graph::ResetMode::Hard, l) => Some(crate::questions::hard_reset(&short, repository, l.as_ref())),
+                    (_, Some(l)) if l.pushed > 0 => l.upstream.as_deref().map(|up| crate::questions::reset_pushed(l.pushed, up, repository)),
+                    _ => None,
+                };
+                let expect = leaving.map(|l| l.head);
+                let Some(question) = question else { return this.run_commit_op(target, hash, op, expect, cx) };
+                let answer = question.ask(window, cx);
+                cx.spawn(async move |this, cx| {
+                    if answer.await == Some(0) {
+                        this.update(cx, |this, cx| this.run_commit_op(target, hash, op, expect, cx)).ok();
+                    }
+                })
+                .detach();
             })
-            .detach();
-            return;
-        }
-        self.run_commit_op(target, hash, op, cx);
+            .ok();
+        })
+        .detach();
     }
 
-    fn run_commit_op(&mut self, target: Target, hash: String, op: CommitOp, cx: &mut Context<Self>) {
-        self.run_in(target, move |h, root| graph::run_op(h, root, &hash, &op), |_, _, _| {}, cx);
+    /// `expect`: the `HEAD` a question was about; the operation runs only while the branch is still there.
+    fn run_commit_op(&mut self, target: Target, hash: String, op: CommitOp, expect: Option<String>, cx: &mut Context<Self>) {
+        self.run_in(
+            target,
+            move |h, root| {
+                if let Some(head) = &expect {
+                    crate::git::head_is(h, root, head)?;
+                }
+                graph::run_op(h, root, &hash, &op)
+            },
+            |_, _, _| {},
+            cx,
+        );
     }
 
     fn section_height(&self, id: &str, default: f32) -> f32 {

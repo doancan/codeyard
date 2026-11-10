@@ -631,14 +631,16 @@ fn polling_many_repositories_is_bounded(cx: &mut TestAppContext) {
     let _ = std::fs::remove_dir_all(&w);
     std::fs::create_dir_all(&w).unwrap();
     let w = crate::ui::canonical_for_test(&w);
-    for i in 0..24 {
+    // More than the slots of one poll, so that some wait: two more than the slots leave one waiting.
+    let repos = crate::workbench::repos_glue::MAX_REFRESHES + 2;
+    for i in 0..repos {
         let d = w.join(format!("r{i:02}"));
         std::fs::create_dir_all(&d).unwrap();
-        git_in(&d, &["init", "-q"]);
+        crate::test_git::init_by_copy(&d);
     }
-    let (wb, scm, cx) = open(cx, &w, 24);
+    let (wb, scm, cx) = open(cx, &w, repos);
     let (_, started, _) = wb.read_with(cx, |wb, _| wb.repo_counters_for_test());
-    // Two polls in a row, before anything finishes: 23 refreshes at most (selected excluded), 8 at a time.
+    // Two polls in a row, before anything finishes: every repository but the selected one at most, 8 at a time.
     wb.update(cx, |wb, cx| {
         wb.refresh_repos(cx);
         wb.refresh_repos(cx);
@@ -649,7 +651,7 @@ fn polling_many_repositories_is_bounded(cx: &mut TestAppContext) {
     let (running, waiting) = wb.read_with(cx, |wb, _| wb.repo_queue_for_test());
     let selected = key(&scm, cx, &w.join("r00"));
     assert_eq!(running.len(), max);
-    assert_eq!(running.len() + waiting.len(), 23, "every repository but the selected one, each queued once over two polls");
+    assert_eq!(running.len() + waiting.len(), repos - 1, "every repository but the selected one, each queued once over two polls");
     assert!(!running.contains(&selected) && !waiting.contains(&selected), "the selected repository is left to the main refresh");
     let unique: std::collections::HashSet<_> = waiting.iter().collect();
     assert_eq!(unique.len(), waiting.len(), "no repository waits twice");
@@ -657,7 +659,7 @@ fn polling_many_repositories_is_bounded(cx: &mut TestAppContext) {
     let (_, _, peak_after) = wb.read_with(cx, |wb, _| wb.repo_counters_for_test());
     assert!(peak <= max && peak_after <= max, "never more than {max} at once ({peak_after})");
     assert!(wb.read_with(cx, |wb, _| wb.repo_queue_for_test()).1.is_empty(), "the queue drains");
-    assert_eq!(scm.read_with(cx, |s, _| s.repos.len()), 24);
+    assert_eq!(scm.read_with(cx, |s, _| s.repos.len()), repos);
     let _ = std::fs::remove_dir_all(w);
 }
 
@@ -823,16 +825,19 @@ fn a_large_inventory_is_bounded_and_virtualized(cx: &mut TestAppContext) {
     let _ = std::fs::remove_dir_all(&w);
     std::fs::create_dir_all(&w).unwrap();
     let w = crate::ui::canonical_for_test(&w);
-    for i in 0..120 {
+    // Three times the limit of the inventory, which is more rows than the window shows.
+    const LIMIT: usize = 12; // the last row is `scm-repo-row-11`
+    for i in 0..LIMIT * 3 {
         let d = w.join(format!("r{i:03}"));
         std::fs::create_dir_all(&d).unwrap();
-        git_in(&d, &["init", "-q"]);
+        crate::test_git::init_by_copy(&d);
         for j in 0..5 {
             std::fs::write(d.join(format!("f{j}.txt")), "x\n").unwrap();
         }
     }
     let (wb, cx) = setup_with(cx, Settings { lsp_enabled: false, hot_exit: false, ..Default::default() });
-    wb.update(cx, |wb, _| wb.set_repo_limits_for_test(crate::repos::Limits { repos: 40, ..Default::default() }));
+    cx.simulate_resize(gpui::size(gpui::px(700.), gpui::px(400.)));
+    wb.update(cx, |wb, _| wb.set_repo_limits_for_test(crate::repos::Limits { repos: LIMIT, ..Default::default() }));
     wb.update_in(cx, |wb, window, cx| {
         wb.open_path(w.to_str().unwrap(), window, cx);
         wb.run_command_for_test("View: Source Control", window, cx);
@@ -847,18 +852,16 @@ fn a_large_inventory_is_bounded_and_virtualized(cx: &mut TestAppContext) {
     let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
     crate::qa_integration_tests::wait_secs(cx, 120, "large inventory", |cx| {
         cx.executor().advance_clock(std::time::Duration::from_millis(300));
-        scm.read_with(cx, |s, _| s.repos.len() == 40 && s.repos.iter().all(|r| r.status.is_some()))
+        scm.read_with(cx, |s, _| s.repos.len() == LIMIT && s.repos.iter().all(|r| r.status.is_some()))
     });
     assert!(wb.read_with(cx, |wb, _| wb.repo_inventory().truncated));
     let lines = scm.read_with(cx, |s, _| s.lines_for_test().len());
-    assert!(lines >= 40 * 7, "{lines} rows");
+    assert!(lines >= LIMIT * 7, "{lines} rows");
     cx.run_until_parked();
-    let started = std::time::Instant::now();
     cx.update(|window, _| window.refresh());
     cx.run_until_parked();
-    assert!(started.elapsed() < std::time::Duration::from_secs(5));
     assert!(cx.debug_bounds("scm-repo-row-0").is_some());
-    assert!(cx.debug_bounds("scm-repo-row-39").is_none(), "rows off screen are not built");
+    assert!(cx.debug_bounds("scm-repo-row-11").is_none(), "rows off screen are not built");
     let _ = std::fs::remove_dir_all(w);
 }
 

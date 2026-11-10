@@ -72,6 +72,29 @@ fn breakpoints_keep_their_state_across_a_restart(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn breakpoints_follow_a_renamed_file(cx: &mut TestAppContext) {
+    let home = project("dbg-rename-home");
+    let (dir, _) = fake_project("dbg-rename");
+    let (wb, cx) = setup_persistent(cx, &home);
+    open(&wb, &dir, cx);
+    let (main, ed) = open_main(&wb, &dir, cx);
+    ed.update(cx, |e, cx| {
+        e.toggle_breakpoint_at(3, cx);
+        e.toggle_breakpoint_at(6, cx);
+    });
+    let renamed = crate::ui::local_path(&dir.join("renamed.c"));
+    wb.update_in(cx, |wb, window, cx| wb.move_path_for_test(main.clone(), renamed.clone(), window, cx));
+    cx.run_until_parked();
+    assert!(wb.read_with(cx, |wb, _| wb.breakpoints_for_test(&main)).is_empty(), "nothing is left at the old path");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.breakpoints_for_test(&renamed)), vec![(3, true, "?"), (6, true, "?")]);
+
+    let wb = restart_with(wb, cx, &home, crate::settings::Startup::Continue);
+    wait_secs(cx, 10, "the folder to come back", |cx| wb.read_with(cx, |wb, cx| wb.root_for_test(cx)).is_some());
+    assert!(wb.read_with(cx, |wb, _| wb.breakpoints_for_test(&main)).is_empty(), "the old path is not saved");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.breakpoints_for_test(&renamed)), vec![(3, true, "?"), (6, true, "?")], "the new path is");
+}
+
+#[gpui::test]
 fn disabled_and_deactivated_breakpoints_are_not_sent_and_results_come_back(cx: &mut TestAppContext) {
     if !crate::test_lsp::have_python() {
         return;

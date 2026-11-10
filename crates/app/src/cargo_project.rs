@@ -160,10 +160,41 @@ impl CargoTarget {
     }
 }
 
+/// What to do when `cargo` could not be started or rustup could not pick a toolchain; `None` when the failure is
+/// something else and the tool's own text is the best explanation.
+pub fn toolchain_hint(text: &str) -> Option<String> {
+    let lower = text.to_lowercase();
+    let missing = lower.contains("no such file or directory")
+        || lower.contains("program not found")
+        || lower.contains("cannot find the file")
+        || lower.contains("cannot find the path");
+    if missing && lower.contains("cargo") {
+        return Some(
+            crate::i18n::t("Cargo was not found. Install Rust from https://rustup.rs and make sure `cargo` is on the PATH of this machine.").to_string(),
+        );
+    }
+    if lower.contains("rustup could not choose a version") || lower.contains("no default toolchain") || lower.contains("override and no default") {
+        return Some(crate::i18n::t("No Rust toolchain is selected. Run `rustup default stable` in a terminal.").to_string());
+    }
+    if lower.contains("toolchain") && lower.contains("is not installed") {
+        return Some(crate::i18n::t("The project's Rust toolchain is not installed. Run `rustup toolchain install` in the project folder.").to_string());
+    }
+    None
+}
+
+/// A failed `cargo` run as one message: the hint first when there is one, then the text itself.
+pub fn explain_failure(text: &str) -> String {
+    match toolchain_hint(text) {
+        Some(hint) => format!("{hint}\n{}", text.trim()),
+        None => text.trim().to_string(),
+    }
+}
+
 pub fn discover(host: &dyn Host, root: &str) -> Result<Vec<CargoTarget>, String> {
-    let output = host.exec("cargo", &["metadata", "--no-deps", "--format-version=1", "--offline"], Some(root), None).map_err(|e| e.to_string())?;
+    let output =
+        host.exec("cargo", &["metadata", "--no-deps", "--format-version=1", "--offline"], Some(root), None).map_err(|e| explain_failure(&e.to_string()))?;
     if !output.ok() {
-        return Err(format!("{}{}", output.stdout_str(), output.stderr_str()).trim().to_string());
+        return Err(explain_failure(&format!("{}{}", output.stdout_str(), output.stderr_str())));
     }
     parse_metadata(&output.stdout_str())
 }

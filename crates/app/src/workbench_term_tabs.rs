@@ -174,6 +174,8 @@ impl Workbench {
     pub(super) fn close_editor_terminal(&mut self, term: &Entity<TerminalView>, cx: &mut Context<Self>) {
         if self.take_editor_terminal(term) {
             term.read(cx).kill();
+            // The saved arrangement must not list it: the next start would open a new shell in its place.
+            self.persist_session(cx);
             cx.notify();
         }
     }
@@ -246,7 +248,7 @@ impl Workbench {
                 .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover))))
                 .when(active, |d| d.bg(c(p.bg)).child(div().absolute().top_0().left_0().right_0().h(px(1.)).bg(c(p.accent))))
                 .child(icon("terminal", layout::ICON, if exited { p.text_muted } else { p.accent }))
-                .child(div().overflow_hidden().whitespace_nowrap().child(title.clone()))
+                .child(div().overflow_hidden().whitespace_nowrap().text_ellipsis().child(title.clone()))
                 .child(
                     div()
                         .id(SharedString::from(format!("tab-terminal-close-{}-{ix}", key.id)))

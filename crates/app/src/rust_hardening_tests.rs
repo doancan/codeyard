@@ -16,6 +16,27 @@ fn rust_hardening_duplicate_test_names_cannot_overwrite_a_failure_with_a_pass() 
 }
 
 #[test]
+fn rust_hardening_coloured_test_output_still_gives_results_and_panic_locations() {
+    use crate::testexp::{Kind, Outcome, parse_results};
+    let output = "test a::good ... \x1b[32mok\x1b[0m\ntest a::bad ... \x1b[31mFAILED\x1b[0m\n\n---- a::bad stdout ----\n\
+        thread 'a::bad' panicked at src/a.rs:7:9:\n\x1b[1mboom\x1b[0m\n";
+    let results = parse_results(Kind::Rust, output);
+    assert_eq!(results["a::good"].outcome, Outcome::Passed);
+    assert_eq!(results["a::bad"].outcome, Outcome::Failed);
+    assert_eq!(results["a::bad"].location, Some(("src/a.rs".into(), 7)));
+    assert_eq!(results["a::bad"].message.as_deref(), Some("boom"));
+}
+
+#[test]
+fn rust_hardening_nocapture_output_between_the_name_and_the_verdict_keeps_the_verdict() {
+    use crate::testexp::{Kind, Outcome, parse_results};
+    let output = "running 2 tests\ntest a::loud ... hello from the test\nsecond line\nok\ntest a::bad ... printing\nFAILED\n";
+    let results = parse_results(Kind::Rust, output);
+    assert_eq!(results["a::loud"].outcome, Outcome::Passed);
+    assert_eq!(results["a::bad"].outcome, Outcome::Failed);
+}
+
+#[test]
 fn rust_hardening_test_artifacts_are_nonempty_and_unique() {
     let artifact =
         |path: &str| serde_json::json!({"reason":"compiler-artifact","target":{"name":"api","kind":["test"]},"profile":{"test":true},"executable":path});

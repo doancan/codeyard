@@ -73,7 +73,7 @@ fn a_flood_behind_a_stalled_terminal_is_capped_and_the_exit_is_kept() {
 }
 
 #[test]
-fn osc_52_reaches_the_clipboard_only_when_the_setting_allows_it() {
+fn osc_52_reaches_the_clipboard_only_when_allowed() {
     let events = Listener::default();
     let mut term = Term::new(Config::default(), &TermSize { cols: 80, rows: 24 }, events.clone());
     let mut parser = Processor::<StdSyncHandler>::default();
@@ -81,9 +81,8 @@ fn osc_52_reaches_the_clipboard_only_when_the_setting_allows_it() {
     let queued = std::mem::take(&mut *events.0.borrow_mut());
     assert!(queued.iter().any(|e| matches!(e, TermEvent::ClipboardStore(..))), "the terminal reports the store request");
     let texts = |allowed| queued.iter().cloned().filter_map(|e| clipboard_text(e, allowed)).collect::<Vec<_>>();
-    assert!(texts(false).is_empty(), "off by default: nothing is written");
+    assert!(texts(false).is_empty(), "refused: nothing is written");
     assert_eq!(texts(true), ["foo"]);
-    assert!(!crate::settings::Settings::default().terminal_allow_clipboard_write);
 }
 
 #[test]
@@ -146,6 +145,21 @@ fn keys_map_to_xterm_sequences() {
 }
 
 #[test]
+fn alt_letters_are_the_meta_key_unless_alt_composed_another_character() {
+    let m = TermMode::empty();
+    // readline, emacs, vim: Alt+f, Alt+b, Alt+d.
+    for (k, want) in [("alt-f", b"\x1bf".as_slice()), ("alt-b", b"\x1bb"), ("alt-d", b"\x1bd"), ("alt-shift-f", b"\x1bF")] {
+        let mut key = Keystroke::parse(k).unwrap();
+        key.key_char = Some(if k.contains("shift") { want[1..].to_ascii_uppercase() } else { want[1..].to_vec() }.iter().map(|b| *b as char).collect());
+        assert_eq!(key_to_bytes(&key, m).unwrap(), want, "{k}");
+    }
+    // ⌥ on macOS composed another character: it is typed as it is.
+    let mut key = Keystroke::parse("alt-f").unwrap();
+    key.key_char = Some("ƒ".into());
+    assert_eq!(key_to_bytes(&key, m).unwrap(), "ƒ".as_bytes());
+}
+
+#[test]
 fn space_keys_are_sent_to_the_terminal() {
     let m = TermMode::empty();
     assert_eq!(bytes("space", m), Some(b" ".to_vec()));
@@ -190,10 +204,10 @@ fn tui_stream(frames: usize) -> Vec<u8> {
     out
 }
 
-/// Parsing a long TUI stream must stay fast, and feeding it in one piece must not be slower than in the chunks the pty
-/// delivers it in (the pump batches the chunks of one turn).
+/// Feeding a long TUI stream in one piece gives the screen that the chunks the pty delivers it in give (the pump batches
+/// the chunks of one turn). How long parsing takes depends on the machine, so no duration is asserted.
 #[gpui::test]
-fn feeding_a_tui_stream_is_fast(cx: &mut gpui::TestAppContext) {
+fn feeding_a_tui_stream_in_one_piece_or_in_chunks_gives_the_same_screen(cx: &mut gpui::TestAppContext) {
     let data = tui_stream(300);
     cx.update(|cx| cx.set_global(crate::settings::Settings::default()));
     let make = |cx: &mut gpui::TestAppContext| {
@@ -202,17 +216,11 @@ fn feeding_a_tui_stream_is_fast(cx: &mut gpui::TestAppContext) {
         view
     };
     let chunked = make(cx);
-    let start = std::time::Instant::now();
     chunked.update(cx, |t, _| data.chunks(16 * 1024).for_each(|c| t.feed(c)));
-    let per_chunk = start.elapsed();
     let whole = make(cx);
-    let start = std::time::Instant::now();
     whole.update(cx, |t, _| t.feed(&data));
-    let in_one = start.elapsed();
-    eprintln!("BENCH feed {} KB: chunked {per_chunk:?}, one piece {in_one:?}", data.len() / 1024);
     let (a, b) = (chunked.read_with(cx, |t, _| t.scrollback_text()), whole.read_with(cx, |t, _| t.scrollback_text()));
     assert!(a == b, "the pump feeds a turn's chunks as one piece: the screen must come out the same");
-    assert!(per_chunk < std::time::Duration::from_secs(5 * crate::test_sshd::timeout_scale()), "{per_chunk:?}");
 }
 
 /// A program that animates its title (a spinner) must not make the window rebuild for every frame: the first change is told
@@ -258,9 +266,23 @@ fn a_synchronized_update_that_never_ends_is_shown_after_its_time_limit(cx: &mut 
         let left = t.release_expired_sync().expect("an update is pending");
         assert!(left <= std::time::Duration::from_millis(150), "{left:?}");
     });
-    std::thread::sleep(std::time::Duration::from_millis(200));
     view.update(cx, |t, _| {
-        assert_eq!(t.release_expired_sync(), None, "nothing pending once it is applied");
+        let later = std::time::Instant::now() + std::time::Duration::from_millis(200);
+        assert_eq!(t.release_expired_sync_at(later), None, "nothing pending once it is applied");
         assert!(t.screen_text().contains("drawn in a frame"));
     });
+}
+
+#[test]
+fn clipboard_writes_follow_the_setting_and_the_copy_gesture() {
+    use super::mouse::clipboard_write_allowed;
+    let now = std::time::Instant::now();
+    let just = Some(now);
+    let stale = now.checked_sub(std::time::Duration::from_secs(6));
+    assert!(clipboard_write_allowed("copy", just, now));
+    assert!(!clipboard_write_allowed("copy", stale, now), "a copy long ago does not open the clipboard");
+    assert!(!clipboard_write_allowed("copy", None, now));
+    assert!(clipboard_write_allowed("always", None, now));
+    assert!(!clipboard_write_allowed("off", just, now));
+    assert_eq!(crate::settings::Settings::default().terminal_allow_clipboard_write, "copy");
 }

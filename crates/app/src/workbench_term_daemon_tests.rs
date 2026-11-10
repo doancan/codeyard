@@ -19,12 +19,29 @@ fn text(wb: &Entity<Workbench>, cx: &mut gpui::VisualTestContext) -> String {
 }
 
 fn daemon(name: &str) -> std::path::PathBuf {
+    daemon_with_registry(name).0
+}
+
+/// [`daemon`], and its registry: a test that must know when the daemon has noticed a window going away waits on it.
+fn daemon_with_registry(name: &str) -> (std::path::PathBuf, std::sync::Arc<agent::daemon::Registry>) {
     let dir = std::env::temp_dir().join(format!("codeyard-app-termd-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let sock = dir.join("d.sock");
     let s2 = sock.clone();
-    std::thread::spawn(move || agent::daemon::run(&s2));
-    sock
+    let registry = std::sync::Arc::new(agent::daemon::Registry::default());
+    let shared = registry.clone();
+    std::thread::spawn(move || agent::daemon::run_with(&s2, shared));
+    (sock, registry)
+}
+
+/// Waits (on the real clock: the daemon is another thread) until no connection of the daemon is attached: it has noticed that
+/// the window's connection ended, so what a shell prints from now on is kept for the next window.
+fn wait_for_detach(registry: &agent::daemon::Registry) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20 * crate::test_sshd::timeout_scale());
+    while registry.any_attached() {
+        assert!(std::time::Instant::now() < deadline, "the daemon still has the closed window attached");
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
 }
 
 /// A window of `dir` on the terminal daemon `sock`, with its terminals restored.
@@ -41,6 +58,31 @@ fn window<'a>(
     crate::qa_workbench_tests::open(&wb, dir, cx);
     wait_ticking(cx, "the window's daemon session", |cx| wb.read_with(cx, |wb, _| wb.persist.term_daemon.is_some()));
     (wb, cx)
+}
+
+fn make_fifo(path: &std::path::Path) {
+    let made = std::process::Command::new("mkfifo").arg(path).status().is_ok_and(|s| s.success());
+    assert!(made, "mkfifo {}", path.display());
+}
+
+/// Waits (on the real clock: a process outside the test creates it) until `path` exists.
+fn wait_for_file(path: &std::path::Path) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20 * crate::test_sshd::timeout_scale());
+    while !path.exists() {
+        assert!(std::time::Instant::now() < deadline, "waited for {}", path.display());
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
+/// Waits until the test sshd's bridge processes (one per connection that is still attached) are gone: the host has
+/// noticed that the window's connection ended.
+fn wait_for_bridge_gone(sshd: &crate::test_sshd::Sshd) {
+    let pattern = format!("{}/remote/agent.*--attach", sshd.dir.display());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20 * crate::test_sshd::timeout_scale());
+    while std::process::Command::new("pgrep").arg("-f").arg(&pattern).output().is_ok_and(|o| o.status.success()) {
+        assert!(std::time::Instant::now() < deadline, "the bridge of the closed connection is still there");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
 }
 
 /// The pid the shell writes to `file`.
@@ -95,23 +137,38 @@ fn window_with_terminal<'a>(
 fn a_terminal_outlives_its_window_and_the_next_window_takes_the_same_shell_back(cx: &mut gpui::TestAppContext) {
     let home = crate::qa_workbench_tests::fresh("termd-home");
     let dir = crate::qa_workbench_tests::project("termd");
-    let sock = daemon("reattach");
+    let (sock, registry) = daemon_with_registry("reattach");
     let first = {
         let (wb, vcx) = window(cx, &home, &dir, &sock);
         wb.update_in(vcx, |wb, window, cx| wb.new_terminal_launch(None, crate::terminal::Launch::default(), window, cx));
         wait_ticking(vcx, "its token is saved", |cx| wb.read_with(cx, |wb, cx| wb.terminals[0].read(cx).token().is_some()));
         let pid = shell_pid(&wb, vcx, &dir.join("pid-1"));
         // Output while no window is attached is kept for the next one.
-        wb.update(vcx, |wb, cx| wb.terminals[0].update(cx, |t, _| t.send("sleep 0.5; echo printed-while-closed\n")));
+        // The shell prints only when the test releases it (after the window is gone), then says so with a file.
+        let (release, printed) = (dir.join("release"), dir.join("printed"));
+        make_fifo(&release);
+        let line = format!("read _ < {}; echo printed-while-closed; touch {}\n", release.display(), printed.display());
+        wb.update(vcx, |wb, cx| wb.terminals[0].update(cx, |t, _| t.send(&line)));
         quit(wb, vcx);
+        wait_for_detach(&registry);
+        std::fs::write(&release, "go\n").unwrap();
+        wait_for_file(&printed);
         pid
     };
-    std::thread::sleep(std::time::Duration::from_millis(900));
 
     let (wb, cx) = window(cx, &home, &dir, &sock);
     wait_ticking(cx, "the terminal taken back", |cx| wb.read_with(cx, |wb, _| wb.terminals.len() == 1));
     wait_notice(&wb, cx, "Reconnected to terminal session");
-    wait_ticking(cx, "the buffered output", |cx| text(&wb, cx).contains("printed-while-closed"));
+    crate::qa_integration_tests::wait_secs_describing(
+        cx,
+        10,
+        "the buffered output",
+        |cx| format!("the screen shows {:?}", text(&wb, cx)),
+        |cx| {
+            cx.executor().advance_clock(std::time::Duration::from_millis(300));
+            text(&wb, cx).contains("printed-while-closed")
+        },
+    );
     let shown = text(&wb, cx);
     assert!(shown.contains("Reconnected to terminal session") && !shown.contains("Previous session ended"), "{shown}");
     assert_eq!(shell_pid(&wb, cx, &dir.join("pid-2")), first, "the same shell process");
@@ -321,17 +378,22 @@ fn an_ssh_folders_terminal_is_taken_back_after_a_restart(cx: &mut gpui::TestAppC
         });
         let term = wb.read_with(vcx, |wb, _| wb.terminals[0].clone());
         let pid = pid_of(&term, vcx, &dir.join("pid-1"));
-        term.update(vcx, |t, _| t.send("sleep 1; echo printed-while-away\n"));
+        // The shell prints only when the test releases it, after the window is gone.
+        let (release, printed) = (dir.join("release"), dir.join("printed"));
+        make_fifo(&release);
+        term.update(vcx, |t, _| t.send(&format!("read _ < {}; echo printed-while-away; touch {}\n", release.display(), printed.display())));
         // The command reached the host (the shell echoed it) before the app goes.
         crate::qa_integration_tests::wait_secs(vcx, 30, "the command echoed", |cx| {
-            cx.update(|_, cx| term.read(cx).scrollback_text() + &term.read(cx).screen_text()).contains("sleep 1")
+            cx.update(|_, cx| term.read(cx).scrollback_text() + &term.read(cx).screen_text()).contains("read _")
         });
         // Nothing of the window may outlive it here: its connection must go as a quitting app's does.
         drop(term);
         quit_all(wb, vcx);
+        wait_for_bridge_gone(&sshd);
+        std::fs::write(&release, "go\n").unwrap();
+        wait_for_file(&printed);
         pid
     };
-    std::thread::sleep(std::time::Duration::from_secs(1));
     let (wb, cx) = ssh_window(cx, &home, &path);
     crate::qa_integration_tests::wait_secs(cx, 30, "the terminal taken back", |cx| text(&wb, cx).contains("printed-while-away"));
     let shown = text(&wb, cx);
@@ -365,9 +427,9 @@ fn an_ssh_workspaces_terminal_is_taken_back_after_a_restart(cx: &mut gpui::TestA
         let pid = pid_of(&term, vcx, &dir.join("pid-1"));
         drop(term);
         quit_all(wb, vcx);
+        wait_for_bridge_gone(&sshd);
         pid
     };
-    std::thread::sleep(std::time::Duration::from_secs(1));
     let (wb, cx) = ssh_window(cx, &home, &path);
     crate::qa_integration_tests::wait_secs(cx, 30, "the terminal taken back", |cx| text(&wb, cx).contains("Reconnected to terminal session"));
     let term = wb.read_with(cx, |wb, _| wb.terminals[0].clone());
@@ -398,17 +460,99 @@ fn an_ssh_session_kept_for_a_restart_hands_its_shell_to_the_next_connection() {
         let first = host::ssh::connect_session(crate::test_sshd::ALIAS, &bundle, Some(session.clone()), |_| {}).unwrap();
         let pty = first.pty_spawn_ex(spec()).unwrap();
         let token = first.pty_token(pty.id).unwrap();
-        first.pty_input(pty.id, format!("echo $$ > {}; sleep 1; echo printed-while-away\n", marker.display()).into_bytes());
-        read_until(&pty, "sleep 1");
+        let release = sshd.dir.join("release");
+        make_fifo(&release);
+        first.pty_input(pty.id, format!("echo $$ > {}; read _ < {}; echo printed-while-away\n", marker.display(), release.display()).into_bytes());
+        read_until(&pty, "read _");
         first.keep_for(300);
         first.keep_session();
         (pty.id, token)
     };
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    wait_for_bridge_gone(&sshd);
+    std::fs::write(sshd.dir.join("release"), "go\n").unwrap();
     let second = host::ssh::connect_session(crate::test_sshd::ALIAS, &bundle, Some(session), |_| {}).unwrap();
     let (back, _) = second.pty_adopt(id, token.0, token.1).unwrap();
     read_until(&back, "printed-while-away");
     let pid = std::fs::read_to_string(&marker).unwrap().trim().to_string();
     second.pty_input(id, b"echo still-the-same-$$\n".to_vec());
     read_until(&back, &format!("still-the-same-{pid}"));
+}
+
+/// A daemon connection whose answers the test chooses: what it lists, and what taking each terminal back gives.
+struct ScriptedDaemon {
+    info: proto::HostInfo,
+    listed: Vec<u32>,
+    refuse_with: fn() -> host::HostError,
+    killed: Mutex<Vec<u32>>,
+}
+
+impl ScriptedDaemon {
+    fn new(listed: Vec<u32>, refuse_with: fn() -> host::HostError) -> Self {
+        let info = proto::HostInfo { version: 0, os: "linux".into(), arch: "x86_64".into(), home: "/".into(), hostname: "d".into(), resumed: true };
+        Self { info, listed, refuse_with, killed: Mutex::new(Vec::new()) }
+    }
+}
+
+impl Host for ScriptedDaemon {
+    fn info(&self) -> &proto::HostInfo {
+        &self.info
+    }
+    fn label(&self) -> String {
+        "scripted".into()
+    }
+    fn is_remote(&self) -> bool {
+        false
+    }
+    fn call(&self, req: proto::Request) -> host::Result<proto::Response> {
+        match req {
+            proto::Request::PtyList => Ok(proto::Response::PtyList(self.listed.clone())),
+            other => unimplemented!("{other:?}"),
+        }
+    }
+    fn search(&self, _: proto::SearchQuery) -> host::Result<host::SearchStream> {
+        unimplemented!()
+    }
+    fn hash_tree(&self, _: &str, _: Vec<String>, _: bool, _: u32, _: Option<Vec<String>>) -> host::Result<host::HashStream> {
+        unimplemented!()
+    }
+    fn cancel(&self, _: u32) {}
+    fn pty_spawn(&self, _: u16, _: u16, _: Option<String>, _: Option<String>) -> host::Result<host::Pty> {
+        unimplemented!()
+    }
+    fn pty_adopt(&self, _: u32, _: String, _: String) -> host::Result<(host::Pty, u64)> {
+        Err((self.refuse_with)())
+    }
+    fn pty_input(&self, _: u32, _: Vec<u8>) {}
+    fn pty_resize(&self, _: u32, _: u16, _: u16) {}
+    fn pty_kill(&self, pty: u32) {
+        self.killed.lock().unwrap().push(pty);
+    }
+    fn watch(&self, _: Vec<String>) {}
+    fn fs_events(&self) -> std::sync::mpsc::Receiver<host::FsChanges> {
+        std::sync::mpsc::channel().1
+    }
+    fn status_events(&self) -> std::sync::mpsc::Receiver<host::ConnStatus> {
+        std::sync::mpsc::channel().1
+    }
+    fn proc_spawn(&self, _: &str, _: Vec<String>, _: Option<String>) -> host::Result<host::Proc> {
+        unimplemented!()
+    }
+    fn proc_input(&self, _: u32, _: Vec<u8>) {}
+    fn proc_kill(&self, _: u32) {}
+}
+
+/// A shell is ended only when the daemon says it is not this window's. A connection that failed while taking it back proves
+/// nothing, and the user's running programs must survive it.
+#[test]
+fn a_failed_connection_never_ends_the_shells_it_could_not_take_back() {
+    let token = |pty| (Slot::Panel(0), SavedPty { pty, instance: "i".into(), secret: "s".into() });
+    let tokens = [token(1)];
+
+    let hiccup = ScriptedDaemon::new(vec![1, 2], || host::HostError::Disconnected("pipe closed".into()));
+    assert!(adopt_all(&hiccup, &tokens).is_empty());
+    assert!(hiccup.killed.lock().unwrap().is_empty(), "nothing was proven about shell 1: it lives");
+
+    let refused = ScriptedDaemon::new(vec![1, 2], || host::HostError::Op(proto::Error::PermissionDenied("not this session's".into())));
+    assert!(adopt_all(&refused, &tokens).is_empty());
+    assert_eq!(*refused.killed.lock().unwrap(), vec![1], "refused: no window can reach it; shell 2 is newer than the saved ones and stays");
 }

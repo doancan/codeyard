@@ -276,6 +276,9 @@ pub(super) struct RemoteState {
     pub(super) transfer: Option<Arc<super::transfer::TransferRun>>,
     /// The Remote Explorer view.
     pub(super) view: super::remote_glue::RemoteView,
+    /// Tests: how many times a dropped connection came back with its terminals kept. The notice says so too, but it goes away.
+    #[cfg(test)]
+    pub(super) resumed_reconnects: u32,
 }
 
 /// Explorer roots, clipboard and favorites.

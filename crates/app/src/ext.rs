@@ -595,7 +595,7 @@ pub fn install_file(store: &ext_core::Store, path: &Path, accepted: bool) -> Res
         let files = ext_pkg::collect_dir_for(path, ext_pkg::folder_target(path).as_deref()).map_err(|e| e.to_string())?;
         (ext_pkg::write(files).map_err(|e| e.to_string())?.0, ext_core::Source::Folder { path: path.display().to_string() })
     } else {
-        (std::fs::read(path).map_err(|e| e.to_string())?, ext_core::Source::File { path: path.display().to_string() })
+        (ext_pkg::read_file(path).map_err(|e| e.to_string())?, ext_core::Source::File { path: path.display().to_string() })
     };
     let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
     command_line_consent(&pkg.manifest, &source, accepted)?;

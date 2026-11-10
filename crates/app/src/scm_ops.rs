@@ -293,15 +293,49 @@ impl ScmPanel {
         );
     }
 
-    /// Undo the last commit: changes stay staged, its message returns to the box.
-    pub fn undo_last_commit(&mut self, cx: &mut Context<Self>) {
+    /// Undo the last commit: changes stay staged, its message returns to the box. A commit that is already on the
+    /// upstream is undone only after a question (the next Sync would bring it back), and only while it is still `HEAD`.
+    pub fn undo_last_commit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Ok(target) = self.target(None) else { return };
+        let (host, root) = (self.host.clone(), target.root.clone());
+        let count = cx.background_executor().spawn(async move { git::undoing(host.as_ref(), &root).ok() });
+        let multi = self.repos.len() > 1;
+        cx.spawn_in(window, async move |this, cx| {
+            let leaving = count.await;
+            this.update_in(cx, |this, window, cx| {
+                let question = leaving
+                    .as_ref()
+                    .filter(|l| l.pushed > 0)
+                    .and_then(|l| l.upstream.as_deref())
+                    .map(|up| crate::questions::undo_pushed(up, multi.then_some(target.root.as_str())));
+                let expect = leaving.map(|l| l.head);
+                let Some(question) = question else { return this.run_undo(target, expect, cx) };
+                let answer = question.ask(window, cx);
+                cx.spawn(async move |this, cx| {
+                    if answer.await == Some(0) {
+                        this.update(cx, |this, cx| this.run_undo(target, expect, cx)).ok();
+                    }
+                })
+                .detach();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    fn run_undo(&mut self, target: Target, expect: Option<String>, cx: &mut Context<Self>) {
         // The message comes from the background job; it is written to the box only on success.
         let message = Arc::new(std::sync::Mutex::new(String::new()));
         let out = message.clone();
-        self.run_then(
+        self.run_in(
+            target,
             move |h, root| {
+                if let Some(head) = &expect {
+                    git::head_is(h, root, head)?;
+                }
+                let was = git::short_head(h, root);
                 let m = git::undo_last_commit(h, root)?;
-                let summary = crate::i18n::tf("Undid commit “{}”", &[&m.lines().next().unwrap_or("")]);
+                let summary = crate::i18n::tf("Undid commit “{0}” (the branch was at {1})", &[&m.lines().next().unwrap_or(""), &was]);
                 *out.lock().unwrap_or_else(|e| e.into_inner()) = m;
                 Ok(summary)
             },
@@ -436,3 +470,7 @@ impl ScmPanel {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "scm_rewind_tests.rs"]
+mod rewind_tests;

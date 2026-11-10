@@ -263,12 +263,46 @@ pub struct Session {
 
 type Forward = (String, Transport, u16, u16);
 
+/// Set up (`cancel = false`) or remove (`cancel = true`) the SSH forwarding of the debug port.
+fn ssh_forward(forward: &Forward, cancel: bool) -> host::Result<()> {
+    let (alias, transport, remote, local) = forward;
+    match transport {
+        Transport::Connect => host::ssh::forward_port(alias, *local, *remote, cancel),
+        _ => host::ssh::forward_port_reverse(alias, *remote, *local, cancel),
+    }
+}
+
 fn release_forward(f: &Option<Forward>) {
-    if let Some((alias, transport, remote, local)) = f {
-        let _ = match transport {
-            Transport::Connect => host::ssh::forward_port(alias, *local, *remote, true),
-            _ => host::ssh::forward_port_reverse(alias, *remote, *local, true),
-        };
+    if let Some(forward) = f {
+        let _ = ssh_forward(forward, true);
+    }
+}
+
+const FORWARD_PROBE_TIMEOUT: Duration = Duration::from_millis(500);
+const ATTACH_PROBE_TIMEOUT: Duration = Duration::from_millis(400);
+
+/// Whether the peer closes the connection within `wait` (an SSH `-L` forward does this when the remote
+/// service isn't listening yet). Restores the blocking read mode afterwards.
+fn closed_soon(stream: &TcpStream, wait: Duration) -> bool {
+    let _ = stream.set_read_timeout(Some(wait));
+    let closed = match stream.peek(&mut [0u8; 1]) {
+        Ok(n) => n == 0,
+        Err(e) => !matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut),
+    };
+    let _ = stream.set_read_timeout(None);
+    closed
+}
+
+/// How much of the adapter's own output is kept for the error message when it fails to start.
+const OUTPUT_TAIL_BYTES: usize = 2000;
+
+/// Append adapter output to `tail`, keeping only the last `OUTPUT_TAIL_BYTES` (cut on a char boundary).
+fn push_output_tail(tail: &mut String, data: &[u8]) {
+    tail.push_str(&String::from_utf8_lossy(data));
+    let extra = tail.len().saturating_sub(OUTPUT_TAIL_BYTES);
+    if extra > 0 {
+        let cut = (extra..tail.len()).find(|&i| tail.is_char_boundary(i)).unwrap_or(tail.len());
+        tail.drain(..cut);
     }
 }
 
@@ -285,7 +319,7 @@ fn free_port() -> Result<u16, String> {
 }
 
 impl Session {
-    fn build(writer: Writer, proc: Option<(Arc<dyn Host>, u32)>, addr: Option<SocketAddr>, events: mpsc::Sender<DapEvent>) -> Arc<Session> {
+    fn build(writer: Writer, proc: Option<(Arc<dyn Host>, u32)>, addr: Option<SocketAddr>, events: mpsc::Sender<DapEvent>, direct: bool) -> Arc<Session> {
         Arc::new_cyclic(|me| Session {
             writer: Arc::new(writer),
             proc,
@@ -304,7 +338,7 @@ impl Session {
             exception_pref: Mutex::new(None),
             attached: AtomicBool::new(false),
             terminal: AtomicBool::new(false),
-            direct: false,
+            direct,
             me: me.clone(),
             forward: Mutex::new(None),
         })
@@ -332,12 +366,8 @@ impl Session {
             }
         };
         let forward = (remote && transport != Transport::Stdio).then(|| (alias.clone(), transport, adapter_port, port));
-        if let Some((alias, transport, remote_port, local)) = &forward {
-            let done = match transport {
-                Transport::Connect => host::ssh::forward_port(alias, *local, *remote_port, false),
-                _ => host::ssh::forward_port_reverse(alias, *remote_port, *local, false),
-            };
-            done.map_err(|e| crate::i18n::tf("Could not forward the debug port over SSH: {}", &[&e]))?;
+        if let Some(forward) = &forward {
+            ssh_forward(forward, false).map_err(|e| crate::i18n::tf("Could not forward the debug port over SSH: {}", &[&e]))?;
         }
         let args = if transport == Transport::Stdio { args } else { substitute(&args, adapter_port) };
         let proc = host.proc_spawn(command, args, cwd).map_err(|e| e.to_string())?;
@@ -363,13 +393,7 @@ impl Session {
                                     }
                                 } else {
                                     // Output of the TCP adapter itself (build error, crash): keep the tail for the error message.
-                                    let mut t = tail.lock().unwrap();
-                                    t.push_str(&String::from_utf8_lossy(&data));
-                                    let extra = t.len().saturating_sub(2000);
-                                    if extra > 0 {
-                                        let cut = (extra..t.len()).find(|&i| t.is_char_boundary(i)).unwrap_or(t.len());
-                                        t.drain(..cut);
-                                    }
+                                    push_output_tail(&mut tail.lock().unwrap(), &data);
                                 }
                             }
                             ProcEvent::Exit(code) => {
@@ -388,7 +412,7 @@ impl Session {
                 })?;
         }
         let session = match transport {
-            Transport::Stdio => Session::build(Writer::Proc { host: host.clone(), id }, Some((host.clone(), id)), None, events),
+            Transport::Stdio => Session::build(Writer::Proc { host: host.clone(), id }, Some((host.clone(), id)), None, events, false),
             Transport::Connect | Transport::Accept => {
                 let started = std::time::Instant::now();
                 let fail = |why: &str| {
@@ -406,11 +430,7 @@ impl Session {
                         // SSH `-L` accepts the local port before the remote service is ready, then closes right away:
                         // if the connection didn't stay open for a short while the service isn't listening yet, retry.
                         Ok(s) if forward.is_some() && transport == Transport::Connect => {
-                            let _ = s.set_read_timeout(Some(Duration::from_millis(500)));
-                            let closed = matches!(s.peek(&mut [0u8; 1]), Ok(0))
-                                || matches!(s.peek(&mut [0u8; 1]), Err(e) if !matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut));
-                            if !closed {
-                                let _ = s.set_read_timeout(None);
+                            if !closed_soon(&s, FORWARD_PROBE_TIMEOUT) {
                                 break s;
                             }
                             if exited.load(Ordering::Relaxed) {
@@ -433,7 +453,8 @@ impl Session {
                     Ok(r) => r,
                     Err(e) => return fail(&e.to_string()),
                 };
-                let s = Session::build(Writer::Tcp(Mutex::new(stream)), Some((host.clone(), id)), Some(SocketAddr::from(([127, 0, 0, 1], port))), events);
+                let s =
+                    Session::build(Writer::Tcp(Mutex::new(stream)), Some((host.clone(), id)), Some(SocketAddr::from(([127, 0, 0, 1], port))), events, false);
                 *s.forward.lock().unwrap() = forward;
                 *slot.lock().unwrap() = Arc::downgrade(&s);
                 s.spawn_tcp_reader(reader);
@@ -468,11 +489,7 @@ impl Session {
                     break s;
                 }
                 // SSH `-L` accepts a remote port that isn't ready and then closes: the connection must stay open.
-                let _ = s.set_read_timeout(Some(Duration::from_millis(400)));
-                let closed = matches!(s.peek(&mut [0u8; 1]), Ok(0))
-                    || matches!(s.peek(&mut [0u8; 1]), Err(e) if !matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut));
-                let _ = s.set_read_timeout(None);
-                if !closed {
+                if !closed_soon(&s, ATTACH_PROBE_TIMEOUT) {
                     break s;
                 }
             }
@@ -489,28 +506,7 @@ impl Session {
         };
         let _ = stream.set_nodelay(true);
         let reader = stream.try_clone().map_err(|e| e.to_string())?;
-        let s = Arc::new_cyclic(|me| Session {
-            writer: Arc::new(Writer::Tcp(Mutex::new(stream))),
-            proc: None,
-            next_seq: AtomicI64::new(1),
-            pending: Arc::default(),
-            alive: Arc::new(AtomicBool::new(true)),
-            initialized: Arc::new((Mutex::new(false), Condvar::new())),
-            capabilities: Mutex::new(Value::Null),
-            addr: Some(target),
-            events,
-            child: Mutex::new(None),
-            adapter_id: Mutex::new(String::new()),
-            breakpoints: Mutex::new(BTreeMap::new()),
-            functions: Mutex::new(Vec::new()),
-            root: Mutex::new(None),
-            exception_pref: Mutex::new(None),
-            attached: AtomicBool::new(false),
-            terminal: AtomicBool::new(false),
-            direct: true,
-            forward: Mutex::new(None),
-            me: me.clone(),
-        });
+        let s = Session::build(Writer::Tcp(Mutex::new(stream)), None, Some(target), events, true);
         *s.forward.lock().unwrap() = remote.then_some((alias, Transport::Connect, port, local));
         s.spawn_tcp_reader(reader);
         Ok(s)
@@ -522,7 +518,7 @@ impl Session {
         let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(10)).map_err(|e| e.to_string())?;
         let _ = stream.set_nodelay(true);
         let reader = stream.try_clone().map_err(|e| e.to_string())?;
-        let child = Session::build(Writer::Tcp(Mutex::new(stream)), None, Some(addr), self.events.clone());
+        let child = Session::build(Writer::Tcp(Mutex::new(stream)), None, Some(addr), self.events.clone(), false);
         child.spawn_tcp_reader(reader);
         Ok(child)
     }

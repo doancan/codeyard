@@ -15,7 +15,16 @@ use crate::editor::ext_lang::{ExtAnswer, ExtAsker, ExtLanguage, ExtQuery, ExtRep
 use crate::ui::ActiveTheme;
 use crate::workbench::Workbench;
 
-const BIG: &str = include_str!("../testdata/big.rs");
+const BIG_SOURCE: &str = include_str!("../testdata/big.rs");
+/// Whole items (nine lines each) of the generated file: enough for the colors of a window and the tail to differ from
+/// the middle. Whether a reparse is fast enough for a key is not left to the machine: the tests that depend on it set
+/// the budget of a key (`set_syntax_budget_for_test`).
+const BIG_LINES: usize = 133 * 9;
+const LAST_LINE: u32 = BIG_LINES as u32 - 7;
+
+fn big() -> String {
+    BIG_SOURCE.lines().take(BIG_LINES).flat_map(|line| [line, "\n"]).collect()
+}
 
 fn file(name: &str, content: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("codeyard-keystroke-{name}-{}", std::process::id()));
@@ -34,6 +43,8 @@ fn setup(cx: &mut TestAppContext) -> (Entity<Workbench>, &mut VisualTestContext)
     });
     let (wb, cx) = cx.add_window_view(|window, cx| Workbench::with_state(state::State::in_memory().ok(), None, window, cx));
     wb.update_in(cx, |wb, window, cx| window.focus(&wb.focus_handle(cx)));
+    // A small window: a draw of the whole workbench costs by its size, and no test here is about the layout.
+    cx.simulate_resize(gpui::size(gpui::px(600.), gpui::px(300.)));
     (wb, cx)
 }
 
@@ -90,10 +101,12 @@ fn typing_never_waits_for_a_completion_provider_that_never_answers(cx: &mut Test
 /// key does not wait for that; the tree catches up in the background and ends as a full parse of the text.
 #[gpui::test]
 fn a_keystroke_never_waits_for_a_reparse_of_the_whole_file(cx: &mut TestAppContext) {
-    let f = file("reparse", BIG);
+    let f = file("reparse", &big());
     let (wb, cx) = setup(cx);
     let ed = open(&wb, &f, cx);
     ed.update(cx, |e, cx| e.set_cursor_for_test(0, cx));
+    // Every key's reparse that takes any time goes to the background, on any machine and build.
+    ed.update(cx, |e, _| e.set_syntax_budget_for_test(std::time::Duration::ZERO));
     let mut deferred = 0;
     for ch in "ab ab ab ab ab a".split("").filter(|s| !s.is_empty()) {
         type_char(&ed, ch, cx);
@@ -128,9 +141,20 @@ fn assert_colors_of_a_full_parse(ed: &Entity<EditorView>, lines: usize, cx: &mut
 /// are those of a full parse.
 #[gpui::test]
 fn every_kind_of_edit_reaches_the_syntax_tree(cx: &mut TestAppContext) {
-    let f = file("every-edit", BIG);
+    every_kind_of_edit("every-edit", std::time::Duration::from_secs(3600), cx);
+}
+
+/// The same when every reparse goes to the background.
+#[gpui::test]
+fn every_kind_of_edit_reaches_the_syntax_tree_when_the_reparse_is_deferred(cx: &mut TestAppContext) {
+    every_kind_of_edit("every-edit-deferred", std::time::Duration::ZERO, cx);
+}
+
+fn every_kind_of_edit(name: &str, budget: std::time::Duration, cx: &mut TestAppContext) {
+    let f = file(name, &big());
     let (wb, cx) = setup(cx);
     let ed = open(&wb, &f, cx);
+    ed.update(cx, |e, _| e.set_syntax_budget_for_test(budget));
     ed.update_in(cx, |e, window, cx| window.focus(&e.focus_handle(cx)));
     ed.update(cx, |e, cx| e.set_cursor_for_test(0, cx));
     cx.dispatch_action(crate::editor::AddCursorBelow);
@@ -156,7 +180,7 @@ fn every_kind_of_edit_reaches_the_syntax_tree(cx: &mut TestAppContext) {
     // Replace in files, then an extension's (or a language server's, or an agent's) edits in UTF-16 positions.
     ed.update(cx, |e, cx| e.apply_buffer_edits(|_| vec![(40..48, "let x = \"".into()), (400..400, "impl S {}\n".into())], cx));
     let version = ed.read_with(cx, |e, _| e.version());
-    let edits = [(((3, 0), (3, 4)), "/* r */".to_string()), (((9000, 0), (9000, 0)), "fn tail() {}\n".to_string())];
+    let edits = [(((3, 0), (3, 4)), "/* r */".to_string()), (((LAST_LINE, 0), (LAST_LINE, 0)), "fn tail() {}\n".to_string())];
     assert!(ed.update(cx, |e, cx| e.apply_lsp_edits_if_unchanged(version, &edits, cx)));
     cx.run_until_parked();
     assert_colors_of_a_full_parse(&ed, 200, cx);
@@ -166,7 +190,7 @@ fn every_kind_of_edit_reaches_the_syntax_tree(cx: &mut TestAppContext) {
 /// pauses it asks for a frame, only if something on screen changed color and no frame has drawn it yet.
 #[gpui::test]
 fn a_tree_that_lands_while_typing_waits_for_a_pause_to_draw(cx: &mut TestAppContext) {
-    let f = file("landing", BIG);
+    let f = file("landing", &big());
     let (wb, cx) = setup(cx);
     let ed = open(&wb, &f, cx);
     ed.update(cx, |e, cx| e.set_cursor_for_test(0, cx));

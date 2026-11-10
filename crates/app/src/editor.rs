@@ -539,6 +539,9 @@ pub struct EditorView {
     find: Option<(Entity<FindBar>, gpui::Subscription)>,
     find_re: Option<regex::bytes::Regex>,
     matches: Vec<Range<usize>>,
+    /// Searches of large files run in the background; only the latest one (by `find_epoch`) may write `matches`.
+    find_epoch: u64,
+    find_task: Option<gpui::Task<()>>,
     /// Git: repository root, content at HEAD, and line markers (gutter).
     git_root: Option<String>,
     /// Inline blame: (line, text version, text) and the task fetching it.
@@ -708,8 +711,16 @@ thread_local! {
     /// View being painted: listeners set up during painting switch to this view
     /// first when an event arrives (two groups paint the same editor with different views).
     static RENDER_SLOT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Lines and characters handed to the text shaper so far (tests compare the work of a frame, not its duration).
+    #[cfg(test)]
+    static SHAPED: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
     #[cfg(test)]
     static SLOT_PAINTS: std::cell::RefCell<std::collections::HashMap<(gpui::EntityId, usize), usize>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+#[cfg(test)]
+pub fn shaped_text() -> (usize, usize) {
+    SHAPED.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]
@@ -985,6 +996,8 @@ impl EditorView {
             find: None,
             find_re: None,
             matches: Vec::new(),
+            find_epoch: 0,
+            find_task: None,
             git_root: None,
             blame: None,
             blame_task: None,

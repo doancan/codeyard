@@ -279,6 +279,10 @@ impl Workbench {
                                 this.ports_interrupted();
                             }
                             host::ConnStatus::Connected { resumed } => {
+                                #[cfg(test)]
+                                if resumed {
+                                    this.remote.resumed_reconnects += 1;
+                                }
                                 this.remote.conn = Conn::Connected { alias };
                                 this.ports_reconnected(cx);
                                 this.reattach_lsp(cx);

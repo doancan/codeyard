@@ -6,8 +6,6 @@
 
 use std::path::{Path, PathBuf};
 
-use sha2::{Digest, Sha256};
-
 const LINUX: [(&str, u16); 2] = [("x86_64-unknown-linux-musl", 62), ("aarch64-unknown-linux-musl", 183)];
 
 fn validate_linux(bytes: &[u8], machine: u16) -> Result<(), String> {
@@ -20,8 +18,17 @@ fn validate_linux(bytes: &[u8], machine: u16) -> Result<(), String> {
     Ok(())
 }
 
+// scripts/check-windows.ps1 compiles this file alone with `rustc --test`, without its build dependencies (like
+// embed_resource below): the tests check what is recorded, not the hash function, so they use a stand-in.
+#[cfg(not(test))]
 fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
     Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+#[cfg(test)]
+fn sha256_hex(bytes: &[u8]) -> String {
+    format!("{:064x}", bytes.len())
 }
 
 fn sources(dir: &Path, required: bool) -> Result<String, String> {

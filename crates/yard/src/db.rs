@@ -184,6 +184,21 @@ pub fn set_status(tx: &Transaction, id: &ExtId, version: &Version, status: &Stat
     put_release(tx, id, &r)
 }
 
+/// When Rekor logged the publisher's latest accepted status statement for a version (0 if none).
+pub fn status_logged(tx: &Transaction, id: &ExtId, version: &Version) -> rusqlite::Result<u64> {
+    let logged = tx.query_row("SELECT value FROM meta WHERE key = ?1", [status_key(id, version)], |r| r.get::<_, i64>(0)).optional()?;
+    Ok(logged.unwrap_or(0) as u64)
+}
+
+pub fn set_status_logged(tx: &Transaction, id: &ExtId, version: &Version, logged: u64) -> rusqlite::Result<()> {
+    tx.execute("INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = ?2", params![status_key(id, version), logged as i64])
+        .map(|_| ())
+}
+
+fn status_key(id: &ExtId, version: &Version) -> String {
+    format!("status-logged {id} {version}")
+}
+
 pub fn set_immediate(tx: &Transaction, id: &ExtId, version: &Version) -> rusqlite::Result<()> {
     let Some(mut r) = release(tx, id, version)? else { return Ok(()) };
     r.immediate = true;

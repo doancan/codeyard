@@ -65,6 +65,7 @@ Guides**, **Inlay Hints** and **File: Toggle Auto Save**, which change the runni
 | Go to definition | F12 or ⌘-click | F12 or Ctrl+click |
 | Suggestions / hover | ⌃Space / ⌘K ⌘I | Ctrl+Space / Ctrl+K Ctrl+I |
 | Next / previous change (diff) | F7 / ⇧F7 | F7 / Shift+F7 |
+| Pick the change / stage or unstage the picked lines (diff) | Space / ↵ | Space / Enter |
 | Word left / right (+Shift selects) | ⌥← / ⌥→ | Ctrl+← / Ctrl+→ |
 | Delete word left / right | ⌥⌫ / ⌥⌦ | Ctrl+Backspace / Ctrl+Delete |
 | Select word / line | double / triple click | double / triple click |
@@ -493,8 +494,12 @@ columns), one line per commit: message, author and the most important branch/tag
 next to it, so history reads from the left edge and side branches step to the right. Hover a commit
 for its author, date, all labels and hash. Click a commit for its message, files and `+/−` counts below
 the graph (click a file for its diff; double-click for the file list). Right-click for copy hash,
-create branch or tag here, checkout (detached), cherry-pick, revert and reset (hard reset asks;
-a cherry-pick or revert that conflicts is undone, never left half done; for a merge commit the first parent is the mainline).
+create branch or tag here, checkout (detached), cherry-pick, revert and reset (a cherry-pick or revert that conflicts is
+undone, never left half done; for a merge commit the first parent is the mainline). Before a reset Codeyard counts the
+commits that leave the branch: a hard reset always asks and says how many leave, how many exist on no other branch, tag
+or remote (afterwards only Git's reflog finds them) and how many are already on the upstream; a soft or mixed reset asks
+only when some are already on the upstream, because the next Sync would bring them back. The result names the commit the
+branch was at, so `git reset <hash>` returns there.
 There is no interactive rebase (squash, reorder, edit): use a terminal for that. The header searches
 commits (message, author, hash, branch), fetches, pulls and pushes (with the counts of commits to pull
 and to push) and reloads; its **…** menu picks the view (Graph, List with times, Days), the scope (all
@@ -964,6 +969,22 @@ staged. The panel also shows the last commit and who the commits will be made as
 refused commit explains how to set it. Clicking a file opens a side-by-side diff; F7 jumps
 between changes. Commits made in the terminal show up on their own.
 
+**Staging lines.** A file's diff from Source Control stages part of a change, not only the whole file. Each changed
+line has a box at its left edge: click it to pick the line, Shift-click to pick every changed line from the last one
+clicked, or press Space to pick the change F7 is on. The header counts the picked lines; **Stage Lines** (or ↵) stages
+them and Escape lets them go. Hovering a change shows a **Stage Change** button for the whole change, and ↵ with nothing
+picked stages the change F7 is on. In the staged diff the same picks and buttons unstage instead. A changed line is
+staged as you see it next to its old line: picking only the new line of a changed pair replaces the old one, an added
+line is added, a removed line is removed. Unstaging every line of a new file takes it out of the index; a rename and a
+deleted file are unstaged as a whole file from Source Control. The diff is read again after each step. If the file or
+the index changed after the diff was shown, nothing is written: the diff reloads and says so, and you pick again.
+Line endings and a byte order mark stay as the index has them.
+
+In the editor, **Git: Stage Selected Lines** and **Git: Revert Selected Lines** (palette, and the editor's right-click
+menu on a changed line) do the same from the text: with a selection, only the selected lines (a removed line belongs to
+the line below it, where the gutter marks it, or to the last line of its change); with no selection, the whole change
+under the cursor. Revert puts the lines back as they are in `HEAD`, and undo brings them back.
+
 The change list also works from the keyboard: Tab moves to it from the message box, ↑/↓/Home/End
 move its cursor, ↵ opens the file's diff (or folds the group), Space stages or unstages the file,
 ← goes to the file's group (and folds it), → unfolds it and goes in, Delete (⌘⌫ on macOS)
@@ -975,7 +996,8 @@ with branch (blue), remote (green), tag (yellow) and HEAD labels; merges are hol
 Click a commit to list the files it changed and open one as a side-by-side diff.
 
 The "…" menu in Source Control (also in the palette) has commit (amend), undo last commit
-(the changes stay staged and the message comes back), stash / stash with untracked files,
+(the changes stay staged and the message comes back; a commit that is already on the upstream is undone only after a
+question, since the next Sync would bring it back, and the result names the commit the branch was at), stash / stash with untracked files,
 pop / apply / drop a stash, and discard all changes. "Git: View File History" lists the
 commits of the open file (following renames); pick one to see what it changed. "Git: Blame
 Line" tells who last changed the line under the cursor, also when the file has unsaved edits.
@@ -1632,8 +1654,12 @@ limited to 32 MiB. The file remains available in the remote `/tmp` directory unt
 **Selecting and copying.** Drag to select, double-click for a word, triple-click for a line. The selection stays on its
 text while a program such as Claude Code or Codex redraws or adds lines below it. While Claude Code or Codex runs, a
 finished selection is copied right away, because those programs keep Ctrl+C for themselves
-(`terminal.copyOnSelection`: `agents`, `always` or `off`). When a program reads the mouse, a drag goes to it. Hold Shift or ⌥
-to select instead; the terminal reminds you the first time.
+(`terminal.copyOnSelection`: `agents`, `always` or `off`). When a program reads the mouse, a drag goes to it: Claude Code's
+fullscreen view, tmux and vim then select the text themselves and copy it when you let go, also over SSH, where the copy
+arrives as OSC 52 (see `terminal.allowClipboardWrite`). Hold Shift or ⌥ to make the terminal's own selection instead; a
+program that only reads clicks gets a reminder the first time. Such a program also gets the middle button (Shift or ⌥
+pastes instead). A right click opens the terminal's menu there too; `terminal.rightClick: "program"` gives it to the
+program, and Shift or ⌥ then opens the menu.
 
 **Shell integration.** zsh, bash and fish mark each prompt and command, with no setup:
 
@@ -1684,8 +1710,10 @@ the bottom or the right restores its size.
 - Pasted text cannot end bracketed paste early. Control characters are removed when the shell does not use bracketed
   paste (`terminal.sanitizePaste`).
 - A paste of several lines asks before it runs (`terminal.warnMultilinePaste`).
-- Programs may write to the clipboard only with `terminal.allowClipboardWrite`. This setting and the two paste settings
-  above are read only from your own settings, never from a project's.
+- Programs may write to the clipboard (OSC 52) only right after you copy in them: let go of a drag or a double-click, or
+  press Ctrl+C (`terminal.allowClipboardWrite`: `copy`, `always` or `off`). Output on its own, such as a file printed with
+  `cat`, cannot replace the clipboard. This setting and the two paste settings above are read only from your own
+  settings, never from a project's.
 - Links that programs mark (OSC 8) show and open their real target.
 - The history is capped at 50,000 lines (`terminal.scrollback`).
 - A maximized panel hides the editor area. When a file, a diff or a page opens meanwhile,

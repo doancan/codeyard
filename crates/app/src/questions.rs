@@ -178,12 +178,60 @@ pub(crate) fn first_use(title: &str, detail: &str) -> Question {
     Question::new(PromptLevel::Warning, title).detail(detail).button(t("Allow for this session")).cancel(t("Deny"))
 }
 
-pub(crate) fn hard_reset(short: &str, repository: Option<&str>) -> Question {
-    let mut detail = t("Commits after it leave this branch and every uncommitted change is lost. This can't be undone.").to_string();
+/// A hard reset to `short`. With `leaving` (counted before asking) it says how many commits leave the branch, how many of
+/// them exist nowhere else and how many are pushed; without it, the general warning.
+pub(crate) fn hard_reset(short: &str, repository: Option<&str>, leaving: Option<&crate::git::Leaving>) -> Question {
+    let mut lines = Vec::new();
+    if let Some(root) = repository {
+        lines.push(tf("Repository: {}", &[&root]));
+    }
+    match leaving {
+        Some(l) => {
+            if l.count > 0 {
+                lines.push(tn("{} commit leaves this branch.", "{} commits leave this branch.", l.count, &[]));
+            }
+            if l.only_here > 0 {
+                lines.push(tn(
+                    "{} of them is on no other branch, tag or remote: after the reset only Git's reflog still finds it.",
+                    "{} of them are on no other branch, tag or remote: after the reset only Git's reflog still finds them.",
+                    l.only_here,
+                    &[],
+                ));
+            }
+            if let (Some(up), true) = (&l.upstream, l.pushed > 0) {
+                lines.push(tn(
+                    "{0} of them is already on {1}: the next Sync brings it back.",
+                    "{0} of them are already on {1}: the next Sync brings them back.",
+                    l.pushed,
+                    &[up],
+                ));
+            }
+            lines.push(t("Every uncommitted change is lost. This can't be undone.").into());
+        }
+        None => lines.push(t("Commits after it leave this branch and every uncommitted change is lost. This can't be undone.").into()),
+    }
+    confirm(PromptLevel::Warning, tf("Hard reset to {}?", &[&short]), lines.join("\n"), t("Reset"))
+}
+
+/// *Undo Last Commit* on a commit that is already on `upstream`: undoing it here leaves it there.
+pub(crate) fn undo_pushed(upstream: &str, repository: Option<&str>) -> Question {
+    let mut detail =
+        tf("The commit stays on {}: the next Sync brings it back. To remove it there too, push with force after undoing (Git: Push (Force)…).", &[&upstream]);
     if let Some(root) = repository {
         detail = format!("{}\n{detail}", tf("Repository: {}", &[&root]));
     }
-    confirm(PromptLevel::Warning, tf("Hard reset to {}?", &[&short]), detail, t("Reset"))
+    confirm(PromptLevel::Warning, tf("Undo a commit that is already on {}?", &[&upstream]), detail, t("Undo Commit"))
+}
+
+/// A soft or mixed reset past `pushed` commits that are on `upstream`.
+pub(crate) fn reset_pushed(pushed: usize, upstream: &str, repository: Option<&str>) -> Question {
+    let mut detail =
+        tf("They stay on {}: the next Sync brings them back. To remove them there too, push with force after the reset (Git: Push (Force)…).", &[&upstream]);
+    if let Some(root) = repository {
+        detail = format!("{}\n{detail}", tf("Repository: {}", &[&root]));
+    }
+    let title = tn("Reset past {0} commit that is already on {1}?", "Reset past {0} commits that are already on {1}?", pushed, &[&upstream]);
+    confirm(PromptLevel::Warning, title, detail, t("Reset"))
 }
 
 /// Copying between the two sides of a folder comparison (`detail` says what goes where).

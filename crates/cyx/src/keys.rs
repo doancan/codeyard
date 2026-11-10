@@ -2,8 +2,9 @@
 //! because the app decides them at run time. Codeyard does not bind an extension's key that a built-in shortcut uses,
 //! and a language id may come from another extension.
 //!
-//! `builtin_keys.txt` lists the keys of the app's built-in shortcuts. It is generated from `crates/app/src/main.rs`
-//! by `UPDATE_DOCS=1 cargo test -p cyx reference`, and the test fails while it is out of date.
+//! `builtin_keys.txt` lists the keys of the app's built-in shortcuts. It is generated from `crates/app/src/main.rs` and
+//! the other files that bind keys (`keys_tests.rs`, `BINDING_SOURCES`) by `UPDATE_DOCS=1 cargo test -p cyx reference`,
+//! and the test fails while it is out of date.
 
 /// One key sequence per line, as the app's `KeyBinding::new` calls write them.
 const BUILTIN_KEYS: &str = include_str!("builtin_keys.txt");

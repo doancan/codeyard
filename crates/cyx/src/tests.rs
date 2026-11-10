@@ -396,8 +396,10 @@ fn dev_watches_sources_but_not_build_output() {
     let names: Vec<String> = dev::sources(&d).iter().map(|(p, _, _)| p.strip_prefix(&d).unwrap().to_string_lossy().replace('\\', "/")).collect();
     assert_eq!(names, ["Cargo.toml", "src/lib.rs"]);
     // A build that did not change the code leaves extension.wasm alone, so Codeyard does not reload.
+    // Its modification time is set back, so a rewrite would show whatever the clock's resolution is.
+    let past = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+    std::fs::File::options().write(true).open(d.join("extension.wasm")).unwrap().set_modified(past).unwrap();
     let before = std::fs::metadata(d.join("extension.wasm")).unwrap().modified().unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(20));
     build::install(&d, b"x").unwrap();
     assert_eq!(std::fs::metadata(d.join("extension.wasm")).unwrap().modified().unwrap(), before);
     assert!(!d.join(build::PARTIAL).exists());
