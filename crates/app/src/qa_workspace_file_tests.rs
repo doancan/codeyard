@@ -788,10 +788,13 @@ fn one_answer_trusts_the_whole_workspace(cx: &mut TestAppContext) {
         &file,
         MONO.replace(
             r#""unknownSection""#,
-            r#""tasks": { "version": "2.0.0", "tasks": [ { "label": "ws build", "command": "touch ran.txt", "group": "build" } ] }, "unknownSection""#,
+            // The task waits for the test to release it, so its "succeeded" notice cannot replace the one the test reads.
+            r#""tasks": { "version": "2.0.0", "tasks": [ { "label": "ws build", "command": "read _ < gate; touch ran.txt", "group": "build" } ] }, "unknownSection""#,
         ),
     )
     .unwrap();
+    let gate = base.join("api/gate");
+    assert!(std::process::Command::new("mkfifo").arg(&gate).status().is_ok_and(|s| s.success()), "mkfifo");
     let (wb, cx) = setup_trust_gate(cx, "trust-scope-config");
     open(&wb, &file, cx);
     wait(cx, "open", |cx| labels(&wb, cx) == ["Backend", "web"]);
@@ -809,6 +812,7 @@ fn one_answer_trusts_the_whole_workspace(cx: &mut TestAppContext) {
     }
     assert!(!trusted(cx, &base.join("outside")), "a folder the workspace does not list");
     assert!(notice(&wb, cx).contains("mono.code-workspace"), "{}", notice(&wb, cx));
+    std::fs::write(&gate, "go\n").unwrap();
     wait_secs(cx, 15, "the task ran", |cx| {
         cx.executor().advance_clock(Duration::from_millis(300));
         base.join("api/ran.txt").exists()
