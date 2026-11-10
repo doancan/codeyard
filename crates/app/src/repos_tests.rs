@@ -122,11 +122,10 @@ fn symlink_loops_do_not_extend_discovery() {
     std::os::unix::fs::symlink(&w, w.join("self")).unwrap();
     std::fs::create_dir_all(w.join("a")).unwrap();
     std::os::unix::fs::symlink("..", w.join("a/back")).unwrap();
-    let started = std::time::Instant::now();
     let d = run(&[s(&w)], Limits::default());
     assert_eq!(worktrees(&d), vec![s(&w.join("real"))]);
+    // Counted folders, not a duration: a loop would list without end.
     assert!(d.listed <= 4, "listed {} folders", d.listed);
-    assert!(started.elapsed() < std::time::Duration::from_secs(10));
     let _ = std::fs::remove_dir_all(w);
 }
 
