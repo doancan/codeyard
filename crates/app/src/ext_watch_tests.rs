@@ -111,14 +111,19 @@ fn watched(wb: &Entity<Workbench>, cx: &mut VisualTestContext) -> String {
 
 fn wait_watched(wb: &Entity<Workbench>, cx: &mut VisualTestContext, what: &str, want: impl Fn(&str) -> bool) -> String {
     let deadline = Instant::now() + Duration::from_secs(20 * crate::test_sshd::timeout_scale());
+    // The files change on the real clock, and the application coalesces them by its own: the test clock moves by the real time
+    // that passed. Moving it faster shrinks the coalescing window, and one change then shows up as two batches.
+    let mut last = Instant::now();
     loop {
         let seen = watched(wb, cx);
         if want(&seen) {
             return seen;
         }
         assert!(Instant::now() < deadline, "timed out waiting for {what}; the probe saw:\n{seen}");
-        cx.executor().advance_clock(Duration::from_millis(200));
         std::thread::sleep(Duration::from_millis(50));
+        let now = Instant::now();
+        cx.executor().advance_clock(now - last);
+        last = now;
     }
 }
 
