@@ -203,10 +203,31 @@ fn file_watches_see_changes_on_disk(cx: &mut TestAppContext) {
     let wb2 = wb.clone();
     until(cx, "the watched folders", move |cx| wb2.read_with(cx, |wb, _| wb.watched_for_test().iter().any(|p| p.ends_with("/src/a.rs"))));
 
-    std::fs::write(root.join("src/a.rs"), "fn a() { changed() }\n").unwrap();
     std::fs::write(root.join("src/new.rs"), "fn new() {}\n").unwrap();
     std::fs::write(root.join("src/new.txt"), "outside the glob\n").unwrap();
-    let seen = wait_watched(&wb, cx, "the changes", |s| s.contains("changed") && s.contains("created"));
+    // The agent compares file stamps with the ones it took when the watch began: a change made before that first look is not a
+    // change to it. The file is therefore written again, with other content, until the change has been seen. Each write is
+    // given longer than the agent's poll to be noticed before the next one, so one change is never two.
+    let a = root.join("src/a.rs");
+    let mut round = 0;
+    let seen = loop {
+        round += 1;
+        std::fs::write(&a, format!("fn a() {{ changed({round}) }}\n")).unwrap();
+        let waited = std::time::Instant::now();
+        let mut seen = watched(&wb, cx);
+        let mut last = std::time::Instant::now();
+        while !(seen.contains("changed") && seen.contains("created")) && waited.elapsed() < Duration::from_secs(3 * crate::test_sshd::timeout_scale()) {
+            std::thread::sleep(Duration::from_millis(50));
+            let now = std::time::Instant::now();
+            cx.executor().advance_clock(now - last);
+            last = now;
+            seen = watched(&wb, cx);
+        }
+        if seen.contains("changed") && seen.contains("created") {
+            break seen;
+        }
+        assert!(round < 6, "the changes never showed up; the probe saw:\n{seen}");
+    };
     assert!(seen.contains(&format!("1 changed {}", uri("src/a.rs"))), "{seen}");
     assert!(seen.contains(&format!("1 created {}", uri("src/new.rs"))), "{seen}");
     assert!(!seen.contains("new.txt") && !seen.contains("a.txt"), "{seen}");
