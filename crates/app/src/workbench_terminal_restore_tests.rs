@@ -37,7 +37,16 @@ fn terminals_come_back_as_new_shells_in_their_folders_without_running_anything_a
             wb.terminals[0].update(cx, |t, _| t.set_fixed_title("build".into()));
             wb.terminals[0].update(cx, |t, _| t.send("echo restore-marker; touch ran-once\n"));
         });
-        wait_ticking(cx, "the command ran", |_| dir.join("sub/ran-once").exists());
+        crate::qa_integration_tests::wait_secs_describing(
+            cx,
+            10,
+            "the command ran",
+            |cx| format!("the terminal shows {:?}", terminal_text(&wb, cx, 0)),
+            |cx| {
+                cx.executor().advance_clock(std::time::Duration::from_millis(300));
+                dir.join("sub/ran-once").exists()
+            },
+        );
         wait_ticking(cx, "its output", |cx| terminal_text(&wb, cx, 0).contains("restore-marker"));
         wb.update(cx, |wb, cx| wb.persist_session(cx));
     }
