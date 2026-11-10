@@ -205,7 +205,7 @@ impl Workbench {
                 // Never came up (no shell, or exited at once like a rustup proxy):
                 // show how to install instead of just "not installed".
                 let lang = slot_language(key);
-                let msg = if e.contains("not found") || e.contains("exited with code") {
+                let msg = if never_came_up(&e) {
                     let hint = lsp::install_hint(lang).filter(|_| config_is_default(lang, command, cx)).map(lsp::install_hint_text);
                     match (&remote_label, hint) {
                         (None, None) => tf("{} isn't available. Or set “lsp.servers” in settings.", &[&command]),
@@ -1031,5 +1031,24 @@ mod tests {
         assert!(inside_roots(&through_link, &roots, false), "remote paths cannot be resolved here");
         assert!(inside_roots(&root.join("fresh/new.txt").to_string_lossy(), &roots, true), "a not yet existing file is judged by its parent");
         let _ = std::fs::remove_dir_all(&base);
+    }
+}
+
+/// A server that never came up: the shell did not find it, it exited at once, or it had already exited when the first request
+/// was sent (which of the three shows depends only on how fast the process dies).
+fn never_came_up(error: &str) -> bool {
+    error.contains("not found") || error.contains("exited with code") || error == crate::i18n::t("language server is not running")
+}
+
+#[cfg(test)]
+mod never_came_up_tests {
+    use super::never_came_up;
+
+    #[test]
+    fn a_server_that_died_before_its_first_request_is_told_like_one_that_was_not_found() {
+        assert!(never_came_up("sh: 1: nope: not found"));
+        assert!(never_came_up("the server exited with code 127"));
+        assert!(never_came_up(crate::i18n::t("language server is not running")));
+        assert!(!never_came_up("initialize: no answer from clangd"));
     }
 }

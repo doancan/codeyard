@@ -2682,7 +2682,13 @@ fn language_servers_wait_for_trust(cx: &mut TestAppContext) {
     assert!(!notice(&wb, cx).contains("isn't available"), "no server start was even attempted");
     // Trusting starts them (here the configured command does not exist, which proves a start was attempted).
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Workspace: Trust This Folder", window, cx));
-    wait_for(cx, "server start attempted after trust", |cx| notice(&wb, cx).contains("isn't available"));
+    wait_secs_describing(
+        cx,
+        10,
+        "server start attempted after trust",
+        |cx| format!("the notice is {:?}", notice(&wb, cx)),
+        |cx| notice(&wb, cx).contains("isn't available"),
+    );
 }
 
 /// Running or debugging tests runs the project's code (a Rust test is built first, which runs its build script): in an

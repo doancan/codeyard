@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Language servers: a server whose command does not exist always gets the "isn't available" message with how to install it or set `lsp.servers`; when the process had already ended by the time of the first request, the notice used to read "command: language server is not running" instead.
 - Workspace Trust: while the question is open, a shortcut (⌘, for Settings, ⌘N and the like) no longer acts behind it. Its own keys, and quitting, hiding or closing the window, still work.
 
 ## [0.9.0] - 2026-11-10
