@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Extensions: a registry served by a program that names itself with `HTTP/` in its `Server` header (Python's `http.server` does) could not be read: the status of the answer was taken from after the last `HTTP/` in it, so every request looked like a refusal.
 - Extensions: the registry downloader checks every redirect like the first address, so a local http registry cannot send it on to plain http elsewhere.
 - Extensions: the registry downloader in the app allows plain http only to this machine, read the way a client reads the host (`http://localhost.evil.test` is not).
 - Debugger: a `launch.json` (or any other JSON-with-comments settings file) saved with a byte order mark is read instead of silently showing no configurations.
