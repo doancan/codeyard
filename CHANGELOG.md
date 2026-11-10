@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Source Control: in a short window or at a large interface scale the changes list keeps room for at least four lines (up to seven when there are that many); the worktrees and graph sections under it shrink first, so a change is no longer cut off at its second row.
+- Command Palette: pressing ⌘, over the palette opens Settings and closes the palette, instead of leaving it on top of the page.
+- Status bar: a long notice is cut with an ellipsis before the items beside it, instead of being clipped at their edge.
 - Language servers: a server whose command does not exist always gets the "isn't available" message with how to install it or set `lsp.servers`; when the process had already ended by the time of the first request, the notice used to read "command: language server is not running" instead.
 - Workspace Trust: while the question is open, a shortcut (⌘, for Settings, ⌘N and the like) no longer acts behind it. Its own keys, and quitting, hiding or closing the window, still work.
 
