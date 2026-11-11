@@ -1464,7 +1464,7 @@ fn block_delims(path: &str) -> Option<(&'static str, &'static str)> {
 /// Minimap width (px).
 const MINIMAP_W: f32 = 90.;
 
-fn role_color(role: Option<Role>, p: &Palette) -> u32 {
+pub(crate) fn role_color(role: Option<Role>, p: &Palette) -> u32 {
     match role {
         None => p.text,
         Some(Role::Keyword) => p.syntax_keyword,

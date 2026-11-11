@@ -152,8 +152,13 @@ pub fn inline_rows(rows: &[DiffRow]) -> Vec<InlineRow> {
 }
 
 pub fn side_by_side(base: &str, current: &str) -> Vec<DiffRow> {
+    rows_from_ops(diff_ops(base, current))
+}
+
+/// The side-by-side rows of a line diff's operations (`diff_ops`).
+pub fn rows_from_ops(ops: impl IntoIterator<Item = (similar::DiffTag, Range<usize>, Range<usize>)>) -> Vec<DiffRow> {
     let mut rows = Vec::new();
-    for (tag, old, new) in diff_ops(base, current) {
+    for (tag, old, new) in ops {
         match tag {
             similar::DiffTag::Equal => rows.extend(old.zip(new).map(|(a, b)| DiffRow::Same(a, b))),
             _ => {
