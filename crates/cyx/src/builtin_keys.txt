@@ -190,9 +190,11 @@ secondary-k secondary-c
 secondary-k secondary-d
 secondary-k secondary-enter
 secondary-k secondary-f
+secondary-k secondary-h
 secondary-k secondary-i
 secondary-k secondary-j
 secondary-k secondary-k
+secondary-k secondary-o
 secondary-k secondary-q
 secondary-k secondary-shift-d
 secondary-k secondary-t

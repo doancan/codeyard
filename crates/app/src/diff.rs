@@ -2,6 +2,22 @@
 //! Lines aligned, changed blocks colored, virtualized list. Read-only, except that Source Control's diffs stage and
 //! unstage picked lines (`diff_stage`).
 
+#[path = "diff_chrome.rs"]
+mod chrome;
+#[path = "diff_syntax.rs"]
+pub(crate) mod colors;
+#[path = "diff_fold.rs"]
+pub(crate) mod fold;
+#[path = "diff_guard.rs"]
+pub(crate) mod guard;
+#[path = "diff_ruler.rs"]
+pub(crate) mod ruler;
+#[cfg(test)]
+#[path = "diff_view_tests.rs"]
+mod view_tests;
+#[path = "diff_ws.rs"]
+pub(crate) mod whitespace;
+
 use std::collections::{BTreeSet, HashMap};
 use std::ops::Range;
 
@@ -10,15 +26,20 @@ use gpui::{
     px, uniform_list,
 };
 
+use self::colors::Runs;
+use self::fold::Item;
+use self::guard::Unsupported;
+use self::ruler::Span;
+use self::whitespace::Whitespace;
 use crate::git::{self, DiffRow};
 use crate::settings::Settings;
 use crate::ui::{self, MONO_FONT, c, ca, icon, palette, text};
 
-actions!(diff, [NextChange, PrevChange, ToggleInline]);
+actions!(diff, [NextChange, PrevChange, ToggleInline, ToggleCollapseUnchanged, ToggleIgnoreWhitespace]);
 
 /// The diff's keys: changes (F7), the inline view, and picking lines to stage (`diff_stage`). `cyx` lists them as
 /// built-in keys too (its `BINDING_SOURCES`).
-pub fn key_bindings() -> [gpui::KeyBinding; 7] {
+pub fn key_bindings() -> [gpui::KeyBinding; 9] {
     use crate::diff_stage::{ApplyPicked, ClearPicked, PickChange};
     use gpui::KeyBinding;
     let at = Some("DiffView");
@@ -27,6 +48,8 @@ pub fn key_bindings() -> [gpui::KeyBinding; 7] {
         KeyBinding::new("f7", NextChange, at),
         KeyBinding::new("shift-f7", PrevChange, at),
         KeyBinding::new("secondary-k secondary-i", ToggleInline, at),
+        KeyBinding::new("secondary-k secondary-o", ToggleCollapseUnchanged, at),
+        KeyBinding::new("secondary-k secondary-h", ToggleIgnoreWhitespace, at),
         KeyBinding::new("enter", ApplyPicked, at),
         KeyBinding::new("space", PickChange, at),
         KeyBinding::new("escape", ClearPicked, at),
@@ -39,28 +62,50 @@ pub struct DiffView {
     pub name: SharedString,
     /// The comparison in the title ("HEAD ↔ Working Tree").
     pub label: SharedString,
-    left: Vec<String>,
-    right: Vec<String>,
+    pub(crate) left: Vec<String>,
+    pub(crate) right: Vec<String>,
     pub(crate) rows: Vec<DiffRow>,
     /// The texts shown (`old` on the left), as given.
     pub(crate) old_text: String,
     pub(crate) new_text: String,
     /// First lines of the changed blocks (for navigation).
-    hunks: Vec<usize>,
+    pub(crate) hunks: Vec<usize>,
     /// Row ranges of the changed blocks.
     pub(crate) blocks: Vec<Range<usize>>,
     /// The block navigated with F7 / ⇧F7.
     pub(crate) current: usize,
-    stats: (usize, usize),
+    pub(crate) stats: (usize, usize),
     /// Single-column (inline) view.
-    inline: bool,
-    inline_rows: Vec<git::InlineRow>,
+    pub(crate) inline: bool,
+    pub(crate) inline_rows: Vec<git::InlineRow>,
     /// The side-by-side row each inline row shows.
-    inline_src: Vec<usize>,
+    pub(crate) inline_src: Vec<usize>,
     /// Inline (character-level) diffs: line number → byte ranges in the tab-expanded text.
     left_marks: HashMap<usize, Vec<Range<usize>>>,
     right_marks: HashMap<usize, Vec<Range<usize>>>,
-    scroll: UniformListScrollHandle,
+    /// Syntax colors of each line of either side (empty: not colored).
+    syn_left: Vec<Runs>,
+    syn_right: Vec<Runs>,
+    /// What the list shows: rows, and folds standing in for runs of unchanged ones.
+    pub(crate) items: Vec<Item>,
+    /// Foldable side-by-side row ranges, and the ones opened (by first row).
+    folds: Vec<Range<usize>>,
+    pub(crate) expanded: BTreeSet<usize>,
+    /// Unchanged regions fold (otherwise the whole file shows).
+    pub(crate) collapse: bool,
+    pub(crate) ws: Whitespace,
+    /// Why the texts are not lined up, if they are not.
+    pub(crate) unsupported: Option<Unsupported>,
+    /// A side had bytes that are not valid UTF-8 (shown as replacement characters).
+    pub(crate) invalid_bytes: bool,
+    /// What each side is called ("HEAD", "Working Tree"), from the label.
+    pub(crate) titles: Option<(SharedString, SharedString)>,
+    /// The overview ruler's markers, over `items`.
+    pub(crate) ruler_spans: Vec<Span>,
+    pub(crate) ruler_drag: bool,
+    /// The path was just copied (the button says so for a moment).
+    pub(crate) copied: bool,
+    pub(crate) scroll: UniformListScrollHandle,
     focus_handle: FocusHandle,
     /// Staging from this diff (Source Control's diffs only).
     pub(crate) stage: Option<crate::diff_stage::Stager>,
@@ -71,6 +116,11 @@ pub struct DiffView {
     pub(crate) busy: bool,
     /// The last operation's result: its message and whether it failed.
     pub(crate) outcome: Option<(SharedString, bool)>,
+}
+
+/// The two sides' names from a label like "HEAD ↔ Working Tree".
+fn titles_of(label: &str) -> Option<(SharedString, SharedString)> {
+    label.split_once(" ↔ ").map(|(left, right)| (left.to_string().into(), right.to_string().into()))
 }
 
 /// A diff line for the tree: whether it was added or removed, its number and its text.
@@ -87,9 +137,10 @@ fn line_heard(sign: &str, line: Option<usize>, text: Option<&String>) -> String 
 /// For each inline row, the side-by-side row it shows: a block's removed lines first, then its added ones.
 fn inline_sources(rows: &[DiffRow], blocks: &[Range<usize>]) -> Vec<usize> {
     let mut out = Vec::with_capacity(rows.len());
+    let mut upcoming = blocks.iter().peekable();
     let mut i = 0;
     while i < rows.len() {
-        match blocks.iter().find(|b| b.start == i) {
+        match upcoming.next_if(|b| b.start == i) {
             Some(b) => {
                 out.extend(b.clone().filter(|&r| matches!(rows[r], DiffRow::Changed(Some(_), _))));
                 out.extend(b.clone().filter(|&r| matches!(rows[r], DiffRow::Changed(_, Some(_)))));
@@ -109,12 +160,19 @@ fn expand_tabs(line: &str) -> String {
     line.replace('\t', "    ")
 }
 
-/// Code cell: changed characters are highlighted with a darker shade of `tint`.
-fn code_cell(text: Option<&String>, marks: Option<&Vec<Range<usize>>>, tint: u32) -> Option<StyledText> {
+/// Code cell: syntax colors from `runs`, and changed characters on a darker shade of `tint`.
+fn code_cell(text: Option<&String>, runs: Option<&Runs>, marks: Option<&Vec<Range<usize>>>, tint: u32, p: &ui::Palette) -> Option<StyledText> {
     let text = expand_tabs(text?);
-    let style = HighlightStyle { background_color: Some(ca(tint, 0.4).into()), ..Default::default() };
-    let marks = marks.into_iter().flatten().map(|r| (r.clone(), style));
-    Some(StyledText::new(text).with_highlights(marks))
+    let segments = colors::segments(text.len(), runs.map_or(&[][..], Vec::as_slice), marks.map_or(&[][..], Vec::as_slice));
+    let styled = segments.into_iter().filter(|s| s.role.is_some() || s.marked).map(|s| {
+        let style = HighlightStyle {
+            color: s.role.map(|r| c(crate::editor::role_color(Some(r), p)).into()),
+            background_color: s.marked.then(|| ca(tint, 0.4).into()),
+            ..Default::default()
+        };
+        (s.range, style)
+    });
+    Some(StyledText::new(text).with_highlights(styled))
 }
 
 impl Focusable for DiffView {
@@ -144,6 +202,19 @@ impl DiffView {
             inline_src: Vec::new(),
             left_marks: HashMap::new(),
             right_marks: HashMap::new(),
+            syn_left: Vec::new(),
+            syn_right: Vec::new(),
+            items: Vec::new(),
+            folds: Vec::new(),
+            expanded: BTreeSet::new(),
+            collapse: true,
+            ws: Whitespace::default(),
+            unsupported: None,
+            invalid_bytes: false,
+            titles: titles_of(label),
+            ruler_spans: Vec::new(),
+            ruler_drag: false,
+            copied: false,
             scroll: UniformListScrollHandle::new(),
             focus_handle: cx.focus_handle(),
             stage: None,
@@ -154,32 +225,37 @@ impl DiffView {
             outcome: None,
         };
         view.set_texts(old, new);
-        // Scroll to the first change (with a few lines of context).
-        if let Some(&first) = view.hunks.first() {
-            view.scroll.scroll_to_item(first.saturating_sub(3), ScrollStrategy::Top);
-        }
+        view.scroll_to_change(0);
         view
     }
 
     /// The description in the title (instead of "HEAD ↔ Staged", e.g. a commit or comparison).
     pub fn with_label(mut self, label: impl Into<SharedString>) -> Self {
         self.label = label.into();
+        self.titles = titles_of(&self.label);
         self
     }
 
     pub fn set_texts(&mut self, old: &str, new: &str) {
-        let split = |s: &str| {
-            let mut v: Vec<String> = s.split('\n').map(str::to_string).collect();
-            if v.last().is_some_and(|l| l.is_empty()) {
-                v.pop(); // the final newline shouldn't count as an empty line
-            }
-            v
-        };
-        self.left = split(old);
-        self.right = split(new);
+        let split = |s: &str| git::split_lines(s).into_iter().map(str::to_string).collect::<Vec<_>>();
         self.old_text = old.to_string();
         self.new_text = new.to_string();
-        self.rows = git::side_by_side(old, new);
+        self.unsupported = guard::check(old, new);
+        self.invalid_bytes = guard::has_invalid_bytes(old, new);
+        let shown = self.unsupported.is_none();
+        self.left = if shown { split(old) } else { Vec::new() };
+        self.right = if shown { split(new) } else { Vec::new() };
+        // The comparison's title can carry more than the file name ("a.rs ↔ Clipboard").
+        let language_path = self.path.split(" ↔ ").next().unwrap_or(&self.path);
+        self.syn_left = if shown { colors::highlight(language_path, old).unwrap_or_default() } else { Vec::new() };
+        self.syn_right = if shown { colors::highlight(language_path, new).unwrap_or_default() } else { Vec::new() };
+        self.lay_out();
+    }
+
+    /// Line up the texts as they are (`self.ws` decides what counts as a difference): rows, changes, word marks, stats and
+    /// the list. Colors do not depend on any of it, so a change of the whitespace option comes here and not to `set_texts`.
+    fn lay_out(&mut self) {
+        self.rows = if self.unsupported.is_none() { whitespace::side_by_side(&self.old_text, &self.new_text, self.ws) } else { Vec::new() };
         self.inline_rows = git::inline_rows(&self.rows);
         self.blocks = git::blocks(&self.rows);
         self.inline_src = inline_sources(&self.rows, &self.blocks);
@@ -206,6 +282,37 @@ impl DiffView {
             }
         }
         self.stats = (added, removed);
+        self.rebuild_items();
+    }
+
+    /// The side-by-side row list item `ix` shows.
+    pub(crate) fn src_of(&self, ix: usize) -> usize {
+        if self.inline { self.inline_src.get(ix).copied().unwrap_or(ix) } else { ix }
+    }
+
+    /// The list (rows and folds) and the ruler's markers over it, after the texts, the view or the folds changed.
+    pub(crate) fn rebuild_items(&mut self) {
+        self.folds = if self.collapse { fold::fold_ranges(&self.blocks, self.rows.len(), fold::CONTEXT) } else { Vec::new() };
+        // Folds the reader opened stay open while they still exist (after a stage reloads the texts).
+        self.expanded.retain(|start| self.folds.iter().any(|f| f.start == *start));
+        self.items = if self.inline {
+            fold::items(self.inline_rows.len(), |ix| self.inline_src[ix], &self.folds, &self.expanded)
+        } else {
+            fold::items(self.rows.len(), |ix| ix, &self.folds, &self.expanded)
+        };
+        let kind = |item: &Item| match item {
+            Item::Fold { .. } => None,
+            Item::Row(ix) if self.inline => ruler::kind_of_inline(&self.inline_rows[*ix]),
+            Item::Row(ix) => ruler::kind_of_row(&self.rows[*ix]),
+        };
+        self.ruler_spans = ruler::spans(self.items.iter().map(kind));
+    }
+
+    /// How many lines of each side have syntax colors.
+    #[cfg(test)]
+    pub(crate) fn colored_lines(&self) -> (usize, usize) {
+        let colored = |lines: &Vec<Runs>| lines.iter().filter(|runs| !runs.is_empty()).count();
+        (colored(&self.syn_left), colored(&self.syn_right))
     }
 
     #[cfg(test)]
@@ -219,17 +326,61 @@ impl DiffView {
             return;
         }
         self.current = if forward { (self.current + 1) % n } else { (self.current + n - 1) % n };
-        self.scroll.scroll_to_item(self.list_index(self.hunks[self.current]).saturating_sub(3), ScrollStrategy::Top);
+        self.scroll_to_change(self.current);
         cx.notify();
     }
 
-    /// The list item that shows side-by-side row `row` (its first inline row in the inline view).
-    fn list_index(&self, row: usize) -> usize {
-        if self.inline { self.inline_src.iter().position(|&r| r == row).unwrap_or(row) } else { row }
+    /// The list item to scroll to for change `n`: a few lines of context above it, and the fold above those if there is one.
+    pub(crate) fn change_scroll_target(&self, n: usize) -> Option<usize> {
+        let row = *self.hunks.get(n)?;
+        let at = self.list_index(row).saturating_sub(fold::CONTEXT);
+        Some(if at > 0 && matches!(self.items.get(at - 1), Some(Item::Fold { .. })) { at - 1 } else { at })
     }
 
-    fn toggle_inline(&mut self, _: &ToggleInline, _: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn scroll_to_change(&mut self, n: usize) {
+        if let Some(at) = self.change_scroll_target(n) {
+            self.scroll.scroll_to_item(at, ScrollStrategy::Top);
+        }
+    }
+
+    /// The list item that shows side-by-side row `row` (its first inline row in the inline view).
+    pub(crate) fn list_index(&self, row: usize) -> usize {
+        self.items.iter().position(|item| matches!(item, Item::Row(ix) if self.src_of(*ix) == row)).unwrap_or(0)
+    }
+
+    pub(crate) fn toggle_inline(&mut self, _: &ToggleInline, _: &mut Window, cx: &mut Context<Self>) {
         self.inline = !self.inline;
+        self.rebuild_items();
+        self.scroll_to_change(self.current);
+        cx.notify();
+    }
+
+    pub(crate) fn toggle_collapse(&mut self, _: &ToggleCollapseUnchanged, _: &mut Window, cx: &mut Context<Self>) {
+        self.collapse = !self.collapse;
+        self.expanded.clear();
+        self.rebuild_items();
+        self.scroll_to_change(self.current);
+        cx.notify();
+    }
+
+    /// Open the fold that starts at side-by-side row `start`.
+    pub(crate) fn expand_fold(&mut self, start: usize, cx: &mut Context<Self>) {
+        if self.expanded.insert(start) {
+            self.rebuild_items();
+            cx.notify();
+        }
+    }
+
+    /// Exact → trailing → all: the diff is computed again, picks are dropped (staging is off while whitespace is ignored).
+    pub(crate) fn toggle_whitespace(&mut self, _: &ToggleIgnoreWhitespace, _: &mut Window, cx: &mut Context<Self>) {
+        self.ws = self.ws.next();
+        self.picked.clear();
+        self.anchor = None;
+        self.outcome = None;
+        self.expanded.clear();
+        self.lay_out();
+        self.current = 0;
+        self.scroll_to_change(0);
         cx.notify();
     }
 
@@ -241,30 +392,31 @@ impl DiffView {
     #[cfg(test)]
     pub fn set_inline_for_test(&mut self, v: bool) {
         self.inline = v;
+        self.rebuild_items();
     }
 
-    fn next_change(&mut self, _: &NextChange, _: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn next_change(&mut self, _: &NextChange, _: &mut Window, cx: &mut Context<Self>) {
         self.jump(true, cx);
     }
-    fn prev_change(&mut self, _: &PrevChange, _: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn prev_change(&mut self, _: &PrevChange, _: &mut Window, cx: &mut Context<Self>) {
         self.jump(false, cx);
     }
 }
 
 /// Width of the column where changed lines are picked for staging.
-const PICK_W: f32 = 22.;
+pub(crate) const PICK_W: f32 = 22.;
 /// Height of a change's Stage / Unstage button drawn over its first line.
 const BLOCK_BUTTON_H: f32 = 18.;
 
 /// Sizes and colors one frame's rows share.
 #[derive(Clone, Copy)]
-struct RowStyle {
-    p: ui::Palette,
-    line_h: f32,
-    num_w: f32,
-    font_size: f32,
+pub(crate) struct RowStyle {
+    pub(crate) p: ui::Palette,
+    pub(crate) line_h: f32,
+    pub(crate) num_w: f32,
+    pub(crate) font_size: f32,
     /// The diff has the keyboard: the change under F7 is marked.
-    focused: bool,
+    pub(crate) focused: bool,
 }
 
 impl DiffView {
@@ -442,9 +594,9 @@ impl DiffView {
             .child(Self::num_cell(new_n, st))
             .child(div().w(px(st.font_size)).flex_none().text_color(c(tint.unwrap_or(p.text_muted))).child(sign))
             .child(div().flex_1().min_w_0().whitespace_nowrap().overflow_hidden().text_color(c(p.text)).children(match self.inline_rows[ix] {
-                git::InlineRow::Removed(a) => code_cell(text, self.left_marks.get(&a), p.danger),
-                git::InlineRow::Added(b) => code_cell(text, self.right_marks.get(&b), p.success),
-                git::InlineRow::Same(..) => code_cell(text, None, p.text),
+                git::InlineRow::Removed(a) => code_cell(text, self.syn_left.get(a), self.left_marks.get(&a), p.danger, &p),
+                git::InlineRow::Added(b) => code_cell(text, self.syn_right.get(b), self.right_marks.get(&b), p.success, &p),
+                git::InlineRow::Same(_, b) => code_cell(text, self.syn_right.get(b), None, p.text, &p),
             }));
         let first = self.block_of(src).filter(|&b| ix == 0 || !self.blocks[b].contains(&self.inline_src[ix - 1]));
         self.stage_row(SharedString::from(format!("diff-irow-{ix}")), src, &format!("i{ix}"), first, inner, st, cx)
@@ -457,7 +609,7 @@ impl DiffView {
             DiffRow::Changed(a, b) => (a, b, true),
         };
         let picked = self.picked.contains(&ix);
-        let side = |n: Option<usize>, lines: &Vec<String>, marks: &HashMap<usize, Vec<Range<usize>>>, tint: u32| {
+        let side = |n: Option<usize>, lines: &Vec<String>, syn: &Vec<Runs>, marks: &HashMap<usize, Vec<Range<usize>>>, tint: u32| {
             let sign = match (changed, tint == p.danger) {
                 (false, _) => " ",
                 (true, true) => "-",
@@ -483,23 +635,35 @@ impl DiffView {
                 .child(Self::num_cell(n, st))
                 .child(div().flex_1().min_w_0().whitespace_nowrap().overflow_hidden().text_color(c(p.text)).children(code_cell(
                     n.and_then(|n| lines.get(n)),
+                    n.and_then(|n| syn.get(n)),
                     n.and_then(|n| marks.get(&n)),
                     tint,
+                    &p,
                 )))
         };
         let inner = div()
             .w_full()
             .flex()
-            .child(side(l, &self.left, &self.left_marks, p.danger))
+            .child(side(l, &self.left, &self.syn_left, &self.left_marks, p.danger))
             .child(div().w(px(1.)).h(px(st.line_h)).flex_none().bg(c(p.border)))
-            .child(side(r, &self.right, &self.right_marks, p.success));
+            .child(side(r, &self.right, &self.syn_right, &self.right_marks, p.success));
         let first = self.blocks.iter().position(|b| b.start == ix);
         self.stage_row(SharedString::from(format!("diff-row-{ix}")), ix, &ix.to_string(), first, inner, st, cx)
     }
 
     /// The header's staging part: what was done, what is picked and the button that stages it, or a hint.
-    fn stage_status(&self, p: ui::Palette, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+    pub(crate) fn stage_status(&self, p: ui::Palette, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
         self.stage.as_ref()?;
+        let why_not = if self.ws.ignores() {
+            Some(crate::i18n::t("Staging is off while whitespace is ignored"))
+        } else if self.invalid_bytes {
+            Some(crate::i18n::t("Staging is off: the file is not valid UTF-8"))
+        } else {
+            None
+        };
+        if let Some(why_not) = why_not {
+            return Some(div().truncate().text_color(c(p.text_muted)).child(why_not).into_any_element());
+        }
         let unstage = self.unstages();
         let surface = self.path.clone();
         let ctl = |key: &str, label: &str| crate::a11y_controls::Control::button(surface.clone(), key.to_string(), label, |_, _| {});
@@ -575,6 +739,18 @@ impl DiffView {
     }
 }
 
+impl DiffView {
+    /// List item `i`: a row of the current view, or a fold.
+    fn list_item(&self, i: usize, st: RowStyle, cx: &mut Context<Self>) -> gpui::AnyElement {
+        match self.items.get(i) {
+            Some(&Item::Row(ix)) if self.inline => self.inline_row(ix, st, cx),
+            Some(&Item::Row(ix)) => self.side_row(ix, st, cx),
+            Some(&Item::Fold { start, len }) => self.fold_row(start, len, st.line_h, st.p, cx),
+            None => div().into_any_element(),
+        }
+    }
+}
+
 impl Render for DiffView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
@@ -584,8 +760,6 @@ impl Render for DiffView {
         let digits = self.left.len().max(self.right.len()).to_string().len().max(3) as f32;
         let num_w = digits * font_size * 0.62 + theme::SPACE[5];
         let st = RowStyle { p, line_h, num_w, font_size, focused: self.focus_handle.is_focused(window) };
-        let (added, removed) = self.stats;
-        let this_scroll = self.scroll.clone();
         let empty = self.can_stage() && self.blocks.is_empty() && !self.busy;
         let status = self.stage_status(p, cx);
         let root = div()
@@ -593,93 +767,52 @@ impl Render for DiffView {
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::next_change))
             .on_action(cx.listener(Self::prev_change))
-            .on_action(cx.listener(Self::toggle_inline));
+            .on_action(cx.listener(Self::toggle_inline))
+            .on_action(cx.listener(Self::toggle_collapse))
+            .on_action(cx.listener(Self::toggle_whitespace));
+        let rows = self.items.len();
+        let list = if self.inline {
+            uniform_list(
+                "diff-inline-rows",
+                rows,
+                cx.processor(move |this, range: Range<usize>, _, cx| range.map(|ix| this.list_item(ix, st, cx)).collect::<Vec<_>>()),
+            )
+        } else {
+            uniform_list(
+                "diff-rows",
+                rows,
+                cx.processor(move |this, range: Range<usize>, _, cx| range.map(|ix| this.list_item(ix, st, cx)).collect::<Vec<_>>()),
+            )
+        };
+        let shows_list = !empty && self.unsupported.is_none();
         self.register_stage_actions(root, cx)
             .size_full()
             .flex()
             .flex_col()
             .bg(c(p.bg))
-            .child(
-                div()
-                    .h(px(30.))
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .gap(px(theme::SPACE[4]))
-                    .px(px(theme::SPACE[6]))
-                    .border_b_1()
-                    .border_color(c(p.border))
-                    .text_size(px(text::XS.0))
-                    .text_color(c(p.text_muted))
-                    .child(icon("git-compare", 14., p.text_muted))
-                    .child(div().flex_none().text_color(c(p.text)).child(self.path.clone()))
-                    .child(div().flex_none().child(self.label.clone()))
-                    .relative()
-                    .child(crate::a11y_controls::said(
-                        self.path.clone(),
-                        "summary",
-                        accesskit::Role::Heading,
-                        format!(
-                            "{} · {} · {}",
-                            self.label,
-                            crate::i18n::tf("{} added", &[&added]),
-                            if self.hunks.is_empty() { crate::i18n::t("No changes").to_string() } else { crate::i18n::tf("{} removed", &[&removed]) }
-                        ),
-                    ))
-                    .child(div().flex_1())
-                    .when_some(status, |d, status| d.child(status).child(div().w(px(1.)).h(px(14.)).flex_none().bg(c(p.border))))
-                    .child(div().text_color(c(p.success)).child(format!("+{added}")))
-                    .child(div().text_color(c(p.danger)).child(format!("−{removed}")))
-                    .child(
-                        div()
-                            .id("diff-inline-toggle")
-                            .relative()
-                            .child(crate::a11y_controls::control(
-                                crate::a11y_controls::Control::button(self.path.clone(), "inline", crate::i18n::t("Toggle inline view"), |_, _| {})
-                                    .description(if self.inline { crate::i18n::t("Inline") } else { crate::i18n::t("Side by side") })
-                                    .on_entity(cx.entity().downgrade(), |this: &mut Self, w, cx| this.toggle_inline(&ToggleInline, w, cx)),
-                            ))
-                            .cursor_pointer()
-                            .px(px(theme::SPACE[3]))
-                            .rounded(px(theme::radius::LG))
-                            .hover(|s| s.bg(c(p.surface_hover)))
-                            .text_color(c(p.text))
-                            .child(if self.inline { crate::i18n::t("Inline") } else { crate::i18n::t("Side by side") })
-                            .tooltip(|_, cx| cx.new(|_| crate::workbench::Tooltip(crate::i18n::t("Toggle inline view").into())).into())
-                            .on_click(cx.listener(|this, _, w, cx| this.toggle_inline(&ToggleInline, w, cx))),
-                    )
-                    .when(self.hunks.is_empty() && !self.can_stage(), |d| d.child(crate::i18n::t("No changes"))),
-            )
+            .child(self.header(status, p, cx))
+            .children(self.titles_band(st))
+            .children(self.notice_strip(p))
             .child(
                 div()
                     .flex_1()
                     .min_h_0()
-                    .font_family(font.clone())
-                    .text_size(px(font_size))
-                    .line_height(px(line_h))
-                    .when(empty, |d| d.child(self.empty_state(p)))
-                    .when(self.inline && !empty, |d| {
-                        d.child(
-                            uniform_list(
-                                "diff-inline-rows",
-                                self.inline_rows.len(),
-                                cx.processor(move |this, range: Range<usize>, _, cx| range.map(|ix| this.inline_row(ix, st, cx)).collect::<Vec<_>>()),
-                            )
-                            .track_scroll(this_scroll.clone())
-                            .size_full(),
-                        )
-                    })
-                    .when(!self.inline && !empty, |d| {
-                        d.child(
-                            uniform_list(
-                                "diff-rows",
-                                self.rows.len(),
-                                cx.processor(move |this, range: Range<usize>, _, cx| range.map(|ix| this.side_row(ix, st, cx)).collect::<Vec<_>>()),
-                            )
-                            .track_scroll(self.scroll.clone())
-                            .size_full(),
-                        )
-                    }),
+                    .flex()
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .h_full()
+                            .font_family(font.clone())
+                            .text_size(px(font_size))
+                            .line_height(px(line_h))
+                            // The list scrolls first; the ruler's thumb follows once it has.
+                            .on_scroll_wheel(cx.listener(|_, _, _, cx| cx.notify()))
+                            .when(empty, |d| d.child(self.empty_state(p)))
+                            .when_some(self.unsupported, |d, why| d.child(self.unsupported_state(why, p)))
+                            .when(shows_list, |d| d.child(list.track_scroll(self.scroll.clone()).size_full())),
+                    )
+                    .when(shows_list && !self.items.is_empty(), |d| d.child(self.ruler(line_h, p, cx))),
             )
     }
 }
