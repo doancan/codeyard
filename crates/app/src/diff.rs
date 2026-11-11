@@ -137,9 +137,10 @@ fn line_heard(sign: &str, line: Option<usize>, text: Option<&String>) -> String 
 /// For each inline row, the side-by-side row it shows: a block's removed lines first, then its added ones.
 fn inline_sources(rows: &[DiffRow], blocks: &[Range<usize>]) -> Vec<usize> {
     let mut out = Vec::with_capacity(rows.len());
+    let mut upcoming = blocks.iter().peekable();
     let mut i = 0;
     while i < rows.len() {
-        match blocks.iter().find(|b| b.start == i) {
+        match upcoming.next_if(|b| b.start == i) {
             Some(b) => {
                 out.extend(b.clone().filter(|&r| matches!(rows[r], DiffRow::Changed(Some(_), _))));
                 out.extend(b.clone().filter(|&r| matches!(rows[r], DiffRow::Changed(_, Some(_)))));
@@ -236,13 +237,7 @@ impl DiffView {
     }
 
     pub fn set_texts(&mut self, old: &str, new: &str) {
-        let split = |s: &str| {
-            let mut v: Vec<String> = s.split('\n').map(str::to_string).collect();
-            if v.last().is_some_and(|l| l.is_empty()) {
-                v.pop(); // the final newline shouldn't count as an empty line
-            }
-            v
-        };
+        let split = |s: &str| git::split_lines(s).into_iter().map(str::to_string).collect::<Vec<_>>();
         self.old_text = old.to_string();
         self.new_text = new.to_string();
         self.unsupported = guard::check(old, new);
@@ -250,11 +245,17 @@ impl DiffView {
         let shown = self.unsupported.is_none();
         self.left = if shown { split(old) } else { Vec::new() };
         self.right = if shown { split(new) } else { Vec::new() };
-        self.rows = if shown { whitespace::side_by_side(old, new, self.ws) } else { Vec::new() };
         // The comparison's title can carry more than the file name ("a.rs ↔ Clipboard").
         let language_path = self.path.split(" ↔ ").next().unwrap_or(&self.path);
         self.syn_left = if shown { colors::highlight(language_path, old).unwrap_or_default() } else { Vec::new() };
         self.syn_right = if shown { colors::highlight(language_path, new).unwrap_or_default() } else { Vec::new() };
+        self.lay_out();
+    }
+
+    /// Line up the texts as they are (`self.ws` decides what counts as a difference): rows, changes, word marks, stats and
+    /// the list. Colors do not depend on any of it, so a change of the whitespace option comes here and not to `set_texts`.
+    fn lay_out(&mut self) {
+        self.rows = if self.unsupported.is_none() { whitespace::side_by_side(&self.old_text, &self.new_text, self.ws) } else { Vec::new() };
         self.inline_rows = git::inline_rows(&self.rows);
         self.blocks = git::blocks(&self.rows);
         self.inline_src = inline_sources(&self.rows, &self.blocks);
@@ -281,7 +282,6 @@ impl DiffView {
             }
         }
         self.stats = (added, removed);
-        self.expanded.clear();
         self.rebuild_items();
     }
 
@@ -293,6 +293,8 @@ impl DiffView {
     /// The list (rows and folds) and the ruler's markers over it, after the texts, the view or the folds changed.
     pub(crate) fn rebuild_items(&mut self) {
         self.folds = if self.collapse { fold::fold_ranges(&self.blocks, self.rows.len(), fold::CONTEXT) } else { Vec::new() };
+        // Folds the reader opened stay open while they still exist (after a stage reloads the texts).
+        self.expanded.retain(|start| self.folds.iter().any(|f| f.start == *start));
         self.items = if self.inline {
             fold::items(self.inline_rows.len(), |ix| self.inline_src[ix], &self.folds, &self.expanded)
         } else {
@@ -375,8 +377,8 @@ impl DiffView {
         self.picked.clear();
         self.anchor = None;
         self.outcome = None;
-        let (old, new) = (std::mem::take(&mut self.old_text), std::mem::take(&mut self.new_text));
-        self.set_texts(&old, &new);
+        self.expanded.clear();
+        self.lay_out();
         self.current = 0;
         self.scroll_to_change(0);
         cx.notify();
@@ -652,8 +654,15 @@ impl DiffView {
     /// The header's staging part: what was done, what is picked and the button that stages it, or a hint.
     pub(crate) fn stage_status(&self, p: ui::Palette, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
         self.stage.as_ref()?;
-        if self.ws.ignores() {
-            return Some(div().truncate().text_color(c(p.text_muted)).child(crate::i18n::t("Staging is off while whitespace is ignored")).into_any_element());
+        let why_not = if self.ws.ignores() {
+            Some(crate::i18n::t("Staging is off while whitespace is ignored"))
+        } else if self.invalid_bytes {
+            Some(crate::i18n::t("Staging is off: the file is not valid UTF-8"))
+        } else {
+            None
+        };
+        if let Some(why_not) = why_not {
+            return Some(div().truncate().text_color(c(p.text_muted)).child(why_not).into_any_element());
         }
         let unstage = self.unstages();
         let surface = self.path.clone();

@@ -2306,6 +2306,7 @@ Staging changes is not supported in files with old-Mac (CR only) line endings
 Staging changes needs a UTF-8 file	
 Staging changes needs a UTF-8 file (this one is stored in another encoding)	
 Staging is off while whitespace is ignored	
+Staging is off: the file is not valid UTF-8	
 Staging…	
 Start	
 Start Debugging	

@@ -46,8 +46,24 @@ fn set(marks: &mut [Option<LineMark>], i: usize, m: LineMark) {
 
 /// (kind, old lines, new lines). Lines are split on `\n`.
 pub fn diff_ops(base: &str, current: &str) -> Vec<(similar::DiffTag, Range<usize>, Range<usize>)> {
-    let diff = similar::TextDiff::configure().algorithm(similar::Algorithm::Myers).timeout(std::time::Duration::from_millis(200)).diff_lines(base, current);
+    let diff = line_diff_config().diff_lines(base, current);
     diff.ops().iter().map(|op| op.as_tag_tuple()).collect()
+}
+
+/// The line differ every view of a file's changes uses (Myers, giving up on a hard pair after 200 ms).
+pub fn line_diff_config() -> similar::TextDiffConfig {
+    let mut config = similar::TextDiff::configure();
+    config.algorithm(similar::Algorithm::Myers).timeout(std::time::Duration::from_millis(200));
+    config
+}
+
+/// The lines of `text` as the diff counts them: split on `\n`, and the final newline does not start another line.
+pub fn split_lines(text: &str) -> Vec<&str> {
+    let mut lines: Vec<&str> = text.split('\n').collect();
+    if lines.last().is_some_and(|l| l.is_empty()) {
+        lines.pop();
+    }
+    lines
 }
 
 /// Inline (character-level) diffs within a changed line pair: byte ranges in the old and new line.

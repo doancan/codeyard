@@ -3729,3 +3729,4 @@ Whitespace differences are shown. Click to ignore trailing whitespace	Boşluk fa
 {} changes	{} değişiklik
 {} of {}	{} / {}
 {} unchanged line|{} unchanged lines	{} değişmeyen satır
+Staging is off: the file is not valid UTF-8	Stage'e alma kapalı: dosya geçerli UTF-8 değil

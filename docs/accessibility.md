@@ -60,7 +60,12 @@ The tree, in the order a screen reader walks it:
   Accept Incoming, Accept Both and Both, Incoming First with the conflict as description, Accept All, Save File and
   Close); the folder comparison (the option chips as `CheckBox`es, Stop, Scan Again, Copy Report and Export, each row
   a `TreeItem` with both sides and its status as description, expanded for a folder, with Copy to the right or left
-  and Delete from either side); the diff (a heading with the comparison and counts, Toggle inline view, every line
+  and Delete from either side); the diff (a heading with the comparison and counts, a `Status` "Change 2 of 12" with Previous change and Next
+  change buttons, Copy path, Collapse unchanged lines as a toggled button, Ignore whitespace as a toggled button
+  whose description is the current mode, Toggle inline view, a button "83 unchanged lines" for each fold, the
+  "Change overview" `Slider` of the overview ruler (0 at the top, 100 at the end; Increment and Decrement scroll by a
+  tenth, its description says how many changes there are), a `Status` for the notices (bytes that are not valid
+  UTF-8, only whitespace differs) and a `Label` in place of the lines for a binary or very large file; every line
   drawn as a `ListItem` "Added, line 3: text", side by side or inline; in Source Control's diffs also each changed
   line as a `CheckBox` named after both of its sides that picks it for staging, each change's Stage Change or Unstage
   Change button ("Stage Change, change 2 of 3"), the picked count, Clear, Stage Lines and the result as a `Status`);

@@ -36,23 +36,15 @@ impl Whitespace {
     }
 }
 
-fn lines(text: &str) -> Vec<&str> {
-    let mut v: Vec<&str> = text.split('\n').collect();
-    if v.last().is_some_and(|l| l.is_empty()) {
-        v.pop();
-    }
-    v
-}
-
 /// The side-by-side rows of `old` against `new`, matching lines the way `mode` says.
 pub fn side_by_side(old: &str, new: &str, mode: Whitespace) -> Vec<DiffRow> {
     if !mode.ignores() {
         return git::side_by_side(old, new);
     }
-    let keys = |text: &str| lines(text).into_iter().map(|l| mode.key(l)).collect::<Vec<_>>();
+    let keys = |text: &str| git::split_lines(text).into_iter().map(|l| mode.key(l)).collect::<Vec<_>>();
     let (a, b) = (keys(old), keys(new));
     let (a, b): (Vec<&str>, Vec<&str>) = (a.iter().map(String::as_str).collect(), b.iter().map(String::as_str).collect());
-    let diff = similar::TextDiff::configure().algorithm(similar::Algorithm::Myers).timeout(std::time::Duration::from_millis(200)).diff_slices(&a, &b);
+    let diff = git::line_diff_config().diff_slices(&a, &b);
     git::rows_from_ops(diff.ops().iter().map(|op| op.as_tag_tuple()))
 }
 

@@ -71,9 +71,10 @@ impl DiffView {
     }
 
     /// Lines can be picked here: a Source Control diff of text that is lined up exactly (staging works on the exact
-    /// rows, so it is off while whitespace is ignored).
+    /// rows, so it is off while whitespace is ignored) and read without loss (replacement characters would be staged
+    /// in place of the file's bytes).
     pub fn can_stage(&self) -> bool {
-        self.stage.is_some() && !self.ws.ignores() && self.unsupported.is_none()
+        self.stage.is_some() && !self.ws.ignores() && self.unsupported.is_none() && !self.invalid_bytes
     }
 
     /// Whether lines are unstaged here (HEAD ↔ Staged) rather than staged.

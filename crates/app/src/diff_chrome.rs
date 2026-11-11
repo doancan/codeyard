@@ -38,7 +38,7 @@ fn with_keys(label: &str, keys: &str) -> String {
 }
 
 impl DiffView {
-    /// A small icon button of the header: `active` marks a toggle that is on; `enabled` false dims it and ignores clicks.
+    /// A small icon button of the header: `toggled` is the state of a toggle button (None: not a toggle); `enabled` false dims it and ignores clicks.
     #[allow(clippy::too_many_arguments)]
     fn tool_button(
         &self,
@@ -46,7 +46,7 @@ impl DiffView {
         glyph: &'static str,
         label: &str,
         tip: String,
-        (active, enabled): (bool, bool),
+        (toggled, enabled): (Option<bool>, bool),
         p: ui::Palette,
         cx: &mut Context<Self>,
         f: impl Fn(&mut Self, &mut Window, &mut Context<Self>) + 'static,
@@ -59,15 +59,15 @@ impl DiffView {
             .items_center()
             .justify_center()
             .rounded(px(theme::radius::SM))
-            .when(active, |d| d.bg(c(p.surface_active)))
+            .when(toggled == Some(true), |d| d.bg(c(p.surface_active)))
             .when(enabled, |d| d.cursor_pointer().hover(|d| d.bg(c(p.surface_hover))))
             .when(!enabled, |d| d.opacity(0.4))
-            .child(icon(glyph, 14., if active { p.text } else { p.text_muted }))
+            .child(icon(glyph, 14., if toggled == Some(true) { p.text } else { p.text_muted }))
             .tooltip(tooltip(tip));
         let mut control = Control::button(self.path.clone(), id, label, |_, _| {});
         control.disabled = !enabled;
-        if matches!(id, "collapse") {
-            control = control.toggled(active);
+        if let Some(on) = toggled {
+            control = control.toggled(on);
         }
         a11y_controls::press_on(el, control, cx, move |this, w, cx| {
             if enabled {
@@ -92,7 +92,6 @@ impl DiffView {
             tf("{} added", &[&added]),
             if self.hunks.is_empty() { t("No changes").to_string() } else { tf("{} removed", &[&removed]) }
         );
-        let next_keys = chord("F7", "F7");
         let prev_keys = chord("⇧F7", "Shift+F7");
         let has_changes = changes > 0;
         let copy_label = t("Copy path");
@@ -153,7 +152,7 @@ impl DiffView {
                 if self.copied { "check" } else { "copy" },
                 copy_label,
                 if self.copied { t("Copied").to_string() } else { copy_label.to_string() },
-                (false, true),
+                (None, true),
                 p,
                 cx,
                 |this, _, cx| this.copy_path(cx),
@@ -167,7 +166,7 @@ impl DiffView {
                 "chevron-up",
                 t("Previous change"),
                 with_keys(t("Previous change"), prev_keys),
-                (false, has_changes),
+                (None, has_changes),
                 p,
                 cx,
                 |this, w, cx| this.prev_change(&crate::diff::PrevChange, w, cx),
@@ -177,8 +176,8 @@ impl DiffView {
                 "next-change",
                 "chevron-down",
                 t("Next change"),
-                with_keys(t("Next change"), next_keys),
-                (false, has_changes),
+                with_keys(t("Next change"), "F7"),
+                (None, has_changes),
                 p,
                 cx,
                 |this, w, cx| this.next_change(&crate::diff::NextChange, w, cx),
@@ -195,7 +194,7 @@ impl DiffView {
                 "chevrons-down-up",
                 t("Collapse unchanged lines"),
                 with_keys(t("Collapse unchanged lines"), chord("⌘K ⌘O", "Ctrl+K Ctrl+O")),
-                (self.collapse, true),
+                (Some(self.collapse), true),
                 p,
                 cx,
                 |this, w, cx| this.toggle_collapse(&ToggleCollapseUnchanged, w, cx),
@@ -356,6 +355,15 @@ impl DiffView {
         self.scroll.0.borrow().last_item_size.map_or(0., |s| f32::from(s.item.height))
     }
 
+    /// Scroll to `progress` of the way from the top (0) to the end (1): what the ruler's slider says.
+    pub(crate) fn scroll_to_progress(&mut self, progress: f32, cx: &mut Context<Self>) {
+        let line_h = cx.global::<crate::settings::Settings>().editor_line_height;
+        let offset = ruler::offset_at(progress, self.viewport_height(), self.items.len() as f32 * line_h);
+        let base = self.scroll.0.borrow().base_handle.clone();
+        base.set_offset(point(base.offset().x, px(offset)));
+        cx.notify();
+    }
+
     /// Scroll so that the point `fraction` (0..=1) down the list is centered.
     pub(crate) fn scroll_to_fraction(&mut self, fraction: f32, cx: &mut Context<Self>) {
         let line_h = cx.global::<crate::settings::Settings>().editor_line_height;
@@ -392,7 +400,7 @@ impl DiffView {
             let len = self.items[first..].iter().take_while(|item| matches!(item, Item::Row(ix) if block.contains(&self.src_of(*ix)))).count();
             first..first + len.max(1)
         });
-        let position = thumb.map_or(0., |(top, _)| top);
+        let position = ruler::progress(self.scroll_offset(line_h), self.viewport_height(), content);
         let changes = self.hunks.len();
         let heard = if changes == 0 { t("No changes").to_string() } else { tf("{} changes", &[&changes]) };
         let weak = cx.entity().downgrade();
@@ -426,7 +434,7 @@ impl DiffView {
             .child(a11y_controls::control(Control::new(self.path.clone(), "ruler", accesskit::Role::Slider, t("Change overview")).description(heard).slider(
                 a11y_controls::Range { value: (position * 100.) as f64, min: 0., max: 100., step: 10. },
                 move |to, _, cx| {
-                    weak.update(cx, |this, cx| this.scroll_to_fraction(to as f32 / 100., cx)).ok();
+                    weak.update(cx, |this, cx| this.scroll_to_progress(to as f32 / 100., cx)).ok();
                 },
             )))
             .on_mouse_down(

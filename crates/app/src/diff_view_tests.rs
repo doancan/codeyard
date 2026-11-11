@@ -322,3 +322,108 @@ fn with_no_changes_nothing_folds_and_f7_stays_put(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("f7");
     assert_eq!(view.read_with(cx, |v, _| v.current), before);
 }
+
+#[test]
+fn inline_sources_walks_the_blocks_once() {
+    // 60k rows, every third one changed: a lookup of the block per row would take minutes.
+    let rows: Vec<DiffRow> = (0..60_000).map(|i| if i % 3 == 0 { DiffRow::Changed(Some(i), Some(i)) } else { DiffRow::Same(i, i) }).collect();
+    let blocks = crate::git::blocks(&rows);
+    assert_eq!(blocks.len(), 20_000);
+    let started = std::time::Instant::now();
+    let sources = super::inline_sources(&rows, &blocks);
+    assert!(started.elapsed() < std::time::Duration::from_secs(5), "{:?}", started.elapsed());
+    // Every changed row shows twice (removed, then added), every unchanged row once.
+    assert_eq!(sources.len(), 60_000 + 20_000);
+    assert_eq!(sources[..4], [0, 0, 1, 2]);
+}
+
+#[gpui::test]
+fn text_that_is_not_utf8_shows_but_cannot_be_staged(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let dir = repo("diffv2-latin1");
+    std::fs::write(dir.join("latin.txt"), b"caf\xe9\nx\n").unwrap();
+    git_in(&dir, &["add", "-A"]);
+    git_in(&dir, &["commit", "-q", "-m", "latin"]);
+    std::fs::write(dir.join("latin.txt"), b"caf\xe9\ny\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    wait_ticking(cx, "status", |cx| changes(&wb, cx).is_some_and(|c| c.iter().any(|(p, ..)| p == "latin.txt")));
+    wb.update_in(cx, |wb, window, cx| wb.open_diff("latin.txt".into(), false, window, cx));
+    wait_ticking(cx, "the diff", |cx| wb.read_with(cx, |wb, cx| wb.diff_view().is_some_and(|v| v.read(cx).path == "latin.txt")));
+    cx.run_until_parked();
+    let view = wb.read_with(cx, |wb, _| wb.diff_view()).unwrap();
+    assert_eq!(view.read_with(cx, |v, _| (v.invalid_bytes, v.can_stage(), v.blocks.len())), (true, false, 1));
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    assert!(git_in(&dir, &["diff", "--cached", "--name-only"]).is_empty(), "nothing staged");
+    // The header says why there is no staging.
+    let (_, nodes) = controls(&wb, cx);
+    assert!(nodes.iter().any(|(_, n)| n.label().is_some_and(|l| l.starts_with("Some bytes are not valid UTF-8"))));
+}
+
+#[gpui::test]
+fn folds_the_reader_opened_stay_open_after_a_stage_reloads_the_diff(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let (_dir, wb, cx) = long_file("diffv2-keepopen", cx);
+    let view = open_diff(&wb, false, cx);
+    view.update(cx, |v, cx| v.expand_fold(0, cx));
+    assert_eq!(folds(&view, cx), vec![(13, 83), (103, 17)]);
+    let row = row_of(&view, 99, cx);
+    view.update(cx, |v, cx| v.click_row(row, false, cx));
+    cx.simulate_keystrokes("enter");
+    wait_ticking(cx, "the reload", |cx| view.read_with(cx, |v, _| v.blocks.len() == 1 && !v.busy));
+    // One change is left; the fold above it is still open.
+    let left = folds(&view, cx);
+    assert!(left.iter().all(|(start, _)| *start != 0), "{left:?}");
+    assert!(view.read_with(cx, |v, _| v.expanded.contains(&0)));
+}
+
+#[gpui::test]
+fn changing_the_whitespace_option_keeps_the_syntax_colors(cx: &mut TestAppContext) {
+    let (_dir, wb, cx) = long_file("diffv2-keepcolors", cx);
+    let view = open_diff(&wb, false, cx);
+    // A marker in place of the colors survives: the toggle lays the rows out again but does not parse again.
+    view.update(cx, |v, _| v.syn_left = vec![vec![(1, None)]]);
+    cx.simulate_keystrokes("cmd-k cmd-h");
+    assert_eq!(view.read_with(cx, |v, _| (v.ws, v.syn_left.clone())), (Whitespace::Trailing, vec![vec![(1, None)]]));
+}
+
+#[gpui::test]
+fn the_ruler_slider_runs_from_the_top_to_the_end_and_nudges_from_either(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let (_dir, wb, cx) = long_file("diffv2-slider", cx);
+    let view = open_diff(&wb, false, cx);
+    cx.simulate_keystrokes("cmd-k cmd-o");
+    cx.run_until_parked();
+    let progress = |view: &Entity<DiffView>, cx: &mut VisualTestContext| {
+        view.read_with(cx, |v, _| {
+            let s = v.scroll.0.borrow();
+            let (viewport, content) = s.last_item_size.map(|z| (f32::from(z.item.height), f32::from(z.contents.height))).unwrap();
+            crate::diff::ruler::progress(f32::from(s.base_handle.offset().y), viewport, content)
+        })
+    };
+    view.update(cx, |v, cx| v.scroll_to_progress(1.0, cx));
+    cx.run_until_parked();
+    assert_eq!(progress(&view, cx), 1.0);
+    let value = |nodes: &[(accesskit::NodeId, accesskit::Node)]| {
+        nodes.iter().find(|(_, n)| n.label() == Some("Change overview")).map(|(id, n)| (*id, n.numeric_value().unwrap()))
+    };
+    let (snap, nodes) = controls(&wb, cx);
+    let (id, at_end) = value(&nodes).unwrap();
+    assert_eq!(at_end, 100., "the slider says the end");
+    // Decrement moves back by one step (10%) of the way, not to some other scale.
+    let req = accesskit::ActionRequest { action: accesskit::Action::Decrement, target_tree: accesskit::TreeId::ROOT, target_node: id, data: None };
+    wb.update_in(cx, |wb, window, cx| wb.a11y_action_for_test(&req, &snap, window, cx));
+    cx.run_until_parked();
+    assert!((progress(&view, cx) - 0.9).abs() < 0.01, "{}", progress(&view, cx));
+    assert!((value(&controls(&wb, cx).1).unwrap().1 - 90.).abs() < 1.);
+    // And from the top, Increment goes down by a step.
+    view.update(cx, |v, cx| v.scroll_to_progress(0.0, cx));
+    cx.run_until_parked();
+    let (snap, nodes) = controls(&wb, cx);
+    let (id, _) = value(&nodes).unwrap();
+    let req = accesskit::ActionRequest { action: accesskit::Action::Increment, target_tree: accesskit::TreeId::ROOT, target_node: id, data: None };
+    wb.update_in(cx, |wb, window, cx| wb.a11y_action_for_test(&req, &snap, window, cx));
+    cx.run_until_parked();
+    assert!((progress(&view, cx) - 0.1).abs() < 0.01);
+}

@@ -79,6 +79,17 @@ pub fn offset_for(fraction: f32, viewport: f32, content: f32) -> f32 {
     -(fraction.clamp(0., 1.) * content - viewport / 2.).clamp(0., max)
 }
 
+/// How far the list is scrolled: 0 at the top, 1 at the end (the slider's value).
+pub fn progress(offset: f32, viewport: f32, content: f32) -> f32 {
+    let room = content - viewport;
+    if room <= 0. { 0. } else { (-offset / room).clamp(0., 1.) }
+}
+
+/// The scroll offset for a `progress` between the top (0) and the end (1).
+pub fn offset_at(progress: f32, viewport: f32, content: f32) -> f32 {
+    -(progress.clamp(0., 1.) * (content - viewport).max(0.))
+}
+
 /// How far down the lane (0..=1) the pointer at `y` is, for a lane from `top` of height `height`.
 pub fn fraction_at(y: f32, top: f32, height: f32) -> f32 {
     if height <= 0. { 0. } else { ((y - top) / height).clamp(0., 1.) }
@@ -128,6 +139,19 @@ mod tests {
         // Everything fits, or no layout yet: no thumb.
         assert_eq!(thumb(0., 250., 200.), None);
         assert_eq!(thumb(0., 0., 1000.), None);
+    }
+
+    #[test]
+    fn progress_runs_from_the_top_to_the_end_and_back() {
+        assert_eq!(progress(0., 250., 1000.), 0.);
+        assert_eq!(progress(-750., 250., 1000.), 1.);
+        assert_eq!(progress(-375., 250., 1000.), 0.5);
+        assert_eq!(progress(-900., 250., 1000.), 1.);
+        assert_eq!(progress(0., 250., 100.), 0.);
+        for p in [0., 0.3, 1.] {
+            assert!((progress(offset_at(p, 250., 1000.), 250., 1000.) - p).abs() < 1e-6);
+        }
+        assert_eq!(offset_at(0.5, 250., 100.), 0.);
     }
 
     #[test]
