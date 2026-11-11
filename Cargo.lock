@@ -220,6 +220,7 @@ dependencies = [
  "regex",
  "ring",
  "schema",
+ "semver",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -231,6 +232,7 @@ dependencies = [
  "theme",
  "tokio",
  "toml 1.1.8+spec-1.1.0",
+ "toml_edit 0.25.17+spec-1.1.0",
  "usvg",
  "windows 0.61.3",
 ]

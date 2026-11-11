@@ -4,6 +4,10 @@
 use host::Host;
 use serde_json::Value;
 
+/// Dependency intelligence for `Cargo.toml` (hints, completion, hover, updates).
+#[path = "cargo_deps.rs"]
+pub mod deps;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CrateContext {
     pub manifest: String,

@@ -44,6 +44,10 @@ serde = { version = "1.0.229", default-features = false, features = ["std"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 # Data lens: TOML read and write. Same release as the build script of the Windows resource compiler already pulls in.
 toml = { version = "1.1.8", default-features = false, features = ["std", "serde", "parse", "display", "preserve_order"] }
+# Cargo.toml dependency intelligence: the format-preserving editor `cyx` already uses (same lock entry), and Cargo's own
+# version-requirement matching (`semver` is already in the tree through the Wasm tooling).
+toml_edit = { version = "0.25.17", default-features = false, features = ["parse", "display"] }
+semver = "1.0.28"
 spell = { version = "0.9.1", path = "../spell" }
 state = { version = "0.9.1", path = "../state" }
 syntax = { version = "0.9.1", path = "../syntax" }
