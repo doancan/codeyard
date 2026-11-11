@@ -3730,3 +3730,83 @@ Whitespace differences are shown. Click to ignore trailing whitespace	Boşluk fa
 {} of {}	{} / {}
 {} unchanged line|{} unchanged lines	{} değişmeyen satır
 Staging is off: the file is not valid UTF-8	Stage'e alma kapalı: dosya geçerli UTF-8 değil
+
+# ---- Cargo.toml dependencies (dependency bağımlılık, requirement gereksinim, yanked geri çekildi, lookup sorgu; crate stays crate) ----
+Cargo: Add Dependency…	Cargo: Bağımlılık Ekle…
+Cargo: Remove Dependency at Cursor	Cargo: İmleçteki Bağımlılığı Kaldır
+Cargo: Update Dependency at Cursor to Latest	Cargo: İmleçteki Bağımlılığı Son Sürüme Güncelle
+Cargo: Update All Dependencies in This File (Compatible)	Cargo: Bu Dosyadaki Tüm Bağımlılıkları Güncelle (Uyumlu)
+Cargo: Update All Dependencies in This File to Latest	Cargo: Bu Dosyadaki Tüm Bağımlılıkları Son Sürüme Güncelle
+(from the cache, offline)	(önbellekten, çevrimdışı)
+A git dependency: not looked up on crates.io.	Git bağımlılığı: crates.io’da aranmadı.
+A path dependency: not looked up on crates.io.	Yol bağımlılığı: crates.io’da aranmadı.
+Add dependency	Bağımlılık ekle
+Added with cargo add	cargo add ile eklendi
+Added “{0}” by editing the file (cargo add: {1}). Save the file to keep it.	“{0}” dosya düzenlenerek eklendi (cargo add: {1}). Kalması için dosyayı kaydedin.
+Added “{}”. Save the file to keep it.	“{}” eklendi. Kalması için dosyayı kaydedin.
+Cargo dependency	Cargo bağımlılığı
+Cargo.toml is not valid TOML yet.	Cargo.toml henüz geçerli bir TOML değil.
+Cargo.toml is not valid TOML: {}	Cargo.toml geçerli bir TOML değil: {}
+Could not add “{}”: cargo is not available and its version is not known offline.	“{}” eklenemedi: cargo yok ve sürümü çevrimdışıyken bilinmiyor.
+Dependency lookups are off. Turn on rust.cargo.dependencyLookups in Settings.	Bağımlılık sorguları kapalı. Ayarlar’da rust.cargo.dependencyLookups seçeneğini açın.
+Documentation: {}	Belgeler: {}
+Enables nothing else	Başka bir şeyi etkinleştirmez
+Enables: {}	Etkinleştirir: {}
+From the registry “{}”: not looked up.	“{}” kaydından: aranmadı.
+Homepage: {}	Ana sayfa: {}
+License: {}	Lisans: {}
+Needs Rust {} or newer	Rust {} veya daha yenisi gerekir
+No crates matching “{}”	“{}” ile eşleşen crate yok
+No published version matches the requirement	Yayımlanmış hiçbir sürüm gereksinimle eşleşmiyor
+Nothing to update: the requirements are current.	Güncellenecek bir şey yok: gereksinimler güncel.
+Open a Cargo.toml first	Önce bir Cargo.toml açın
+Put the cursor on a dependency first	Önce imleci bir bağımlılığın üzerine getirin
+Remove dependency “{}”	“{}” bağımlılığını kaldır
+Removed with cargo remove	cargo remove ile kaldırıldı
+Removed “{0}” by editing the file (cargo remove: {1}). Save the file to keep it.	“{0}” dosya düzenlenerek kaldırıldı (cargo remove: {1}). Kalması için dosyayı kaydedin.
+Removed “{}”. Save the file to keep it.	“{}” kaldırıldı. Kalması için dosyayı kaydedin.
+Requirement “{0}”, Cargo.lock has {1}	Gereksinim “{0}”, Cargo.lock’ta {1} var
+Requirement “{}”	Gereksinim “{}”
+Search failed: {}	Arama başarısız: {}
+Search is not available for this project's registry	Bu projenin kaydında arama kullanılamıyor
+That dependency is gone.	Bu bağımlılık artık yok.
+The dependency versions are not loaded yet. Try again in a moment.	Bağımlılık sürümleri henüz yüklenmedi. Birazdan yeniden deneyin.
+The file changed meanwhile. Try again.	Dosya bu sırada değişti. Yeniden deneyin.
+The version comes from [workspace.dependencies].	Sürüm [workspace.dependencies] içinden geliyor.
+Type a crate name to search crates.io	crates.io’da aramak için bir crate adı yazın
+Up to date: the latest release is {}	Güncel: son sürüm {}
+Update available: {}	Güncelleme var: {}
+Update “{0}” to the latest version, {1}	“{0}” bağımlılığını son sürüme, {1}, güncelle
+Update “{0}” to {1}, the newest compatible version	“{0}” bağımlılığını en yeni uyumlu sürüme, {1}, güncelle
+Use the name as typed	Adı yazıldığı gibi kullan
+Version {} was yanked	{} sürümü geri çekildi
+crates.io could not be reached (offline?)	crates.io’ya ulaşılamadı (çevrimdışı mı?)
+enabled by default	varsayılan olarak etkin
+feature {0} of {1}: enables nothing else	{1} paketinin {0} özelliği: başka bir şeyi etkinleştirmez
+feature {0} of {1}: enables {2}	{1} paketinin {0} özelliği: {2} öğesini etkinleştirir
+latest	son sürüm
+lookup failed	sorgu başarısız
+no version matches	eşleşen sürüm yok
+not found on crates.io	crates.io’da bulunamadı
+offline	çevrimdışı
+optional dependency	isteğe bağlı bağımlılık
+up to date (latest {})	güncel (son sürüm {})
+update available: {}	güncelleme var: {}
+yanked	geri çekildi
+yanked: {}	geri çekildi: {}
+{0} can be updated: “{1}” does not allow the latest release, {2}	{0} güncellenebilir: “{1}” son sürüme, {2}, izin vermiyor
+{0} is up to date: “{1}” allows the latest release, {2}	{0} güncel: “{1}” son sürüme, {2}, izin veriyor
+{0}: lookup failed: {1}	{0}: sorgu başarısız: {1}
+{0}: no published version matches “{1}”	{0}: “{1}” ile eşleşen yayımlanmış sürüm yok
+{0}: no published version matches “{1}” (latest is {2})	{0}: “{1}” ile eşleşen yayımlanmış sürüm yok (son sürüm {2})
+{0}: version {1} was yanked and should not be used	{0}: {1} sürümü geri çekildi ve kullanılmamalı
+{0}: version {1} was yanked from crates.io. Update to a release that is not yanked.	{0}: {1} sürümü crates.io’dan geri çekildi. Geri çekilmemiş bir sürüme güncelleyin.
+{1} has no feature named {0}	{1} paketinde {0} adlı bir özellik yok
+{}: crates.io could not be reached	{}: crates.io’ya ulaşılamadı
+{}: no crate with this name on crates.io	{}: crates.io’da bu adda bir crate yok
+“{}” in Cargo.toml is not a table	Cargo.toml içindeki “{}” bir tablo değil
+“{}” is already a dependency here	“{}” zaten burada bir bağımlılık
+“{}” was not found in the file	“{}” dosyada bulunamadı
+Updated {} dependency|Updated {} dependencies	{} bağımlılık güncellendi
+Update {} dependency in this file to its newest compatible version|Update {} dependencies in this file to their newest compatible versions	Bu dosyadaki {} bağımlılığı en yeni uyumlu sürüme güncelle
+Update {} dependency in this file to the latest version|Update {} dependencies in this file to the latest versions	Bu dosyadaki {} bağımlılığı son sürüme güncelle

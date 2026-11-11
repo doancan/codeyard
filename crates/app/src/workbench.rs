@@ -155,7 +155,7 @@ mod remote_glue;
 mod row_nav_glue;
 pub use row_nav_glue::{ROW_LIST, RowActivate, RowFirst, RowLast, RowNext, RowPrevious};
 #[path = "workbench_rust.rs"]
-mod rust_glue;
+pub(crate) mod rust_glue;
 // --- git-refs ---
 #[path = "workbench_recover.rs"]
 mod recover_glue;
@@ -1275,6 +1275,7 @@ impl Workbench {
                 tests: Default::default(),
             },
             lsp: state_glue::LspState {
+                cargo: Default::default(),
                 restricted_notified: Default::default(),
                 servers: Default::default(),
                 diagnostics: Default::default(),

@@ -6,6 +6,10 @@ use crate::i18n::t;
 use crate::lsp::{self, METHOD_NOT_FOUND};
 use serde_json::{Value, json};
 
+/// `Cargo.toml` dependency hints, completion, updates, adding and removing.
+#[path = "workbench_cargo.rs"]
+pub mod cargo;
+
 /// How long a Rust command waits for the language server before it says the server did not answer.
 pub(super) const RUST_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 

@@ -347,6 +347,11 @@ impl Workbench {
             Command::action("Rust: Expand Macro Recursively", RustExpandMacro),
             Command::action("Rust: Locate Parent Module", RustParentModule),
             Command::action("Rust: Open Cargo.toml", RustOpenCargoToml),
+            Command::action("Cargo: Add Dependency…", rust_glue::cargo::AddDependency),
+            Command::action("Cargo: Remove Dependency at Cursor", rust_glue::cargo::RemoveDependency),
+            Command::action("Cargo: Update Dependency at Cursor to Latest", rust_glue::cargo::UpdateDependency),
+            Command::action("Cargo: Update All Dependencies in This File (Compatible)", rust_glue::cargo::UpdateAllCompatible),
+            Command::action("Cargo: Update All Dependencies in This File to Latest", rust_glue::cargo::UpdateAllLatest),
             Command::action("View: Output", ShowOutput),
             Command::action("Output: Clear", ClearOutput),
             Command::action("View: Ports (SSH port forwarding)", ShowPorts),
@@ -740,6 +745,14 @@ impl Workbench {
                 if let Some(ed) = self.active_editor().cloned() {
                     ed.update(cx, |e, cx| e.reveal_lsp(line, col, window, cx));
                 }
+            }
+            (OverlayKind::CargoAdd { .. }, PickerEvent::Query(q)) => {
+                let q = q.clone();
+                self.cargo_search(q, cx);
+            }
+            (OverlayKind::CargoAdd { path, hits }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (path, hit) = (path.clone(), hits[*index].clone());
+                self.cargo_add_chosen(path, hit, window, cx);
             }
             (OverlayKind::QuickFixes(fixes), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let fix = fixes[*index].clone();

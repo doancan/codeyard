@@ -28,6 +28,9 @@ impl EditorView {
         // Extensions are asked on their own (editor_ext_lang.rs): their items join whichever list opens.
         self.ext_after_typed(typed, cx);
         let Some(client) = self.lsp.clone() else {
+            if self.has_cargo() {
+                return self.after_typed_cargo(typed, cx);
+            }
             return if self.schema.is_some() { self.after_typed_schema(typed, cx) } else { self.after_typed_words(typed, cx) };
         };
         let mut chars = typed.chars();
@@ -130,6 +133,9 @@ impl EditorView {
 
     pub(super) fn request_completion(&mut self, trigger: Option<char>, cx: &mut Context<Self>) {
         let Some(client) = self.lsp.clone() else {
+            if self.has_cargo() {
+                return self.request_cargo_completion(cx);
+            }
             if self.schema.is_some() {
                 return self.request_schema_completion(cx);
             }

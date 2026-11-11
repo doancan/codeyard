@@ -686,8 +686,9 @@ impl EditorView {
         let client = self.lsp.clone();
         let debug = self.debug_eval.clone().zip(self.debug_expression_at(ix));
         let schema_hover = self.schema_hover_input(ix, client.is_some());
+        let cargo_hover = self.cargo_hover_input(ix).filter(|_| client.is_none());
         let ext = self.ext_hover_ask(ix);
-        if client.is_none() && diagnostics.is_empty() && debug.is_none() && schema_hover.is_none() && ext.is_none() {
+        if client.is_none() && diagnostics.is_empty() && debug.is_none() && schema_hover.is_none() && cargo_hover.is_none() && ext.is_none() {
             self.hover_task = None;
             return;
         }
@@ -720,9 +721,10 @@ impl EditorView {
                         .ok()
                         .and_then(|v| crate::lsp::hover_text(&v))
                 }
-                None => match schema_hover {
-                    Some(input) => cx.background_executor().spawn(async move { input.run() }).await,
-                    None => None,
+                None => match (schema_hover, cargo_hover) {
+                    (Some(input), _) => cx.background_executor().spawn(async move { input.run() }).await,
+                    (None, Some(input)) => cx.background_executor().spawn(async move { input.run() }).await,
+                    (None, None) => None,
                 },
             };
             let text = match (value, text) {

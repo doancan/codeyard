@@ -232,6 +232,11 @@ impl Workbench {
             .on_action(cx.listener(Self::rust_expand_macro))
             .on_action(cx.listener(Self::rust_parent_module))
             .on_action(cx.listener(Self::rust_open_cargo_toml))
+            .on_action(cx.listener(Self::cargo_add_dependency))
+            .on_action(cx.listener(Self::cargo_remove_dependency))
+            .on_action(cx.listener(Self::cargo_update_dependency))
+            .on_action(cx.listener(Self::cargo_update_all_compatible))
+            .on_action(cx.listener(Self::cargo_update_all_latest))
             .on_action(cx.listener(|this, _: &RestartLanguageServers, _, cx| {
                 this.restart_lsp(cx);
                 this.notice = Some(Notice::Info(crate::i18n::t("Restarting language servers…").into()));

@@ -13,4 +13,7 @@ pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>) {
     // Cargo's names: `dev` (default), `release` or a custom `[profile.*]`; empty means Cargo's default.
     b.profile = r.string("rust.profile").map(|p| p.trim().to_string());
     b.target_dir = r.string("rust.targetDir").map(|d| d.trim().to_string());
+    if let Some(v) = r.bool("rust.cargo.dependencyLookups") {
+        s.rust_dependency_lookups = v;
+    }
 }

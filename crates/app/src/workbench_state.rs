@@ -55,6 +55,8 @@ pub(super) struct TaskState {
 
 /// Language servers, diagnostics, progress and log (see workbench_lsp.rs).
 pub(super) struct LspState {
+    /// `Cargo.toml` dependency lookups, hints and problems (see workbench_cargo.rs).
+    pub(super) cargo: super::rust_glue::cargo::CargoState,
     /// Language servers (language key -> state), diagnostics (path -> list) and progress.
     pub(super) servers: std::collections::HashMap<String, lsp_glue::ServerSlot>,
     /// Folders for which the user was told the language server is off because the folder is untrusted (notified once per folder).

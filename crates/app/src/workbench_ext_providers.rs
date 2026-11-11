@@ -65,6 +65,8 @@ pub(super) struct ProviderState {
 #[derive(Clone)]
 pub(super) enum QuickFix {
     Lsp(Arc<crate::lsp::Client>, crate::lsp::CodeAction),
+    /// A `Cargo.toml` dependency fix (workbench_cargo.rs).
+    Cargo(super::rust_glue::cargo::CargoFix),
     /// `document`: the path the actions were asked for, the one file its edits may change without `write`.
     Extension {
         extension: String,
@@ -420,6 +422,7 @@ impl Workbench {
             // Preferred first, the rest in the order they came.
             fixes.sort_by_key(|f| match f {
                 QuickFix::Lsp(_, a) => !a.preferred,
+                QuickFix::Cargo(_) => false,
                 QuickFix::Extension { action, .. } => !action.preferred,
             });
             this.update_in(cx, |this, window, cx| this.show_quick_fixes(fixes, window, cx)).ok();
@@ -428,7 +431,7 @@ impl Workbench {
         true
     }
 
-    fn show_quick_fixes(&mut self, fixes: Vec<QuickFix>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn show_quick_fixes(&mut self, fixes: Vec<QuickFix>, window: &mut Window, cx: &mut Context<Self>) {
         if fixes.is_empty() {
             self.notice = Some(Notice::Info(crate::i18n::t("No quick fixes here").into()));
             cx.notify();
@@ -438,6 +441,7 @@ impl Workbench {
             .iter()
             .map(|f| match f {
                 QuickFix::Lsp(_, a) => PickItem { label: a.title.clone().into(), detail: (!a.kind.is_empty()).then(|| a.kind.clone().into()), keys: None },
+                QuickFix::Cargo(fix) => PickItem { label: fix.title.clone().into(), detail: Some(crate::i18n::t("Cargo dependency").into()), keys: None },
                 // Every extension surface names the extension.
                 QuickFix::Extension { extension, action, .. } => {
                     PickItem { label: action.title.clone().into(), detail: Some(extension.clone().into()), keys: None }
@@ -453,6 +457,7 @@ impl Workbench {
     pub(super) fn run_quick_fix(&mut self, fix: QuickFix, window: &mut Window, cx: &mut Context<Self>) {
         let (extension, document, action) = match fix {
             QuickFix::Lsp(client, action) => return self.run_code_action(client, action, cx),
+            QuickFix::Cargo(fix) => return self.run_cargo_fix(fix, window, cx),
             QuickFix::Extension { extension, document, action } => (extension, document, action),
         };
         if !action.edits.is_empty() {
@@ -1141,6 +1146,7 @@ impl Workbench {
                     .iter()
                     .map(|f| match f {
                         QuickFix::Lsp(_, a) => a.title.clone(),
+                        QuickFix::Cargo(fix) => fix.title.clone(),
                         QuickFix::Extension { action, .. } => action.title.clone(),
                     })
                     .collect(),
@@ -1158,6 +1164,7 @@ impl Workbench {
             .iter()
             .find(|f| match f {
                 QuickFix::Lsp(_, a) => a.title == title,
+                QuickFix::Cargo(fix) => fix.title == title,
                 QuickFix::Extension { action, .. } => action.title == title,
             })
             .cloned()
