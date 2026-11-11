@@ -145,63 +145,79 @@ impl DiffView {
             .text_size(px(text::XS.0))
             .text_color(c(p.text_muted))
             .relative()
-            .child(icon("git-compare", 14., p.text_muted))
-            .child(div().min_w_0().truncate().text_color(c(p.text)).child(self.path.clone()))
-            .child(self.tool_button(
-                "copy-path",
-                if self.copied { "check" } else { "copy" },
-                copy_label,
-                if self.copied { t("Copied").to_string() } else { copy_label.to_string() },
-                (None, true),
-                p,
-                cx,
-                |this, _, cx| this.copy_path(cx),
-            ))
-            .child(div().flex_none().child(self.label.clone()))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .flex()
+                    .items_center()
+                    .gap(px(theme::SPACE[3]))
+                    .child(icon("git-compare", 14., p.text_muted))
+                    .child(div().min_w_0().truncate().text_color(c(p.text)).child(self.path.clone()))
+                    .child(self.tool_button(
+                        "copy-path",
+                        if self.copied { "check" } else { "copy" },
+                        copy_label,
+                        if self.copied { t("Copied").to_string() } else { copy_label.to_string() },
+                        (None, true),
+                        p,
+                        cx,
+                        |this, _, cx| this.copy_path(cx),
+                    ))
+                    .child(div().min_w_0().truncate().child(self.label.clone()))
+                    .when_some(status, |d, status| d.child(div().min_w_0().overflow_hidden().child(status))),
+            )
             .child(a11y_controls::said(self.path.clone(), "summary", accesskit::Role::Heading, summary))
-            .child(div().flex_1())
-            .when_some(status, |d, status| d.child(status).child(Self::separator(p)))
-            .child(self.tool_button(
-                "prev-change",
-                "chevron-up",
-                t("Previous change"),
-                with_keys(t("Previous change"), prev_keys),
-                (None, has_changes),
-                p,
-                cx,
-                |this, w, cx| this.prev_change(&crate::diff::PrevChange, w, cx),
-            ))
-            .child(div().flex_none().min_w(px(40.)).flex().justify_center().text_color(c(p.text)).child(counter.clone()))
-            .child(self.tool_button(
-                "next-change",
-                "chevron-down",
-                t("Next change"),
-                with_keys(t("Next change"), "F7"),
-                (None, has_changes),
-                p,
-                cx,
-                |this, w, cx| this.next_change(&crate::diff::NextChange, w, cx),
-            ))
-            .when(has_changes, |d| {
-                d.child(a11y_controls::said(self.path.clone(), "counter", accesskit::Role::Status, tf("Change {} of {}", &[&(at + 1), &changes])))
-            })
             .child(Self::separator(p))
-            .child(div().flex_none().text_color(c(p.success)).child(format!("+{added}")))
-            .child(div().flex_none().text_color(c(p.danger)).child(format!("−{removed}")))
-            .child(Self::separator(p))
-            .child(self.tool_button(
-                "collapse",
-                "chevrons-down-up",
-                t("Collapse unchanged lines"),
-                with_keys(t("Collapse unchanged lines"), chord("⌘K ⌘O", "Ctrl+K Ctrl+O")),
-                (Some(self.collapse), true),
-                p,
-                cx,
-                |this, w, cx| this.toggle_collapse(&ToggleCollapseUnchanged, w, cx),
-            ))
-            .child(ws_pill)
-            .child(inline_pill)
-            .when(self.hunks.is_empty() && !self.can_stage() && self.unsupported.is_none(), |d| d.child(t("No changes")))
+            .child(
+                div()
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .gap(px(theme::SPACE[3]))
+                    .child(self.tool_button(
+                        "prev-change",
+                        "chevron-up",
+                        t("Previous change"),
+                        with_keys(t("Previous change"), prev_keys),
+                        (None, has_changes),
+                        p,
+                        cx,
+                        |this, w, cx| this.prev_change(&crate::diff::PrevChange, w, cx),
+                    ))
+                    .child(div().flex_none().min_w(px(40.)).flex().justify_center().text_color(c(p.text)).child(counter.clone()))
+                    .child(self.tool_button(
+                        "next-change",
+                        "chevron-down",
+                        t("Next change"),
+                        with_keys(t("Next change"), "F7"),
+                        (None, has_changes),
+                        p,
+                        cx,
+                        |this, w, cx| this.next_change(&crate::diff::NextChange, w, cx),
+                    ))
+                    .when(has_changes, |d| {
+                        d.child(a11y_controls::said(self.path.clone(), "counter", accesskit::Role::Status, tf("Change {} of {}", &[&(at + 1), &changes])))
+                    })
+                    .child(Self::separator(p))
+                    .child(div().flex_none().text_color(c(p.success)).child(format!("+{added}")))
+                    .child(div().flex_none().text_color(c(p.danger)).child(format!("−{removed}")))
+                    .child(Self::separator(p))
+                    .child(self.tool_button(
+                        "collapse",
+                        "chevrons-down-up",
+                        t("Collapse unchanged lines"),
+                        with_keys(t("Collapse unchanged lines"), chord("⌘K ⌘O", "Ctrl+K Ctrl+O")),
+                        (Some(self.collapse), true),
+                        p,
+                        cx,
+                        |this, w, cx| this.toggle_collapse(&ToggleCollapseUnchanged, w, cx),
+                    ))
+                    .child(ws_pill)
+                    .child(inline_pill)
+                    .when(self.hunks.is_empty() && !self.can_stage() && self.unsupported.is_none(), |d| d.child(t("No changes"))),
+            )
     }
 
     /// The names of the two sides above the rows, each over its column.
