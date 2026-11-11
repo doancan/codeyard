@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Diff viewer: an overview ruler at the right edge marks every change (green added, red removed, half and half changed), shows the part on screen and scrolls on a click or drag. Unchanged lines fold to three lines of context ("83 unchanged lines", click to open, ⌘K ⌘O for all). Both sides have syntax colors. **Whitespace** (⌘K ⌘H) ignores trailing or all whitespace. The header gains a change counter ("3 of 12") with previous and next buttons, names for both sides, and a copy-path button. Binary and very large files show a message instead of a diff.
+
 ### Fixed
 
 - SSH config: two saves at the same moment (two windows adding hosts) no longer fail on Windows with "The process cannot access the file"; they take turns.

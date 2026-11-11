@@ -66,6 +66,7 @@ Guides**, **Inlay Hints** and **File: Toggle Auto Save**, which change the runni
 | Suggestions / hover | ⌃Space / ⌘K ⌘I | Ctrl+Space / Ctrl+K Ctrl+I |
 | Next / previous change (diff) | F7 / ⇧F7 | F7 / Shift+F7 |
 | Pick the change / stage or unstage the picked lines (diff) | Space / ↵ | Space / Enter |
+| Collapse unchanged lines / ignore whitespace (diff) | ⌘K ⌘O / ⌘K ⌘H | Ctrl+K Ctrl+O / Ctrl+K Ctrl+H |
 | Word left / right (+Shift selects) | ⌥← / ⌥→ | Ctrl+← / Ctrl+→ |
 | Delete word left / right | ⌥⌫ / ⌥⌦ | Ctrl+Backspace / Ctrl+Delete |
 | Select word / line | double / triple click | double / triple click |
@@ -1156,8 +1157,28 @@ status bar says why. `postDebugTask` runs when the session ends.
 
 Syntax colors come from tree-sitter for Rust, JavaScript / TypeScript (and JSX / TSX), Python, Go, C, C++,
 Java, C#, Ruby, PHP, Swift, Kotlin, SQL, Lua, Shell, Dockerfile, Makefile, CSS, HTML, JSON, TOML, YAML and
-Markdown; "Editor: Change Language Mode" sets it by hand for one file. The diff view marks the characters that
-changed inside a changed line.
+Markdown; "Editor: Change Language Mode" sets it by hand for one file.
+
+**The diff view.** A changed file opens with the old text on the left and the new text on the right, line by line;
+the characters that changed inside a changed line are marked, and both sides have syntax colors (not for an unknown
+language, nor for a side over 512 KB). The header shows the file, what is compared ("HEAD ↔ Working Tree"), a counter
+("3 of 12") with buttons for the previous and next change (⇧F7 / F7), the number of added and removed lines, and these
+options:
+
+- **Copy path** puts the file's path on the clipboard.
+- **Collapse unchanged lines** (⌘K ⌘O) is on by default: three lines of context stay around each change and the rest
+  folds into a row such as "83 unchanged lines". Click the row to open that part; the button shows the whole file.
+- **Whitespace** (⌘K ⌘H) cycles between showing every difference, ignoring whitespace at the end of lines, and ignoring
+  all whitespace. The diff is computed again. Staging lines is off while whitespace is ignored, because a staged line has
+  to be the exact text you see.
+- **Inline / Side by side** (⌘K ⌘I) puts both texts in one column.
+
+The strip at the right edge is the overview ruler. It shows the whole list: a green mark for added lines, a red one for
+removed lines and a half-red, half-green one for a changed line, in proportion to their place in the file. The lighter
+box is the part on screen, and the outlined mark is the change F7 is on. Click the ruler or drag along it to scroll there.
+
+A binary file and a file over 4 MB show a message instead of a diff. A file with bytes that are not valid UTF-8 still
+shows, with a warning above it, and those bytes appear as replacement characters.
 
 If Codeyard panics it writes a report to `crashes/` next to its state database
 (`~/.local/state/codeyard` or `~/Library/Application Support/codeyard`, or `CODEYARD_STATE_DIR`). Nothing is
