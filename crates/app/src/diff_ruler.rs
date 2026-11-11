@@ -103,10 +103,7 @@ mod tests {
     fn neighbours_of_one_kind_make_one_marker() {
         use Kind::*;
         let list = [None, Some(Added), Some(Added), None, Some(Added), Some(Removed), Some(Removed)];
-        assert_eq!(
-            spans(list),
-            vec![Span { items: 1..3, kind: Added }, Span { items: 4..5, kind: Added }, Span { items: 5..7, kind: Removed }]
-        );
+        assert_eq!(spans(list), vec![Span { items: 1..3, kind: Added }, Span { items: 4..5, kind: Added }, Span { items: 5..7, kind: Removed }]);
         assert!(spans([None, None]).is_empty());
     }
 

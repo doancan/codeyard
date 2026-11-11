@@ -70,8 +70,10 @@ impl DiffView {
         self
     }
 
+    /// Lines can be picked here: a Source Control diff of text that is lined up exactly (staging works on the exact
+    /// rows, so it is off while whitespace is ignored).
     pub fn can_stage(&self) -> bool {
-        self.stage.is_some()
+        self.stage.is_some() && !self.ws.ignores() && self.unsupported.is_none()
     }
 
     /// Whether lines are unstaged here (HEAD ↔ Staged) rather than staged.

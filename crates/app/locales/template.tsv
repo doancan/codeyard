@@ -86,6 +86,7 @@ All
 All Branches	
 All conflicts are resolved	
 All levels	
+All whitespace is ignored. Click to show whitespace differences	
 Allow	
 Allow Host	
 Allow Host…	
@@ -217,8 +218,10 @@ Change All Occurrences
 Change Color…	
 Change Local Port…	
 Change all files in the workspace	
+Change overview	
 Change the URL of which remote?	
 Change {}	
+Change {} of {}	
 Changed	
 Changed files	
 Changed {0} file ({1} file operations skipped)|Changed {0} files ({1} file operations skipped)	
@@ -313,6 +316,7 @@ Collapse All
 Collapse All Inside	
 Collapse Folders	
 Collapse all results	
+Collapse unchanged lines	
 Color Theme	
 Color Theme…	
 Color matching brackets by nesting depth	
@@ -447,6 +451,7 @@ Copy code
 Copy container ID	
 Copy fix	
 Copy link	
+Copy path	
 Copy text selected with the mouse: while Claude Code or Codex runs, always, or never	
 Copy the files again on the current host before pasting.	
 Copy the full hash	
@@ -1160,8 +1165,10 @@ Hue
 Identical	
 If the remote branch moves while this question is open, git refuses.	
 Ignore Case	
+Ignore all	
 Ignore case unless the query has capital letters	
 Ignore line endings	
+Ignore trailing	
 Ignore whitespace	
 Ignore “{}” in this session	
 Ignored	
@@ -1457,6 +1464,7 @@ Newer versions of extensions from a registry: install (by themselves; versions t
 Next	
 Next Match	
 Next Problem	
+Next change	
 Next match (↵)	
 Next result (F4)	
 No Cargo.toml found for this file	
@@ -1800,6 +1808,7 @@ Preview port (0: choose a free port automatically)
 Preview {}	
 Previous Match	
 Previous Problem	
+Previous change	
 Previous match (⇧↵)	
 Previous result (⇧F4)	
 Previous session ended; started a new shell	
@@ -2243,6 +2252,7 @@ Show the file path above the editor
 Show the minimap	
 Show the short commit hash on Source Control graph rows	
 Show the status bar	
+Show these lines	
 Show type and parameter name hints from the language server	
 Show who last changed the cursor line (and when) at the end of the line	
 Showing the first 100,000 files of a very large folder	
@@ -2264,6 +2274,7 @@ Snippets: Insert Snippet…
 Software Update	
 Solid blue folders like Finder, outline files with a language dot like GitHub	
 Solid folders colored and marked by purpose, solid files colored by language	
+Some bytes are not valid UTF-8 and are shown as replacement characters	
 Sort by {}	
 Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order)	
 Source Control	
@@ -2294,6 +2305,7 @@ Staging changes inside a symlink or submodule is not supported
 Staging changes is not supported in files with old-Mac (CR only) line endings	
 Staging changes needs a UTF-8 file	
 Staging changes needs a UTF-8 file (this one is stored in another encoding)	
+Staging is off while whitespace is ignored	
 Staging…	
 Start	
 Start Debugging	
@@ -2541,6 +2553,7 @@ The terminal could not move to a new window: {}
 The test runner stopped without reporting this test. See Test Results for build or runner errors.	
 The text is not a patch.	
 The token has no signature.	
+The two sides differ only in whitespace	
 The update couldn't be installed	
 The update couldn't be verified	
 The update failed part-way and Codeyard couldn't put the previous version back. It may be at {0}. If Codeyard doesn't start, move it back to {1}.	
@@ -2595,9 +2608,11 @@ This file cannot be read as {}
 This file has merge conflicts: resolve them first (Source Control marks it resolved when staged)	
 This file has no commits or saved copies yet.	
 This file is already on this computer. Use Save As instead.	
+This file is binary, so there is no line diff to show	
 This file is not in the repository.	
 This file is outside the open folder.	
 This file is outside the repository root	
+This file is too large to compare here ({} MB; the limit is {} MB)	
 This file is {0} MB; Data: Query handles files up to {1} MB.	
 This file mixes line endings; saving writes all of them as {}, like its first line. Change it in the status bar.	
 This file was deleted on disk. Save it explicitly before debugging.	
@@ -2640,6 +2655,7 @@ Toggle a break-on-exception filter
 Toggle inline view	
 Too many files to preview ({}). Narrow the search.	
 Track which remote branch?	
+Trailing whitespace is ignored. Click to ignore all whitespace	
 Transfer cancelled.	
 Transfer failed: {}	
 Trust Folder	
@@ -2838,6 +2854,8 @@ When the close button of a tab shows
 Where .http requests are sent from: the workspace host (the server when connected over SSH) or this computer	
 Where a right click goes while a program in the terminal reads the mouse: the terminal's menu or the program (Shift opens the menu)	
 Where forwarded ports listen: this computer only, or every network interface	
+Whitespace	
+Whitespace differences are shown. Click to ignore trailing whitespace	
 Whole word	
 Whole word (⌥W)	
 Why: {}	
@@ -3331,6 +3349,7 @@ your words
 {} (selection) ↔ Clipboard	
 {} (terminal)	
 {} (terminal, exited)	
+{} ({})	
 {} (“{}” failed; {} of {} items were transferred before it)	
 {} KB · image preview	
 {} MB · image preview	
@@ -3347,6 +3366,7 @@ your words
 {} cannot receive native programs	
 {} cannot run: codeyard-exthost is missing beside Codeyard.	
 {} changed no files (merge or empty commit).	
+{} changes	
 {} change|{} changes	
 {} command|{} commands	
 {} commit leaves this branch.|{} commits leave this branch.	
@@ -3429,6 +3449,7 @@ your words
 {} more ports are not listed here	
 {} no longer exists, so it was not reopened.	
 {} of them is on no other branch, tag or remote: after the reset only Git's reflog still finds it.|{} of them are on no other branch, tag or remote: after the reset only Git's reflog still finds them.	
+{} of {}	
 {} open	
 {} outgoing call|{} outgoing calls	
 {} parent module|{} parent modules	
@@ -3447,6 +3468,7 @@ your words
 {} terminals have programs running. Close them anyway?	
 {} test|{} tests	
 {} type definition|{} type definitions	
+{} unchanged line|{} unchanged lines	
 {} was not installed from a registry	
 {} week ago|{} weeks ago	
 {} year ago|{} years ago	

@@ -43,13 +43,7 @@ mod datalens_tests;
 mod datalens_ui_tests;
 mod debug_config;
 mod diff;
-mod diff_chrome;
-mod diff_fold;
-mod diff_guard;
-mod diff_ruler;
 mod diff_stage;
-mod diff_syntax;
-mod diff_ws;
 mod display;
 mod docker;
 #[cfg(test)]
