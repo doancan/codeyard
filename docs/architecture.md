@@ -85,6 +85,12 @@ generated test commands back into literal Cargo argv. Debug executable paths com
 directory guesses. `workbench_debug_save.rs` coordinates workspace saves before discovery/build/start and cancels
 the start on a save error, Stop or a changed workspace. Editor saves keep their hash/conflict protection.
 
+`Cargo.toml` dependency intelligence lives in `cargo_deps*.rs`, hung off `cargo_project.rs` (`cargo_project::deps`; `main.rs`
+is at its size limit). The core (manifest parsing with `toml_edit`, version logic with `semver`, the sparse-index client, the
+cache, text edits) knows nothing of GPUI; the network is one trait, `Fetch`, with the system `curl` behind it and a fake in
+the tests. `editor_cargo.rs` binds a registry to a manifest's editor (hints, completion, hover); `workbench_cargo.rs`
+(a child of `workbench_rust.rs`) refreshes it, runs Quick Fix, the palette commands and `cargo add` / `cargo remove`.
+
 ## Stack
 
 | Layer | Choice | Why |

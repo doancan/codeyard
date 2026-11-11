@@ -81,7 +81,9 @@ The tree, in the order a screen reader walks it:
 - The editor's own drawn controls, in a group named after the file: each breakpoint in the gutter ("Breakpoint on line
   2", its condition, log message, binding failure or "disabled" as description; `Click` removes it as a click on the
   dot does, F9 sets one), each fold button ("Fold line 1" or "Unfold line 1", expanded while open), each Git mark
-  ("Line 3 changed", "Line 4 added", "Lines deleted above line 7"), an extension's lens at the end of a line, the
+  ("Line 3 changed", "Line 4 added", "Lines deleted above line 7"), an extension's lens at the end of a line, a `Cargo.toml`
+  dependency hint at the end of its line (a label with the full sentence, "serde is up to date: “1” allows the latest
+  release, 1.0.229"; the sentence is also the tooltip, and a yanked version is a warning in Problems), the
   sticky scope lines (`Link`s to their line), a merge conflict's Accept Current, Incoming and Both Changes and Open
   Merge Editor (`Link`s with "Conflict at line 2") and an `.http` request's Send Request. The color picker is a group
   "Color picker": Hue (0–359), Saturation, Brightness and Opacity (0–100 %) as `Slider`s over the planes a drag sets

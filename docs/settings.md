@@ -281,4 +281,5 @@ status bar reports it.
 | `rust.noDefaultFeatures` | boolean | `false` | Build Run and Debug targets without the package's default features. |
 | `rust.profile` | string | Cargo's default (`dev`) | Cargo profile Run and Debug build with, e.g. `release` or a custom `[profile.*]`. |
 | `rust.targetDir` | path | Cargo's own | Output folder for Run and Debug builds (`--target-dir`); a relative path is resolved against the workspace folder on the machine that builds, also over SSH. |
+| `rust.cargo.dependencyLookups` | boolean | `true` | Let `Cargo.toml` show the latest version of each dependency and complete crate names, versions and features. It asks index.crates.io for the crates named in the file and crates.io for search and descriptions; turn it off to stop all of that (see *Cargo dependencies* in the user guide for exactly what is sent). |
 | `workbench.colorCustomizations` | object | `{}` | Override single colour roles; an entry in `[Theme Name]` applies to that theme only. |
