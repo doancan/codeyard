@@ -485,10 +485,18 @@ fn feature_items_come_from_the_published_list_without_the_ones_already_listed() 
 }
 
 #[test]
+fn the_name_that_was_typed_ranks_before_crates_io_relevance_order() {
+    let hit = |name: &str| super::registry::SearchHit { name: name.into(), version: "1.0.0".into(), description: String::new() };
+    let hits = [hit("serde-saphyr"), hit("my-serde"), hit("serde_json"), hit("Serde"), hit("serde")];
+    let names: Vec<&str> = items::ranked(&hits, "serde").iter().map(|h| h.name.as_str()).collect();
+    assert_eq!(names, ["Serde", "serde", "serde-saphyr", "serde_json", "my-serde"], "exact (any case), then prefix, then the rest, each in crates.io order");
+}
+
+#[test]
 fn crate_items_write_the_whole_entry_and_carry_the_description() {
     let hits = super::registry::parse_search(SEARCH);
     assert_eq!(hits[0].name, "serde");
-    let list = items::crate_items(&hits);
+    let list = items::crate_items(&hits, "serde");
     assert_eq!(list[0].insert, format!("serde = \"{}\"", hits[0].version));
     assert_eq!(list[0].doc.as_deref(), Some("A generic serialization/deserialization framework"));
     assert!(list[0].sort < list[1].sort);

@@ -166,7 +166,8 @@ impl EditorView {
         let cursor = self.buffer.cursor();
         let ctx = context_at(&rope.to_string(), rope.char_to_byte(cursor));
         match (&self.completion, ctx) {
-            (_, None) => self.completion = None,
+            // Not a place the registry knows (a comment, [package], …): words from the document, as in any file.
+            (_, None) => self.after_typed_words(typed, cx),
             (Some(open), Some(ctx)) if open.start == self.cargo_replace_start(&ctx) && !open.incomplete => self.refilter(cx),
             _ => self.request_cargo_completion(cx),
         }
@@ -185,7 +186,9 @@ impl EditorView {
         }
         let (text, version) = (rope.to_string(), self.buffer.version());
         let Some(ctx) = context_at(&text, rope.char_to_byte(self.buffer.cursor())) else {
-            self.completion = None;
+            if cx.global::<Settings>().word_based_suggestions {
+                self.request_word_completion(cx);
+            }
             return;
         };
         let (Ctx::CrateName { replace, .. } | Ctx::Version { replace, .. } | Ctx::Feature { replace, .. }) = &ctx;
@@ -243,7 +246,7 @@ fn cargo_items(binding: &CargoBinding, ctx: &Ctx, text: &str) -> Vec<Item> {
     let entry = |key: &str| parsed.as_ref().and_then(|m| m.deps.iter().find(|d| d.key == key));
     let real = |key: &str| entry(key).map_or_else(|| key.to_string(), |d| d.package.clone());
     match ctx {
-        Ctx::CrateName { prefix, .. } if prefix.len() >= 2 => binding.registry.search(prefix).map(|hits| items::crate_items(&hits)).unwrap_or_default(),
+        Ctx::CrateName { prefix, .. } if prefix.len() >= 2 => binding.registry.search(prefix).map(|hits| items::crate_items(&hits, prefix)).unwrap_or_default(),
         Ctx::CrateName { .. } => Vec::new(),
         Ctx::Version { package, closed, .. } => match binding.registry.crate_info(&real(package)) {
             Lookup::Found { info, .. } => items::version_items(&info, *closed),

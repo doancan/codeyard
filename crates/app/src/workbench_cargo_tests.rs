@@ -315,6 +315,16 @@ fn versions_features_and_crate_names_complete_from_the_registry(cx: &mut TestApp
 }
 
 #[gpui::test]
+fn outside_dependencies_the_document_words_are_still_suggested(cx: &mut TestAppContext) {
+    let text = "[package]\nname = \"demonstration\"\nversion = \"0.1.0\"\n\n[features]\nfast = []\n\n[dependencies]\n";
+    let f = fixture(cx, "words", text, "{}", fake_registry(), false);
+    f.ed.update(f.cx, |e, cx| e.set_cursor_line_col_for_test(6, 0, cx));
+    f.cx.simulate_input("demo");
+    wait_ticking(f.cx, "word suggestions", |cx| f.ed.read_with(cx, |e, _| e.completion_labels()).is_some_and(|l| l.contains(&"demonstration".to_string())));
+    assert_eq!(f.fake.count(), 0, "no request for a word");
+}
+
+#[gpui::test]
 fn hover_shows_the_crate_its_licence_the_lock_version_and_links(cx: &mut TestAppContext) {
     let _en = crate::i18n::LangGuard::set("en");
     let text = "[dependencies]\nserde = { version = \"1\", features = [\"derive\"] }\n";

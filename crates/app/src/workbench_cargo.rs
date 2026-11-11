@@ -480,7 +480,7 @@ impl Workbench {
                 if valid_crate_name(&typed) && !hits.iter().any(|h| h.name == typed) {
                     rows.push(SearchHit { name: typed.clone(), version: String::new(), description: t("Use the name as typed").to_string() });
                 }
-                rows.extend(hits);
+                rows.extend(crate::cargo_project::deps::items::ranked(&hits, &typed).into_iter().cloned());
                 let items = rows
                     .iter()
                     .map(|h| PickItem {

@@ -27,9 +27,24 @@ fn closing(closed: bool) -> &'static str {
     if closed { "" } else { "\"" }
 }
 
-/// Crates from a search, in the order crates.io ranked them. Choosing one writes the whole entry.
-pub fn crate_items(hits: &[SearchHit]) -> Vec<Item> {
-    hits.iter()
+/// Search hits with what was typed first: the crate of exactly that name, then the names that start with it, then the rest in
+/// the order crates.io ranked them (its relevance order alone puts `serde-saphyr` before `serde_json` for `serd`).
+pub fn ranked<'a>(hits: &'a [SearchHit], typed: &str) -> Vec<&'a SearchHit> {
+    let typed = typed.to_ascii_lowercase();
+    let rank = |name: &str| match name.to_ascii_lowercase() {
+        n if n == typed => 0,
+        n if n.starts_with(&typed) => 1,
+        _ => 2,
+    };
+    let mut ordered: Vec<&SearchHit> = hits.iter().collect();
+    ordered.sort_by_key(|h| rank(&h.name));
+    ordered
+}
+
+/// Crates from a search (`typed` first, see `ranked`). Choosing one writes the whole entry.
+pub fn crate_items(hits: &[SearchHit], typed: &str) -> Vec<Item> {
+    ranked(hits, typed)
+        .into_iter()
         .enumerate()
         .map(|(i, h)| Item {
             label: h.name.clone(),
