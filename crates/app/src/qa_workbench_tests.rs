@@ -18,8 +18,11 @@ fn qa_root() -> PathBuf {
     crate::ui::canonical_for_test(d)
 }
 
+/// A new empty directory named `name`. Tests run in parallel, so two calls with the same `name` (a shared fixture helper,
+/// say) must not share a directory: it lives under a counter folder of its own, and keeps `name` as its last component.
 pub(crate) fn fresh(name: &str) -> PathBuf {
-    let d = qa_root().join(name);
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let d = qa_root().join(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed).to_string()).join(name);
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     crate::ui::canonical_for_test(&d)
