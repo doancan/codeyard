@@ -151,7 +151,11 @@ fn finish_folder_commit(mut child: Child, cancel: &AtomicBool) -> Result<()> {
     };
     let stderr = receive.recv_timeout(std::time::Duration::from_secs(1)).unwrap_or_default();
     if interrupted.is_some() {
-        return Err(fail("folder finalization was interrupted; completed destination files are kept"));
+        // What the remote side said before it stopped is the best clue to why, so it travels with the message.
+        let said = String::from_utf8_lossy(&stderr);
+        let said = said.trim();
+        let message = "folder finalization was interrupted; completed destination files are kept";
+        return Err(fail(if said.is_empty() { message.to_string() } else { format!("{message}\n{said}") }));
     }
     if status.success() {
         Ok(())
@@ -626,6 +630,16 @@ fn copy_node(src: &Path, dest: &Path, cancel: &AtomicBool, step: &mut dyn FnMut(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A finalization that is cancelled still tells what the remote side said before it stopped.
+    #[cfg(unix)]
+    #[test]
+    fn an_interrupted_finalization_keeps_what_the_remote_side_said() {
+        let child = spawn(local_shell("cat > /dev/null; echo 'No space left on device' >&2; exit 1"), Stdio::piped(), Stdio::null()).unwrap();
+        let error = finish_folder_commit(child, &AtomicBool::new(true)).unwrap_err().to_string();
+        assert!(error.contains("finalization was interrupted"), "{error}");
+        assert!(error.contains("No space left on device"), "{error}");
+    }
 
     #[test]
     fn already_cancelled_local_copies_create_no_paths_even_for_empty_trees() {
