@@ -190,6 +190,7 @@ fn a_file_changed_after_the_preview_is_a_conflict_that_takes_everything_back() {
     let lines = report(&tx, &[], |p| p.rsplit('/').next().unwrap().to_string());
     assert!(lines[0].0.contains("taken back"), "{lines:?}");
     assert!(lines.iter().any(|(l, bad)| *bad && l.contains("File changed since preview: a.txt")), "{lines:?}");
+    assert!(lines.iter().any(|(l, _)| l.starts_with("The files changed since the preview. Discard this page")), "{lines:?}");
     std::fs::remove_dir_all(&d).ok();
 }
 

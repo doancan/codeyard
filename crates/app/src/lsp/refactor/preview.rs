@@ -615,15 +615,11 @@ impl RefactorPreview {
 
     fn confirm_text(&self) -> String {
         let names = self.deletes();
-        format!(
-            "{} {}",
-            crate::i18n::tn(
-                "Delete {} item for good? It is not moved to the trash.",
-                "Delete {} items for good? They are not moved to the trash.",
-                names.len(),
-                &[]
-            ),
-            names.join(", ")
+        crate::i18n::tn(
+            "Delete {0} item for good? It is not moved to the trash: {1}",
+            "Delete {0} items for good? They are not moved to the trash: {1}",
+            names.len(),
+            &[&names.join(", ")],
         )
     }
 
@@ -1089,7 +1085,7 @@ impl RefactorPreview {
                             Resource::Delete { .. } => "trash",
                         };
                         let danger = matches!(r.op, Resource::Delete { .. });
-                        base.child(div().w(px(layout::ICON)))
+                        base.child(div().flex_none().w(px(layout::ICON)))
                             .child(check)
                             .child(icon(glyph, layout::ICON, if danger && !problem { p.danger } else { p.text_muted }))
                             .child(div().flex_none().child(label))

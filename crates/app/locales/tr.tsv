@@ -4168,7 +4168,7 @@ Could not take back the change in {}: it was edited since. Undo it in the editor
 Create {}	{} oluştur
 Delete and Apply	Sil ve Uygula
 Delete {}	{} sil
-Delete {} item for good? It is not moved to the trash.|Delete {} items for good? They are not moved to the trash.	{} öğe kalıcı olarak silinsin mi? Çöp kutusuna taşınmaz.
+Delete {0} item for good? It is not moved to the trash: {1}|Delete {0} items for good? They are not moved to the trash: {1}	{0} öğe kalıcı olarak silinsin mi? Çöp kutusuna taşınmaz: {1}
 Deletes the file for good; it is not moved to the trash.	Dosyayı kalıcı olarak siler; çöp kutusuna taşınmaz.
 Deletes the folder and everything in it for good; it is not moved to the trash.	Klasörü ve içindeki her şeyi kalıcı olarak siler; çöp kutusuna taşınmaz.
 Done.	Tamam.
@@ -4196,3 +4196,4 @@ Write the selected changes; nothing else is touched ({}Enter)	Seçilen değişik
 {} file operation|{} file operations	{} dosya işlemi
 {} needs a file operation that is not selected.	{} seçilmemiş bir dosya işlemine ihtiyaç duyuyor.
 Line {0}, column {1}: “{2}” → “{3}”	{0}. satır, {1}. sütun: “{2}” → “{3}”
+The files changed since the preview. Discard this page and start the refactoring again.	Dosyalar önizlemeden sonra değişti. Bu sayfadan vazgeçip yeniden düzenlemeyi baştan başlatın.

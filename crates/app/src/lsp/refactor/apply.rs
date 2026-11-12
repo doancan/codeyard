@@ -349,6 +349,10 @@ pub fn report(tx: &Transaction, buffers: &[(String, usize)], name: impl Fn(&str)
     if rolled_back || failed {
         out.push((crate::i18n::t("The refactoring failed, so everything it had done was taken back. Nothing was changed.").to_string(), true));
     }
+    if tx.steps.iter().any(|(_, o)| *o == StepOutcome::Conflict) {
+        // What the preview shows is not what the files hold any more: trying again cannot work.
+        out.push((crate::i18n::t("The files changed since the preview. Discard this page and start the refactoring again.").to_string(), true));
+    }
     for (step, outcome) in &tx.steps {
         let line = match outcome {
             StepOutcome::Failed(why) => crate::i18n::tf("Not changed: {0} ({1})", &[&name(step.path()), why]),

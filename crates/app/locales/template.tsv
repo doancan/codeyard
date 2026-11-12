@@ -733,8 +733,8 @@ Delete which branch on the remote?
 Delete which branch?	
 Delete which tag on the remote?	
 Delete which tag?	
+Delete {0} item for good? It is not moved to the trash: {1}|Delete {0} items for good? They are not moved to the trash: {1}	
 Delete {}	
-Delete {} item for good? It is not moved to the trash.|Delete {} items for good? They are not moved to the trash.	
 Delete “{0}” from {1}?	
 Delete “{}” permanently?	
 Deleted	
@@ -2802,6 +2802,7 @@ The file list could not be read: only opened folders are searched.
 The file to delete is not there.	
 The file to rename is not there.	
 The file was edited while the language server was working, so its answer no longer fits. Try again.	
+The files changed since the preview. Discard this page and start the refactoring again.	
 The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
