@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Cargo.toml dependency lookups are off by default (`rust.cargo.dependencyLookups`), see Added; nothing contacts crates.io unless you turn them on or run one of the commands.
 - The renderer that draws SVG pictures in Markdown previews and extension views no longer follows `<image>` links inside an SVG (see Security).
+- Memory: a window with a terminal uses about 3 MB more than in 0.9.1 (54 MB against 51 MB in the release benchmark; the budget is 85 MB), from the notification list, log file, profiles, Keyboard Shortcuts page and the Rust status state.
 
 ### Fixed
 
