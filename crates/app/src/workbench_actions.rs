@@ -230,6 +230,7 @@ impl Workbench {
             .on_action(cx.listener(|this, _: &ShowKeyboardShortcuts, window, cx| this.show_shortcuts_picker(window, cx)))
             .on_action(cx.listener(|this, _: &CopyFullDiagnostic, _, cx| this.copy_full_diagnostic(cx)))
             .on_action(cx.listener(Self::copy_all_problems))
+            .on_action(cx.listener(Self::breadcrumb_symbols))
             .on_action(cx.listener(Self::search_in_workspace))
             .on_action(cx.listener(Self::search_in_open_editors))
             .on_action(cx.listener(Self::search_in_changed_files))

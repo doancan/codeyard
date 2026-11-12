@@ -252,6 +252,7 @@ Changed {0} in {1}
 Changed {} file|Changed {} files	
 Changes	
 Changes the order of the problems	
+Changes the order of the symbols	
 Check Daily	
 Check JSON and YAML files against their schema (problems, hover, suggestions)	
 Check comments in code files too (prose files are always checked)	
@@ -1011,6 +1012,7 @@ Files: {}
 Filter	
 Filter (e.g. text, path)	
 Filter problems	
+Filter symbols	
 Filtering needs sh, tail, grep and cut on the host (on Windows: Git Bash or WSL). {}	
 Filtering {0} for “{1}”…	
 Find	
@@ -1034,6 +1036,7 @@ Folder to clone into
 Folders colored by purpose (src, tests, docs…) and colored file glyphs	
 Follow	
 Follow (Tail)	
+Follow Cursor	
 Follow the end of the file as it grows (tail -f). Scrolling up pauses.	
 Following latest logs	
 Font size of the editor	
@@ -1155,6 +1158,7 @@ Go to a symbol in this file
 Go to file	
 Go to line {0}, column {1}	
 Go to line {}	
+Go to symbol at this level	
 Go to symbol in file	
 Go to the next merge conflict	
 Go: Back	
@@ -1164,6 +1168,7 @@ Go: Last Edit Location
 Go: Line…	
 Go: Next Change	
 Go: Next Problem	
+Go: Pick Symbol at the Cursor's Level	
 Go: Previous Change	
 Go: Previous Problem	
 Go: Symbol in File…	
@@ -1627,6 +1632,7 @@ No subtypes found
 No supertypes found	
 No symbols found.	
 No symbols in this file	
+No symbols match the filter.	
 No symbols matching “{}”	
 No task is running.	
 No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.	
@@ -2404,7 +2410,10 @@ Some bytes are not valid UTF-8 and are shown as replacement characters
 Sort by {}	
 Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order)	
 Sort: File	
+Sort: Kind	
 Sort: Line	
+Sort: Name	
+Sort: Position	
 Sort: Severity	
 Source Control	
 Source Control (⌃⇧G)	
@@ -3171,6 +3180,7 @@ git {} failed
 goes to an address whose host cannot be read reliably	
 goes to {}, which you have not sent anything to in this session	
 goto	
+heading	
 image default	
 in a key binding, == and != compare editor.language with a language id	
 in {} file|in {} files	
@@ -3290,6 +3300,7 @@ rust.semanticModifiers: unknown modifier {} ({})
 rust.target: {} is not a target triple (letters, digits, - _ .)	
 rustc not found	
 seconds	
+section	
 selected	
 send the request named “{}” first	
 sends {} to {}	
@@ -3376,6 +3387,7 @@ too many copies
 too many or too large patterns	
 turned off after three crashes	
 turned off on the extension page	
+type	
 type parameter	
 unclosed [ in the path	
 undefined variable {}	
@@ -3482,6 +3494,7 @@ your words
 {0} {1} waits for your OK in the Extensions view.	
 {0} {1}: I/O {2}, overhead {3}	
 {0} {1}: guest {2}	
+{0} · line {1}	
 {0} · version {1}	
 {0} · version {1} · {2} license	
 {0}, by {1}	
@@ -3494,6 +3507,7 @@ your words
 {0}, problems: {1}	
 {0}, signed by {1} in the {2} registry	
 {0}, {1} {2} {3}	
+{0}. Choose another symbol at this level.	
 {0}. The search stopped at the result limit, so the results are incomplete.	
 {0}. The search was cancelled, so the results are incomplete.	
 {0}/{1} passed	

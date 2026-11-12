@@ -349,6 +349,7 @@ impl Workbench {
             Command::action("View: Problems", ShowProblems),
             Command::action("Problems: Copy Full Diagnostic", CopyFullDiagnostic),
             Command::action("Problems: Copy All", panels_glue::CopyAllProblems),
+            Command::action("Go: Pick Symbol at the Cursor's Level", outline_glue::BreadcrumbSymbols),
             Command::action("Problems: Toggle Active File Only", panels_glue::ToggleProblemsActiveFile),
             Command::action("Rust: Expand Macro Recursively", RustExpandMacro),
             Command::action("Rust: Locate Parent Module", RustParentModule),

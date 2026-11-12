@@ -726,6 +726,7 @@ impl Render for Picker {
             .relative()
             .child(self.painted.probe(PickFrame::Picker))
             .w(px(layout::PALETTE_W))
+            .max_w_full()
             .flex()
             .flex_col()
             .p(px(theme::SPACE[3]))

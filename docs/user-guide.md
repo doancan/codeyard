@@ -156,7 +156,10 @@ to the right / saved, pin, copy path; drag tabs to reorder them or onto the othe
 Right-click in the editor for go to definition / references, rename, cut/copy/paste,
 file history and blame. A single click in the tree opens a preview tab (italic) that the next
 preview replaces; editing or double-clicking keeps it. Tabs of files with the same name show
-the folder that tells them apart; the breadcrumbs above the editor reveal a folder in the tree.
+the folder that tells them apart; the breadcrumbs above the editor reveal a folder in the tree. After the file name the
+breadcrumbs show where the cursor is in the code, as a chain of symbols (`Shape › area`), each with the icon of its kind. A
+click on a symbol opens a list of the symbols at the same level; choosing one goes there. *Go: Pick Symbol at the Cursor's
+Level* does the same from the palette. On a narrow editor the folders give way, so the file and the symbols stay visible.
 
 **Explorer.** Vertical guides under every folder arrow show the hierarchy; the guide of the
 selected folder is highlighted. Folders that only hold one folder show as one row
@@ -527,9 +530,18 @@ branches or the current one), *Only My Commits* and *Hide Merge Commits*, and of
 click one to turn it off. Stashes are listed with apply, pop and drop. `"git.graph.limit"`,
 `"git.graph.allBranches"` and `"git.timeline.limit"` tune it; the Changes groups fold too.
 
-**Explorer sections.** OPEN EDITORS, the folder tree, **OUTLINE** (functions, types and
-headings of the open file, found without a language server) and **TIMELINE** (the file's git
+**Explorer sections.** OPEN EDITORS, the folder tree, **OUTLINE** (the symbols of the open file) and **TIMELINE** (the file's git
 commits plus a saved copy for every save, "local history"; click an entry for a diff).
+
+**Outline and breadcrumb symbols.** When a language server runs for the file and offers symbols, the Outline and the
+breadcrumbs use its answer (classes, methods, fields, with their real ranges); until it answers, and for files with no server
+(also over SSH), they use line patterns for the common languages and Markdown headings, which is why a method can show as a
+function there. Each symbol has an icon: a tinted square with a mark for its kind (module, class, type, interface, enum,
+function, property, field, variable, constant, heading). The box above the list filters as you type: every word must be in a
+name, ignoring case (and Turkish i/ı), and the enclosing symbols of a match stay as context. **Sort** cycles *Position*
+(document order, nested), *Name* and *Kind* (flat lists, with the parent's name beside each symbol). **Follow Cursor** (on by
+default) scrolls the list to the symbol the cursor is in as it moves. The sort order and the switch are remembered for each
+workspace. Files over 30,000 lines have no outline.
 Clicking the empty space under the tree clears the selection so new files go to the root; open
 folders are remembered per project; ⇧→ / ⇧← (or the context menu) open or close everything
 inside a folder. Right-click ▸ Find in Folder… limits the search to it.

@@ -177,9 +177,11 @@ impl Workbench {
                     .flex()
                     .justify_center()
                     .pt(px(top))
+                    // A window narrower than the picker keeps it whole inside, with a margin.
+                    .px(px(theme::SPACE[3]))
                     // Click outside = Esc.
                     .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.on_overlay_event(&PickerEvent::Dismiss, window, cx)))
-                    .child(div().occlude().child(picker)),
+                    .child(div().id("picker-layer").occlude().min_w_0().max_w_full().debug_selector(|| "picker-layer".into()).child(picker)),
             )
             .into_any_element(),
         )

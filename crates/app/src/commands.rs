@@ -199,6 +199,7 @@ registry! {
     "workbench.showProblems" => wb::ShowProblems,
     "problems.copyFullDiagnostic" => wb::CopyFullDiagnostic,
     "problems.copyAll" => wb::panels_glue::CopyAllProblems,
+    "go.pickSymbolAtLevel" => wb::outline_glue::BreadcrumbSymbols,
     "problems.toggleActiveFileOnly" => wb::panels_glue::ToggleProblemsActiveFile,
     "rust.expandMacro" => wb::RustExpandMacro,
     "rust.parentModule" => wb::RustParentModule,

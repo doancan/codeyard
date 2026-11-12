@@ -131,8 +131,11 @@ mod lsp_glue;
 mod menus_glue;
 #[path = "workbench_nav.rs"]
 mod nav_glue;
+#[path = "workbench_outline.rs"]
+pub(crate) mod outline_glue;
 #[path = "workbench_palette.rs"]
 mod palette_glue;
+use outline_glue::OutlineState;
 #[path = "workbench_panels.rs"]
 pub(crate) mod panels_glue;
 #[cfg(test)]
@@ -572,17 +575,6 @@ const FILE_LIMIT: u32 = 100_000;
 
 /// Midnight / Daylight following the system light/dark mode.
 pub const THEME_AUTO: &str = "auto";
-
-/// Explorer OUTLINE section: symbols of the active file (refreshed at most every 400 ms while typing).
-#[derive(Default)]
-struct OutlineState {
-    key: Option<(String, u64)>,
-    symbols: Vec<crate::outline::Symbol>,
-    supported: bool,
-    too_large: bool,
-    computed_at: Option<std::time::Instant>,
-    refresh_pending: bool,
-}
 
 /// Pages opened as tabs.
 #[derive(Clone)]

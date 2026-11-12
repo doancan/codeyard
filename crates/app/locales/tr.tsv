@@ -3931,3 +3931,19 @@ Search: Find in Open Editors	Arama: Açık Düzenleyicilerde Bul
 Search: Find in Changed Files	Arama: Değişen Dosyalarda Bul
 Search: Find in Current Folder	Arama: Geçerli Klasörde Bul
 {0} Files to include is not used.	{0} “Dahil edilecek dosyalar” kullanılmıyor.
+
+# ---- Outline and breadcrumb symbols ----
+Changes the order of the symbols	Sembollerin sırasını değiştirir
+Filter symbols	Sembolleri süz
+Follow Cursor	İmleci Takip Et
+Go to symbol at this level	Bu düzeydeki sembole git
+Go: Pick Symbol at the Cursor's Level	Git: İmlecin Düzeyinden Sembol Seç
+No symbols match the filter.	Süzgece uyan sembol yok.
+Sort: Kind	Sıra: Tür
+Sort: Name	Sıra: Ad
+Sort: Position	Sıra: Konum
+heading	başlık
+section	bölüm
+type	tür
+{0} · line {1}	{0} · satır {1}
+{0}. Choose another symbol at this level.	{0}. Bu düzeyde başka bir sembol seçin.

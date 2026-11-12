@@ -29,7 +29,8 @@ The tree, in the order a screen reader walks it:
   terminal toggle, merge conflicts, a data path, the web preview's Open and Stop) joined to the status bar's node; the
   resource monitor (its "Resources" button, expanded while the figures show, each figure as a label, Pin and Close);
   the error card's Reconnect and Close; the containers' "Back to SSH workspace" bar; the breadcrumbs (`Link`s that
-  show the folder or file in the Explorer); the menu bar the app draws on Windows and Linux (`MenuItem`s that open
+  show the folder or file in the Explorer, then a `Button` per symbol around the cursor, with its kind as description, that
+  opens a picker of the symbols at its level); the menu bar the app draws on Windows and Linux (`MenuItem`s that open
   their menu under them); the panel's buttons (New Terminal, Launch Profile…, Split Terminal, Kill Terminal, Move
   Panel, Maximize or Restore, Hide Panel) and its list of terminals ("Terminals": a `Tab` each, selected while in
   front, with Kill Terminal; Move Terminal Up and Down reorder them from the palette and the menu, as dragging does for the
@@ -41,7 +42,7 @@ The tree, in the order a screen reader walks it:
 - The side views' drawn controls, declared the same way: the Explorer's empty-state buttons (Open Folder, Open
   recent), header buttons (New File, New Folder, Refresh, Expand and Collapse Folders), each section's header (a
   `Button` with its count, expanded while open; `Click` folds it), the open editors (a `ListItem` each, selected while
-  in front, with Close), favorites, the outline (`TreeItem`s with their line, selected at the caret) and the timeline
+  in front, with Close), favorites, the outline (a "Filter symbols" `TextInput`, a "Sort: Position / Name / Kind" `Button` that changes the order, a "Follow Cursor" toggle `Button`, and `TreeItem`s with their kind and line as description, selected at the caret) and the timeline
   (saved copies and commits), and its notes as labels; Source Control's Refresh and More Actions…, the Stashes header
   and each stash's Apply, Pop and Drop (the stash as description), a repository's fold button; the Search view's
   Clear field, Previous and Next result, Expand or Collapse all, Open in a Search Editor tab, Run again, Clear and, in
