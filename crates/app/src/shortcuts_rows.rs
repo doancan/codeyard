@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn a_command_without_a_key_has_one_row_without_one() {
         let cmds = [command("Quick Open", "workbench.quickOpen", wb::QuickOpen), command("Go to Line", "workbench.goToLine", wb::GoToLine)];
-        let rows = build(&cmds, &keymap(vec![KeyBinding::new("cmd-p", wb::QuickOpen, None)]), &[], &[]);
+        let rows = build(&cmds, &keymap(vec![KeyBinding::new("ctrl-p", wb::QuickOpen, None)]), &[], &[]);
         assert_eq!(rows.len(), 2);
         assert_eq!((rows[0].label.as_str(), rows[0].binding.as_ref().map(|b| b.source)), ("Quick Open", Some(Source::Default)));
         assert_eq!((rows[1].label.as_str(), rows[1].binding.is_none()), ("Go to Line", true), "bound commands come first");
@@ -243,19 +243,19 @@ mod tests {
     #[test]
     fn a_command_with_two_keys_has_two_rows_and_the_file_marks_its_own() {
         let cmds = [command("Quick Open", "workbench.quickOpen", wb::QuickOpen)];
-        let km = keymap(vec![KeyBinding::new("cmd-p", wb::QuickOpen, None), KeyBinding::new("cmd-alt-o", wb::QuickOpen, None)]);
-        let rows = build(&cmds, &km, &[entry(3, "alt-cmd-o", Some("workbench.quickOpen"), None)], &[]);
+        let km = keymap(vec![KeyBinding::new("ctrl-p", wb::QuickOpen, None), KeyBinding::new("ctrl-alt-o", wb::QuickOpen, None)]);
+        let rows = build(&cmds, &km, &[entry(3, "ctrl-alt-o", Some("workbench.quickOpen"), None)], &[]);
         assert_eq!(rows.len(), 2);
         let sources: Vec<_> =
             rows.iter().map(|r| (r.binding.as_ref().unwrap().keys.clone(), r.binding.as_ref().unwrap().source, r.binding.as_ref().unwrap().entry)).collect();
-        assert!(sources.contains(&("cmd-p".into(), Source::Default, None)) && sources.contains(&("alt-cmd-o".into(), Source::User, Some(3))), "{sources:?}");
+        assert!(sources.contains(&("ctrl-p".into(), Source::Default, None)) && sources.contains(&("ctrl-alt-o".into(), Source::User, Some(3))), "{sources:?}");
         assert!(rows.iter().all(|r| r.changed));
     }
 
     #[test]
     fn the_same_key_in_two_commands_is_named_on_both_sides() {
         let cmds = [command("Quick Open", "workbench.quickOpen", wb::QuickOpen), command("Go to Line", "workbench.goToLine", wb::GoToLine)];
-        let km = keymap(vec![KeyBinding::new("cmd-p", wb::QuickOpen, None), KeyBinding::new("cmd-p", wb::GoToLine, None)]);
+        let km = keymap(vec![KeyBinding::new("ctrl-p", wb::QuickOpen, None), KeyBinding::new("ctrl-p", wb::GoToLine, None)]);
         let rows = build(&cmds, &km, &[], &[]);
         assert_eq!(only(&rows, "Quick Open").conflicts, ["Go to Line"]);
         assert_eq!(only(&rows, "Go to Line").conflicts, ["Quick Open"]);
@@ -265,33 +265,33 @@ mod tests {
     #[test]
     fn different_contexts_do_not_clash_but_no_context_clashes_with_every_context() {
         let cmds = [command("Quick Open", "workbench.quickOpen", wb::QuickOpen), command("Go to Line", "workbench.goToLine", wb::GoToLine)];
-        let apart = keymap(vec![KeyBinding::new("cmd-p", wb::QuickOpen, Some("Editor")), KeyBinding::new("cmd-p", wb::GoToLine, Some("Terminal"))]);
+        let apart = keymap(vec![KeyBinding::new("ctrl-p", wb::QuickOpen, Some("Editor")), KeyBinding::new("ctrl-p", wb::GoToLine, Some("Terminal"))]);
         assert_eq!(conflict_count(&build(&cmds, &apart, &[], &[])), 0);
-        let shadowed = keymap(vec![KeyBinding::new("cmd-p", wb::QuickOpen, Some("Editor")), KeyBinding::new("cmd-p", wb::GoToLine, None)]);
+        let shadowed = keymap(vec![KeyBinding::new("ctrl-p", wb::QuickOpen, Some("Editor")), KeyBinding::new("ctrl-p", wb::GoToLine, None)]);
         assert_eq!(conflict_count(&build(&cmds, &shadowed, &[], &[])), 2);
     }
 
     #[test]
     fn a_key_that_starts_a_chord_clashes_with_the_chord() {
         let cmds = [command("Quick Open", "workbench.quickOpen", wb::QuickOpen), command("Go to Line", "workbench.goToLine", wb::GoToLine)];
-        let km = keymap(vec![KeyBinding::new("cmd-k", wb::QuickOpen, None), KeyBinding::new("cmd-k cmd-i", wb::GoToLine, None)]);
+        let km = keymap(vec![KeyBinding::new("ctrl-k", wb::QuickOpen, None), KeyBinding::new("ctrl-k ctrl-i", wb::GoToLine, None)]);
         let rows = build(&cmds, &km, &[], &[]);
         assert_eq!(only(&rows, "Go to Line").conflicts, ["Quick Open"]);
-        let apart = keymap(vec![KeyBinding::new("cmd-k", wb::QuickOpen, None), KeyBinding::new("cmd-j cmd-i", wb::GoToLine, None)]);
+        let apart = keymap(vec![KeyBinding::new("ctrl-k", wb::QuickOpen, None), KeyBinding::new("ctrl-j ctrl-i", wb::GoToLine, None)]);
         assert_eq!(conflict_count(&build(&cmds, &apart, &[], &[])), 0);
     }
 
     #[test]
     fn a_command_does_not_clash_with_itself() {
         let cmds = [command("Quick Open", "workbench.quickOpen", wb::QuickOpen)];
-        let km = keymap(vec![KeyBinding::new("cmd-p", wb::QuickOpen, None), KeyBinding::new("cmd-p", wb::QuickOpen, Some("Editor"))]);
+        let km = keymap(vec![KeyBinding::new("ctrl-p", wb::QuickOpen, None), KeyBinding::new("ctrl-p", wb::QuickOpen, Some("Editor"))]);
         assert_eq!(conflict_count(&build(&cmds, &km, &[], &[])), 0);
     }
 
     #[test]
     fn a_key_used_by_an_action_no_command_lists_is_named_by_the_action() {
         let cmds = [command("Quick Open", "workbench.quickOpen", wb::QuickOpen)];
-        let km = keymap(vec![KeyBinding::new("cmd-p", wb::QuickOpen, None), KeyBinding::new("cmd-p", wb::GoToLine, None)]);
+        let km = keymap(vec![KeyBinding::new("ctrl-p", wb::QuickOpen, None), KeyBinding::new("ctrl-p", wb::GoToLine, None)]);
         let rows = build(&cmds, &km, &[], &[]);
         assert_eq!(only(&rows, "Quick Open").conflicts.len(), 1);
         assert!(only(&rows, "Quick Open").conflicts[0].contains("GoToLine"), "{:?}", only(&rows, "Quick Open").conflicts);
@@ -301,39 +301,39 @@ mod tests {
     fn a_key_the_user_turned_off_is_listed_as_off_and_does_not_clash() {
         let cmds = [command("Quick Open", "workbench.quickOpen", wb::QuickOpen), command("Go to Line", "workbench.goToLine", wb::GoToLine)];
         let km = keymap(vec![
-            KeyBinding::new("cmd-p", wb::QuickOpen, None),
-            KeyBinding::new("cmd-p", wb::GoToLine, None),
-            KeyBinding::load("cmd-p", Box::new(gpui::NoAction), None, false, None, &gpui::DummyKeyboardMapper).unwrap(),
-            KeyBinding::new("cmd-j", wb::GoToLine, None),
+            KeyBinding::new("ctrl-p", wb::QuickOpen, None),
+            KeyBinding::new("ctrl-p", wb::GoToLine, None),
+            KeyBinding::load("ctrl-p", Box::new(gpui::NoAction), None, false, None, &gpui::DummyKeyboardMapper).unwrap(),
+            KeyBinding::new("ctrl-j", wb::GoToLine, None),
         ]);
-        let rows = build(&cmds, &km, &[entry(0, "cmd-p", None, None)], &[]);
+        let rows = build(&cmds, &km, &[entry(0, "ctrl-p", None, None)], &[]);
         let off: Vec<&Row> = rows.iter().filter(|r| r.binding.as_ref().is_some_and(|b| b.disabled)).collect();
         assert_eq!(off.len(), 2, "{rows:?}");
         assert!(off.iter().all(|r| r.binding.as_ref().unwrap().entry == Some(0) && r.changed));
         assert_eq!(conflict_count(&rows), 0, "a key that is off cannot clash");
         let go: Vec<_> = rows.iter().filter(|r| r.label == "Go to Line").map(|r| r.binding.as_ref().unwrap()).collect();
-        assert!(go.iter().any(|b| b.keys == "cmd-j" && !b.disabled), "the other key of the command is still on");
+        assert!(go.iter().any(|b| b.keys == "ctrl-j" && !b.disabled), "the other key of the command is still on");
     }
 
     #[test]
     fn extension_keys_are_told_from_default_and_user_keys() {
         let cmds = [command("Quick Open", "workbench.quickOpen", wb::QuickOpen)];
-        let km = keymap(vec![KeyBinding::new("cmd-p", wb::QuickOpen, None)]);
-        let rows = build(&cmds, &km, &[], &[entry(0, "cmd-p", Some("workbench.quickOpen"), None)]);
+        let km = keymap(vec![KeyBinding::new("ctrl-p", wb::QuickOpen, None)]);
+        let rows = build(&cmds, &km, &[], &[entry(0, "ctrl-p", Some("workbench.quickOpen"), None)]);
         assert_eq!(only(&rows, "Quick Open").source, Source::Extension);
     }
 
     #[test]
     fn search_finds_by_name_id_keys_context_and_source() {
         let cmds = [command("Go to Line…", "workbench.goToLine", wb::GoToLine)];
-        let km = keymap(vec![KeyBinding::new("cmd-shift-g", wb::GoToLine, Some("Editor"))]);
+        let km = keymap(vec![KeyBinding::new("ctrl-shift-g", wb::GoToLine, Some("Editor"))]);
         let rows = build(&cmds, &km, &[], &[]);
         let row = &rows[0];
-        for q in ["line", "GOTOLINE", "editor", "default", "cmd-shift-g", "cmd+shift+g", ""] {
+        for q in ["line", "GOTOLINE", "editor", "default", "ctrl-shift-g", "ctrl+shift+g", ""] {
             assert!(matches(row, q), "{q}");
         }
-        assert!(!matches(row, "terminal") && !matches(row, "cmd-p") && !matches(row, "user"));
+        assert!(!matches(row, "terminal") && !matches(row, "ctrl-p") && !matches(row, "user"));
         assert!(matches(&Row { label: "x".into(), id: None, binding: None, changed: false }, "x"));
-        assert!(!matches(&Row { label: "x".into(), id: None, binding: None, changed: false }, "cmd-p"));
+        assert!(!matches(&Row { label: "x".into(), id: None, binding: None, changed: false }, "ctrl-p"));
     }
 }

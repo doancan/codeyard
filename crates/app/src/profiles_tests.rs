@@ -341,7 +341,9 @@ fn list_skips_files_hidden_folders_and_names_that_are_not_valid() {
     create(&cfg, "b").unwrap();
     create(&cfg, "A").unwrap();
     std::fs::create_dir_all(cfg.join(DIR).join(".hidden")).unwrap();
-    std::fs::create_dir_all(cfg.join(DIR).join("trailing.")).ok();
+    // Windows strips a trailing dot when a folder is made, so there the name is valid; elsewhere it is a folder to skip.
+    #[cfg(unix)]
+    std::fs::create_dir_all(cfg.join(DIR).join("trailing.")).unwrap();
     std::fs::create_dir_all(cfg.join(DIR).join("Default")).unwrap();
     write(&cfg.join(DIR).join("note.txt"), "x");
     assert_eq!(list(&cfg), ["A", "b"], "sorted without regard to case, only valid names");

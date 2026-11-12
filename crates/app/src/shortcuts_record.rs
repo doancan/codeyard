@@ -84,26 +84,26 @@ mod tests {
     #[test]
     fn a_chord_then_enter_gives_the_keys() {
         let mut r = Recorder::default();
-        assert_eq!(press(&mut r, "cmd-shift-d"), Step::Continue);
-        assert_eq!(r.keys(), "cmd-shift-d");
-        assert_eq!(press(&mut r, "enter"), Step::Done("cmd-shift-d".into()));
+        assert_eq!(press(&mut r, "ctrl-shift-d"), Step::Continue);
+        assert_eq!(r.keys(), "ctrl-shift-d");
+        assert_eq!(press(&mut r, "enter"), Step::Done("ctrl-shift-d".into()));
     }
 
     #[test]
     fn two_chords_make_a_sequence() {
         let mut r = Recorder::default();
-        press(&mut r, "cmd-k");
-        press(&mut r, "cmd-i");
-        assert_eq!(r.keys(), "cmd-k cmd-i");
-        assert_eq!(press(&mut r, "enter"), Step::Done("cmd-k cmd-i".into()));
-        assert_eq!(crate::shortcuts_page::edit::canonical_keys(&r.keys()).as_deref(), Some("cmd-k cmd-i"));
+        press(&mut r, "ctrl-k");
+        press(&mut r, "ctrl-i");
+        assert_eq!(r.keys(), "ctrl-k ctrl-i");
+        assert_eq!(press(&mut r, "enter"), Step::Done("ctrl-k ctrl-i".into()));
+        assert_eq!(crate::shortcuts_page::edit::canonical_keys(&r.keys()).as_deref(), Some("ctrl-k ctrl-i"));
     }
 
     #[test]
     fn escape_cancels_at_any_point() {
         let mut r = Recorder::default();
         assert_eq!(press(&mut r, "escape"), Step::Cancel);
-        press(&mut r, "cmd-k");
+        press(&mut r, "ctrl-k");
         assert_eq!(press(&mut r, "escape"), Step::Cancel);
     }
 
@@ -113,9 +113,9 @@ mod tests {
         assert_eq!(press(&mut r, "enter"), Step::Continue);
         assert_eq!(r.keys(), "enter");
         let mut r = Recorder::default();
-        press(&mut r, "cmd-k");
-        press(&mut r, "cmd-enter");
-        assert_eq!(r.keys(), "cmd-k cmd-enter");
+        press(&mut r, "ctrl-k");
+        press(&mut r, "ctrl-enter");
+        assert_eq!(r.keys(), "ctrl-k ctrl-enter");
         let mut r = Recorder::default();
         assert_eq!(press(&mut r, "shift-escape"), Step::Continue, "only a bare Escape cancels");
         assert_eq!(r.keys(), "shift-escape");
@@ -129,16 +129,16 @@ mod tests {
         }
         assert!(r.is_empty(), "nothing was taken");
         // Named keys, function keys and anything with Ctrl, Alt or Cmd are fine, also Ctrl+Alt (AltGr on Windows).
-        for key in ["f5", "tab", "enter", "left", "backspace", "ctrl-a", "alt-a", "cmd-a", "ctrl-alt-a", "ctrl-alt-shift-ö"] {
+        for key in ["f5", "tab", "enter", "left", "backspace", "ctrl-a", "alt-a", "ctrl-a", "ctrl-alt-a", "ctrl-alt-shift-ö"] {
             let mut r = Recorder::default();
             assert_eq!(press(&mut r, key), Step::Continue, "{key}");
             assert!(!r.is_empty(), "{key}");
         }
         // After a first chord a bare key is the second key of a sequence.
         let mut r = Recorder::default();
-        press(&mut r, "cmd-k");
+        press(&mut r, "ctrl-k");
         assert_eq!(press(&mut r, "a"), Step::Continue);
-        assert_eq!(r.keys(), "cmd-k a");
+        assert_eq!(r.keys(), "ctrl-k a");
     }
 
     #[test]
@@ -158,28 +158,72 @@ mod tests {
         assert_eq!(r.keys(), "ctrl-ö ç");
         // Typed text of the key does not change the spelling (the keymap ignores it).
         let mut r = Recorder::default();
-        r.press(&Keystroke { key: "ğ".into(), modifiers: gpui::Modifiers::command(), key_char: Some("Ğ".into()) });
-        assert_eq!(r.keys(), "cmd-ğ");
+        r.press(&Keystroke { key: "ğ".into(), modifiers: gpui::Modifiers::control(), key_char: Some("Ğ".into()) });
+        assert_eq!(r.keys(), "ctrl-ğ");
     }
 
     #[test]
     fn at_most_max_chords_are_taken() {
         let mut r = Recorder::default();
-        for key in ["cmd-a", "b", "c", "d"] {
+        for key in ["ctrl-a", "b", "c", "d"] {
             press(&mut r, key);
         }
-        assert_eq!(r.keys(), "cmd-a b c");
+        assert_eq!(r.keys(), "ctrl-a b c");
     }
 
     #[test]
     fn what_is_recorded_matches_when_pressed_again() {
         // The spelling written to the file binds exactly the key that was pressed.
-        for typed in ["cmd-shift-p", "ctrl-alt-ö", "alt-cmd-down", "f13", "ctrl-;", "cmd-\\"] {
+        for typed in ["ctrl-shift-p", "ctrl-alt-ö", "ctrl-alt-down", "f13", "ctrl-;", "ctrl-\\"] {
             let mut r = Recorder::default();
             let pressed = Keystroke::parse(typed).unwrap();
             r.press(&pressed);
             let binding = gpui::KeyBinding::load(&r.keys(), Box::new(gpui::NoAction), None, false, None, &gpui::DummyKeyboardMapper).unwrap();
             assert_eq!(binding.match_keystrokes(&[pressed]), Some(false), "{typed} -> {}", r.keys());
         }
+    }
+
+    /// Record, write to the file, read it back, load it into the keymap: the key that was pressed matches, for every
+    /// modifier, on every system (the platform key is `cmd`, `super` or `win` in the file, and all three load).
+    #[test]
+    fn a_key_survives_record_write_read_and_load_for_every_modifier() {
+        for typed in ["ctrl-x", "alt-x", "shift-f5", "ctrl-alt-shift-x", "cmd-x", "super-x", "win-x", "cmd-shift-alt-ctrl-x", "secondary-x"] {
+            let mut r = Recorder::default();
+            let pressed = Keystroke::parse(typed).unwrap();
+            r.press(&pressed);
+            let written = crate::shortcuts_page::edit::add_entry("[]", &r.keys(), Some("workbench.quickOpen"), None);
+            let entry = crate::shortcuts_page::edit::read_entries(&written).unwrap().remove(0);
+            let binding = gpui::KeyBinding::load(&entry.keys, Box::new(gpui::NoAction), None, false, None, &gpui::DummyKeyboardMapper).unwrap();
+            assert_eq!(binding.match_keystrokes(std::slice::from_ref(&pressed)), Some(false), "{typed}: file has {written}");
+            // The user file loader of the app takes the entry too.
+            let (loaded, warnings) = crate::settings::parse_keybindings(&written);
+            assert!(warnings.is_empty() && loaded.len() == 1, "{typed}: {warnings:?}");
+            let again = gpui::KeyBinding::load(&loaded[0].key, Box::new(gpui::NoAction), None, false, None, &gpui::DummyKeyboardMapper).unwrap();
+            assert_eq!(again.match_keystrokes(&[pressed]), Some(false), "{typed}");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_platform_key_is_written_as_cmd_on_macos() {
+        let mut r = Recorder::default();
+        r.press(&Keystroke::parse("super-x").unwrap());
+        assert_eq!(r.keys(), "cmd-x");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_platform_key_is_written_as_super_on_linux() {
+        let mut r = Recorder::default();
+        r.press(&Keystroke::parse("cmd-x").unwrap());
+        assert_eq!(r.keys(), "super-x");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn the_platform_key_is_written_as_win_on_windows() {
+        let mut r = Recorder::default();
+        r.press(&Keystroke::parse("cmd-x").unwrap());
+        assert_eq!(r.keys(), "win-x");
     }
 }

@@ -237,84 +237,90 @@ mod tests {
 
     #[test]
     fn recording_a_key_for_a_command_adds_an_entry() {
-        let out = apply(WITH_COMMENTS, &Change::Set { command: "editor.undo", keys: "cmd-u", when: None, replacing: None }).unwrap();
+        let out = apply(WITH_COMMENTS, &Change::Set { command: "editor.undo", keys: "ctrl-u", when: None, replacing: None }).unwrap();
         assert!(out.contains("// first") && out.contains("// go quickly"));
-        assert_eq!(state(&out).last().unwrap(), &("cmd-u".to_string(), Some("editor.undo".into()), None));
-        let again = apply(&out, &Change::Set { command: "editor.undo", keys: "cmd-u", when: None, replacing: None }).unwrap();
+        assert_eq!(state(&out).last().unwrap(), &("ctrl-u".to_string(), Some("editor.undo".into()), None));
+        let again = apply(&out, &Change::Set { command: "editor.undo", keys: "ctrl-u", when: None, replacing: None }).unwrap();
         assert_eq!(again, out, "the same key twice changes nothing");
     }
 
     #[test]
     fn changing_a_users_key_changes_it_in_place_and_changing_a_default_turns_it_off_first() {
-        let user = apply(WITH_COMMENTS, &Change::Set { command: "workbench.quickOpen", keys: "cmd-9", when: None, replacing: Some(key("cmd-1", None, true)) })
-            .unwrap();
-        assert_eq!(user.replace("cmd-9", "cmd-1"), WITH_COMMENTS);
+        let user =
+            apply(WITH_COMMENTS, &Change::Set { command: "workbench.quickOpen", keys: "ctrl-9", when: None, replacing: Some(key("ctrl-1", None, true)) })
+                .unwrap();
+        assert_eq!(user.replace("ctrl-9", "ctrl-1"), WITH_COMMENTS);
         let default = apply(
             WITH_COMMENTS,
-            &Change::Set { command: "editor.undo", keys: "cmd-u", when: Some("Editor"), replacing: Some(key("cmd-z", Some("Editor"), false)) },
+            &Change::Set { command: "editor.undo", keys: "ctrl-u", when: Some("Editor"), replacing: Some(key("ctrl-z", Some("Editor"), false)) },
         )
         .unwrap();
         let s = state(&default);
-        assert_eq!(s.first().unwrap(), &("cmd-z".to_string(), None, Some("Editor".to_string())), "the entry that turns the default off comes first: {default}");
+        assert_eq!(
+            s.first().unwrap(),
+            &("ctrl-z".to_string(), None, Some("Editor".to_string())),
+            "the entry that turns the default off comes first: {default}"
+        );
         assert_eq!(s.last().unwrap().1.as_deref(), Some("editor.undo"));
         assert_eq!(s.len(), 4);
     }
 
     #[test]
     fn removing_a_default_key_turns_it_off_once_and_removing_a_users_key_deletes_it() {
-        let off = apply("[]", &Change::Remove { command: "editor.undo", key: key("cmd-z", None, false) }).unwrap();
-        assert_eq!(state(&off), [("cmd-z".to_string(), None, None)]);
-        assert_eq!(apply(&off, &Change::Remove { command: "editor.undo", key: key("cmd-z", None, false) }).unwrap(), off);
-        let gone = apply(WITH_COMMENTS, &Change::Remove { command: "editor.save", key: key("cmd-2", Some("Editor"), true) }).unwrap();
+        let off = apply("[]", &Change::Remove { command: "editor.undo", key: key("ctrl-z", None, false) }).unwrap();
+        assert_eq!(state(&off), [("ctrl-z".to_string(), None, None)]);
+        assert_eq!(apply(&off, &Change::Remove { command: "editor.undo", key: key("ctrl-z", None, false) }).unwrap(), off);
+        let gone = apply(WITH_COMMENTS, &Change::Remove { command: "editor.save", key: key("ctrl-2", Some("Editor"), true) }).unwrap();
         assert_eq!(state(&gone).len(), 1);
-        assert!(gone.contains("// { \"key\": \"cmd-3\""));
+        assert!(gone.contains("// { \"key\": \"ctrl-3\""));
     }
 
     #[test]
     fn reset_removes_the_commands_entries_and_the_nulls_that_turned_its_defaults_off() {
-        let text = "[\n  { \"key\": \"cmd-z\", \"command\": null, \"when\": \"Editor\" },\n  { \"key\": \"cmd-u\", \"command\": \"editor.undo\" },\n  { \"key\": \"cmd-9\", \"command\": \"editor.save\" },\n  { \"key\": \"cmd-q\", \"command\": null }\n]\n";
-        let out = apply(text, &Change::Reset { command: "editor.undo", turned_off: &[key("cmd-z", Some("Editor"), false)] }).unwrap();
-        assert_eq!(state(&out), [("cmd-9".into(), Some("editor.save".into()), None), ("cmd-q".into(), None, None)]);
+        let text = "[\n  { \"key\": \"ctrl-z\", \"command\": null, \"when\": \"Editor\" },\n  { \"key\": \"ctrl-u\", \"command\": \"editor.undo\" },\n  { \"key\": \"ctrl-9\", \"command\": \"editor.save\" },\n  { \"key\": \"ctrl-q\", \"command\": null }\n]\n";
+        let out = apply(text, &Change::Reset { command: "editor.undo", turned_off: &[key("ctrl-z", Some("Editor"), false)] }).unwrap();
+        assert_eq!(state(&out), [("ctrl-9".into(), Some("editor.save".into()), None), ("ctrl-q".into(), None, None)]);
     }
 
     #[test]
     fn a_key_moves_to_the_end_when_a_later_entry_would_kill_it_in_place() {
-        let text = "[ {\"key\":\"cmd-1\",\"command\":\"editor.save\"}, {\"key\":\"cmd-2\",\"command\":null} ]";
-        let out = apply(text, &Change::Set { command: "editor.save", keys: "cmd-2", when: None, replacing: Some(key("cmd-1", None, true)) }).unwrap();
+        let text = "[ {\"key\":\"ctrl-1\",\"command\":\"editor.save\"}, {\"key\":\"ctrl-2\",\"command\":null} ]";
+        let out = apply(text, &Change::Set { command: "editor.save", keys: "ctrl-2", when: None, replacing: Some(key("ctrl-1", None, true)) }).unwrap();
         let s = state(&out);
-        assert_eq!(s.last().unwrap(), &("cmd-2".to_string(), Some("editor.save".into()), None), "{out}");
+        assert_eq!(s.last().unwrap(), &("ctrl-2".to_string(), Some("editor.save".into()), None), "{out}");
         assert_eq!(s.len(), 2, "the old entry is gone: {out}");
         // With nothing later on the new key the entry stays where it is.
-        let calm = apply(text, &Change::Set { command: "editor.save", keys: "cmd-3", when: None, replacing: Some(key("cmd-1", None, true)) }).unwrap();
-        assert_eq!(calm.replace("cmd-3", "cmd-1"), text);
+        let calm = apply(text, &Change::Set { command: "editor.save", keys: "ctrl-3", when: None, replacing: Some(key("ctrl-1", None, true)) }).unwrap();
+        assert_eq!(calm.replace("ctrl-3", "ctrl-1"), text);
     }
 
     #[test]
     fn reset_keeps_a_global_null_of_the_user_when_the_default_has_a_context() {
-        let text = "[ {\"key\":\"cmd-z\",\"command\":null}, {\"key\":\"cmd-z\",\"command\":null,\"when\":\"Editor\"}, {\"key\":\"cmd-u\",\"command\":\"editor.undo\"} ]";
-        let out = apply(text, &Change::Reset { command: "editor.undo", turned_off: &[key("cmd-z", Some("Editor"), false)] }).unwrap();
-        assert_eq!(state(&out), [("cmd-z".to_string(), None, None)], "{out}");
-        let plain = "[ {\"key\":\"cmd-z\",\"command\":null}, {\"key\":\"cmd-q\",\"command\":null,\"when\":\"Editor\"} ]";
-        let out = apply(plain, &Change::Reset { command: "editor.undo", turned_off: &[key("cmd-z", None, false)] }).unwrap();
-        assert_eq!(state(&out), [("cmd-q".to_string(), None, Some("Editor".to_string()))]);
+        let text = "[ {\"key\":\"ctrl-z\",\"command\":null}, {\"key\":\"ctrl-z\",\"command\":null,\"when\":\"Editor\"}, {\"key\":\"ctrl-u\",\"command\":\"editor.undo\"} ]";
+        let out = apply(text, &Change::Reset { command: "editor.undo", turned_off: &[key("ctrl-z", Some("Editor"), false)] }).unwrap();
+        assert_eq!(state(&out), [("ctrl-z".to_string(), None, None)], "{out}");
+        let plain = "[ {\"key\":\"ctrl-z\",\"command\":null}, {\"key\":\"ctrl-q\",\"command\":null,\"when\":\"Editor\"} ]";
+        let out = apply(plain, &Change::Reset { command: "editor.undo", turned_off: &[key("ctrl-z", None, false)] }).unwrap();
+        assert_eq!(state(&out), [("ctrl-q".to_string(), None, Some("Editor".to_string()))]);
     }
 
     #[test]
     fn removing_deletes_every_identical_entry_and_reading_notes_extra_members() {
-        let text = "[ {\"key\":\"cmd-1\",\"command\":\"a\"}, {\"key\":\"cmd-2\",\"command\":\"b\"}, {\"key\":\"cmd-1\",\"command\":\"a\",\"args\":{\"x\":1}} ]";
+        let text =
+            "[ {\"key\":\"ctrl-1\",\"command\":\"a\"}, {\"key\":\"ctrl-2\",\"command\":\"b\"}, {\"key\":\"ctrl-1\",\"command\":\"a\",\"args\":{\"x\":1}} ]";
         let entries = read_entries(text).unwrap();
         assert_eq!(entries.iter().map(|e| e.extras).collect::<Vec<_>>(), [false, false, true]);
-        let out = apply(text, &Change::Remove { command: "a", key: key("cmd-1", None, true) }).unwrap();
-        assert_eq!(state(&out), [("cmd-2".to_string(), Some("b".into()), None)], "{out}");
+        let out = apply(text, &Change::Remove { command: "a", key: key("ctrl-1", None, true) }).unwrap();
+        assert_eq!(state(&out), [("ctrl-2".to_string(), Some("b".into()), None)], "{out}");
     }
 
     #[test]
     fn a_broken_file_is_never_written_over() {
-        assert!(apply("[ { ", &Change::Remove { command: "a", key: key("cmd-1", None, true) }).is_err());
+        assert!(apply("[ { ", &Change::Remove { command: "a", key: key("ctrl-1", None, true) }).is_err());
         assert!(apply("[]", &Change::Set { command: "a", keys: "", when: None, replacing: None }).is_err());
     }
 
-    const WITH_COMMENTS: &str = "// my keys\n[\n  // go quickly\n  { \"key\": \"cmd-1\", \"command\": \"workbench.quickOpen\" }, // first\n  { \"key\": \"cmd-2\", \"command\": \"editor.save\", \"when\": \"Editor\" }\n  // { \"key\": \"cmd-3\", \"command\": \"x\" },\n]\n";
+    const WITH_COMMENTS: &str = "// my keys\n[\n  // go quickly\n  { \"key\": \"ctrl-1\", \"command\": \"workbench.quickOpen\" }, // first\n  { \"key\": \"ctrl-2\", \"command\": \"editor.save\", \"when\": \"Editor\" }\n  // { \"key\": \"ctrl-3\", \"command\": \"x\" },\n]\n";
 
     fn parse_back(text: &str) -> Vec<FileEntry> {
         read_entries(text).unwrap_or_else(|e| panic!("{e}: {text}"))
@@ -334,7 +340,7 @@ mod tests {
         let entries = parse_back(WITH_COMMENTS);
         assert_eq!(entries.len(), 2);
         assert_eq!((entries[1].index, entries[1].command.as_deref(), entries[1].when.as_deref()), (1, Some("editor.save"), Some("Editor")));
-        let off = parse_back(r#"[ { "key": "cmd-s", "command": null }, { "key": "oops" }, { "key": "cmd-d", "command": "a" } ]"#);
+        let off = parse_back(r#"[ { "key": "ctrl-s", "command": null }, { "key": "oops" }, { "key": "ctrl-d", "command": "a" } ]"#);
         assert_eq!(off.iter().map(|e| (e.index, e.command.clone())).collect::<Vec<_>>(), [(0, None), (2, Some("a".into()))]);
         assert!(read_entries("[ {").is_err());
         assert!(read_entries("{}").is_err());
@@ -342,45 +348,45 @@ mod tests {
 
     #[test]
     fn adding_keeps_comments_and_the_other_entries() {
-        let out = add_entry(WITH_COMMENTS, "cmd-k cmd-i", Some("editor.showHover"), Some("Editor"));
-        assert!(out.starts_with("// my keys\n[\n  // go quickly\n") && out.contains("// first") && out.contains("// { \"key\": \"cmd-3\""), "{out}");
+        let out = add_entry(WITH_COMMENTS, "ctrl-k ctrl-i", Some("editor.showHover"), Some("Editor"));
+        assert!(out.starts_with("// my keys\n[\n  // go quickly\n") && out.contains("// first") && out.contains("// { \"key\": \"ctrl-3\""), "{out}");
         let entries = parse_back(&out);
         assert_eq!(entries.len(), 3);
         assert_eq!(
             (entries[2].keys.as_str(), entries[2].command.as_deref(), entries[2].when.as_deref()),
-            ("cmd-k cmd-i", Some("editor.showHover"), Some("Editor"))
+            ("ctrl-k ctrl-i", Some("editor.showHover"), Some("Editor"))
         );
         assert_eq!(&out[..out.len() - 1].lines().last().unwrap()[..1], "]");
     }
 
     #[test]
     fn adding_after_an_item_without_a_comma_adds_the_comma() {
-        let out = add_entry("[\n  { \"key\": \"cmd-1\", \"command\": \"a\" }\n]\n", "cmd-2", Some("b"), None);
+        let out = add_entry("[\n  { \"key\": \"ctrl-1\", \"command\": \"a\" }\n]\n", "ctrl-2", Some("b"), None);
         assert_eq!(parse_back(&out).len(), 2, "{out}");
         assert!(out.contains("\"a\" },\n"), "{out}");
-        let one_line = add_entry(r#"[ { "key": "cmd-1", "command": "a" } ]"#, "cmd-2", None, None);
+        let one_line = add_entry(r#"[ { "key": "ctrl-1", "command": "a" } ]"#, "ctrl-2", None, None);
         assert_eq!(parse_back(&one_line).iter().map(|e| e.command.clone()).collect::<Vec<_>>(), [Some("a".into()), None], "{one_line}");
     }
 
     #[test]
     fn adding_to_a_missing_or_empty_file_makes_a_list() {
         for start in ["", "   \n", "[]", "[\n]\n", "// only a comment\n[\n]"] {
-            let out = add_entry(start, "cmd-1", Some("a"), None);
+            let out = add_entry(start, "ctrl-1", Some("a"), None);
             assert_eq!(parse_back(&out).len(), 1, "{start:?} -> {out}");
         }
-        assert!(add_entry("// only a comment\n[\n]", "cmd-1", Some("a"), None).starts_with("// only a comment\n"));
+        assert!(add_entry("// only a comment\n[\n]", "ctrl-1", Some("a"), None).starts_with("// only a comment\n"));
     }
 
     #[test]
     fn windows_line_endings_stay_windows_line_endings() {
         let crlf = WITH_COMMENTS.replace('\n', "\r\n");
-        let added = add_entry(&crlf, "cmd-4", Some("a"), None);
+        let added = add_entry(&crlf, "ctrl-4", Some("a"), None);
         assert_eq!(added.matches('\n').count(), added.matches("\r\n").count(), "a bare LF crept in: {added:?}");
         assert_eq!(parse_back(&added).len(), 3);
         let removed = remove_entry(&added, 0).unwrap();
         assert_eq!(removed.matches('\n').count(), removed.matches("\r\n").count(), "{removed:?}");
         assert_eq!(parse_back(&removed).len(), 2);
-        let from_empty = add_entry("[\r\n]\r\n", "cmd-4", Some("a"), None);
+        let from_empty = add_entry("[\r\n]\r\n", "ctrl-4", Some("a"), None);
         assert_eq!(from_empty.matches('\n').count(), from_empty.matches("\r\n").count(), "{from_empty:?}");
     }
 
@@ -388,25 +394,25 @@ mod tests {
     fn removing_takes_the_entry_and_nothing_else() {
         let out = remove_entry(WITH_COMMENTS, 0).unwrap();
         assert_eq!(parse_back(&out).len(), 1);
-        assert!(out.contains("// go quickly") && out.contains("// { \"key\": \"cmd-3\"") && !out.contains("cmd-1"), "{out}");
+        assert!(out.contains("// go quickly") && out.contains("// { \"key\": \"ctrl-3\"") && !out.contains("ctrl-1"), "{out}");
         let last = remove_entry(WITH_COMMENTS, 1).unwrap();
-        assert_eq!(parse_back(&last).iter().map(|e| e.keys.as_str()).collect::<Vec<_>>(), ["cmd-1"]);
+        assert_eq!(parse_back(&last).iter().map(|e| e.keys.as_str()).collect::<Vec<_>>(), ["ctrl-1"]);
         assert!(remove_entry(WITH_COMMENTS, 5).is_none());
-        let single_line = remove_entry(r#"[ { "key": "cmd-1", "command": "a" }, { "key": "cmd-2", "command": "b" } ]"#, 0).unwrap();
+        let single_line = remove_entry(r#"[ { "key": "ctrl-1", "command": "a" }, { "key": "ctrl-2", "command": "b" } ]"#, 0).unwrap();
         assert_eq!(parse_back(&single_line).len(), 1, "{single_line}");
     }
 
     #[test]
     fn rekeying_changes_only_the_key() {
         let out = set_entry_keys(WITH_COMMENTS, 1, "ctrl-ö").unwrap();
-        assert_eq!(out.replace("ctrl-ö", "cmd-2"), WITH_COMMENTS);
+        assert_eq!(out.replace("ctrl-ö", "ctrl-2"), WITH_COMMENTS);
         assert_eq!(parse_back(&out)[1].keys, "ctrl-ö");
-        assert!(set_entry_keys(r#"[ { "command": "a" } ]"#, 0, "cmd-1").is_none());
+        assert!(set_entry_keys(r#"[ { "command": "a" } ]"#, 0, "ctrl-1").is_none());
     }
 
     #[test]
     fn special_characters_in_a_when_are_escaped() {
-        let out = add_entry("[]", "cmd-1", Some("a"), Some(r#"Editor && !mode == "x\y""#));
+        let out = add_entry("[]", "ctrl-1", Some("a"), Some(r#"Editor && !mode == "x\y""#));
         assert_eq!(parse_back(&out)[0].when.as_deref(), Some(r#"Editor && !mode == "x\y""#));
     }
 }
