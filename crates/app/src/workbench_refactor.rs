@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use gpui::WeakEntity;
 
-use super::notifications_glue::model::{Notification, Severity};
+use super::notifications_glue::model::{NoticeAction, Notification, Severity};
 use super::*;
 use crate::i18n::{t, tf};
 use crate::lsp::refactor::apply::{self, Fs, Step, Transaction};
@@ -354,10 +354,10 @@ impl Workbench {
         self.lsp.refactor.cancel = Some(cancel.clone());
         let fs = self.refactor_fs(&host);
         let steps = prepared.steps;
-        let (journal_dir, label, root, roots) = (self.refactor_journal_dir(), host.label(), plan.root.clone(), plan.roots.clone());
+        let (journal_dir, label, remote, root, roots) = (self.refactor_journal_dir(), host.label(), host.is_remote(), plan.root.clone(), plan.roots.clone());
         let task = cx.background_executor().spawn(async move {
             // The record of what is about to happen, for the next start if this process dies in the middle.
-            let journal = journal_dir.and_then(|dir| Journal::begin(&dir, &label, &root, &steps));
+            let journal = journal_dir.and_then(|dir| Journal::begin(&dir, &label, remote, &root, &steps));
             let tx = apply::run(fs.as_ref(), steps, &cancel, &roots);
             if let Some(journal) = journal {
                 journal.finish(tx.steps.iter().any(|(_, o)| matches!(o, apply::StepOutcome::RollbackFailed(_))));
@@ -402,7 +402,11 @@ impl Workbench {
                         &[&left.steps.iter().map(|(p, _)| ui::file_name(p).to_string()).collect::<Vec<_>>().join(", ")],
                     );
                     let detail = format!("{} · {}\n{}", left.host, left.root, files.join("\n"));
-                    this.notify_with(Notification::new(Severity::Warning, NoticeSource::Language, message).detail(detail));
+                    let mut note = Notification::new(Severity::Warning, NoticeSource::Language, message).detail(detail);
+                    if !left.remote {
+                        note = note.action(NoticeAction::Reveal(std::path::PathBuf::from(&left.root)));
+                    }
+                    this.notify_with(note);
                 }
             })
             .ok();

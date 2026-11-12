@@ -23,6 +23,8 @@ pub struct Journal {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Interrupted {
     pub host: String,
+    /// The folder is on an SSH host, not on this computer.
+    pub remote: bool,
     pub root: String,
     /// The paths of the steps, in order, each with what it was to do.
     pub steps: Vec<(String, String)>,
@@ -44,11 +46,11 @@ fn step_json(step: &Step) -> Value {
 impl Journal {
     /// Write the record before the first step. `None` when it cannot be written: the transaction still runs (it is as safe as
     /// before), only without a record.
-    pub fn begin(dir: &Path, host: &str, root: &str, steps: &[Step]) -> Option<Journal> {
+    pub fn begin(dir: &Path, host: &str, remote: bool, root: &str, steps: &[Step]) -> Option<Journal> {
         std::fs::create_dir_all(dir).ok()?;
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let path = dir.join(format!("refactor-journal-{}-{}.json", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
-        let body = json!({ "pid": std::process::id(), "started": now(), "host": host, "root": root, "steps": steps.iter().map(step_json).collect::<Vec<_>>() });
+        let body = json!({ "pid": std::process::id(), "started": now(), "host": host, "remote": remote, "root": root, "steps": steps.iter().map(step_json).collect::<Vec<_>>() });
         std::fs::write(&path, body.to_string()).ok()?;
         Some(Journal { path })
     }
@@ -98,7 +100,12 @@ pub fn take_interrupted(dir: &Path) -> Vec<Interrupted> {
             .as_array()
             .map(|a| a.iter().map(|s| (s["path"].as_str().unwrap_or_default().to_string(), s["op"].as_str().unwrap_or_default().to_string())).collect())
             .unwrap_or_default();
-        out.push(Interrupted { host: body["host"].as_str().unwrap_or_default().into(), root: body["root"].as_str().unwrap_or_default().into(), steps });
+        out.push(Interrupted {
+            host: body["host"].as_str().unwrap_or_default().into(),
+            remote: body["remote"].as_bool().unwrap_or(false),
+            root: body["root"].as_str().unwrap_or_default().into(),
+            steps,
+        });
         let _ = std::fs::remove_file(entry.path());
     }
     out
