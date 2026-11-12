@@ -23,7 +23,10 @@ pub fn resolve(configs: &[String]) -> Source {
     // The replacement's definition may sit in any file of the chain.
     let Some(def) = docs.iter().find_map(|d| source(d, &replacement)) else { return Source::Unsupported };
     match def.get("registry").and_then(|r| r.as_str()).and_then(|r| r.strip_prefix("sparse+")) {
-        Some(url) if url.starts_with("https://") => Source::Endpoints(Endpoints { index: url.trim_end_matches('/').to_string(), api: None }),
+        // Credentials in the address would end up in a folder name and on the command line of `curl`: not asked.
+        Some(url) if url.starts_with("https://") && !url["https://".len()..].split('/').next().unwrap_or_default().contains('@') => {
+            Source::Endpoints(Endpoints { index: url.trim_end_matches('/').to_string(), api: None })
+        }
         _ => Source::Unsupported,
     }
 }

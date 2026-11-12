@@ -1016,3 +1016,113 @@ fn the_app_client_refuses_plain_http() {
     let result = super::fetch::CurlFetch::new().get("http://127.0.0.1:9/x", None);
     assert!(matches!(result, Err(FetchError::Other(_))), "{result:?}");
 }
+
+// --- review fixes ----------------------------------------------------------------------------------------------------
+
+#[test]
+fn a_crate_name_follows_crates_io_rules_so_an_option_is_no_name() {
+    for bad in ["--git", "-x", "--config=/x.toml", "1abc", "_x", "", "a b", "a;b"] {
+        assert!(!valid_crate_name(bad), "{bad}");
+    }
+    assert!(valid_crate_name("a") && valid_crate_name("serde_json") && valid_crate_name(&format!("a{}", "b".repeat(63))));
+    assert!(!valid_crate_name(&format!("a{}", "b".repeat(64))));
+}
+
+#[test]
+fn the_memory_of_a_registry_is_bounded() {
+    let fake = Arc::new(Fake::default());
+    let reg = registry(&fake, None, Arc::new(AtomicUsize::new(1)));
+    for i in 0..400 {
+        let name = format!("crate-{i}");
+        fake.ok(&format!("https://index.crates.io/{}", index::index_path(&name)), SERDE_INDEX, "\"e\"");
+        reg.crate_info(&name);
+    }
+    assert!(reg.memory_len() <= 256, "{}", reg.memory_len());
+    // The newest stay, the oldest were forgotten (and are asked for again).
+    let before = fake.count();
+    reg.crate_info("crate-399");
+    assert_eq!(fake.count(), before);
+    reg.crate_info("crate-0");
+    assert_eq!(fake.count(), before + 1);
+}
+
+#[test]
+fn the_least_recently_used_entry_is_the_one_forgotten() {
+    let mut lru = super::registry::lru_for_test(64);
+    for i in 0..100 {
+        lru.insert(format!("q{i}"), i);
+    }
+    assert_eq!(lru.len(), 64);
+    assert!(lru.get("q99").is_some() && lru.get("q0").is_none());
+    lru.get("q36");
+    lru.insert("fresh".into(), 0);
+    assert!(lru.get("q36").is_some(), "a use keeps an entry");
+    assert!(lru.get("q37").is_none());
+}
+
+#[test]
+fn an_answer_that_is_not_an_index_file_is_not_cached_as_a_crate_without_versions() {
+    let dir = temp_dir("portal");
+    let fake = Arc::new(Fake::default());
+    fake.ok(SERDE_URL, "<html>Sign in to the Wi-Fi</html>", "\"p\"");
+    let reg = registry(&fake, Some(dir.clone()), Arc::new(AtomicUsize::new(1)));
+    assert!(matches!(reg.crate_info("serde"), Lookup::Failed(m) if m.contains("not an index file")));
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0, "nothing was written");
+    // The pause keeps the next lookups quiet, and a later good answer is used.
+    assert_eq!(reg.crate_info("tokio"), Lookup::Offline);
+    let fresh = registry(&fake, Some(dir.clone()), Arc::new(AtomicUsize::new(1)));
+    fake.set(SERDE_URL, Ok(Response { status: 200, etag: None, body: SERDE_INDEX.as_bytes().to_vec() }));
+    assert!(matches!(fresh.crate_info("serde"), Lookup::Found { .. }));
+    fake.set(SERDE_URL, Ok(Response { status: 200, etag: None, body: Vec::new() }));
+    let empty = registry(&fake, None, Arc::new(AtomicUsize::new(1)));
+    assert!(matches!(empty.crate_info("serde"), Lookup::Failed(_)), "an empty body is no index file either");
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn a_mirror_address_with_credentials_is_never_used() {
+    for url in ["sparse+https://user:pass@mirror.example/index/", "sparse+https://token@mirror.example/"] {
+        let cfg = format!("[source.crates-io]\nreplace-with = \"m\"\n[source.m]\nregistry = \"{url}\"\n");
+        assert_eq!(config::resolve(&[cfg]), Source::Unsupported, "{url}");
+    }
+    let ok = "[source.crates-io]\nreplace-with = \"m\"\n[source.m]\nregistry = \"sparse+https://mirror.example/a@b/\"\n";
+    assert!(matches!(config::resolve(&[ok.into()]), Source::Endpoints(_)), "an @ in the path is no userinfo");
+}
+
+#[test]
+fn edits_keep_a_crlf_file_crlf() {
+    let text = "[package]\r\nname = \"x\"\r\n\r\n[dependencies]\r\nserde = \"1\"\r\n";
+    let added = edit::add_dependency(text, &["dependencies".to_string()], "anyhow", "1").unwrap();
+    assert!(added.contains("anyhow = \"1\"\r\n") && !added.replace("\r\n", "").contains('\n'), "{added:?}");
+    let m = manifest::parse(text).unwrap();
+    let removed = edit::remove_dependency(text, &m.deps[0]).unwrap();
+    assert!(!removed.replace("\r\n", "").contains('\n') && !removed.contains("serde"), "{removed:?}");
+    // A file with LF endings is left as toml_edit wrote it.
+    assert!(!edit::add_dependency("[dependencies]\n", &["dependencies".to_string()], "a", "1").unwrap().contains('\r'));
+}
+
+#[test]
+fn curl_fetch_stops_a_server_that_never_stops_without_waiting_for_the_timeout() {
+    use std::io::{Read, Write};
+    let curl = crate::update::system_tool("curl");
+    if std::process::Command::new(&curl).arg("--version").output().is_err() {
+        eprintln!("SKIPPED: curl is not installed");
+        return;
+    }
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        let (mut s, _) = listener.accept().unwrap();
+        let mut buf = [0u8; 4096];
+        let _ = s.read(&mut buf);
+        s.write_all(b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n").ok();
+        let block = [b'x'; 64 * 1024];
+        // No Content-Length: only reading the bytes shows how much there is.
+        while s.write_all(&block).is_ok() {}
+    });
+    let started = std::time::Instant::now();
+    let result = super::fetch::CurlFetch::for_test().get(&format!("http://127.0.0.1:{port}/endless"), None);
+    assert_eq!(result, Err(FetchError::Other("the answer was too large".into())));
+    assert!(started.elapsed() < std::time::Duration::from_secs(5), "{:?}", started.elapsed());
+    server.join().unwrap();
+}

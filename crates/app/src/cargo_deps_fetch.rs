@@ -16,6 +16,8 @@ pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 pub const TOTAL_TIMEOUT: Duration = Duration::from_secs(12);
 /// An index file larger than this is refused (the biggest, `windows-sys`, is a few megabytes).
 pub const MAX_BODY: u64 = 16 * 1024 * 1024;
+const HEADER_ALLOWANCE: u64 = 64 * 1024;
+const TOO_LARGE: &str = "the answer was too large";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Response {
@@ -41,16 +43,19 @@ pub struct CurlFetch {
     curl: PathBuf,
     /// Tests talk to a server on 127.0.0.1; the app never does.
     allow_http: bool,
+    /// The most bytes of answer read; the child is killed past it, so a server that never stops cannot hold a lookup until the
+    /// total timeout.
+    max_body: u64,
 }
 
 impl CurlFetch {
     pub fn new() -> Self {
-        Self { curl: crate::update::system_tool("curl"), allow_http: false }
+        Self { curl: crate::update::system_tool("curl"), allow_http: false, max_body: MAX_BODY }
     }
 
     #[cfg(test)]
     pub fn for_test() -> Self {
-        Self { allow_http: true, ..Self::new() }
+        Self { allow_http: true, max_body: 256 * 1024, ..Self::new() }
     }
 
     fn command(&self, url: &str, etag: Option<&str>) -> Command {
@@ -58,7 +63,7 @@ impl CurlFetch {
         // `-q` first: ignore `~/.curlrc`. `--include` puts the status line and headers before the body.
         c.args(["-q", "--silent", "--show-error", "--include", "--compressed", "--max-redirs", "0", "--tlsv1.2"]);
         c.args(["--connect-timeout", &CONNECT_TIMEOUT.as_secs().to_string(), "--max-time", &TOTAL_TIMEOUT.as_secs().to_string()]);
-        c.args(["--max-filesize", &MAX_BODY.to_string(), "--proto", if self.allow_http { "=https,http" } else { "=https" }]);
+        c.args(["--max-filesize", &self.max_body.to_string(), "--proto", if self.allow_http { "=https,http" } else { "=https" }]);
         c.args(["--user-agent", &user_agent(), "--header", "Accept: application/json, text/plain"]);
         if let Some(tag) = etag.filter(|t| t.bytes().all(|b| (0x20..0x7f).contains(&b))) {
             c.args(["--header", &format!("If-None-Match: {tag}")]);
@@ -87,8 +92,20 @@ impl Fetch for CurlFetch {
             text
         });
         let mut raw = Vec::new();
-        if let Some(o) = out.as_mut() {
-            o.take(MAX_BODY + 64 * 1024).read_to_end(&mut raw).ok();
+        let mut chunk = [0u8; 16 * 1024];
+        while let Some(Ok(n)) = out.as_mut().map(|o| o.read(&mut chunk)) {
+            if n == 0 {
+                break;
+            }
+            raw.extend_from_slice(&chunk[..n]);
+            // Headers come first, so a little more than the body's cap is allowed before it counts as too large.
+            if raw.len() as u64 > self.max_body + HEADER_ALLOWANCE {
+                child.kill().ok();
+                child.wait().ok();
+                errors.join().ok();
+                // Not `Offline`: the server is there, it sends too much, and that must not pause every other lookup.
+                return Err(FetchError::Other(TOO_LARGE.into()));
+            }
         }
         let status = child.wait().map_err(|e| FetchError::Other(format!("curl: {e}")))?;
         let stderr = errors.join().unwrap_or_default();
@@ -105,7 +122,7 @@ fn curl_error(code: Option<i32>, stderr: &str) -> FetchError {
         // 6 could not resolve host, 7 could not connect, 52 empty reply, 56 receive error.
         Some(6 | 7 | 52 | 56) => FetchError::Offline,
         Some(28) => FetchError::Timeout,
-        Some(63) => FetchError::Other("the answer was too large".into()),
+        Some(63) => FetchError::Other(TOO_LARGE.into()),
         _ => FetchError::Other(
             stderr.lines().next().map(str::trim).filter(|l| !l.is_empty()).map_or_else(|| format!("curl exited with {code:?}"), str::to_string),
         ),

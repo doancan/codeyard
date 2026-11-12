@@ -109,7 +109,14 @@ pub fn add_dependency(text: &str, path: &[String], name: &str, version: &str) ->
     if was_sorted {
         table.sort_values();
     }
-    Ok(doc.to_string())
+    Ok(keep_line_ending(text, doc.to_string()))
+}
+
+/// A file that uses `\r\n` throughout stays that way: lines `toml_edit` inserts come with `\n`.
+fn keep_line_ending(original: &str, edited: String) -> String {
+    let crlf = original.matches("\r\n").count();
+    let bare = original.matches('\n').count() - crlf;
+    if crlf > 0 && bare == 0 { edited.replace("\r\n", "\n").replace('\n', "\r\n") } else { edited }
 }
 
 /// Remove the entry `dep` describes (the whole table for `[dependencies.name]`).
@@ -117,7 +124,7 @@ pub fn remove_dependency(text: &str, dep: &Dep) -> Result<String, EditError> {
     let mut doc = text.parse::<DocumentMut>().map_err(|e| EditError::Invalid(e.to_string()))?;
     let table = table_mut(&mut doc, &table_path(dep), false).ok_or_else(|| EditError::Missing(dep.key.clone()))?;
     table.remove(&dep.key).ok_or_else(|| EditError::Missing(dep.key.clone()))?;
-    Ok(doc.to_string())
+    Ok(keep_line_ending(text, doc.to_string()))
 }
 
 /// The smallest single replacement that turns `old` into `new` (common head and tail kept), so an editor applies a small

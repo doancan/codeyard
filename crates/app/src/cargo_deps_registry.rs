@@ -89,9 +89,66 @@ impl From<FetchError> for Failure {
     }
 }
 
-/// Crates.io names: ASCII letters, digits, `-` and `_`, at most 64 characters. Anything else never reaches a URL.
+/// Crates.io's rule for a name: it starts with an ASCII letter and has ASCII letters, digits, `-` and `_`, at most 64
+/// characters. Anything else never reaches a URL or the command line of `cargo` (so `--git` is no name).
 pub fn valid_crate_name(name: &str) -> bool {
-    (1..=64).contains(&name.len()) && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    name.len() <= 64
+        && name.bytes().next().is_some_and(|b| b.is_ascii_alphabetic())
+        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+/// How many crates and searches a registry keeps in memory (the disk cache keeps more, for longer).
+const MEMORY_ENTRIES: usize = 256;
+const SEARCH_ENTRIES: usize = 64;
+
+#[cfg(test)]
+pub(crate) fn lru_for_test(cap: usize) -> Lru<i32> {
+    Lru::new(cap)
+}
+
+/// A map that forgets the entry used longest ago once it is full.
+pub(crate) struct Lru<V> {
+    cap: usize,
+    map: HashMap<String, V>,
+    /// Keys, least recently used first.
+    order: std::collections::VecDeque<String>,
+}
+
+impl<V> Lru<V> {
+    fn new(cap: usize) -> Self {
+        Self { cap, map: HashMap::new(), order: Default::default() }
+    }
+
+    fn touch(&mut self, key: &str) {
+        if let Some(at) = self.order.iter().position(|k| k == key) {
+            let k = self.order.remove(at);
+            self.order.extend(k);
+        }
+    }
+
+    pub(crate) fn get(&mut self, key: &str) -> Option<&V> {
+        self.touch(key);
+        self.map.get(key)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    pub(crate) fn insert(&mut self, key: String, value: V) {
+        if self.map.insert(key.clone(), value).is_some() {
+            self.touch(&key);
+            return;
+        }
+        self.order.push_back(key);
+        while self.map.len() > self.cap {
+            match self.order.pop_front() {
+                Some(old) => self.map.remove(&old),
+                None => break,
+            };
+        }
+    }
 }
 
 fn encode_query(q: &str) -> String {
@@ -138,8 +195,8 @@ pub struct Registry {
     disk: DiskCache,
     endpoints: Endpoints,
     clock: Clock,
-    memory: Mutex<HashMap<String, Memory>>,
-    searches: Mutex<HashMap<String, (u64, Vec<SearchHit>)>>,
+    memory: Mutex<Lru<Memory>>,
+    searches: Mutex<Lru<(u64, Vec<SearchHit>)>>,
     gate: Gate,
     /// When the next API request may start.
     api_next: Mutex<Instant>,
@@ -157,12 +214,17 @@ impl Registry {
             disk,
             endpoints,
             clock,
-            memory: Mutex::default(),
-            searches: Mutex::default(),
+            memory: Mutex::new(Lru::new(MEMORY_ENTRIES)),
+            searches: Mutex::new(Lru::new(SEARCH_ENTRIES)),
             gate: Gate { free: Mutex::new(MAX_PARALLEL), wake: Condvar::new() },
             api_next: Mutex::new(Instant::now()),
             offline_until: Mutex::new(None),
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn memory_len(&self) -> usize {
+        Self::lock(&self.memory).len()
     }
 
     fn now(&self) -> u64 {
@@ -235,6 +297,12 @@ impl Registry {
         match self.request(&url, etag.as_deref(), false) {
             Ok(r) if r.status == 200 => {
                 let info = Arc::new(index::parse_index(&key, &String::from_utf8_lossy(&r.body)));
+                if info.versions.is_empty() {
+                    // A captive portal's page, an error body behind a 200: not an index file, and not worth caching as a crate
+                    // without versions. Like a lost connection, it pauses the requests for a while.
+                    *Self::lock(&self.offline_until) = Some(Instant::now() + OFFLINE_PAUSE);
+                    return self.fallback(old, Failure::Other("the index answered something that is not an index file".into()));
+                }
                 self.remember(&key, Some(info.clone()), r.etag);
                 Lookup::Found { info, stale: false }
             }
