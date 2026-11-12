@@ -217,6 +217,21 @@ fn cleanup_upload_tree(shell: Shell, stage: &str) {
     }
 }
 
+/// How long a child whose input was closed gets to finish and clean up before it is killed.
+const STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Wait for `child` to exit on its own (its stdin is closed), killing it only when it does not within [`STOP_GRACE`].
+fn stop_gracefully(child: &mut Child) {
+    let start = std::time::Instant::now();
+    while start.elapsed() < STOP_GRACE {
+        if !matches!(child.try_wait(), Ok(None)) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    kill(child);
+}
+
 fn kill(child: &mut Child) {
     let _ = child.kill();
     let _ = child.wait();
@@ -338,7 +353,9 @@ count=0; while [ ! -f {status} ] && [ "$count" -lt 10 ]; do sleep 1; count=$((co
             }
             Ok(false) => {
                 kill(&mut tar);
-                kill(&mut remote);
+                // Its input is closed: the remote shell stops and removes its staging folder itself. Killing it at once would leave
+                // the `tar -x` it started running, still writing into the folder that is deleted next.
+                stop_gracefully(&mut remote);
                 undo(true);
                 Err(HostError::Op(proto::Error::Cancelled))
             }
@@ -630,16 +647,6 @@ fn copy_node(src: &Path, dest: &Path, cancel: &AtomicBool, step: &mut dyn FnMut(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A finalization that is cancelled still tells what the remote side said before it stopped.
-    #[cfg(unix)]
-    #[test]
-    fn an_interrupted_finalization_keeps_what_the_remote_side_said() {
-        let child = spawn(local_shell("cat > /dev/null; echo 'No space left on device' >&2; exit 1"), Stdio::piped(), Stdio::null()).unwrap();
-        let error = finish_folder_commit(child, &AtomicBool::new(true)).unwrap_err().to_string();
-        assert!(error.contains("finalization was interrupted"), "{error}");
-        assert!(error.contains("No space left on device"), "{error}");
-    }
 
     #[test]
     fn already_cancelled_local_copies_create_no_paths_even_for_empty_trees() {
@@ -1479,3 +1486,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
     }
 }
+
+#[cfg(test)]
+#[path = "transfer_cancel_tests.rs"]
+mod cancel_tests;

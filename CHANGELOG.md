@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A broken `settings.jsonc` (or theme file) reports the right line and column when a `/* … */` comment comes before the mistake; the comment's lines used to be left out of the count.
+- Cancelling a folder upload no longer sometimes leaves a `.codeyard-upload-…` folder on the server: the remote side is given time to stop and clean up before the staging folder is removed, instead of being killed while its `tar` was still writing.
 - A failed folder upload that was cancelled now keeps what the remote side reported, and a failed remote container or WSL listing keeps its full text in the notification instead of only the first line.
 - SSH config: two saves at the same moment (two windows adding hosts) no longer fail on Windows with "The process cannot access the file"; they take turns.
 
