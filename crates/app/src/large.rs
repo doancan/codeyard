@@ -16,6 +16,14 @@ use proto::Response;
 
 use crate::input::{FieldEvent, TextField};
 
+#[path = "large_image.rs"]
+mod image_view;
+#[path = "large_image_info.rs"]
+pub(crate) mod info;
+#[path = "large_image_zoom.rs"]
+pub(crate) mod zoom;
+pub use image_view::key_bindings as image_key_bindings;
+
 actions!(large, [FindInLarge, LargeFindPrev, ToggleFollow, FollowEnd]);
 
 /// Maximum matches shown (also caps the search on the agent).
@@ -61,8 +69,8 @@ pub struct LargeFileView {
     error: Option<SharedString>,
     scroll: UniformListScrollHandle,
     focus_handle: FocusHandle,
-    /// In image mode: the loaded image (`None` until loaded).
-    image: Option<Arc<gpui::Image>>,
+    /// In image mode: the picture, its zoom and position (`image_view`).
+    pic: image_view::State,
     is_image: bool,
     find: Option<LargeFind>,
     /// The found line shown (0-based), highlighted.
@@ -141,7 +149,7 @@ impl LargeFileView {
             error: None,
             scroll: UniformListScrollHandle::new(),
             focus_handle: cx.focus_handle(),
-            image: None,
+            pic: Default::default(),
             is_image: false,
             find: None,
             highlight: None,
@@ -180,7 +188,7 @@ impl LargeFileView {
             error: None,
             scroll: UniformListScrollHandle::new(),
             focus_handle: cx.focus_handle(),
-            image: None,
+            pic: Default::default(),
             is_image: true,
             find: None,
             highlight: None,
@@ -189,22 +197,7 @@ impl LargeFileView {
             stale: None,
             _watch: None,
         };
-        let task = cx.background_executor().spawn(async move { crate::image_size::load(host.as_ref(), &path, format) });
-        cx.spawn(async move |this, cx| {
-            let result = task.await;
-            this.update(cx, |v, cx| {
-                match result {
-                    Ok((image, size)) => {
-                        v.size = size;
-                        v.image = Some(image);
-                    }
-                    Err(e) => v.error = Some(e.to_string().into()),
-                }
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
+        image_view::spawn_load(host, path, format, cx);
         view
     }
 
@@ -322,7 +315,7 @@ impl LargeFileView {
 
     #[cfg(test)]
     pub fn image_loaded(&self) -> bool {
-        self.image.is_some()
+        self.image_loaded_state()
     }
 
     #[cfg(test)]
@@ -542,52 +535,12 @@ impl LargeFileView {
     }
 }
 
-impl LargeFileView {
-    fn render_image(&self, p: &ui::Palette) -> gpui::AnyElement {
-        let kb = self.size as f64 / 1024.;
-        let header = match (&self.error, &self.image) {
-            (Some(e), _) => e.to_string(),
-            (None, None) => crate::i18n::t("Loading…").to_string(),
-            (None, Some(_)) if kb < 1024. => crate::i18n::tf("{} KB · image preview", &[&format!("{kb:.0}")]),
-            (None, Some(_)) => crate::i18n::tf("{} MB · image preview", &[&format!("{:.1}", kb / 1024.)]),
-        };
-        div()
-            .key_context("LargeFile")
-            .track_focus(&self.focus_handle)
-            .size_full()
-            .flex()
-            .flex_col()
-            .bg(c(p.bg))
-            .child(
-                div()
-                    .h(px(30.))
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .gap(px(theme::SPACE[3]))
-                    .px(px(theme::SPACE[6]))
-                    .border_b_1()
-                    .border_color(c(p.border))
-                    .text_size(px(text::XS.0))
-                    .text_color(c(if self.error.is_some() { p.danger } else { p.text_muted }))
-                    .child(icon("file-image", 14., p.text_muted))
-                    .relative()
-                    .child(crate::a11y_controls::said(self.path.clone(), "header", accesskit::Role::Label, header.clone()))
-                    .child(header),
-            )
-            .child(div().flex_1().min_h_0().p(px(theme::SPACE[8])).flex().items_center().justify_center().children(
-                self.image.clone().map(|image| gpui::img(gpui::ImageSource::Image(image)).max_w_full().max_h_full().object_fit(gpui::ObjectFit::Contain)),
-            ))
-            .into_any_element()
-    }
-}
-
 impl Render for LargeFileView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let p = *palette(cx);
         if self.is_image {
-            return self.render_image(&p);
+            return self.render_image(window, cx);
         }
+        let p = *palette(cx);
         let settings = cx.global::<Settings>();
         let (font_size, line_h) = (settings.editor_font_size, settings.editor_line_height);
         let font: SharedString = settings.editor_font_family.clone().map_or(MONO_FONT.into(), Into::into);

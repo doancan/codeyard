@@ -293,7 +293,7 @@ fn bind_keys(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("f11", ToggleFullScreen, None), KeyBinding::new("ctrl-f11", DebugStepInto, None)]);
     #[cfg(target_os = "macos")]
     cx.bind_keys([KeyBinding::new("f11", DebugStepInto, None)]);
-    cx.bind_keys(diff::key_bindings().into_iter().chain(t::filter_key_bindings()));
+    cx.bind_keys(diff::key_bindings().into_iter().chain(t::filter_key_bindings()).chain(large::image_key_bindings()));
     cx.bind_keys([
         KeyBinding::new("secondary-o", OpenFolder, None),
         KeyBinding::new("secondary-b", ToggleSidebar, None),

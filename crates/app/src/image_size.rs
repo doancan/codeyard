@@ -54,13 +54,27 @@ fn i32_le(d: &[u8], at: usize) -> Option<u64> {
 /// a header that is cut short or broken).
 pub fn dimensions(data: &[u8]) -> Option<(u64, u64)> {
     if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        // The first chunk of a PNG is its 13-byte header; anything else is not a PNG that announces a size.
+        if data.get(8..16) != Some(b"\0\0\0\x0dIHDR") {
+            return None;
+        }
         return Some((u32_be(data, 16)?, u32_be(data, 20)?));
     }
     if data.starts_with(b"GIF8") {
+        // After the screen descriptor and the colour table the file goes on with an extension, an image or the trailer.
+        let table = if data.get(10)? & 0x80 == 0 { 0 } else { 3 << ((data.get(10)? & 0x07) + 1) };
+        if !matches!(data.get(13 + table), Some(0x21 | 0x2c | 0x3b)) {
+            return None;
+        }
         return Some((u16_le(data, 6)?, u16_le(data, 8)?));
     }
     if data.starts_with(b"BM") {
-        return Some((i32_le(data, 18)?, i32_le(data, 22)?));
+        // The size of the BMP's info header says which layout the numbers are in (12 is the old one, with 16-bit sizes).
+        return match u32::from_le_bytes(data.get(14..18)?.try_into().ok()?) {
+            12 => Some((u16_le(data, 18)?, u16_le(data, 20)?)),
+            40 | 52 | 56 | 64 | 108 | 124 => Some((i32_le(data, 18)?, i32_le(data, 22)?)),
+            _ => None,
+        };
     }
     if data.starts_with(b"RIFF") && data.get(8..12) == Some(b"WEBP") {
         return match data.get(12..16)? {
@@ -119,9 +133,12 @@ fn svg_dimensions(data: &[u8]) -> Option<(u64, u64)> {
     Some((size.width().ceil() as u64, size.height().ceil() as u64))
 }
 
-/// Whether an image this size is too large to decode for the preview.
+/// Longest side of a picture the graphics card takes as one texture; a longer one is drawn as nothing at all.
+pub const MAX_SIDE: u64 = 16_384;
+
+/// Whether an image this size is too large to decode for the preview: too many pixels, or a side the card cannot hold.
 pub fn too_large(width: u64, height: u64) -> bool {
-    width.saturating_mul(height) > MAX_PIXELS
+    width.saturating_mul(height) > MAX_PIXELS || width.max(height) > MAX_SIDE
 }
 
 #[cfg(test)]
@@ -140,9 +157,12 @@ mod tests {
     fn sizes_come_from_each_header() {
         assert_eq!(dimensions(&png(30_000, 30_000)), Some((30_000, 30_000)));
         assert!(too_large(30_000, 30_000) && !too_large(4_000, 3_000));
-        assert_eq!(dimensions(b"GIF89a\x10\x00\x20\x00"), Some((16, 32)));
+        assert!(too_large(40_000, 1_250), "few pixels, but longer than any texture");
+        assert!(!too_large(16_384, 3_000) && too_large(16_385, 10));
+        assert_eq!(dimensions(b"GIF89a\x10\x00\x20\x00\x00\x00\x00\x3b"), Some((16, 32)));
         let mut bmp = b"BM".to_vec();
-        bmp.resize(18, 0);
+        bmp.resize(14, 0);
+        bmp.extend(40u32.to_le_bytes());
         bmp.extend(640i32.to_le_bytes());
         bmp.extend((-480i32).to_le_bytes());
         assert_eq!(dimensions(&bmp), Some((640, 480)), "a top-down BMP has a negative height");
@@ -155,9 +175,22 @@ mod tests {
     }
 
     #[test]
+    fn a_file_that_only_starts_like_a_png_or_a_bmp_announces_no_size() {
+        // Garbage after the signature would otherwise read as billions of pixels and be refused as "too large".
+        assert_eq!(dimensions(b"\x89PNG\r\n\x1a\nthis is not a png at all"), None);
+        assert_eq!(dimensions(b"BM this is not a bitmap at all, it is text"), None);
+        let mut old = b"BM".to_vec();
+        old.resize(14, 0);
+        old.extend(12u32.to_le_bytes());
+        old.extend([0x80, 0x02, 0xe0, 0x01]);
+        assert_eq!(dimensions(&old), Some((640, 480)), "the old 12-byte bitmap header");
+    }
+
+    #[test]
     fn short_and_broken_headers_are_not_read() {
         assert_eq!(dimensions(&png(1, 1)[..20]), None);
         assert_eq!(dimensions(b"GIF8"), None);
+        assert_eq!(dimensions(b"GIF89a not really a gif"), None);
         assert_eq!(dimensions(&[0xff, 0xd8, 0xff, 0xe0, 0x00, 0x00]), None, "a zero-length segment");
         assert_eq!(dimensions(&[0xff, 0xd8, 0x00]), None);
         assert_eq!(dimensions(b"<svg/>"), Some((100, 100)), "the renderer's default canvas");

@@ -1028,6 +1028,7 @@ Find in file (searched on the host)
 Find in files	
 Find in selection (⌥⌘L)	
 Finished: {}	
+Fit to window (0)	
 Flag a terminal and the taskbar when its program rings the bell or asks for you	
 Focus Left Editor Group	
 Focus Next Terminal	
@@ -1831,6 +1832,7 @@ Paths can't end with / or contain . or .. parts
 Pattern, e.g. foo($X, $$$REST)	
 Pause	
 Pause (F6)	
+Pause animation (Space)	
 Pause the program first (a breakpoint or ⏸): the variable has to be in scope.	
 Pause updates	
 Paused	
@@ -1857,6 +1859,7 @@ Pin the enclosing function or class line while scrolling
 Pin to the top	
 Plain Text	
 Platform	
+Play animation (Space)	
 Pop (apply and drop)	
 Pop Latest Stash	
 Pop Stash…	
@@ -2506,6 +2509,7 @@ Suggestions
 Suggestions pop up while typing (off: only Ctrl+Space)	
 Sunday	
 Switch Workspace or Connect to Host…	
+Switch between 100% and fit	
 Switched to {}	
 Switched to {}. Your changes are in the stash: Git: Pop Latest Stash brings them back.	
 Switching to {}…	
@@ -2747,6 +2751,7 @@ There isn't enough free disk space for the download. Free some space and try aga
 These branches share no history, so git will not merge them. In a terminal, `git merge --allow-unrelated-histories` merges them anyway.	
 They stay on {}: the next Sync brings them back. To remove them there too, push with force after the reset (Git: Push (Force)…).	
 They were not found.	
+This animation has {0} frames of {1} × {2} pixels, too large to play.	
 This branch is not published yet. Click to publish it.	
 This can't be undone.	
 This change removes the file: unstage the whole file instead	
@@ -2795,6 +2800,7 @@ This search belongs to {0} on {1}, which this window does not show. Results cann
 This tab cannot move to that window: its folder is on another machine.	
 This view is not available.	
 This window is installing an update. You can close it in a few seconds.	
+This {} file could not be read. It may be damaged or cut short.	
 Thursday	
 Timeline	
 Title bar	
@@ -3067,6 +3073,9 @@ Your uncommitted changes would be overwritten by the switch. They go into a stas
 Zoom	
 Zoom In	
 Zoom Out	
+Zoom in (+)	
+Zoom level	
+Zoom out (-)	
 `{}` did not answer within {} seconds; check the network connection and try again	
 `{}` is not installed or not on PATH	
 a comment is not closed	
@@ -3077,6 +3086,8 @@ a string is not closed
 a theme must be a JSON object	
 about {0} MB · {1}	
 added	
+animated PNG, first frame shown	
+animated, {} frame|animated, {} frames	
 another Codeyard window has them; started new shells	
 approved	
 args must be a list of texts	
@@ -3505,6 +3516,7 @@ your words
 {0} · line {1}	
 {0} · version {1}	
 {0} · version {1} · {2} license	
+{0} × {1} pixels, {2}, {3}	
 {0}, by {1}	
 {0}, change {1} of {2}	
 {0}, from {1}	
@@ -3560,8 +3572,6 @@ your words
 {} (terminal, exited)	
 {} ({})	
 {} (“{}” failed; {} of {} items were transferred before it)	
-{} KB · image preview	
-{} MB · image preview	
 {} YAML documents became one list.	
 {} accepted the connection but sent no reply.	
 {} added	

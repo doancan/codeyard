@@ -1137,6 +1137,7 @@ Result	Sonuç
 Hover an option to preview the result.	Sonucu önizlemek için bir seçeneğin üzerine gelin.
 Preview {}	Önizleme: {}
 Preview of {}	Önizleme: {}
+The file is empty.	Dosya boş.
 
 # ---- Spell check ----
 {0} could not be read ({1})	{0} okunamadı ({1})
@@ -3955,6 +3956,15 @@ expected an object of patterns	kalıplardan oluşan bir nesne bekleniyordu
 {}: expected text or a list of text	{}: metin veya metin listesi bekleniyordu
 {}: a pattern may hold one *	{}: bir kalıpta en fazla bir * olabilir
 Show related files under the file they belong to (Cargo.lock under Cargo.toml)	İlişkili dosyaları ait oldukları dosyanın altında göster (Cargo.lock, Cargo.toml altında)
-{} KB · image preview	{} KB · görsel önizlemesi
-{} MB · image preview	{} MB · görsel önizlemesi
-The file is empty.	Dosya boş.
+This {} file could not be read. It may be damaged or cut short.	Bu {} dosyası okunamadı. Bozuk veya yarım kalmış olabilir.
+This animation has {0} frames of {1} × {2} pixels, too large to play.	Bu animasyon, her biri {1} × {2} piksel olan {0} kareden oluşuyor; oynatılamayacak kadar büyük.
+Play animation (Space)	Animasyonu oynat (Boşluk)
+Pause animation (Space)	Animasyonu duraklat (Boşluk)
+Zoom out (-)	Uzaklaştır (-)
+Zoom in (+)	Yakınlaştır (+)
+Fit to window (0)	Pencereye sığdır (0)
+Switch between 100% and fit	%100 ile sığdırma arasında geçiş yap
+Zoom level	Yakınlaştırma düzeyi
+{0} × {1} pixels, {2}, {3}	{0} × {1} piksel, {2}, {3}
+animated, {} frame|animated, {} frames	animasyonlu, {} kare
+animated PNG, first frame shown	animasyonlu PNG, ilk kare gösteriliyor

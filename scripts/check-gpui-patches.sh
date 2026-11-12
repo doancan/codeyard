@@ -21,6 +21,8 @@ need vendor/gpui/src/platform/windows/clipboard.rs 'fn dib_to_png\(' "bounded Wi
 need vendor/gpui/src/platform/mac/metal_renderer.rs 'set_maximum_drawable_count\(2\)' "drawable count 2"
 absent vendor/gpui/src/platform/mac/metal_renderer.rs 'set_maximum_drawable_count\(3\)' "drawable count 3"
 need vendor/gpui/src/window.rs '^pub struct DispatchEventResult' "pub DispatchEventResult"
+need vendor/gpui/src/gpui.rs '^pub use svg_renderer::\*;' "SvgRenderer and SvgSize are public"
+need vendor/gpui/src/svg_renderer.rs 'pub fn restricted\(&self\)' "SvgRenderer::restricted (no image hrefs for the image viewer)"
 need vendor/gpui/src/ui_scale.rs 'pub fn to_logical\(self, ui_scale: f32\)' "interface scale input conversion"
 need vendor/gpui/src/app.rs 'pub fn set_ui_scale\(&mut self, scale: f32\)' "App::set_ui_scale"
 need vendor/gpui/src/window.rs 'let event = event.to_logical\(window.ui_scale\);' "platform input converted to logical pixels"

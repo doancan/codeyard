@@ -3,7 +3,7 @@
 use super::*;
 
 /// The app's files that bind keys: `main.rs`, and views that keep their own list (the diff's).
-const BINDING_SOURCES: [&str; 3] = ["main.rs", "diff.rs", "tree_filter.rs"];
+const BINDING_SOURCES: [&str; 4] = ["main.rs", "diff.rs", "tree_filter.rs", "large_image.rs"];
 
 #[test]
 fn reference_builtin_keys() {

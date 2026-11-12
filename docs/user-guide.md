@@ -81,6 +81,8 @@ Guides**, **Inlay Hints** and **File: Toggle Auto Save**, which change the runni
 | Toggle bottom panel (opens a terminal if none) | ⌘J | Ctrl+J |
 | Rename / delete (file tree) | F2 / ⌘⌫ | F2 / Ctrl+Backspace |
 | Filter the file tree / clear the filter (file tree focused) | ⌘F / Esc | Ctrl+F / Esc |
+| Zoom in / out, fit, 100% (image tab) | + / - , 0 / 1 | + / - , 0 / 1 |
+| Move the picture / pause an animation (image tab) | ← → ↑ ↓ / Space | ← → ↑ ↓ / Space |
 | Toggle line comment | ⌘/ | Ctrl+/ |
 | Indent / outdent lines | Tab / ⇧Tab (with a selection) | Tab / Shift+Tab |
 | Move lines up / down | ⌥↑ / ⌥↓ | Alt+↑ / Alt+↓ |
@@ -355,7 +357,16 @@ scroll positions return when the workspace reopens, including empty groups. Exis
 sessions migrate automatically. Welcome/settings/diff/preview tabs stay in their owning group
 while switching focus; session restoration currently saves text-document tabs and empty groups.
 
-**Images** (png, jpg, gif, webp, svg, bmp) open in a preview tab.
+**Images** (png, jpg, gif, webp, svg, bmp) open in a preview tab. The toolbar zooms out and in, the percentage button switches
+between 100% and *fit* (the whole picture in the window, never enlarged past 100%), and the fit button fits it. The keys with the
+picture focused are `+` and `-` to zoom, `0` (or Esc) to fit, `1` for 100%, the arrow keys to move a picture that is bigger than
+the window, and Space to pause or play an animation. The mouse wheel moves the picture; with ⌘ (Ctrl on Windows and Linux) it zooms
+around the pointer. Drag to move the picture, double-click to switch between 100% and fit. Transparent pixels show a checkerboard.
+An SVG is drawn again at each zoom, so it stays sharp; pictures an SVG points to (other files, `data:` images) are never loaded. The bar under the picture gives its size in pixels, the file size and the
+format, and says when it is animated. A GIF or WebP animation plays (it starts paused when reduced motion is on, see
+`workbench.reduceMotion`); an animated PNG shows its first frame. Pictures over 20 MB, 50 million pixels or 16,384 pixels on a side (and animations whose
+frames add up to that many) are not decoded: the tab says so, and a damaged, cut or empty file is reported as such instead of
+showing a blank tab. The tab does not follow changes to the file on disk; close and open it again.
 
 **Find in files** (⇧⌘F) has a replace field. "Replace All" (or ↵ in the field, or "replace in
 this file" on a result) does not write anything: it opens a Search Editor with a replacement
