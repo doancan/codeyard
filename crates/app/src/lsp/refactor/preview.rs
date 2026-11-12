@@ -644,6 +644,12 @@ impl RefactorPreview {
     }
 
     #[cfg(test)]
+    pub fn row_words_for_test(&self, ix: usize) -> String {
+        let w = self.row_words(ix);
+        format!("{} {}", w.label, w.detail.unwrap_or_default())
+    }
+
+    #[cfg(test)]
     pub fn status_for_test(&self) -> String {
         self.status_text().0
     }

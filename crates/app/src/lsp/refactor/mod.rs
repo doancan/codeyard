@@ -5,6 +5,8 @@
 pub mod apply;
 pub mod edit;
 pub mod env;
+#[cfg(test)]
+mod lsp_tests;
 pub mod plan;
 pub mod preview;
 #[cfg(test)]
