@@ -14,7 +14,16 @@ fn explorer_tree_mouse_modifiers_toggle_and_extend_without_opening_files(cx: &mu
         );
         tree.rows = ["a", "b", "c", "d"]
             .into_iter()
-            .map(|name| Row { path: format!("/fixture/{name}"), name: name.into(), depth: 0, is_dir: false, loading: false, error: None, chain: false })
+            .map(|name| Row {
+                path: format!("/fixture/{name}"),
+                name: name.into(),
+                depth: 0,
+                is_dir: false,
+                loading: false,
+                error: None,
+                chain: false,
+                nest: Default::default(),
+            })
             .collect();
         tree
     });
@@ -60,7 +69,7 @@ fn explorer_tree_collapse_drops_hidden_marks_and_sorting_keeps_visible_paths(cx:
     });
     tree.update(cx, |tree, cx| tree.collapse_recursive("/fixture/folder", cx));
     assert_eq!(tree.read_with(cx, |t, _| t.selected_paths()), ["/fixture/z"]);
-    tree.update(cx, |tree, cx| tree.set_options(ViewOptions { compact: false, sort: SortOrder::FilesFirst }, cx));
+    tree.update(cx, |tree, cx| tree.set_options(ViewOptions { compact: false, sort: SortOrder::FilesFirst, nesting: nesting::Nesting::off() }, cx));
     assert_eq!(tree.read_with(cx, |t, _| t.selected_paths()), ["/fixture/z"]);
     tree.update(cx, |tree, cx| tree.set_root(Arc::new(host::local()), None, cx));
     assert!(tree.read_with(cx, |t, _| t.selected_paths()).is_empty());

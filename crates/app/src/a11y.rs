@@ -335,6 +335,9 @@ impl Snapshot {
                 if r.is_dir {
                     n.set_expanded(r.expanded);
                     n.set_description(t("folder"));
+                } else if r.nested > 0 {
+                    n.set_expanded(r.expanded);
+                    n.set_description(tn("{} nested file", "{} nested files", r.nested, &[]));
                 }
                 n.add_action(Action::Click);
                 n.add_action(Action::Focus);
@@ -719,7 +722,7 @@ impl Workbench {
                     .into_iter()
                     .skip(first)
                     .take(EXPLORER_WINDOW)
-                    .map(|(path, name, depth, is_dir, expanded)| RowSnap {
+                    .map(|(path, name, depth, is_dir, expanded, nested)| RowSnap {
                         id: row_id(&path).0,
                         selected: tree.path_is_selected(&path),
                         frame: tree.a11y_row_frame(&path, window),
@@ -728,6 +731,7 @@ impl Workbench {
                         depth,
                         is_dir,
                         expanded,
+                        nested,
                     })
                     .collect();
                 ExplorerSnap { name: tree.root().map_or(String::new(), |r| crate::ui::file_name(r).to_string()), rows, rows_total, first, focused }

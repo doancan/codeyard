@@ -131,6 +131,7 @@ registry! {
     "workbench.openFolder" => wb::OpenFolder,
     "workbench.switchEditor" => wb::SwitchEditor,
     "workbench.toggleZenMode" => wb::ToggleZenMode,
+    "explorer.toggleFilter" => crate::tree::ToggleFilter,
     "extensions.installCyx" => wb::InstallCyx,
     "extensions.newExtension" => wb::NewExtension,
     "workbench.toggleFullScreen" => wb::ToggleFullScreen,

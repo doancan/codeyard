@@ -12,8 +12,22 @@ use proto::DirEntry;
 
 use crate::ui::{self, c, icon, layout, palette};
 
+#[path = "tree_filter.rs"]
+mod filter;
+pub use filter::key_bindings as filter_key_bindings;
+#[path = "tree_match.rs"]
+pub(crate) mod matching;
+#[path = "tree_nest_rows.rs"]
+mod nest_rows;
+#[path = "tree_nesting.rs"]
+pub(crate) mod nesting;
+#[cfg(test)]
+#[path = "tree_panel_tests.rs"]
+mod panel_tests;
 #[path = "tree_selection.rs"]
 mod selection;
+#[path = "tree_universe.rs"]
+mod universe;
 
 /// Row metrics: a little taller and roomier than the shared list row, so a deep tree stays easy to scan and to hit.
 const ROW_H: f32 = 24.;
@@ -47,7 +61,9 @@ actions!(
         ExtendPageUp,
         ExtendPageDown,
         SelectAllEntries,
-        ToggleSelection
+        ToggleSelection,
+        ToggleFilter,
+        ClearFilter
     ]
 );
 
@@ -127,6 +143,8 @@ pub enum TreeEvent {
         paths: Vec<String>,
         to_dir: String,
     },
+    /// The filter text changed (empty: the filter is off); the other folders' trees follow.
+    FilterChanged(String),
 }
 
 enum Load {
@@ -145,18 +163,27 @@ struct Row {
     error: Option<SharedString>,
     /// Compacted folder chain ("a/b/c"): `path` is the last folder of the chain.
     chain: bool,
+    /// Whether the row holds nested files (a parent) or is held by one (a child).
+    nest: nesting::Role,
 }
 
-/// Explorer appearance: comes from settings (`explorer.compactFolders`, `explorer.sortOrder`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Explorer appearance: comes from settings (`explorer.compactFolders`, `explorer.sortOrder`, `explorer.fileNesting.*`).
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ViewOptions {
     pub compact: bool,
     pub sort: SortOrder,
+    pub nesting: nesting::Nesting,
+}
+
+impl ViewOptions {
+    pub fn from_settings(s: &crate::settings::Settings) -> Self {
+        ViewOptions { compact: s.compact_folders, sort: SortOrder::from_setting(&s.sort_order), nesting: s.explorer_nesting.clone() }
+    }
 }
 
 impl Default for ViewOptions {
     fn default() -> Self {
-        ViewOptions { compact: true, sort: SortOrder::Default }
+        ViewOptions { compact: true, sort: SortOrder::Default, nesting: nesting::Nesting::default() }
     }
 }
 
@@ -237,6 +264,10 @@ pub struct FileTree {
     bounds: Option<gpui::Bounds<gpui::Pixels>>,
     /// Where each row (by path) was painted in the last frame, for the accessibility tree.
     painted: crate::painted::RowBounds<String>,
+    /// Files that are open under their parent file, and each loaded folder's grouping (`nest_rows.rs`).
+    nests: nest_rows::NestState,
+    /// The filter box and what it leaves of the tree (`filter.rs`).
+    filter: filter::FilterState,
 }
 
 impl EventEmitter<TreeEvent> for FileTree {}
@@ -271,9 +302,9 @@ impl FileTree {
             scroll: UniformListScrollHandle::new(),
             painted: Default::default(),
             git: Arc::default(),
-            opts: cx
-                .try_global::<crate::settings::Settings>()
-                .map_or_else(ViewOptions::default, |s| ViewOptions { compact: s.compact_folders, sort: SortOrder::from_setting(&s.sort_order) }),
+            nests: Default::default(),
+            filter: Default::default(),
+            opts: cx.try_global::<crate::settings::Settings>().map_or_else(ViewOptions::default, ViewOptions::from_settings),
             type_ahead: (String::new(), None),
             root_selected: false,
             recursive: HashSet::new(),
@@ -287,15 +318,18 @@ impl FileTree {
         if self.opts == opts {
             return;
         }
+        let (sort, compact) = (opts.sort, opts.compact);
         self.opts = opts;
+        self.nests.forget_groups();
         for load in self.children.values_mut() {
             if let Load::Loaded(entries) = load {
-                sort_entries(entries, opts.sort);
+                sort_entries(entries, sort);
             }
         }
         self.rebuild();
+        self.refresh_filter(cx);
         // Compaction turned on: also load the child of loaded folders that have a single subfolder.
-        if opts.compact {
+        if compact {
             self.prefetch_chains(cx);
         }
         cx.notify();
@@ -355,6 +389,11 @@ impl FileTree {
     }
 
     fn try_reveal(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = &self.pending_reveal else { return };
+        let target = path.clone();
+        if !self.rows.iter().any(|r| r.path == target) && !self.filter.is_active() {
+            self.open_nest_holding(&target);
+        }
         let Some(path) = &self.pending_reveal else { return };
         // Folder in the middle of a compacted chain: select the chain's row.
         let inside = format!("{path}/");
@@ -515,6 +554,8 @@ impl FileTree {
         for d in dirs {
             self.load(d, cx);
         }
+        self.filter.forget_files();
+        self.refresh_filter(cx);
     }
 
     /// Folders that need watching: the root and the expanded ones.
@@ -528,8 +569,8 @@ impl FileTree {
     }
 
     /// For the accessibility tree (a11y.rs): rows (path, name, depth, is folder, is expanded) and the selected row.
-    pub fn a11y_rows(&self) -> (Vec<(String, String, usize, bool, bool)>, Option<usize>) {
-        let rows = self.rows.iter().map(|r| (r.path.clone(), r.name.to_string(), r.depth, r.is_dir, r.is_dir && self.expanded.contains(&r.path))).collect();
+    pub fn a11y_rows(&self) -> (Vec<(String, String, usize, bool, bool, usize)>, Option<usize>) {
+        let rows = self.rows.iter().map(|r| (r.path.clone(), r.name.to_string(), r.depth, r.is_dir, self.row_expanded(r), r.nested_files())).collect();
         (rows, self.selected)
     }
 
@@ -680,10 +721,13 @@ impl FileTree {
         self.pending_reveal = None;
         self.recursive.clear();
         self.root_selected = false;
+        self.nests.reset();
+        self.filter.forget_files();
         if let Some(root) = root {
             self.expanded.insert(root.clone());
             self.load(root, cx);
         }
+        self.refresh_filter(cx);
         cx.notify();
     }
 
@@ -746,6 +790,10 @@ impl FileTree {
         };
         let open = self.expanded.contains(&path);
         self.children.insert(path.clone(), load);
+        self.nests.forget_dir(&path);
+        if loaded {
+            self.prune_nests(&path);
+        }
         if self.recursive.remove(&path) {
             // A failed read stays failed until an explicit retry. Re-entering
             // expansion here would immediately retry the same unreadable folder.
@@ -765,6 +813,7 @@ impl FileTree {
         }
         self.rebuild();
         self.try_reveal(cx);
+        self.refresh_filter(cx);
         if self.reload_queued.remove(&path) {
             self.load(path, cx);
         }
@@ -779,13 +828,16 @@ impl FileTree {
         self.expanded.retain(|p| !gone(p));
         self.reload_queued.retain(|p| !gone(p));
         self.recursive.retain(|p| !gone(p));
+        self.nests.forget_under(dir);
     }
 
-    /// Rebuild the visible rows from scratch (expanded folders, depth first).
+    /// Rebuild the visible rows from scratch (expanded folders, depth first; with a filter, what it leaves).
     fn rebuild(&mut self) {
         let selected_path = self.selected.and_then(|i| self.rows.get(i)).map(|r| r.path.clone());
         self.rows.clear();
-        if let Some(root) = self.root.clone() {
+        if self.filter.is_active() {
+            self.rows = self.filtered_rows();
+        } else if let Some(root) = self.root.clone() {
             self.push_children(&root, 0);
         }
         self.selected = selected_path.and_then(|p| self.rows.iter().position(|r| r.path == p));
@@ -793,10 +845,14 @@ impl FileTree {
     }
 
     fn push_children(&mut self, dir: &str, depth: usize) {
+        let groups = self.nest_groups(dir);
         let Some(Load::Loaded(entries)) = self.children.get(dir) else { return };
         let entries: Vec<(String, SharedString, bool)> =
             entries.iter().map(|e| (ui::join(dir, &e.name), SharedString::from(e.name.clone()), e.is_dir())).collect();
-        for (mut path, mut name, is_dir) in entries {
+        for (ix, (mut path, mut name, is_dir)) in entries.iter().cloned().enumerate() {
+            if groups.as_ref().is_some_and(|g| g.is_child.get(ix) == Some(&true)) {
+                continue;
+            }
             // Compaction: folders with a single subfolder appear as "a/b/c" on one row.
             let mut chain = false;
             if is_dir && self.opts.compact {
@@ -816,14 +872,33 @@ impl FileTree {
                 Some(Load::Failed(e)) => (false, Some(e.clone())),
                 _ => (false, None),
             };
-            self.rows.push(Row { path: path.clone(), name, depth, is_dir, loading, error, chain });
+            let kids = groups.as_ref().and_then(|g| g.children.get(&ix));
+            let nest = kids.map_or(nesting::Role::None, |k| nesting::Role::Parent(k.len()));
+            let open_nest = kids.filter(|_| self.nests.is_open(&path));
+            self.rows.push(Row { path: path.clone(), name, depth, is_dir, loading, error, chain, nest });
             if expanded {
                 self.push_children(&path, depth + 1);
+            }
+            for &kid in open_nest.into_iter().flatten() {
+                let Some((kid_path, kid_name, _)) = entries.get(kid).cloned() else { continue };
+                self.rows.push(Row {
+                    path: kid_path,
+                    name: kid_name,
+                    depth: depth + 1,
+                    is_dir: false,
+                    loading: false,
+                    error: None,
+                    chain: false,
+                    nest: nesting::Role::Child,
+                });
             }
         }
     }
 
     fn toggle(&mut self, path: &str, cx: &mut Context<Self>) {
+        if self.filter.is_active() {
+            return;
+        }
         if self.expanded.remove(path) {
             self.rebuild();
         } else {
@@ -911,7 +986,13 @@ impl FileTree {
 
     fn expand(&mut self, _: &Expand, _: &mut Window, cx: &mut Context<Self>) {
         let Some(row) = self.selected.and_then(|i| self.rows.get(i)).cloned() else { return };
-        if row.is_dir && !self.expanded.contains(&row.path) {
+        if matches!(row.nest, nesting::Role::Parent(_)) {
+            if !self.nests.is_open(&row.path) {
+                self.toggle_nest(&row.path, cx);
+            } else if let Some(ix) = self.selected {
+                self.select(ix + 1, cx); // step into the first nested file
+            }
+        } else if row.is_dir && !self.expanded.contains(&row.path) {
             self.toggle(&row.path, cx);
         } else if row.is_dir && self.rows.get(self.selected.unwrap() + 1).is_some_and(|child| child.depth > row.depth) {
             self.select(self.selected.unwrap() + 1, cx); // step into the first child
@@ -921,7 +1002,9 @@ impl FileTree {
     fn collapse(&mut self, _: &Collapse, _: &mut Window, cx: &mut Context<Self>) {
         let Some(ix) = self.selected else { return };
         let row = self.rows[ix].clone();
-        if row.is_dir && self.expanded.contains(&row.path) {
+        if matches!(row.nest, nesting::Role::Parent(_)) && self.nests.is_open(&row.path) {
+            self.toggle_nest(&row.path, cx);
+        } else if row.is_dir && self.expanded.contains(&row.path) {
             self.toggle(&row.path, cx);
         } else if row.depth > 0 {
             // Go up to the parent folder.
@@ -940,9 +1023,9 @@ impl FileTree {
 
     /// Type-to-search: jump to the first row starting with the letters typed while the tree has focus
     /// (letters typed within 1 s combine; pressing the same letter again moves to the next match).
-    fn type_ahead_key(&mut self, ev: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn type_ahead_key(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let m = ev.keystroke.modifiers;
-        if m.control || m.platform || m.alt || m.function {
+        if !self.focus_handle.is_focused(window) || m.control || m.platform || m.alt || m.function {
             return;
         }
         let Some(ch) = ev.keystroke.key_char.as_deref().filter(|c| c.chars().all(|c| !c.is_control())) else { return };
@@ -1017,7 +1100,8 @@ impl Render for FileTree {
                                     )
                                     .into_any_element();
                             }
-                            let row = &this.rows[ix];
+                            let row = &this.rows[ix].clone();
+                            let held_mark = this.nest_held_mark(row);
                             let selected = this.marked.contains(&row.path);
                             let bg = match (selected, focused) {
                                 // Selection while focused: a fill sliding toward the accent color (no border; a bright 1 px border felt harsh on every click).
@@ -1025,11 +1109,28 @@ impl Render for FileTree {
                                 (true, false) => Some(p.surface_hover),
                                 _ => None,
                             };
-                            let expanded = this.expanded.contains(&row.path);
+                            let expanded = this.row_expanded(row);
                             // Folder: arrow + folder icon. File: spacing the width of the arrow + icon by type. A theme without
                             // folder icons puts the file's icon in the arrow's column instead, so every name in a level lines up.
                             let folder_icons = crate::icon_theme::current().folder_icons();
-                            let lead = if !row.is_dir {
+                            let lead = if row.nested_files() > 0 {
+                                // A file holding nested files: its arrow opens and closes them (the row itself opens the file).
+                                let path = row.path.clone();
+                                div()
+                                    .id(("nest-toggle", ix))
+                                    .flex_none()
+                                    .cursor_pointer()
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(move |this, _, window, cx| {
+                                            cx.stop_propagation();
+                                            window.focus(&this.focus_handle);
+                                            this.toggle_nest(&path, cx);
+                                        }),
+                                    )
+                                    .child(icon(if expanded { "chevron-down" } else { "chevron-right" }, layout::ICON, p.text_muted))
+                                    .into_any_element()
+                            } else if !row.is_dir {
                                 if folder_icons {
                                     div().w(px(layout::ICON)).flex_none().into_any_element()
                                 } else {
@@ -1041,7 +1142,7 @@ impl Render for FileTree {
                                 icon(if expanded { "chevron-down" } else { "chevron-right" }, layout::ICON, p.text_muted).into_any_element()
                             };
                             let indent = cx.global::<crate::settings::Settings>().tree_indent;
-                            let leading_icon = if !folder_icons {
+                            let leading_icon = if !folder_icons && row.nested_files() == 0 {
                                 None
                             } else if row.is_dir {
                                 Some(crate::icon_theme::folder_icon_el(row.name.rsplit('/').next().unwrap_or(&row.name), expanded, layout::ICON, &p))
@@ -1103,8 +1204,18 @@ impl Render for FileTree {
                                         .whitespace_nowrap()
                                         .when_some(mark, |d, m| d.text_color(c(m.color(&p))))
                                         .when(mark == Some(crate::git::Mark::Deleted), |d| d.line_through())
-                                        .child(row.name.clone())
+                                        .child(if this.filter.is_active() { this.highlighted_name(&row.name, &p) } else { row.name.clone().into_any_element() })
                                 })
+                                .when(row.nested_files() > 0, |d| {
+                                    d.child(
+                                        div()
+                                            .flex_none()
+                                            .text_size(px(crate::ui::text::XS.0))
+                                            .text_color(c(p.text_muted))
+                                            .child(format!("+{}", row.nested_files())),
+                                    )
+                                })
+                                .when_some(held_mark, |d, m| d.child(div().flex_none().mr(px(theme::SPACE[2])).size(px(7.)).rounded_full().bg(c(m.color(&p)))))
                                 .when_some(this.git.get(&row.path).copied(), |d, m| {
                                     // File: letter (M orange, N green, D red…); folder: a dot meaning it contains changes.
                                     if row.is_dir {
@@ -1195,6 +1306,8 @@ impl Render for FileTree {
                 this.collapse_recursive(&dir, cx);
             }))
             .on_action(cx.listener(Self::confirm))
+            .on_action(cx.listener(Self::toggle_filter_action))
+            .on_action(cx.listener(Self::clear_filter_action))
             .on_action(cx.listener(Self::show_context_menu))
             .on_action(cx.listener(Self::rename_entry))
             .on_action(cx.listener(Self::delete_entry))
@@ -1231,10 +1344,11 @@ impl Render for FileTree {
                 }),
             )
             .size_full()
-            .relative()
+            .flex()
+            .flex_col()
             .text_color(c(p.text))
-            .child(body)
-            .child({
+            .children(self.filter_bar(window, cx))
+            .child(div().flex_1().min_h_0().relative().child(body).child({
                 let tree = cx.entity().downgrade();
                 gpui::canvas(
                     |bounds, window, _| bounds.intersect(&window.content_mask().bounds),
@@ -1246,7 +1360,7 @@ impl Render for FileTree {
                 .top_0()
                 .left_0()
                 .size_full()
-            })
+            }))
     }
 }
 

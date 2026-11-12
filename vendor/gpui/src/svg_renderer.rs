@@ -27,6 +27,16 @@ pub enum SvgSize {
 
 impl SvgRenderer {
     pub fn new(asset_source: Arc<dyn AssetSource>) -> Self {
+        Self::with_options(asset_source, false)
+    }
+
+    /// The same renderer for files that are not trusted (the image viewer): an `<image>` inside the SVG is never loaded, neither
+    /// from a file or URL nor from a `data:` URI, so a picture cannot draw other files or make the renderer decode huge ones.
+    pub fn restricted(&self) -> Self {
+        Self::with_options(self.asset_source.clone(), true)
+    }
+
+    fn with_options(asset_source: Arc<dyn AssetSource>, restricted: bool) -> Self {
         static FONT_DB: LazyLock<Arc<usvg::fontdb::Database>> = LazyLock::new(|| {
             let mut db = usvg::fontdb::Database::new();
             db.load_system_fonts();
@@ -41,13 +51,19 @@ impl SvgRenderer {
                 default_font_resolver(font, db)
             },
         );
-        let options = usvg::Options {
+        let mut options = usvg::Options {
             font_resolver: usvg::FontResolver {
                 select_font: font_resolver,
                 select_fallback: usvg::FontResolver::default_fallback_selector(),
             },
             ..Default::default()
         };
+        if restricted {
+            options.image_href_resolver = usvg::ImageHrefResolver {
+                resolve_data: Box::new(|_, _, _| None),
+                resolve_string: Box::new(|_, _| None),
+            };
+        }
         Self {
             asset_source,
             usvg_options: Arc::new(options),

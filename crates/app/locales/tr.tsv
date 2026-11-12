@@ -1098,8 +1098,6 @@ Replace all (⌥⌘↵)	Tümünü değiştir (⌥⌘↵)
 # ---- Large file and log views ----
 “{}” is not in the dictionary. Quick Fix shows suggestions.	“{}” sözlükte yok. Hızlı Düzeltme önerileri gösterir.
 Find in file (searched on the host)	Dosyada bul (sunucuda aranır)
-{} KB · image preview	{} KB · görsel önizlemesi
-{} MB · image preview	{} MB · görsel önizlemesi
 {0} lines · {1}	{0} satır · {1}
 Indexing lines…	Satırlar dizinleniyor…
 {0} lines · {1} MB · read-only	{0} satır · {1} MB · salt okunur
@@ -3947,3 +3945,26 @@ section	bölüm
 type	tür
 {0} · line {1}	{0} · satır {1}
 {0}. Choose another symbol at this level.	{0}. Bu düzeyde başka bir sembol seçin.
+Filter files by name	Dosyaları adına göre süz
+Clear filter	Süzgeci temizle
+Filter Files…	Dosyaları Süz…
+Files: Filter Files in Explorer	Dosyalar: Gezgin'de Dosyaları Süz
+The file list could not be read: only opened folders are searched.	Dosya listesi okunamadı: yalnızca açılmış klasörlerde aranıyor.
+Only the first {} files are searched.	Yalnızca ilk {} dosyada aranıyor.
+{} nested file|{} nested files	{} iç içe dosya
+expected an object of patterns	kalıplardan oluşan bir nesne bekleniyordu
+{}: expected text or a list of text	{}: metin veya metin listesi bekleniyordu
+{}: a pattern may hold one *	{}: bir kalıpta en fazla bir * olabilir
+Show related files under the file they belong to (Cargo.lock under Cargo.toml)	İlişkili dosyaları ait oldukları dosyanın altında göster (Cargo.lock, Cargo.toml altında)
+This {} file could not be read. It may be damaged or cut short.	Bu {} dosyası okunamadı. Bozuk veya yarım kalmış olabilir.
+This animation has {0} frames of {1} × {2} pixels, too large to play.	Bu animasyon, her biri {1} × {2} piksel olan {0} kareden oluşuyor; oynatılamayacak kadar büyük.
+Play animation (Space)	Animasyonu oynat (Boşluk)
+Pause animation (Space)	Animasyonu duraklat (Boşluk)
+Zoom out (-)	Uzaklaştır (-)
+Zoom in (+)	Yakınlaştır (+)
+Fit to window (0)	Pencereye sığdır (0)
+Switch between 100% and fit	%100 ile sığdırma arasında geçiş yap
+Zoom level	Yakınlaştırma düzeyi
+{0} × {1} pixels, {2}, {3}	{0} × {1} piksel, {2}, {3}
+animated, {} frame|animated, {} frames	animasyonlu, {} kare
+animated PNG, first frame shown	animasyonlu PNG, ilk kare gösteriliyor

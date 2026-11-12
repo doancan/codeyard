@@ -71,6 +71,15 @@ musl binary of about 1.5 MB.
 
 Compare Folders is three files: `compare_logic.rs` (matching two `HashTree` scans, plans, report; no UI), `compare_folders.rs` (the tab) and `workbench_compare.rs` (picker, trust gate, copies and deletes checked against the scan).
 
+The Explorer's tree (`tree.rs`) keeps its rows and events; the filter and file nesting hang off it as `#[path]` children:
+`tree_match.rs` (case-insensitive, Turkish-i-aware name matching), `tree_universe.rs` (every path of the workspace in tree order,
+built once on a worker thread, scanned per keystroke), `tree_filter.rs` (the box, its state, the host's file list),
+`tree_nesting.rs` (the rules and the grouping of one folder's entries, pure) and `tree_nest_rows.rs` (open parents and the
+per-folder grouping cache). The image viewer is `large_image.rs` (reading, decoding, drawing; a child of `large.rs`) with
+`large_image_zoom.rs` (scale and pan as numbers) and `large_image_info.rs` (format, size and animation read from the bytes).
+Decoding happens off the UI thread after the header checks refuse what would take gigabytes; SVG is rasterised again per zoom
+through `SvgRenderer` (exported by a small GPUI patch, see `vendor/gpui/PATCHES.md`).
+
 `scripts/arch-check.sh` enforces size limits and only ever lowers them: `workbench.rs` ≤ 2600 lines,
 `editor.rs` ≤ 1700, `buffer/src/lib.rs` ≤ 1800, every other source file ≤ 1500 (`*_tests.rs` and test helpers ≤ 2500,
 `tests.rs` and `qa_*_tests.rs` ≤ 6000), `Workbench` struct ≤ 80 lines. When a

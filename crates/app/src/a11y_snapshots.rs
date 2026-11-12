@@ -20,6 +20,8 @@ pub struct RowSnap {
     pub depth: usize,
     pub is_dir: bool,
     pub expanded: bool,
+    /// Files listed under this one when it is a parent file (0: it is not).
+    pub nested: usize,
     pub selected: bool,
     /// Where the row was painted (`None`: scrolled out of view).
     pub frame: Option<accesskit::Rect>,

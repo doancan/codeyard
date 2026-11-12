@@ -57,6 +57,7 @@ similar = { version = "3", default-features = false, features = ["text"] }
 pulldown-cmark = { version = "0.13.6", default-features = false }
 # Match GPUI's SVG sizing rules (XML, units, viewBox); already in the dependency tree.
 usvg = { version = "0.45.1", default-features = false }
+image = { version = "0.25", default-features = false }
 
 [[bin]]
 name = "codeyard"

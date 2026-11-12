@@ -327,7 +327,7 @@ impl Workbench {
     }
 
     pub fn tree_options_for_test(&mut self, compact: bool, sort: &str, cx: &mut Context<Self>) {
-        let opts = crate::tree::ViewOptions { compact, sort: crate::tree::SortOrder::from_setting(sort) };
+        let opts = crate::tree::ViewOptions { compact, sort: crate::tree::SortOrder::from_setting(sort), nesting: crate::tree::nesting::Nesting::off() };
         self.roots.primary.update(cx, |t, cx| t.set_options(opts, cx));
     }
 

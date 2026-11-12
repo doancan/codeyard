@@ -290,6 +290,7 @@ Choose an extension in the Extensions view.
 Choose…	
 Clear	
 Clear Terminal	
+Clear filter	
 Clear filters	
 Clear the picked lines (Escape)	
 Clear the search	
@@ -1006,11 +1007,14 @@ Files to include / exclude
 Files were changed by a replacement since this search ran. Rerun to refresh.	
 Files with the same name are overwritten; other files in the folder are kept.	
 Files: Collapse Folders in Explorer	
+Files: Filter Files in Explorer	
 Files: Open Folder…	
 Files: {0}/{1}	
 Files: {}	
 Filter	
 Filter (e.g. text, path)	
+Filter Files…	
+Filter files by name	
 Filter problems	
 Filter symbols	
 Filtering needs sh, tail, grep and cut on the host (on Windows: Git Bash or WSL). {}	
@@ -1024,6 +1028,7 @@ Find in file (searched on the host)
 Find in files	
 Find in selection (⌥⌘L)	
 Finished: {}	
+Fit to window (0)	
 Flag a terminal and the taskbar when its program rings the bell or asks for you	
 Focus Left Editor Group	
 Focus Next Terminal	
@@ -1721,6 +1726,7 @@ Only on the right
 Only right	
 Only send it if you trust this file.	
 Only the connection is removed; the remote repository itself is untouched.	
+Only the first {} files are searched.	
 Only the local tag is removed. A copy on a remote stays until you delete it there (Git: Delete Remote Tag…).	
 Only the {} changed file.|Only the {} changed files.	
 Only the {} open file.|Only the {} open files.	
@@ -1826,6 +1832,7 @@ Paths can't end with / or contain . or .. parts
 Pattern, e.g. foo($X, $$$REST)	
 Pause	
 Pause (F6)	
+Pause animation (Space)	
 Pause the program first (a breakpoint or ⏸): the variable has to be in scope.	
 Pause updates	
 Paused	
@@ -1852,6 +1859,7 @@ Pin the enclosing function or class line while scrolling
 Pin to the top	
 Plain Text	
 Platform	
+Play animation (Space)	
 Pop (apply and drop)	
 Pop Latest Stash	
 Pop Stash…	
@@ -2371,6 +2379,7 @@ Show in the Explorer
 Show indent guides	
 Show line numbers in search results	
 Show lines matching (regular expression, case-insensitive), e.g. {}	
+Show related files under the file they belong to (Cargo.lock under Cargo.toml)	
 Show spaces and tabs as marks	
 Show the Markdown source	
 Show the Open Editors list in the explorer	
@@ -2500,6 +2509,7 @@ Suggestions
 Suggestions pop up while typing (off: only Ctrl+Space)	
 Sunday	
 Switch Workspace or Connect to Host…	
+Switch between 100% and fit	
 Switched to {}	
 Switched to {}. Your changes are in the stash: Git: Pop Latest Stash brings them back.	
 Switching to {}…	
@@ -2638,6 +2648,7 @@ The file is empty.
 The file is not open any more.	
 The file is not tracked by Git.	
 The file is too large for an outline.	
+The file list could not be read: only opened folders are searched.	
 The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
@@ -2740,6 +2751,7 @@ There isn't enough free disk space for the download. Free some space and try aga
 These branches share no history, so git will not merge them. In a terminal, `git merge --allow-unrelated-histories` merges them anyway.	
 They stay on {}: the next Sync brings them back. To remove them there too, push with force after the reset (Git: Push (Force)…).	
 They were not found.	
+This animation has {0} frames of {1} × {2} pixels, too large to play.	
 This branch is not published yet. Click to publish it.	
 This can't be undone.	
 This change removes the file: unstage the whole file instead	
@@ -2788,6 +2800,7 @@ This search belongs to {0} on {1}, which this window does not show. Results cann
 This tab cannot move to that window: its folder is on another machine.	
 This view is not available.	
 This window is installing an update. You can close it in a few seconds.	
+This {} file could not be read. It may be damaged or cut short.	
 Thursday	
 Timeline	
 Title bar	
@@ -3060,6 +3073,9 @@ Your uncommitted changes would be overwritten by the switch. They go into a stas
 Zoom	
 Zoom In	
 Zoom Out	
+Zoom in (+)	
+Zoom level	
+Zoom out (-)	
 `{}` did not answer within {} seconds; check the network connection and try again	
 `{}` is not installed or not on PATH	
 a comment is not closed	
@@ -3070,6 +3086,8 @@ a string is not closed
 a theme must be a JSON object	
 about {0} MB · {1}	
 added	
+animated PNG, first frame shown	
+animated, {} frame|animated, {} frames	
 another Codeyard window has them; started new shells	
 approved	
 args must be a list of texts	
@@ -3147,6 +3165,7 @@ env.{} is not used: a name of letters, digits and _ with a text value
 event	
 exception	
 expected a list [ … ]	
+expected an object of patterns	
 expected an object with path, args, env or color	
 expected an object { … }	
 expected an object { … } (previous settings kept)	
@@ -3497,6 +3516,7 @@ your words
 {0} · line {1}	
 {0} · version {1}	
 {0} · version {1} · {2} license	
+{0} × {1} pixels, {2}, {3}	
 {0}, by {1}	
 {0}, change {1} of {2}	
 {0}, from {1}	
@@ -3552,8 +3572,6 @@ your words
 {} (terminal, exited)	
 {} ({})	
 {} (“{}” failed; {} of {} items were transferred before it)	
-{} KB · image preview	
-{} MB · image preview	
 {} YAML documents became one list.	
 {} accepted the connection but sent no reply.	
 {} added	
@@ -3649,6 +3667,7 @@ your words
 {} month ago|{} months ago	
 {} more entry that the comparison hides (ignored by .gitignore or the compare settings) goes too.|{} more entries that the comparison hides (ignored by .gitignore or the compare settings) go too.	
 {} more ports are not listed here	
+{} nested file|{} nested files	
 {} no longer exists, so it was not reopened.	
 {} of them is on no other branch, tag or remote: after the reset only Git's reflog still finds it.|{} of them are on no other branch, tag or remote: after the reset only Git's reflog still finds them.	
 {} of {}	
@@ -3684,6 +3703,7 @@ your words
 {}: .env has no null; give it a value or remove it	
 {}: .env holds only text; nested values need the “joined with __” choice	
 {}: TOML has no null; give it a value or remove it	
+{}: a pattern may hold one *	
 {}: connection failed	
 {}: crates.io could not be reached	
 {}: expected a file pattern or a list of patterns	
@@ -3695,6 +3715,7 @@ your words
 {}: expected an object	
 {}: expected an object { … }	
 {}: expected text	
+{}: expected text or a list of text	
 {}: expected true or false	
 {}: invalid color {}	
 {}: no answer from the debug adapter	
