@@ -156,7 +156,7 @@ impl Application {
         let mut context_lock = self.0.borrow_mut();
         let asset_source = Arc::new(asset_source);
         context_lock.asset_source = asset_source.clone();
-        context_lock.svg_renderer = SvgRenderer::new(asset_source);
+        context_lock.svg_renderer = SvgRenderer::new(asset_source).restricted();
         drop(context_lock);
         self
     }
@@ -623,7 +623,7 @@ impl App {
                 active_drag: None,
                 background_executor: executor,
                 foreground_executor,
-                svg_renderer: SvgRenderer::new(asset_source.clone()),
+                svg_renderer: SvgRenderer::new(asset_source.clone()).restricted(),
                 loading_assets: Default::default(),
                 asset_source,
                 http_client,

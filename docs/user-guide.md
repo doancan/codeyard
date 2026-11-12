@@ -1397,10 +1397,40 @@ box is the part on screen, and the outlined mark is the change F7 is on. Click t
 A binary file and a file over 4 MB show a message instead of a diff. A file with bytes that are not valid UTF-8 still
 shows, with a warning above it, and those bytes appear as replacement characters.
 
-If Codeyard panics it writes a report to `crashes/` next to its state database
-(`~/.local/state/codeyard` or `~/Library/Application Support/codeyard`, or `CODEYARD_STATE_DIR`). Nothing is
-sent anywhere: attach the file to a bug report yourself. The Help menu has **Release Notes**, **Report Issue…** (a new
-issue with the version and system filled in) and, in the palette, **Help: Open Crash Reports Folder**.
+### Log, diagnostics and crash reports
+
+Three things help to find out why something failed. All of them stay on your computer: nothing is sent anywhere, and you
+decide what to share. The state folder is `~/.local/state/codeyard`, `~/Library/Application Support/codeyard` or
+`%LOCALAPPDATA%\codeyard`, or `CODEYARD_STATE_DIR`.
+
+- **The log file** is `logs/codeyard.log` in the state folder. A line is a time, a level, an area and a sentence, for example
+  `2026-11-12T10:00:00.123Z WARN  update: could not remove the previous version`. It records failures the window could
+  not show (an update that could not be installed, a terminal helper that stopped, a saved layout that could not be read)
+  and the warnings and errors you were shown as notifications (information messages only at `debug`). It never holds file contents, only paths and error messages, and your home folder is written as
+  `~`. Passwords, tokens, `Authorization` headers and the user part of `user@host` and of web addresses are removed before a
+  line is written. The file is at most 1 MB; when it is full it moves to `codeyard.log.1` and then `.2`, and older ones are
+  deleted, so the folder never holds more than about 3 MB. The terminal helper process writes its own
+  `codeyard-daemon.log` the same way. Only you can read it (mode 0600 on macOS and Linux).
+  `diagnostics.logLevel` in your settings file chooses what is recorded: `error`, `warn`, `info` (the default) or `debug`.
+  **Help: Open Log File** opens it in an editor and **Help: Reveal Log Folder** shows the folder. To delete the log, delete
+  the `logs` folder.
+- **Copy Diagnostics** (**Help: Copy Diagnostics**) puts a report on the clipboard so you can paste it into a bug report. It
+  holds the version, the build's commit when the build recorded one, your operating system and CPU, the interface
+  language and system locale, the settings that are not at their default (only switches, choices and numbers; no text and
+  no paths), the last 20 notifications (severity, source, message) and the last 100 log lines. The same redaction as in
+  the log applies; host names are kept (`ssh ***@build.example.com`) because the host is often what a problem is about.
+  Nothing is written to disk and nothing is sent.
+- **Crash reports.** If Codeyard panics it writes a report to `crashes/` in the state folder (the newest 10 are kept): the
+  version, the thread, where it happened, the message, the last 20 notifications and log lines, and the backtrace, with your
+  home folder written as `~` and credentials removed, and a line `fatal: unknown`. A panic that Codeyard survives (a
+  background reader that stopped, for example) also writes a report, which is marked `fatal: false` when Codeyard quits
+  normally, and says nothing at the next start. Only a window run counts: `codeyard --version`, `--help` and the other command-line actions neither write nor remove the file. Codeyard keeps a small `running-<process id>` file in the folder while it
+  runs and removes it when it quits. If the next start finds such a file whose process is gone (Codeyard crashed, was killed
+  or lost power; ending it with a terminal's Ctrl+C or a plain `kill` on macOS and Linux counts as quitting), it says so once: a warning "Codeyard quit unexpectedly last time" in the notification list with the place
+  and message from the report when there is one, and a button to the folder. Closing Codeyard normally, and reports from an
+  older version, say nothing. To delete the reports, delete the `crashes` folder. Attach a report to a bug
+  report yourself: the Help menu has **Release Notes** and **Report Issue…** (a new issue with the version and system
+  filled in), and the palette has **Help: Open Crash Reports Folder**.
 
 Over SSH, "File: Save a Copy to This Computer…" saves the open remote file to a path on your own machine.
 

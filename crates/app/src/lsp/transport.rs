@@ -1,6 +1,7 @@
 //! JSON-RPC over the agent's piped process: framing, request/response matching,
 //! replies to the server's own requests.
 
+use crate::diagnostics::LockExt as _;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
@@ -99,6 +100,8 @@ pub enum ServerEvent {
     },
     /// Message from the server to the user (error/warning).
     Message(String),
+    /// The thread reading the server died by a panic (the text is for the user); an `Exited(None)` follows.
+    ConnectionLost(String),
     /// `window/logMessage`: for the Output panel (type: 1 error … 4 log).
     Log {
         level: u8,
@@ -203,29 +206,13 @@ impl Client {
         // the server's own requests (configuration, registration) itself.
         let reader = {
             let (pending, alive, settings) = (pending.clone(), alive.clone(), settings.clone());
+            let (lost_pending, lost_alive, lost_events, lost_host) = (pending.clone(), alive.clone(), events.clone(), host.clone());
             std::thread::Builder::new().name(format!("lsp-{}", config.language)).spawn(move || {
-                let mut dec = Decoder::default();
-                while let Ok(ev) = proc.events.recv() {
-                    match ev {
-                        ProcEvent::Output(data) => {
-                            for msg in dec.push(&data) {
-                                route(msg, &pending, &events, &writer_host, id, &settings);
-                            }
-                        }
-                        ProcEvent::Exit(code) => {
-                            alive.store(false, Ordering::Relaxed);
-                            for (_, tx) in pending.lock().unwrap().drain() {
-                                let message = match code {
-                                    Some(127) => "not found".to_string(),
-                                    Some(c) => format!("exited with code {c}"),
-                                    None => "stopped".to_string(),
-                                };
-                                let _ = tx.send(Err(RpcError { code: None, message }));
-                            }
-                            let _ = events.send(ServerEvent::Exited(code));
-                            break;
-                        }
-                    }
+                // A panic while reading must not leave requests waiting for a server nobody listens to.
+                let read = std::panic::AssertUnwindSafe(|| read_loop(&proc.events, &pending, &alive, &settings, &events, &writer_host, id));
+                if std::panic::catch_unwind(read).is_err() {
+                    connection_lost(&lost_pending, &lost_alive, &lost_events);
+                    lost_host.proc_kill(id);
                 }
             })
         };
@@ -251,13 +238,13 @@ impl Client {
 
     /// The `settings` tree the server currently gets.
     pub fn settings(&self) -> Arc<Value> {
-        self.settings.lock().unwrap().clone()
+        self.settings.lock_recover().clone()
     }
 
     /// New `settings` for a running server: later `workspace/configuration` requests are answered from them, and the
     /// server is told with `workspace/didChangeConfiguration` (most servers then ask again).
     pub fn change_settings(&self, settings: Arc<Value>) {
-        *self.settings.lock().unwrap() = self.config.managed.map_or_else(|| settings.clone(), |service| Arc::new(service.configuration(&settings)));
+        *self.settings.lock_recover() = self.config.managed.map_or_else(|| settings.clone(), |service| Arc::new(service.configuration(&settings)));
         self.notify_settings();
     }
 
@@ -292,10 +279,10 @@ impl Client {
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = mpsc::channel();
-        self.pending.lock().unwrap().insert(id, tx);
+        self.pending.lock_recover().insert(id, tx);
         self.send(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }));
         let result = rx.recv_timeout(timeout).map_err(|_| {
-            self.pending.lock().unwrap().remove(&id);
+            self.pending.lock_recover().remove(&id);
             // Tell the server we gave up too (so it drops the expensive work).
             self.notify("$/cancelRequest", json!({ "id": id }));
             RpcError { code: None, message: crate::i18n::tf("{0}: no answer from {1}", &[&method, &self.config.command]) }
@@ -408,6 +395,53 @@ pub fn configuration_reply(settings: &Value, params: &Value) -> Value {
     Value::Array(reply.collect())
 }
 
+/// The reader thread's work: until the process ends, answers go to whoever waits and notifications to the event channel.
+fn read_loop(
+    inbox: &mpsc::Receiver<ProcEvent>,
+    pending: &Pending,
+    alive: &AtomicBool,
+    settings: &SharedSettings,
+    events: &mpsc::Sender<ServerEvent>,
+    host: &Arc<dyn Host>,
+    id: u32,
+) {
+    let mut dec = Decoder::default();
+    while let Ok(ev) = inbox.recv() {
+        match ev {
+            ProcEvent::Output(data) => {
+                for msg in dec.push(&data) {
+                    route(msg, pending, events, host, id, settings);
+                }
+            }
+            ProcEvent::Exit(code) => {
+                alive.store(false, Ordering::Relaxed);
+                for (_, tx) in pending.lock_recover().drain() {
+                    let message = match code {
+                        Some(127) => "not found".to_string(),
+                        Some(c) => format!("exited with code {c}"),
+                        None => "stopped".to_string(),
+                    };
+                    let _ = tx.send(Err(RpcError { code: None, message }));
+                }
+                let _ = events.send(ServerEvent::Exited(code));
+                break;
+            }
+        }
+    }
+}
+
+/// The reader thread died by a panic: requests that wait are released with an error, the user is told once, and the server counts as
+/// gone (the workbench starts it again, within its restart limit).
+fn connection_lost(pending: &Pending, alive: &AtomicBool, events: &mpsc::Sender<ServerEvent>) {
+    crate::diagnostics::log::error("language", format_args!("the language server reader stopped after a panic"));
+    alive.store(false, Ordering::Relaxed);
+    for (_, tx) in pending.lock_recover().drain() {
+        let _ = tx.send(Err(RpcError { code: None, message: "connection lost".to_string() }));
+    }
+    let _ = events.send(ServerEvent::ConnectionLost(crate::i18n::t("The connection to the language server was lost").to_string()));
+    let _ = events.send(ServerEvent::Exited(None));
+}
+
 fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host: &Arc<dyn Host>, proc: u32, settings: &SharedSettings) {
     let method = msg["method"].as_str();
     if std::env::var_os("CODEYARD_LSP_TRACE").is_some() {
@@ -423,7 +457,7 @@ fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host
 
 fn deliver_response(msg: &Value, id: &Value, pending: &Pending) {
     let Some(id) = id.as_i64() else { return };
-    let Some(tx) = pending.lock().unwrap().remove(&id) else { return };
+    let Some(tx) = pending.lock_recover().remove(&id) else { return };
     let result = match msg.get("error") {
         Some(e) => Err(RpcError { code: e["code"].as_i64(), message: clip_text(e["message"].as_str().unwrap_or("error"), MAX_MESSAGE_CHARS) }),
         None => Ok(msg.get("result").cloned().unwrap_or(Value::Null)),
@@ -443,7 +477,7 @@ fn answer_server_request(
 ) {
     let result = match method {
         "workspace/configuration" => {
-            let settings = settings.lock().unwrap().clone();
+            let settings = settings.lock_recover().clone();
             configuration_reply(&settings, &msg["params"])
         }
         "window/workDoneProgress/create" | "client/registerCapability" | "client/unregisterCapability" => Value::Null,
@@ -609,6 +643,38 @@ fn initialize_params(root: &str, init_options: Option<&Value>) -> Value {
 mod tests {
     use super::*;
     use crate::lsp::{hover_text, parse_locations, server_for};
+
+    #[test]
+    fn a_lost_reader_releases_waiting_requests_and_tells_the_user() {
+        let pending: Pending = Arc::default();
+        let (answer, waiting) = mpsc::channel();
+        pending.lock().unwrap().insert(5, answer);
+        let alive = AtomicBool::new(true);
+        let (events, inbox) = mpsc::channel();
+        connection_lost(&pending, &alive, &events);
+        assert!(!alive.load(Ordering::Relaxed));
+        assert_eq!(waiting.try_recv().unwrap().unwrap_err().message, "connection lost");
+        assert!(matches!(inbox.try_recv(), Ok(ServerEvent::ConnectionLost(m)) if m == "The connection to the language server was lost"));
+        assert!(matches!(inbox.try_recv(), Ok(ServerEvent::Exited(None))));
+    }
+
+    #[test]
+    fn a_normal_exit_of_the_server_is_not_a_lost_connection() {
+        let (feed, inbox) = mpsc::channel();
+        feed.send(ProcEvent::Exit(Some(0))).unwrap();
+        let pending: Pending = Arc::default();
+        let (answer, waiting) = mpsc::channel();
+        pending.lock().unwrap().insert(1, answer);
+        let alive = AtomicBool::new(true);
+        let (events, seen) = mpsc::channel();
+        let settings: SharedSettings = Arc::new(Mutex::new(Arc::new(json!({}))));
+        let host: Arc<dyn Host> = Arc::new(host::local());
+        read_loop(&inbox, &pending, &alive, &settings, &events, &host, 0);
+        assert!(!alive.load(Ordering::Relaxed));
+        assert_eq!(waiting.try_recv().unwrap().unwrap_err().message, "exited with code 0");
+        assert!(matches!(seen.try_recv(), Ok(ServerEvent::Exited(Some(0)))));
+        assert!(seen.try_recv().is_err(), "nothing else is told: no lost-connection notice for a normal exit");
+    }
 
     #[test]
     fn frames_split_across_chunks() {

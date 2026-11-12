@@ -23,6 +23,7 @@ absent vendor/gpui/src/platform/mac/metal_renderer.rs 'set_maximum_drawable_coun
 need vendor/gpui/src/window.rs '^pub struct DispatchEventResult' "pub DispatchEventResult"
 need vendor/gpui/src/gpui.rs '^pub use svg_renderer::\*;' "SvgRenderer and SvgSize are public"
 need vendor/gpui/src/svg_renderer.rs 'pub fn restricted\(&self\)' "SvgRenderer::restricted (no image hrefs for the image viewer)"
+need vendor/gpui/src/app.rs 'SvgRenderer::new\(asset_source(\.clone\(\))?\)\.restricted\(\)' "the shared SvgRenderer is restricted (Markdown and extension pictures cannot pull in other files)"
 need vendor/gpui/src/ui_scale.rs 'pub fn to_logical\(self, ui_scale: f32\)' "interface scale input conversion"
 need vendor/gpui/src/app.rs 'pub fn set_ui_scale\(&mut self, scale: f32\)' "App::set_ui_scale"
 need vendor/gpui/src/window.rs 'let event = event.to_logical\(window.ui_scale\);' "platform input converted to logical pixels"

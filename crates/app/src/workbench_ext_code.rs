@@ -14,6 +14,7 @@ use futures::StreamExt;
 use super::*;
 use crate::ext_broker::{self, Scope, Sink};
 use crate::ext_runtime::{self, Crashes, Event, Pending, Process};
+use crate::workbench::notifications_glue::model::{Notification, Severity};
 
 /// Lines of each extension's log kept for the Inspector (#108).
 const LOG_LINES: usize = 500;
@@ -368,6 +369,7 @@ impl Workbench {
             Event::Message(_) => {}
             Event::Exited { crashed, reason } => {
                 self.on_extension_exited(id, crashed, cx);
+                self.end_interrupted_progress(id, &reason, cx);
                 self.forget_extension_watches(id);
                 let code = &mut self.cfg.exts.code;
                 code.procs.remove(id);
@@ -420,10 +422,10 @@ impl Workbench {
                 self.show_extension_progress(id, p, cx);
             }
             Notify::EndProgress { id: p } => {
-                if self.cfg.exts.code.progress.remove(&(id.to_string(), p)).is_some()
-                    && matches!(&self.notice(), Some(Notice::Info(t)) if t.starts_with(&format!("{id}: ")))
-                {
-                    self.dismiss_notice();
+                if let Some((title, ..)) = self.cfg.exts.code.progress.remove(&(id.to_string(), p)) {
+                    // The one history entry of this run: the ticks before it were toasts only.
+                    let text = crate::i18n::tf("{0}: {1} — done", &[&id, &title]);
+                    self.notify_with(Notification::new(Severity::Info, NoticeSource::Extensions, text).id(progress_entry_id(id, p)));
                     cx.notify();
                 }
             }
@@ -665,6 +667,11 @@ impl Workbench {
     }
 }
 
+/// The history entry of one progress run: the same text-free identity whether it ends well or not.
+fn progress_entry_id(extension: &str, run: u64) -> String {
+    format!("ext-progress:{extension}:{run}")
+}
+
 impl Workbench {
     /// Complete a ticket of `extension` from the window (a pick, an input).
     pub(super) fn complete_extension_ticket(&mut self, extension: &str, ticket: u64, completion: Completion) {
@@ -704,6 +711,19 @@ impl Workbench {
             _ => return,
         };
         self.complete_extension_ticket(&ext, ticket, answer.unwrap_or(nothing));
+    }
+
+    /// The extension ended while a progress run was open: that run is recorded as failed (same entry as its "done" would have been),
+    /// with the reason the process gave.
+    fn end_interrupted_progress(&mut self, id: &str, reason: &str, cx: &mut Context<Self>) {
+        let mut open: Vec<u64> = self.cfg.exts.code.progress.keys().filter(|(ext, _)| ext == id).map(|(_, p)| *p).collect();
+        open.sort_unstable();
+        for p in open {
+            let Some((title, ..)) = self.cfg.exts.code.progress.remove(&(id.to_string(), p)) else { continue };
+            let text = crate::i18n::tf("{0}: {1} did not finish: the extension stopped", &[&id, &title]);
+            self.notify_with(Notification::new(Severity::Error, NoticeSource::Extensions, text).detail(reason).id(progress_entry_id(id, p)));
+        }
+        cx.notify();
     }
 
     pub(in crate::workbench) fn show_extension_progress(&mut self, id: &str, p: u64, cx: &mut Context<Self>) {
@@ -853,3 +873,7 @@ pub(super) fn explain(e: &v::Error) -> String {
         other => other.to_string(),
     }
 }
+
+#[cfg(test)]
+#[path = "workbench_ext_progress_tests.rs"]
+mod progress_tests;

@@ -787,6 +787,9 @@ impl Workbench {
                     self.end_debug(sid, msg, cx);
                 }
             }
+            DapEvent::ConnectionLost => {
+                self.notify(NoticeSource::Debug, Notice::Warning(crate::i18n::t("The connection to the debug adapter was lost").into()));
+            }
             // Answers that arrive after the session ended must not mark breakpoints again.
             DapEvent::BreakpointsSet { .. } | DapEvent::BreakpointChanged(_) | DapEvent::FunctionBreakpointsSet(_)
                 if matches!(d.status, DebugStatus::Ended(_)) => {}

@@ -3,7 +3,7 @@
 use super::{Reader, Settings};
 
 /// Settings read here that are not in the main list of known keys.
-pub(super) const KEYS: &[&str] = &["explorer.fileNesting.enabled", "explorer.fileNesting.patterns"];
+pub(super) const KEYS: &[&str] = &["explorer.fileNesting.enabled", "explorer.fileNesting.patterns", "diagnostics.logLevel"];
 
 pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>) {
     if let Some(v) = r.bool("files.trimFinalNewlines") {
@@ -17,6 +17,9 @@ pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>) {
     }
     if let Some(v) = r.choice("workbench.panel.openFromMaximized", &["half", "restore", "tab"]) {
         s.panel_open_from_maximized = v;
+    }
+    if let Some(v) = r.choice("diagnostics.logLevel", &crate::diagnostics::log::Level::NAMES) {
+        s.log_level = crate::diagnostics::log::Level::parse(&v).unwrap_or(s.log_level);
     }
     parse_nesting(s, r);
 }

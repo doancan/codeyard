@@ -36,12 +36,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keyboard Shortcuts page: "Preferences: Keyboard Shortcuts" is now a page with every command, one row per key, the context (`when`) and where the key comes from (default, extension, user), a search by name, id or key, and buttons to change a key (it listens for the keys, also a sequence such as `⌘K ⌘I` and keys of other layouts, and no shortcut acts while it does), add another one, remove it, reset the command or run it. It writes one entry to `keybindings.jsonc` and keeps your comments, other entries and line endings; a file that does not parse is never overwritten. Keys that more than one command uses are marked with the commands' names. It replaces the picker that added an empty line to the file; 33 commands that only the palette had now have ids for `keybindings.jsonc`.
 
 - Settings profiles: named bundles of settings (with the theme), keybindings and snippets in `~/.config/codeyard/profiles/<name>/`. *Profiles: Create…, Switch…, Rename…, Delete…* and *Duplicate Current…* manage them; switching applies at once in every window, the status bar shows the active profile, and the watcher follows its files. The default profile is the config folder as before, so nothing changes or is created until you make a profile. Names are checked for Windows and macOS (path characters, `CON`/`NUL`, trailing dots, letter-case twins), a missing profile falls back to the default with a notice, and extensions, themes files and session state stay shared.
+- Log file: `logs/codeyard.log` in the state folder records failures the window could not show (updates, the terminal helper, a saved layout that could not be read) and the warnings and errors shown as notifications, one line each with time, level and area. The home folder is written as `~` and passwords, tokens, `Authorization` headers and the user part of `user@host` are removed first. It rotates at 1 MB and keeps 3 files (owner-only on macOS and Linux). `diagnostics.logLevel` (`error`, `warn`, `info`, `debug`; default `info`) chooses what is recorded; *Help: Open Log File* and *Help: Reveal Log Folder* are in the palette. Nothing is sent anywhere.
+- *Help: Copy Diagnostics* copies a redacted report (version, system, changed settings, the last notifications and log lines) for bug reports.
+- Crash reports have your home folder and credentials removed and carry the last notifications and log lines. The next start says "Codeyard quit unexpectedly last time" once (with the place and message from the report when there is one, and a button to the crash folder) only when the last run did not finish: a running marker is kept while Codeyard runs and removed on a normal quit. A panic Codeyard survives keeps its report, marked `fatal: false`, and announces nothing; the terminal helper logs to `codeyard-daemon.log`.
+- An extension's progress run is one entry in the notification list ("done", or an error with the reason when the extension stops before it ends); the ticks stay toasts.
+
+### Changed
+
+- The renderer that draws SVG pictures in Markdown previews and extension views no longer follows `<image>` links inside an SVG, so a README cannot make Codeyard read other local files or decode a huge embedded picture.
 
 ### Fixed
 
 - A broken `settings.jsonc` (or theme file) reports the right line and column when a `/* … */` comment comes before the mistake; the comment's lines used to be left out of the count.
 - A failed folder upload that was cancelled now keeps what the remote side reported, and a failed remote container or WSL listing keeps its full text in the notification instead of only the first line.
 - SSH config: two saves at the same moment (two windows adding hosts) no longer fail on Windows with "The process cannot access the file"; they take turns.
+- A damaged saved editor layout no longer risks a crash at start: the files open in one group and a warning says so.
+- A debug adapter or language server whose reader thread panics no longer leaves requests waiting: the session ends, a notice says the connection was lost, and a poisoned lock no longer makes later calls panic.
+- A query ending in `|`, and the local-agent start, report an error instead of a panic.
 
 ## [0.9.1] - 2026-11-10
 

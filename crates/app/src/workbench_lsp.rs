@@ -271,6 +271,10 @@ impl Workbench {
                 self.log_output(format!("[{key}] {}", m.chars().take(2000).collect::<String>()));
                 self.notify(NoticeSource::Language, Notice::Info(m.into()));
             }
+            ServerEvent::ConnectionLost(m) => {
+                self.log_output(format!("[{key}] {m}"));
+                self.notify(NoticeSource::Language, Notice::Warning(m.into()));
+            }
             ServerEvent::Log { level, text } => {
                 let tag = match level {
                     1 => "error",

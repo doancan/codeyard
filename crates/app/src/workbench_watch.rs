@@ -228,6 +228,8 @@ impl Workbench {
         let mut session = cx.try_global::<settings::SessionScale>().copied().unwrap_or_default();
         new.ui_scale = session.resolve(new.ui_scale);
         cx.set_global(session);
+        crate::diagnostics::log::set_level(new.log_level);
+        crate::diagnostics::log::debug("settings", format_args!("settings applied"));
         cx.set_global(new.clone());
         cx.set_ui_scale(new.ui_scale);
         if !new.web_preview_enabled {

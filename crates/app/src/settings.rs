@@ -99,8 +99,7 @@ pub struct Settings {
     pub terminal_allow_clear_history: bool,
     /// Lines of each terminal's history saved for the next start (`terminal.persistentScrollback`; 0: none).
     pub terminal_persistent_scrollback: usize,
-    /// Minutes a window's terminals keep running for the next start after Codeyard quits, crashes or is killed
-    /// (`terminal.persistentSessionTimeout`; 0: not kept).
+    /// Minutes terminals keep running after Codeyard quits, crashes or is killed (`terminal.persistentSessionTimeout`; 0: not kept).
     pub terminal_persistent_session_timeout: u64,
     pub terminal_scroll_sensitivity: f32,
     /// When a program in the terminal may put text on the clipboard (OSC 52): "copy" (right after you copy in it: a drag or a
@@ -115,11 +114,12 @@ pub struct Settings {
     pub terminal_notifications: bool,
     /// When a finished mouse selection goes to the clipboard: "agents" (Claude Code or Codex runs), "always", "off".
     pub terminal_copy_on_selection: String,
-    /// What a maximized panel does when something opens in the editor area: "half", "restore" or "tab"
-    /// (`workbench.panel.openFromMaximized`).
+    /// What a maximized panel does when something opens in the editor area: "half", "restore" or "tab" (`workbench.panel.openFromMaximized`).
     pub panel_open_from_maximized: String,
     /// The first terminal opened in a window fills the editor area (`workbench.panel.firstTerminalMaximized`).
     pub panel_first_terminal_maximized: bool,
+    /// What the log file records (`diagnostics.logLevel`).
+    pub log_level: crate::diagnostics::log::Level,
     /// Closing a terminal asks first: "running" (a program is in the foreground), "always" or "never".
     pub terminal_confirm_close: String,
     /// Terminal profiles per operating system of the machine (`terminal.profiles.macos` / `.linux` / `.windows`).
@@ -374,6 +374,7 @@ impl Default for Settings {
             terminal_copy_on_selection: "agents".into(),
             panel_open_from_maximized: "half".into(),
             panel_first_terminal_maximized: true,
+            log_level: crate::diagnostics::log::Level::Info,
             terminal_confirm_close: "never".into(),
             terminal_profiles: Default::default(),
             terminal_default_profile: None,
