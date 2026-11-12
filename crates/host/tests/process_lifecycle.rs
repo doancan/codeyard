@@ -3,6 +3,13 @@
 use host::{Host, ProcEvent};
 use std::time::Duration;
 
+/// The local agent starts through the fallible path, and says it is this machine.
+#[test]
+fn the_local_host_starts_through_the_fallible_path() {
+    let host = host::try_local().expect("the local host starts");
+    assert!(!host.is_remote());
+}
+
 #[test]
 fn cancellation_remains_available_after_the_process_closes_stdout() {
     let host = host::local();

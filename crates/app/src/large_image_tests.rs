@@ -249,15 +249,16 @@ fn an_svg_cannot_draw_other_files_or_embedded_pictures(cx: &mut gpui::TestAppCon
         base64(RED_SVG.as_bytes())
     );
     crate::qa_workbench_tests::globals(cx);
-    let (shared, restricted) = cx.update(|cx| (cx.svg_renderer(), cx.svg_renderer().restricted()));
+    // The application's own renderer is the restricted one; an unrestricted one is built here only to prove the fixture bites.
+    let (unrestricted, restricted) = cx.update(|cx| (SvgRenderer::new(cx.asset_source().clone()), cx.svg_renderer()));
     for svg in [&by_file, &by_data] {
         let host = host::local();
         let path = file("href", "a.svg", svg.as_bytes());
-        // The shared renderer (Markdown previews) still draws it: the fixture really pulls a picture in, so the check means something.
-        let drawn = read(&host, &path, ImageFormat::Svg, shared.clone()).ok().unwrap();
-        assert!(has_red(&drawn.picture), "the fixture draws a red pixel with the shared renderer");
+        // A renderer that follows hrefs draws it: the fixture really pulls a picture in, so the check means something.
+        let drawn = read(&host, &path, ImageFormat::Svg, unrestricted.clone()).ok().unwrap();
+        assert!(has_red(&drawn.picture), "the fixture draws a red pixel with a renderer that follows hrefs");
         let safe = read(&host, &path, ImageFormat::Svg, restricted.clone()).ok().unwrap();
-        assert!(!has_red(&safe.picture), "the viewer's renderer loads no picture an SVG points to");
+        assert!(!has_red(&safe.picture), "the application's renderer loads no picture an SVG points to");
         assert_eq!(safe.size, (8., 8.), "the SVG itself still draws");
     }
     // Through the whole view, including the sharper drawings made when zooming.

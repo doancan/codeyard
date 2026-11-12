@@ -15,6 +15,12 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
         "built-in rules (see the user guide)",
         "Which files the explorer lists under another file when `explorer.fileNesting.enabled` is on, added to the built-in rules. The key is a file name or a pattern with one `*`; the value is a comma-separated list of names (or a list of texts) in the same folder, where `${capture}` stands for the text the `*` matched, e.g. `{ \"*.c\": \"${capture}.h\" }`. An entry replaces the built-in rule with the same key; `false` removes it. A file is nested under one parent only (the first matching rule wins). Names are case-sensitive.",
     ),
+    (
+        "diagnostics.logLevel",
+        "`error`, `warn`, `info` or `debug`",
+        "`info`",
+        "What the log file (`logs/codeyard.log` in the state folder) records: `error` only failures, `warn` adds problems that were worked around, `info` adds what the app did, `debug` is for bug reports. Only your own settings file counts; a folder's setting is ignored.",
+    ),
     ("search.exclude", "list of globs", "`[]`", "Skip matching paths in Find in Files."),
     (
         "compare.folders.ignore",

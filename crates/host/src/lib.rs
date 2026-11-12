@@ -864,16 +864,23 @@ pub fn random_token() -> String {
     format!("{:016x}{:016x}", half(nanos), half(!nanos))
 }
 
-/// This machine: the agent is a thread in this process, same protocol over a pipe.
-// Infallible by signature: a failure here is fd or thread exhaustion at startup, which nothing can recover from.
+/// This machine: the agent is a thread in this process, same protocol over a pipe. Running out of file descriptors or threads
+/// is reported instead of panicking.
+pub fn try_local() -> Result<RemoteHost> {
+    let unavailable = |what: &str, e: std::io::Error| HostError::Disconnected(format!("could not start the local agent ({what}): {e}"));
+    let (req_r, req_w) = std::io::pipe().map_err(|e| unavailable("request pipe", e))?;
+    let (resp_r, resp_w) = std::io::pipe().map_err(|e| unavailable("response pipe", e))?;
+    std::thread::Builder::new().name("agent".into()).spawn(move || agent::serve(req_r, resp_w)).map_err(|e| unavailable("thread", e))?;
+    let mut host = RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "Local")?;
+    host.remote = false;
+    Ok(host)
+}
+
+/// `try_local` for the many callers that cannot continue without the local machine: a failure here is fd or thread exhaustion,
+/// which nothing can recover from.
 #[allow(clippy::expect_used)]
 pub fn local() -> RemoteHost {
-    let (req_r, req_w) = std::io::pipe().expect("pipe");
-    let (resp_r, resp_w) = std::io::pipe().expect("pipe");
-    std::thread::Builder::new().name("agent".into()).spawn(move || agent::serve(req_r, resp_w)).expect("agent thread");
-    let mut host = RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "Local").expect("local agent handshake");
-    host.remote = false;
-    host
+    try_local().expect("the local agent starts")
 }
 
 /// Start a child process as the connection (stdio + stderr capture).

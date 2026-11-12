@@ -354,6 +354,7 @@ Codeyard is not signed in to GitHub: run `gh auth login` in a terminal, then try
 Codeyard is still installing an update	
 Codeyard is up to date	
 Codeyard memory	
+Codeyard quit unexpectedly last time	
 Codeyard signs its requests to {} with this account. The extension never sees your password or token. You can sign out on its page in Extensions.	
 Codeyard will reopen your windows.	
 Codeyard {} is available	
@@ -744,6 +745,7 @@ Dev Container setup failed: {}. Check Output and install the Dev Container CLI i
 Developer: Extension Inspector	
 Developer: Restart Language Servers	
 Diagnostic copied	
+Diagnostics copied. Nothing was sent anywhere: paste them where you want to share them.	
 Diff view side by side (off: inline)	
 Disable	
 Disable All Breakpoints	
@@ -1245,11 +1247,14 @@ Health:
 Help	
 Help: About Codeyard	
 Help: Check for Updates…	
+Help: Copy Diagnostics	
 Help: Grant Full Disk Access…	
 Help: Keyboard Shortcuts Reference	
 Help: Open Crash Reports Folder	
+Help: Open Log File	
 Help: Release Notes	
 Help: Report Issue…	
+Help: Reveal Log Folder	
 Help: Welcome	
 Hex dump (read-only copy)	
 Hide	
@@ -1804,6 +1809,7 @@ Only trust folders from people you know: what you trust can run programs on the 
 Opacity	
 Open	
 Open Changes	
+Open Crash Reports Folder	
 Open Editors	
 Open Editors ({})	
 Open File	
@@ -2714,6 +2720,8 @@ The connection closed before it finished.
 The connection dropped; trying to reconnect. Unsaved changes are kept.	
 The connection is down, so files with unsaved changes cannot be saved. Use File: Save a Copy to This Computer… to keep them, or close them, then reconnect.	
 The connection or folder changed since the preview. Rerun the search and preview again.	
+The connection to the debug adapter was lost	
+The connection to the language server was lost	
 The connection to {} dropped while the data was being exchanged.	
 The connection to {} dropped. Reconnecting…	
 The connection to {} was lost during the scan, so the result is partial. Scan again once it is back.	
@@ -2754,12 +2762,14 @@ The folder could not be read on the server: {}
 The folder is not empty.	
 The folder it belongs in does not exist.	
 The folder of “{}” with its settings, keybindings and snippets is deleted. This cannot be undone.	
+The full report is in the crash reports folder and stays on this computer. Help: Report Issue… opens a new issue with the version filled in.	
 The host stopped responding. Installation files were retained because a process may still be running. Reconnect and inspect the destination before retrying.	
 The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	
 The input “{}” would run an editor command; use promptString or pickString.	
 The language server sent a documentation link that is not a web page or a local HTML file, so it was not opened	
 The last background fetch failed: {}	
 The last command exited with code {}	
+The last session ended without closing normally, and no crash report explains why.	
 The local port is busy	
 The local port was not changed: {}. Back on localhost:{}	
 The managed installation is incomplete or belongs to another catalogue. Reinstall the services to repair it.	
@@ -2799,6 +2809,7 @@ The response could not be saved (curl write error).
 The response is larger than {} and was not downloaded.	
 The result would not parse in {0} file: {1}|The result would not parse in {0} files: {1}	
 The runtime checksum did not match. Nothing was activated. Check the connection and retry.	
+The saved editor layout could not be read: the files are shown in one group.	
 The search failed.	
 The search or the connection changed while the preview was being made. Preview again.	
 The secondary side bar shows no view.	
@@ -2858,6 +2869,7 @@ There are no stashes.
 There is already a profile named “{}”. Names differ by more than letter case.	
 There is no breakpoint on this line (F9 adds one).	
 There is no commit to undo	
+There is no log file yet.	
 There is no profile named “{}”.	
 There is no replacement to undo.	
 There is no request here. Write METHOD URL on a line, separate requests with ###.	
@@ -3684,8 +3696,10 @@ your words
 {0}: version {1} was yanked and should not be used	
 {0}: version {1} was yanked from crates.io. Update to a release that is not yanked.	
 {0}: {1} cannot be written in TOML	
+{0}: {1} did not finish: the extension stopped	
 {0}: {1} does not fit in a TOML integer (64 bits, signed)	
 {0}: {1} to pull, {2} to push. Click to sync.	
+{0}: {1} — done	
 {0}: {1}. Fix the file, then try again.	
 {0}: {1}. Start the selected container engine and check Output.	
 {0}: “{1}” is not a name .env files can hold (letters, digits and _)	

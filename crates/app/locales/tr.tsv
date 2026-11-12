@@ -4121,3 +4121,17 @@ The settings file is not {} any more (another profile?). Nothing was written.	Ay
 The system does not allow this: the item may be protected, locked or sandboxed.	Sistem buna izin vermiyor: öğe korumalı, kilitli veya yalıtılmış olabilir.
 This copy of the repository is a shallow clone and ends at this commit, so the file before it is not available.	Deponun bu kopyası sığ bir klon ve bu işlemede bitiyor; bu yüzden dosyanın öncesi yok.
 {} was changed in the settings file since. Nothing was written.	{} ayar dosyasında bu arada değiştirildi. Hiçbir şey yazılmadı.
+Diagnostics copied. Nothing was sent anywhere: paste them where you want to share them.	Tanılama bilgisi kopyalandı. Hiçbir yere gönderilmedi: paylaşmak istediğiniz yere yapıştırın.
+There is no log file yet.	Henüz bir günlük dosyası yok.
+Codeyard quit unexpectedly last time	Codeyard geçen sefer beklenmedik şekilde kapandı
+Open Crash Reports Folder	Çökme Raporları Klasörünü Aç
+The full report is in the crash reports folder and stays on this computer. Help: Report Issue… opens a new issue with the version filled in.	Raporun tamamı çökme raporları klasöründe ve bu bilgisayarda kalır. Yardım: Sorun Bildir… sürüm bilgisi doldurulmuş yeni bir sorun açar.
+The connection to the debug adapter was lost	Hata ayıklama bağdaştırıcısıyla bağlantı kesildi
+The connection to the language server was lost	Dil sunucusuyla bağlantı kesildi
+The saved editor layout could not be read: the files are shown in one group.	Kayıtlı düzen okunamadı: dosyalar tek bir grupta gösteriliyor.
+{0}: {1} — done	{0}: {1} — bitti
+{0}: {1} did not finish: the extension stopped	{0}: {1} bitmedi: eklenti durdu
+Help: Copy Diagnostics	Yardım: Tanılama Bilgisini Kopyala
+Help: Open Log File	Yardım: Günlük Dosyasını Aç
+Help: Reveal Log Folder	Yardım: Günlük Klasörünü Göster
+The last session ended without closing normally, and no crash report explains why.	Son oturum normal şekilde kapanmadı ve nedenini açıklayan bir çökme raporu yok.

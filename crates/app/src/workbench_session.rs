@@ -78,7 +78,7 @@ impl Workbench {
         for (path, id, active) in layout {
             let Some(ed) = all.iter().find(|e| e.read(cx).path == *path).cloned() else { continue };
             let target = if groups.contains_key(id) { *id } else { grid.focused() };
-            let group = groups.get_mut(&target).expect("focused group exists");
+            let group = fallback::group_or_empty(&mut groups, target, "a tab names a group that is not in the layout");
             if !group.editors.contains(&ed) {
                 group.editors.push(ed);
             }
@@ -88,7 +88,7 @@ impl Workbench {
         }
         for ed in all {
             if !groups.values().any(|group| group.editors.contains(&ed)) {
-                groups.get_mut(&grid.focused()).expect("focused group exists").editors.push(ed);
+                fallback::group_or_empty(&mut groups, grid.focused(), "the focused group").editors.push(ed);
             }
         }
         for group in groups.values_mut() {
@@ -103,10 +103,10 @@ impl Workbench {
             orphans.extend(g.searches);
             terminals.extend(g.terminals);
         }
-        let focused = groups.get_mut(&grid.focused()).expect("focused group exists");
+        let focused = fallback::group_or_empty(&mut groups, grid.focused(), "the focused group");
         focused.searches.extend(orphans);
         focused.terminals.extend(terminals);
-        let current = groups.remove(&grid.focused()).expect("focused group exists");
+        let current = fallback::take_group_or_empty(&mut groups, grid.focused());
         self.tabs = state_glue::TabsState { current, groups, layout: grid, ..Default::default() };
         self.sync_slots(cx);
         if let Some(saved) = saved {
@@ -126,7 +126,10 @@ impl Workbench {
         let mut tabs = Vec::new();
         let mut views = Vec::new();
         for id in self.tabs.layout.groups() {
-            let group = self.tabs.group(id).expect("layout group has state");
+            let Some(group) = self.tabs.group(id) else {
+                crate::diagnostics::log::warn("session", format_args!("editor group {id} is in the layout but has no state; its tabs are not saved"));
+                continue;
+            };
             for (index, ed) in group.editors.iter().enumerate() {
                 let e = ed.read(cx);
                 if !e.uses_host(&self.remote.host) {
@@ -274,7 +277,12 @@ impl Workbench {
         let windows = self.saved_editor_windows(ws);
         let Some(s) = &self.persist.state else { return false };
         let mut tabs = s.tabs(ws).unwrap_or_default();
-        let saved = s.tab_layout(ws).as_deref().and_then(SavedEditorSession::parse);
+        let stored_layout = s.tab_layout(ws);
+        let saved = stored_layout.as_deref().and_then(SavedEditorSession::parse);
+        let layout_unreadable = stored_layout.is_some() && saved.is_none();
+        if let Some(text) = stored_layout.as_deref().filter(|_| layout_unreadable) {
+            fallback::keep_copy(s, ws, text);
+        }
         let focus_left = s.get(&format!("focus_left:{ws}")).is_none_or(|v| v != "0");
 
         let backups = if cx.global::<Settings>().hot_exit { s.backups(ws).unwrap_or_default() } else { Vec::new() };
@@ -291,6 +299,16 @@ impl Workbench {
                 tabs.push(state::Tab { rel_path: rel.to_string(), active: false, pinned: false, group: 0 });
                 for_windows.push(rel.to_string());
             }
+        }
+        if layout_unreadable && fallback::first_announcement(ws) {
+            // Deferred: the saved state is still borrowed here.
+            cx.defer_in(window, |this, _, cx| {
+                this.notify(
+                    NoticeSource::App,
+                    Notice::Warning(crate::i18n::t("The saved editor layout could not be read: the files are shown in one group.").into()),
+                );
+                cx.notify();
+            });
         }
         if tabs.is_empty() {
             if saved.is_some() && self.tabs.opening.is_none() {
@@ -476,3 +494,10 @@ fn write_blobs(dir: &std::path::Path, writes: Vec<BackupWrite>) -> Vec<(BackupWr
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "workbench_session_tests.rs"]
+mod tests;
+
+#[path = "workbench_session_fallback.rs"]
+pub(super) mod fallback;

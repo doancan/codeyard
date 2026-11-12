@@ -903,7 +903,10 @@ impl Workbench {
                 let seen = self.stored(HIGHEST_SEEN);
                 if seen.as_deref().is_some_and(|seen| is_rollback(&release.version, seen)) {
                     // Genuinely signed, but older than what this installation was offered before: an old list played back.
-                    eprintln!("update: ignoring {}: an earlier check already saw {}", release.version, seen.unwrap_or_default());
+                    crate::diagnostics::log::warn(
+                        "update",
+                        format_args!("update: ignoring {}: an earlier check already saw {}", release.version, seen.unwrap_or_default()),
+                    );
                     self.update.state = if manual { UpdateState::UpToDate } else { UpdateState::Idle };
                 } else {
                     self.remember(HIGHEST_SEEN, &higher_version(&release.version, seen.as_deref()));
@@ -1045,7 +1048,7 @@ impl Workbench {
     fn fail(&mut self, error: &UpdateError, release: Option<Release>, phase: Phase, window: &mut Window, cx: &mut Context<Self>) {
         self.update.run = None;
         let failure = Failure::from_error(error, release, phase);
-        eprintln!("update: {}: {}", failure.title(), failure.detail);
+        crate::diagnostics::log::warn("update", format_args!("update: {}: {}", failure.title(), failure.detail));
         if phase == Phase::Check {
             let now = self.update.backend.now();
             self.update.failures.push(now);
@@ -1198,7 +1201,7 @@ impl Workbench {
         match update_restart::write(dir, &update_restart::Handover { to: version.clone(), windows, focused }, self.update.backend.now()) {
             Ok(()) => true,
             Err(e) => {
-                eprintln!("could not leave the open windows for the new version: {e}");
+                crate::diagnostics::log::warn("update", format_args!("could not leave the open windows for the new version: {e}"));
                 false
             }
         }
@@ -1275,7 +1278,7 @@ impl Workbench {
     /// A failed write costs a repeated notice or check: it is reported once per session (see `persist_failures.rs`).
     fn remember(&self, key: &str, value: &str) {
         if let Some(Err(e)) = self.persist.state.as_ref().map(|s| s.set(key, value)) {
-            eprintln!("could not remember {key}: {e}");
+            crate::diagnostics::log::warn("update", format_args!("could not remember {key}: {e}"));
             self.persist_failed(super::notifications_glue::failures::Area::UpdateChoice, &e);
         }
     }

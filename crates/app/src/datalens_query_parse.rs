@@ -107,12 +107,13 @@ impl Parser<'_> {
     /// `a | b | c` folds to the right, so evaluation order and tree shape agree.
     fn pipe(&mut self) -> Parsed {
         self.enter()?;
-        let mut parts = vec![self.comma()?];
+        let mut parts = Vec::new();
+        let mut out = self.comma()?;
         while self.peek_after_ws() == Some(b'|') && !self.rest_after_ws().starts_with("|=") {
             self.eat("|");
-            parts.push(self.comma()?);
+            parts.push(out);
+            out = self.comma()?;
         }
-        let mut out = parts.pop().expect("one part");
         while let Some(left) = parts.pop() {
             out = self.node(Expr::Pipe(Box::new(left), Box::new(out)))?;
         }

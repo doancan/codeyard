@@ -903,7 +903,7 @@ pub fn migrate_legacy_dirs() {
             continue; // CODEYARD_CONFIG_DIR / CODEYARD_STATE_DIR
         }
         if let Err(e) = move_legacy_dir(&new) {
-            eprintln!("could not move the old {LEGACY_APP_DIR} folder to {}: {e}", new.display());
+            crate::diagnostics::log::warn("files", format_args!("could not move the old {LEGACY_APP_DIR} folder to {}: {e}", new.display()));
         }
     }
 }

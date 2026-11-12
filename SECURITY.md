@@ -33,6 +33,12 @@ matter most are:
   one successful check a day (a failed one is retried at most three times a day), two small downloads from github.com, the checksum
   list and its signature. GitHub sees your IP address and that the request comes from `curl`; no cookies, no identifier, nothing about
   your files (see [architecture](docs/architecture.md#stack)).
+- The log file (`logs/codeyard.log`), the diagnostics report (*Help: Copy Diagnostics*) and crash reports stay on your computer and
+  are never sent. Before anything is written, the home folder is replaced by `~` and passwords, tokens, `Authorization` headers
+  and the user part of `user@host` and of URLs are removed; host names stay. The files are owner-only on macOS and Linux, are
+  rotated or pruned (log: 3 files of 1 MB; crashes: the newest 10), and are deleted by deleting their folders
+  ([user guide](docs/user-guide.md#log-diagnostics-and-crash-reports)). Pictures in Markdown previews and extension views are drawn
+  by a renderer that never follows an SVG's links to other files or embedded pictures.
 - Passwords and passphrases for `ssh` are asked in the window through a private Unix socket and are never written to disk, the
   environment or process arguments ([remote.md](docs/remote.md#authentication-prompts)).
 - Extension accounts: tokens for an extension's GitHub or OAuth account, and its `secrets`, are kept in the system

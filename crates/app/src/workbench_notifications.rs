@@ -10,6 +10,8 @@ use std::collections::HashMap;
 
 #[path = "workbench_notification_actions.rs"]
 mod actions;
+#[path = "workbench_diagnostics.rs"]
+mod diagnostics_glue;
 #[path = "errors.rs"]
 pub(crate) mod errors;
 #[path = "persist_failures.rs"]
@@ -22,6 +24,7 @@ mod git_failure_tests;
 mod locks;
 #[path = "notifications.rs"]
 pub(crate) mod model;
+pub use diagnostics_glue::{CopyDiagnostics, OpenLogFile, RevealLogFolder};
 #[cfg(test)]
 #[path = "workbench_persist_failure_tests.rs"]
 mod persist_failure_tests;
@@ -103,6 +106,13 @@ impl NoticeCenter {
 
     /// Do Not Disturb hides information and warnings; an error still shows its card (and is still announced).
     fn post(&mut self, n: Notification, severity: Severity) {
+        // Every way into the history is written to the log and the crash report's list, startup messages included.
+        let level = match severity {
+            Severity::Info => crate::diagnostics::log::Level::Info,
+            Severity::Warning => crate::diagnostics::log::Level::Warn,
+            Severity::Error => crate::diagnostics::log::Level::Error,
+        };
+        crate::diagnostics::log::notice(level, &format!("{:?}", n.source), &n.message);
         let text: SharedString = n.message.clone().into();
         let quiet = n.quiet;
         let posted = self.log.post(n, now_secs());

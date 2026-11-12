@@ -20,7 +20,7 @@ mod problems_panel;
 #[path = "problem_rows_tests.rs"]
 mod rows_tests;
 use filter::{Counts, ProblemFilter, Sort};
-pub use notifications_panel::{ClearNotifications, ShowNotifications, ToggleDoNotDisturb};
+pub use notifications_panel::{ClearNotifications, CopyDiagnostics, OpenLogFile, RevealLogFolder, ShowNotifications, ToggleDoNotDisturb};
 pub use problems_panel::{CopyAllProblems, ProblemsView, ToggleProblemsActiveFile};
 
 /// "Interface scale: 110%" in the interface language (Turkish puts the sign first: "%110").

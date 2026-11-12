@@ -93,7 +93,7 @@ pub(crate) fn dir_writable(dir: &Path) -> bool {
     let probe = dir.join(format!(".codeyard-write-test-{}", std::process::id()));
     let created = std::fs::OpenOptions::new().write(true).create_new(true).open(&probe).is_ok();
     if created && let Err(e) = std::fs::remove_file(&probe) {
-        eprintln!("could not remove {}: {e}", probe.display());
+        crate::diagnostics::log::warn("update", format_args!("could not remove {}: {e}", probe.display()));
     }
     created
 }
@@ -201,7 +201,7 @@ impl Mount {
         let args = ["attach", "-nobrowse", "-readonly", "-noverify", "-noautoopen", "-mountpoint"];
         if let Err(e) = run("hdiutil", Command::new(system_tool("hdiutil")).args(args).arg(&point).arg(dmg)) {
             if let Err(e) = std::fs::remove_dir(&point) {
-                eprintln!("could not remove {}: {e}", point.display());
+                crate::diagnostics::log::warn("update", format_args!("could not remove {}: {e}", point.display()));
             }
             return Err(match e {
                 UpdateError::Tool { detail, .. } => UpdateError::MountFailed(detail),
@@ -226,11 +226,11 @@ impl Drop for Mount {
         if let Err(first) = detach(false)
             && let Err(second) = detach(true)
         {
-            eprintln!("could not unmount {}: {first}; {second}", self.point.display());
+            crate::diagnostics::log::warn("update", format_args!("could not unmount {}: {first}; {second}", self.point.display()));
             return;
         }
         if let Err(e) = std::fs::remove_dir(&self.point) {
-            eprintln!("could not remove {}: {e}", self.point.display());
+            crate::diagnostics::log::warn("update", format_args!("could not remove {}: {e}", self.point.display()));
         }
     }
 }
@@ -304,7 +304,7 @@ fn swap(
     match exchange(app, staged) {
         Ok(()) => return Ok(staged.to_path_buf()),
         Err(e) if exchange_unsupported(&e) => {}
-        Err(e) => eprintln!("could not exchange the app atomically, replacing it in two steps: {e}"),
+        Err(e) => crate::diagnostics::log::warn("update", format_args!("could not exchange the app atomically, replacing it in two steps: {e}")),
     }
     rename(app, old).map_err(io_err("move the installed app aside"))?;
     if let Err(e) = rename(staged, app) {
@@ -342,7 +342,7 @@ pub(crate) fn install_mac(dmg: &Path, version: &str, app: &Path) -> Result<Insta
     staged_guard.keep();
     // The new app is in place; a failure from here on must not turn the update into an error.
     if let Err(e) = std::fs::remove_dir_all(&previous) {
-        eprintln!("could not remove the previous version at {}: {e}", previous.display());
+        crate::diagnostics::log::warn("update", format_args!("could not remove the previous version at {}: {e}", previous.display()));
     }
     Ok(InstallPlan::MacApp { app: app.to_path_buf() })
 }
@@ -395,7 +395,7 @@ fn sweep_dir(parent: &Path, app_present: bool, temp: &Path) {
             if prefix == MOUNT_PREFIX {
                 remove_mount_point(&path);
             } else if let Err(e) = std::fs::remove_dir_all(&path) {
-                eprintln!("could not remove {}: {e}", path.display());
+                crate::diagnostics::log::warn("update", format_args!("could not remove {}: {e}", path.display()));
             }
         }
     }
@@ -407,11 +407,11 @@ fn remove_mount_point(point: &Path) {
     if is_mount_point(point)
         && let Err(e) = run("hdiutil", Command::new(system_tool("hdiutil")).args(["detach", "-force"]).arg(point))
     {
-        eprintln!("could not unmount {}: {e}", point.display());
+        crate::diagnostics::log::warn("update", format_args!("could not unmount {}: {e}", point.display()));
         return;
     }
     if let Err(e) = std::fs::remove_dir(point) {
-        eprintln!("could not remove {}: {e}", point.display());
+        crate::diagnostics::log::warn("update", format_args!("could not remove {}: {e}", point.display()));
     }
 }
 
@@ -442,7 +442,7 @@ pub fn sweep_at_start(kind: &InstallKind, downloads: Option<PathBuf>) {
         }
     });
     if let Err(e) = spawned {
-        eprintln!("could not start the clean-up of old update files: {e}");
+        crate::diagnostics::log::warn("update", format_args!("could not start the clean-up of old update files: {e}"));
     }
 }
 
@@ -451,12 +451,12 @@ fn sweep_downloads(dir: &Path, now: std::time::SystemTime) {
     match age {
         Ok(age) if age >= STALE_DOWNLOADS => {
             if let Err(e) = std::fs::remove_dir_all(dir) {
-                eprintln!("could not remove {}: {e}", dir.display());
+                crate::diagnostics::log::warn("update", format_args!("could not remove {}: {e}", dir.display()));
             }
         }
         Ok(_) => {}
         Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-        Err(e) => eprintln!("could not look at {}: {e}", dir.display()),
+        Err(e) => crate::diagnostics::log::warn("update", format_args!("could not look at {}: {e}", dir.display())),
     }
 }
 
