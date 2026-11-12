@@ -17,6 +17,14 @@ expect them to print. Paths of the machine they were captured on are replaced by
 `ignored_one` marked `#[ignore = "slow"]`), `src/main.rs` (`main` and `tests::main_is_fine`) and `tests/integration.rs`
 (`adds_from_outside`, and `panics_with_unicode`, which panics with `ğüşıöç 😀`). `tests::fails_on_purpose` compares 3 with 4.
 
+## `matchers/`
+
+Output of real compilers and interpreters for the per-task problem matchers (`task_matchers_tests.rs`): `clang-errors.txt`
+(Apple clang 21.0.0, `clang -Wall -c şablon.c`: two errors and a warning in a file with a Turkish name), `cargo-errors.txt`
+(`cargo build --color never` on a two-line program with two errors; the project path is replaced by `/work/t`) and
+`python-traceback.txt` (Python 3.9.6 `ValueError`). The tests also feed them with CRLF line ends and in tiny chunks.
+tsc and eslint were not installed on the capture machine, so their matchers are covered by the engine's synthetic tests only.
+
 ## `rust-analyzer/`
 
 Captured by starting `rust-analyzer` on `demo` as a language server (stdio), initializing with the client capabilities

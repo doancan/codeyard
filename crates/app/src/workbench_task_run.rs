@@ -10,6 +10,7 @@ use gpui::{AppContext as _, Context, Entity, Window};
 use task_engine::model::Input;
 use task_engine::schedule::State;
 
+use super::notifications_glue::model::{Notification, Severity};
 use super::tasks::Task;
 use super::{Notice, NoticeSource, OverlayKind, Workbench};
 use crate::picker::{PickItem, Picker, Source as PickSource};
@@ -281,6 +282,19 @@ impl Workbench {
         }
         if effects.problems {
             self.publish_run_problems(cx);
+        }
+        for node in &effects.capped {
+            let label = self.run_mut(token).map(|l| l.run.task(*node).label.clone()).unwrap_or_default();
+            let text = crate::i18n::tf("“{0}” found more than {1} problems: only the first {1} are shown.", &[&label, &task_run::MAX_PROBLEMS]);
+            self.notify_with(Notification::new(Severity::Warning, NoticeSource::Tasks, text).id(format!("matcher-capped:{label}")));
+        }
+        for node in &effects.unreadable {
+            let label = self.run_mut(token).map(|l| l.run.task(*node).label.clone()).unwrap_or_default();
+            let text = crate::i18n::tf(
+                "The problem matcher of “{}” skipped a line it could not read (too long, or the pattern took too long). Problems from that task may be missing.",
+                &[&label],
+            );
+            self.notify_with(Notification::new(Severity::Warning, NoticeSource::Tasks, text).id(format!("matcher-unreadable:{label}")));
         }
         for node in effects.start {
             self.spawn_node(token, node, window, cx);

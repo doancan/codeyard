@@ -141,6 +141,18 @@ fn builtin(name: &str) -> Result<Value, Error> {
             value["background"] = json!({"activeOnStart":true,"beginsPattern":r"(?:Starting compilation|File change detected).*","endsPattern":r"(?:Found \d+ errors?\. Watching for file changes\.|Compilation complete\. Watching for file changes\.)"});
             value
         }
+        "$rustc-watch" => {
+            // rust-analyzer's own task wrapper prints these two markers around each check.
+            let mut value = builtin("$rustc")?;
+            value["background"] = json!({"activeOnStart":true,"beginsPattern":r"^\[Running\b","endsPattern":r"^\[Finished running\b"});
+            value
+        }
+        "$jshint" => {
+            json!({"owner":"javascript","source":"jshint","severity":"warning","pattern":{"regexp":r"^(.+): line (\d+), col (\d+), (.+)$","file":1,"line":2,"column":3,"message":4}})
+        }
+        "$lessCompile" => {
+            json!({"owner":"less","source":"less","severity":"error","pattern":{"regexp":r"^\s*(.*) in file (.*) line no. (\d+)$","message":1,"file":2,"line":3}})
+        }
         "$gcc" | "$go" => {
             json!({"pattern":{"regexp":r"^(.*?):(\d+):(?:(\d+):)?\s*(?:(error|warning|info):\s*)?(.*)$","file":1,"line":2,"column":3,"severity":4,"message":5}})
         }

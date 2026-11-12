@@ -1247,11 +1247,30 @@ server):
   every running task and everything it started; "Tasks: Restart Running Task" starts it again, and running
   a task that is still running restarts it. Closing a task's terminal stops it too.
 
-`problemMatcher` (a built-in name such as `$tsc`, `$gcc`, `$rustc`, `$eslint-stylish`, or your own
-`pattern`, including multi-line ones) turns output lines into entries in the Problems panel and
-underlines in the editor; a watcher's `beginsPattern` clears the previous build's problems. Tasks without
-a matcher still get their compiler messages (gcc / clang, Go, javac, rustc / cargo, tsc / MSBuild, eslint
-stylish) found automatically. Running another task clears them. Click a problem to jump to it.
+`problemMatcher` turns output lines into entries in the Problems panel and underlines in the editor. It is read
+like VS Code's, so a `tasks.json` you bring along keeps working:
+
+- A built-in name: `$gcc` (also clang), `$go`, `$tsc`, `$tsc-watch`, `$eslint-stylish`, `$eslint-compact`,
+  `$msCompile`, `$jshint`, `$lessCompile`, `$rustc` and `$rustc-watch`. A list can mix names and objects. `$jshint`
+  reads the plain `file: line N, col N, message` format as a warning, without VS Code's severity and code suffix.
+- Your own object: `owner`, `severity` (the default for a pattern with no severity group), `fileLocation`
+  (`"absolute"`, or `["relative", "${workspaceFolder}/sub"]`) and a `pattern` with `regexp` and the groups `file`,
+  `line`, `column`, `endLine`, `endColumn`, `location`, `severity`, `code` and `message`. A list of patterns matches
+  consecutive lines (a file line, then the message under it); `"loop": true` on the last one keeps reading
+  problems that share the first lines. `"base": "$tsc"` starts from a built-in and changes some fields.
+- `background` with `beginsPattern` and `endsPattern` (and `activeOnStart`) for watchers: each new
+  begin clears the problems of the previous cycle, and the end pattern is what makes the task "ready".
+
+Patterns are regular expressions checked against one output line at a time. A line over 64 KiB, or a pattern that
+needs too many steps on a line (nested repetition with a back-reference, for example), is skipped; the task's
+problems may then be incomplete and a notification says so once per run. A pattern that does not compile, or a group
+number it does not have, stops the task before it starts and says which task and why. A task keeps at most 1,000
+problems; when more are found, a notification says once per run that only the first 1,000 are shown. Problem paths are resolved on the machine the task runs on, relative to the folder (or the
+`fileLocation` base). The matchers only read output; they never run anything, and the task itself still waits for
+Workspace Trust.
+
+Tasks without a matcher still get their compiler messages (gcc / clang, Go, javac, rustc / cargo, tsc / MSBuild,
+eslint stylish) found automatically. Running another task clears them. Click a problem to jump to it.
 
 A debug configuration's `preLaunchTask` runs the same way, and the debugger starts only after it
 succeeds (or, for a background task, becomes ready). If it fails, debugging does not start and the

@@ -2682,6 +2682,7 @@ The patch is too large.
 The patch was not applied: {}	
 The pattern does not parse: {0} (line {1}, column {2})	
 The preLaunchTask “{0}” did not succeed ({1}), so debugging was not started. Check its terminal, then start debugging again.	
+The problem matcher of “{}” skipped a line it could not read (too long, or the pattern took too long). Problems from that task may be missing.	
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	
 The program is running: pause it first, or set a breakpoint.	
 The project's Rust toolchain is not installed. Run `rustup toolchain install` in the project folder.	
@@ -3765,6 +3766,7 @@ your words
 “folders” must be a list	
 “localhost” means {0}: for a service on your own computer set http.runOn to {1}.	
 “{0}” cannot be written in {1}: not changed.	
+“{0}” found more than {1} problems: only the first {1} are shown.	
 “{0}” is not a valid regular expression ({1}). Escape special characters with a backslash.	
 “{}” already exists. Replace it?	
 “{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	
