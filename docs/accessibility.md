@@ -29,7 +29,8 @@ The tree, in the order a screen reader walks it:
   terminal toggle, merge conflicts, a data path, the web preview's Open and Stop) joined to the status bar's node; the
   resource monitor (its "Resources" button, expanded while the figures show, each figure as a label, Pin and Close);
   the error card's Reconnect and Close; the containers' "Back to SSH workspace" bar; the breadcrumbs (`Link`s that
-  show the folder or file in the Explorer); the menu bar the app draws on Windows and Linux (`MenuItem`s that open
+  show the folder or file in the Explorer, then a `Button` per symbol around the cursor, with its kind as description, that
+  opens a picker of the symbols at its level); the menu bar the app draws on Windows and Linux (`MenuItem`s that open
   their menu under them); the panel's buttons (New Terminal, Launch Profile…, Split Terminal, Kill Terminal, Move
   Panel, Maximize or Restore, Hide Panel) and its list of terminals ("Terminals": a `Tab` each, selected while in
   front, with Kill Terminal; Move Terminal Up and Down reorder them from the palette and the menu, as dragging does for the
@@ -41,7 +42,7 @@ The tree, in the order a screen reader walks it:
 - The side views' drawn controls, declared the same way: the Explorer's empty-state buttons (Open Folder, Open
   recent), header buttons (New File, New Folder, Refresh, Expand and Collapse Folders), each section's header (a
   `Button` with its count, expanded while open; `Click` folds it), the open editors (a `ListItem` each, selected while
-  in front, with Close), favorites, the outline (`TreeItem`s with their line, selected at the caret) and the timeline
+  in front, with Close), favorites, the outline (a "Filter symbols" `TextInput`, a "Sort: Position / Name / Kind" `Button` that changes the order, a "Follow Cursor" toggle `Button`, and `TreeItem`s with their kind and line as description, selected at the caret) and the timeline
   (saved copies and commits), and its notes as labels; Source Control's Refresh and More Actions…, the Stashes header
   and each stash's Apply, Pop and Drop (the stash as description), a repository's fold button; the Search view's
   Clear field, Previous and Next result, Expand or Collapse all, Open in a Search Editor tab, Run again, Clear and, in
@@ -127,12 +128,18 @@ The tree, in the order a screen reader walks it:
   frame. Actions name the commit hash, worktree path, file of that commit or label the tree showed: from an outdated
   tree they do nothing when it changed, and a header or the search toggle only acts from the state that was read.
 - While the Problems panel is open, a `List` labeled with the number of problems: first a polite `Status` with the
-  counts ("2 errors, 1 warnings", spoken when it changes), then a `Heading` per file and a `ListItem` per problem
-  ("Error: …", with file, line and column as its description) or related location, each with `Click` to open it and its
-  painted frame. A problem holds a "Quick Fix…" `Button` (a list popup): it opens the problem at its place and asks for
-  its fixes there, as Quick Fix at the caret does; they come as the picker below, whose option applies the fix, and the
-  keyboard is back in the editor afterwards. At most 2,000 rows are exposed. With nothing to show, a polite `Status`
-  says "No problems.". An activation from an outdated tree opens or fixes nothing unless the same row is still at the
+  counts ("2 errors, 1 warnings", spoken when it changes; with a filter on, "Showing 2 of 3 problems: 1 errors, 0
+  warnings, 1 information"), then a `Heading` per file (expanded or collapsed; `Click` folds or opens its problems) and
+  a `ListItem` per problem ("Error: …", with file, line, column and source as its description) or related location,
+  each with `Click` to open it and its painted frame. A problem holds a "Quick Fix…" `Button` (a list popup): it opens
+  the problem at its place and asks for its fixes there, as Quick Fix at the caret does; they come as the picker below,
+  whose option applies the fix, and the keyboard is back in the editor afterwards. A second `Button`, "Copy Problem",
+  copies the problem's line. At most 2,000 rows are exposed. With nothing to show, a polite `Status` says "No
+  problems." or, when the filter hides everything, "No problems match the filter.". The filter bar is painted controls
+  of the surface "Problems": the switches "Show Errors", "Show Warnings" and "Show Information" (toggle `Button`s with
+  their count as description), the text input "Filter problems", and the buttons "Active File Only" (a toggle), "Sort:
+  File" (it names the current order; pressing it changes the order), "Collapse All Files" / "Expand All Files" and
+  "Copy All Problems". The list takes the keyboard as one stop (Up, Down, Home, End, Enter), like the other lists. An activation from an outdated tree opens or fixes nothing unless the same row is still at the
   same place.
 - While the bottom panel is open, a `TabList` with its tabs (Problems, Output, Debug Console while debugging, Ports,
   Terminal), the selected one marked and counts as descriptions; `Click` switches tabs. While Output is shown, a polite
@@ -147,7 +154,9 @@ The tree, in the order a screen reader walks it:
   options as `CheckBox`es (Match case, Whole word, Regular expression, Preserve case when replacing, Structural search;
   `Click` toggles from the state the tree showed), the replacement (`TextInput`), Replace All (disabled until there are
   results; it opens the review as the button does), the "Files to include / exclude" disclosure `Button` (expanded
-  while the two fields show) and those fields, the status line as a polite `Status` and a search or pattern error as an
+  while the two fields show) and those fields, the scope chips "Workspace", "Open Editors", "Changed Files" and "Current
+  Folder" (toggle `Button`s of the surface "Search"; pressing one limits the search and searches again) with a `Label`
+  that says what the scope means ("Only the 3 open files."), the status line as a polite `Status` and a search or pattern error as an
   assertive `Alert`, then a `Tree` "Search results" of up to 500 rows around the current match (or the rows on screen;
   scroll up/down by 100 rows moves the range): a file per level-1 `TreeItem` (folder as description, match count as
   value, `Expand`/`Collapse`/`Click`, with "Replace in this file" and "Dismiss this file from the results") and its

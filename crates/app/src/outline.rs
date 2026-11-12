@@ -4,23 +4,65 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[path = "outline_model.rs"]
+pub mod model;
+
+/// What a symbol is. The order is the one the Outline groups by.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Kind {
-    Function,
-    Type,
     Module,
+    Class,
+    Type,
+    Interface,
+    Enum,
+    Function,
+    Method,
+    Property,
+    Field,
+    Variable,
+    Constant,
     Heading,
     Section,
+    Other,
 }
 
 impl Kind {
+    /// The mark drawn in the icon.
     pub fn glyph(self) -> &'static str {
         match self {
-            Kind::Function => "ƒ",
-            Kind::Type => "◇",
             Kind::Module => "▪",
+            Kind::Class => "C",
+            Kind::Type => "◇",
+            Kind::Interface => "I",
+            Kind::Enum => "E",
+            Kind::Function | Kind::Method => "ƒ",
+            Kind::Property => "p",
+            Kind::Field => "f",
+            Kind::Variable => "v",
+            Kind::Constant => "K",
             Kind::Heading => "#",
             Kind::Section => "§",
+            Kind::Other => "•",
+        }
+    }
+
+    /// The kind in words (for the accessibility tree and the sibling picker).
+    pub fn label(self) -> &'static str {
+        match self {
+            Kind::Module => crate::i18n::t("module"),
+            Kind::Class => crate::i18n::t("class"),
+            Kind::Type => crate::i18n::t("type"),
+            Kind::Interface => crate::i18n::t("interface"),
+            Kind::Enum => crate::i18n::t("enum"),
+            Kind::Function => crate::i18n::t("function"),
+            Kind::Method => crate::i18n::t("method"),
+            Kind::Property => crate::i18n::t("property"),
+            Kind::Field => crate::i18n::t("field"),
+            Kind::Variable => crate::i18n::t("variable"),
+            Kind::Constant => crate::i18n::t("constant"),
+            Kind::Heading => crate::i18n::t("heading"),
+            Kind::Section => crate::i18n::t("section"),
+            Kind::Other => crate::i18n::t("symbol"),
         }
     }
 }
@@ -31,6 +73,10 @@ pub struct Symbol {
     pub kind: Kind,
     /// 0-based line.
     pub line: usize,
+    /// Column of the name (UTF-16, as a language server counts); 0 when the symbol comes from a line pattern.
+    pub col: usize,
+    /// Last line of the symbol's range.
+    pub end_line: usize,
     /// Nesting (from indentation or heading level).
     pub depth: usize,
 }
@@ -125,16 +171,18 @@ pub fn extract(path: &str, lines: &[String]) -> Option<Vec<Symbol>> {
                 let indent = l.chars().take_while(|c| *c == ' ' || *c == '\t').fold(0, |n, c| n + if c == '\t' { 4 } else { 1 });
                 (indent / 4).min(6)
             };
-            out.push(Symbol { name, kind: r.kind, line: i, depth });
+            out.push(Symbol { name, kind: r.kind, line: i, col: 0, end_line: i, depth });
             break;
         }
     }
+    model::fill_ends(&mut out, lines.len());
     Some(out)
 }
 
-/// Symbol the cursor is in: the last one starting at or before the cursor's line.
+/// Symbol the cursor is in: the innermost one whose range holds the cursor's line, else the last one starting before it
+/// (so the Outline still marks where you are between two functions).
 pub fn current(symbols: &[Symbol], cursor_line: usize) -> Option<usize> {
-    symbols.iter().rposition(|s| s.line <= cursor_line)
+    model::path_at(symbols, cursor_line).last().copied().or_else(|| symbols.iter().rposition(|s| s.line <= cursor_line))
 }
 
 #[cfg(test)]

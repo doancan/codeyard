@@ -528,6 +528,8 @@ pub struct Symbol {
     pub kind: u8,
     pub line: u32,
     pub col: u32,
+    /// The last line of the symbol's range (its own line when the server gave none).
+    pub end_line: u32,
     pub depth: usize,
 }
 
@@ -563,12 +565,15 @@ pub fn parse_symbols(v: &Value) -> Vec<Symbol> {
         for it in items {
             let range = if it.get("selectionRange").is_some() { &it["selectionRange"] } else { &it["location"]["range"] };
             let (line, col) = parse_range(range).0;
+            let full = if it.get("range").is_some() { &it["range"] } else { &it["location"]["range"] };
+            let end_line = if full.is_object() { parse_range(full).1.0.max(line) } else { line };
             out.push(Symbol {
                 name: it["name"].as_str().unwrap_or_default().to_string(),
                 detail: it["detail"].as_str().or(it["containerName"].as_str()).unwrap_or_default().to_string(),
                 kind: it["kind"].as_u64().unwrap_or(0) as u8,
                 line,
                 col,
+                end_line,
                 depth,
             });
             if let Some(children) = it["children"].as_array() {
@@ -580,7 +585,8 @@ pub fn parse_symbols(v: &Value) -> Vec<Symbol> {
     if let Some(a) = v.as_array() {
         walk(a, 0, &mut out);
     }
-    out.sort_by_key(|s| (s.line, s.col));
+    // Stable, and a symbol before the ones it holds when they start at the same place.
+    out.sort_by_key(|s| (s.line, s.col, s.depth));
     out
 }
 
@@ -1124,5 +1130,32 @@ mod tests {
         assert_eq!(parse_locations(&json!([loc, loc])).len(), 2);
         assert_eq!(parse_locations(&json!([link])), vec![("/p/src/lib.rs".to_string(), (3, 4))]);
         assert!(parse_locations(&Value::Null).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod symbol_order_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn at(line: u32, col: u32) -> Value {
+        json!({ "start": {"line": line, "character": col}, "end": {"line": line, "character": col + 1} })
+    }
+
+    #[test]
+    fn symbols_at_the_same_place_keep_their_order_and_a_parent_comes_before_its_child() {
+        let item = |name: &str, line, col, children: Value| json!({ "name": name, "kind": 12, "range": at(line, col), "selectionRange": at(line, col), "children": children });
+        // Same position, same depth: the order the server gave. A child at its parent's position follows it.
+        let flat = parse_symbols(&json!([item("second", 3, 0, json!([])), item("first", 3, 0, json!([])), item("early", 1, 0, json!([]))]));
+        assert_eq!(flat.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["early", "second", "first"]);
+        let nested = parse_symbols(&json!([item("outer", 2, 4, json!([item("inner", 2, 4, json!([]))]))]));
+        assert_eq!(nested.iter().map(|s| (s.name.as_str(), s.depth)).collect::<Vec<_>>(), [("outer", 0), ("inner", 1)]);
+    }
+
+    #[test]
+    fn a_server_range_gives_the_last_line() {
+        let v = json!([{ "name": "f", "kind": 12, "range": { "start": {"line": 1, "character": 0}, "end": {"line": 9, "character": 1} }, "selectionRange": at(1, 3) }]);
+        let s = parse_symbols(&v);
+        assert_eq!((s[0].line, s[0].end_line), (1, 9));
     }
 }

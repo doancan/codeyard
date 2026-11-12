@@ -871,20 +871,22 @@ impl Workbench {
                     .into_any_element(),
             );
         }
+        let symbols = self.symbol_crumbs(p, cx);
+        // On a narrow editor the folders give way (their start is cut off) so the file and its symbols stay visible.
         Some(
             div()
                 .h(px(layout::BREADCRUMBS_H))
                 .flex_none()
                 .flex()
                 .items_center()
-                .gap(px(theme::SPACE[1]))
                 .px(px(theme::SPACE[5]))
                 .bg(c(p.bg))
                 .text_size(px(text::XS.0))
                 .text_color(c(p.text_muted))
                 .overflow_hidden()
                 .whitespace_nowrap()
-                .children(items),
+                .child(div().flex().flex_shrink().min_w_0().overflow_hidden().justify_end().items_center().gap(px(theme::SPACE[1])).children(items))
+                .child(div().flex().flex_none().items_center().gap(px(theme::SPACE[1])).children(symbols)),
         )
     }
 

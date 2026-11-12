@@ -177,9 +177,11 @@ impl Workbench {
                     .flex()
                     .justify_center()
                     .pt(px(top))
+                    // A window narrower than the picker keeps it whole inside, with a margin.
+                    .px(px(theme::SPACE[3]))
                     // Click outside = Esc.
                     .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.on_overlay_event(&PickerEvent::Dismiss, window, cx)))
-                    .child(div().occlude().child(picker)),
+                    .child(div().id("picker-layer").occlude().min_w_0().max_w_full().debug_selector(|| "picker-layer".into()).child(picker)),
             )
             .into_any_element(),
         )
@@ -219,6 +221,7 @@ impl Render for Workbench {
         self.sync_slots(cx);
         self.sync_timeline(cx);
         self.sync_outline(cx);
+        self.sync_search_scope(cx);
         self.sync_ext_views_frame(cx);
         self.sync_update_window(window, cx);
         let remote = self.remote.host.is_remote();

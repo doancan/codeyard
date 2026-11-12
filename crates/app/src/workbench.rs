@@ -131,10 +131,13 @@ mod lsp_glue;
 mod menus_glue;
 #[path = "workbench_nav.rs"]
 mod nav_glue;
+#[path = "workbench_outline.rs"]
+pub(crate) mod outline_glue;
 #[path = "workbench_palette.rs"]
 mod palette_glue;
+use outline_glue::OutlineState;
 #[path = "workbench_panels.rs"]
-mod panels_glue;
+pub(crate) mod panels_glue;
 #[cfg(test)]
 pub use panels_glue::ProblemRow;
 #[cfg(test)]
@@ -169,7 +172,7 @@ mod replace_glue;
 #[path = "workbench_schema.rs"]
 mod schema_glue;
 #[path = "workbench_search_editor.rs"]
-mod search_editor_glue;
+pub(crate) mod search_editor_glue;
 #[path = "workbench_session.rs"]
 mod session_glue;
 #[path = "workbench_settings.rs"]
@@ -572,17 +575,6 @@ const FILE_LIMIT: u32 = 100_000;
 
 /// Midnight / Daylight following the system light/dark mode.
 pub const THEME_AUTO: &str = "auto";
-
-/// Explorer OUTLINE section: symbols of the active file (refreshed at most every 400 ms while typing).
-#[derive(Default)]
-struct OutlineState {
-    key: Option<(String, u64)>,
-    symbols: Vec<crate::outline::Symbol>,
-    supported: bool,
-    too_large: bool,
-    computed_at: Option<std::time::Instant>,
-    refresh_pending: bool,
-}
 
 /// Pages opened as tabs.
 #[derive(Clone)]
@@ -1085,9 +1077,8 @@ impl Workbench {
                     this.tabs.pending_reveal = Some((path.clone(), *line, *column, *len));
                     this.open_file(path.clone(), window, cx);
                 }
-                SearchEvent::OpenInEditor(spec) => {
-                    this.open_search_editor(spec.clone(), None, window, cx);
-                }
+                SearchEvent::OpenInEditor(spec) => drop(this.open_search_editor(spec.clone(), None, window, cx)),
+                SearchEvent::ScopeChanged => this.sync_search_scope(cx),
                 SearchEvent::ReviewReplace { spec, only } => {
                     let review = match only {
                         Some(path) => crate::search_editor::Review::Only(path.clone()),
@@ -1324,6 +1315,7 @@ impl Workbench {
                 web_preview: Default::default(),
                 panel: Some(Panel::Explorer),
                 bottom: Bottom::Terminal,
+                problems: Default::default(),
                 sidebar_w,
                 resizing_sidebar: false,
                 panel_open: false,
@@ -1937,6 +1929,7 @@ impl Workbench {
         self.restore_tree(cx);
         self.restore_extra_roots(cx);
         self.load_debug_state(cx);
+        self.load_problems_filter(cx);
         self.load_favorites();
         self.restore_forwards(cx);
         self.load_project_settings(cx);

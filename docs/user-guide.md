@@ -156,7 +156,10 @@ to the right / saved, pin, copy path; drag tabs to reorder them or onto the othe
 Right-click in the editor for go to definition / references, rename, cut/copy/paste,
 file history and blame. A single click in the tree opens a preview tab (italic) that the next
 preview replaces; editing or double-clicking keeps it. Tabs of files with the same name show
-the folder that tells them apart; the breadcrumbs above the editor reveal a folder in the tree.
+the folder that tells them apart; the breadcrumbs above the editor reveal a folder in the tree. After the file name the
+breadcrumbs show where the cursor is in the code, as a chain of symbols (`Shape › area`), each with the icon of its kind. A
+click on a symbol opens a list of the symbols at the same level; choosing one goes there. *Go: Pick Symbol at the Cursor's
+Level* does the same from the palette. On a narrow editor the folders give way, so the file and the symbols stay visible.
 
 **Explorer.** Vertical guides under every folder arrow show the hierarchy; the guide of the
 selected folder is highlighted. Folders that only hold one folder show as one row
@@ -322,6 +325,23 @@ while switching focus; session restoration currently saves text-document tabs an
 **Find in files** (⇧⌘F) has a replace field. "Replace All" (or ↵ in the field, or "replace in
 this file" on a result) does not write anything: it opens a Search Editor with a replacement
 preview, described below.
+
+**Scopes.** Under the file filter, *Search in:* chooses what Find in files looks in: **Workspace** (the default),
+**Open Editors** (the files that are open now), **Changed Files** (what Git reports as changed: staged, unstaged and
+untracked) or **Current Folder** (the folder of the file in front, and below it). A line under the chips says what the
+choice means ("Only the 3 open files."); the lists follow the editors and the changes as they move on. While a scope
+limits the search, it replaces "Files to include": the include field is dimmed and the line under the chips says "Files to
+include is not used." (choose Workspace to use it again). Only the files the scope names are listed, a file of the same name
+in another folder is not (a root `README.md` does not bring in `docs/README.md`). Replace All, "replace in this file" and
+*Open in a Search Editor tab* use the same files, so the review shows exactly what the scope covers; a file whose name has
+a comma cannot be written in the Search Editor's include list, so it is left out of that review (the panel lists it). With
+a scope that names no file they do nothing. The palette has *Search: Find in Workspace*, *… in Open Editors*, *… in Changed Files* and *… in
+Current Folder*. The scope looks at what the app already knows (the open tabs and the last Git status), so it runs nothing
+by itself and works the same over SSH.
+
+**History.** ↑ and ↓ in the search field step through the searches you ran with ↵ (the last 30). Each one brings back
+the text, the Match case / Whole word / Regular expression / Preserve case options, the include and exclude filters and the
+scope it was run with, not just the text.
 
 ### Search Editors and replacement review
 
@@ -510,9 +530,18 @@ branches or the current one), *Only My Commits* and *Hide Merge Commits*, and of
 click one to turn it off. Stashes are listed with apply, pop and drop. `"git.graph.limit"`,
 `"git.graph.allBranches"` and `"git.timeline.limit"` tune it; the Changes groups fold too.
 
-**Explorer sections.** OPEN EDITORS, the folder tree, **OUTLINE** (functions, types and
-headings of the open file, found without a language server) and **TIMELINE** (the file's git
+**Explorer sections.** OPEN EDITORS, the folder tree, **OUTLINE** (the symbols of the open file) and **TIMELINE** (the file's git
 commits plus a saved copy for every save, "local history"; click an entry for a diff).
+
+**Outline and breadcrumb symbols.** When a language server runs for the file and offers symbols, the Outline and the
+breadcrumbs use its answer (classes, methods, fields, with their real ranges); until it answers, and for files with no server
+(also over SSH), they use line patterns for the common languages and Markdown headings, which is why a method can show as a
+function there. Each symbol has an icon: a tinted square with a mark for its kind (module, class, type, interface, enum,
+function, property, field, variable, constant, heading). The box above the list filters as you type: every word must be in a
+name, ignoring case (and Turkish i/ı), and the enclosing symbols of a match stay as context. **Sort** cycles *Position*
+(document order, nested), *Name* and *Kind* (flat lists, with the parent's name beside each symbol). **Follow Cursor** (on by
+default) scrolls the list to the symbol the cursor is in as it moves. The sort order and the switch are remembered for each
+workspace. Files over 30,000 lines have no outline.
 Clicking the empty space under the tree clears the selection so new files go to the root; open
 folders are remembered per project; ⇧→ / ⇧← (or the context menu) open or close everything
 inside a folder. Right-click ▸ Find in Folder… limits the search to it.
@@ -1414,6 +1443,18 @@ in Problems they are rows under the problem; a click opens the place. The proble
 *Problems: Copy Full Diagnostic* copies the problem under the cursor the way the compiler prints it in a terminal, with its
 `-->` arrows, notes and help, ready to paste into a question or a search. When a server repeats those places as hints of
 their own, Problems shows them once, under their problem. Scratch files get no language server.
+
+**Filtering and ordering Problems.** The bar above the list has three switches (errors, warnings, information and
+hints) that each show how many problems there are of their kind, a filter box, **Active File Only**, a sort button, a
+button that folds or opens every file, and **Copy All Problems**. The filter box takes words: a problem is listed when
+every word is found in its path, message, code or source, ignoring case (and Turkish i/ı). While something is hidden the
+panel says "Showing 6 of 18 problems". Each row shows the message, then its code, source and line:column. A click on a
+file's line folds or opens its problems; Tab puts the keyboard on the list, Up and Down move, Enter does what a click does.
+**Sort** cycles *File* (files in path order, the worst problem of each first), *Severity* (files with errors first) and
+*Line* (each file's problems in the order of the code). **Copy Problem** (the button on a hovered row) copies the problem
+as `src/lib.rs:12:5: error [rustc E0382] message`; on a file's line it copies all of that file's problems. The palette has
+*Problems: Copy All* and *Problems: Toggle Active File Only*. The switches, text, sort order and folded files are
+remembered for each workspace.
 
 Besides errors, suggestions, hover and definition: rename (F2), references (⇧F12), symbols
 in the file (⇧⌘O), quick fixes (⌘.), format (⇧⌥F, or `"editor.formatOnSave": true`) and

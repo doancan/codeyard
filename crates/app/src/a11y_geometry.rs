@@ -25,6 +25,8 @@ pub(in crate::workbench) enum RowFrame {
     Test,
     Remote,
     Port,
+    /// A row of the Problems panel.
+    Problem,
 }
 
 /// A control of the workbench's own chrome with a frame of its own in the accessibility tree.

@@ -3889,3 +3889,61 @@ Looking for cargo-nextest…	cargo-nextest aranıyor…
 Running with cargo-nextest. Documentation tests are not run.	cargo-nextest ile çalışıyor. Belge testleri çalıştırılmaz.
 Looking for installed targets…	Kurulu hedefler aranıyor…
 {} did not answer within 5 seconds	{} 5 saniye içinde yanıt vermedi
+
+# ---- Problems panel: filter, sort, folding, copy ----
+Show Errors	Hataları göster
+Show Warnings	Uyarıları göster
+Show Information	Bilgileri göster
+Active File Only	Yalnızca etkin dosya
+Changes the order of the problems	Sorunların sırasını değiştirir
+Collapse All Files	Tüm dosyaları daralt
+Expand All Files	Tüm dosyaları genişlet
+Copied {} problem|Copied {} problems	{} sorun kopyalandı
+Copy All Problems	Tüm sorunları kopyala
+Copy Problem	Sorunu kopyala
+Filter problems	Sorunları süz
+No file is open.	Açık dosya yok.
+No problems match the filter.	Süzgece uyan sorun yok.
+Problems: Copy All	Sorunlar: Tümünü Kopyala
+Problems: Toggle Active File Only	Sorunlar: Yalnızca Etkin Dosyayı Aç/Kapat
+Showing {0} of {1} problems	{1} sorundan {0} tanesi gösteriliyor
+Showing {0} of {1} problems: {2} errors, {3} warnings, {4} information	{1} sorundan {0} tanesi gösteriliyor: {2} hata, {3} uyarı, {4} bilgi
+Sort: File	Sıra: Dosya
+Sort: Line	Sıra: Satır
+Sort: Severity	Sıra: Önem
+{0} errors, {1} warnings, {2} information	{0} hata, {1} uyarı, {2} bilgi
+{} problems	{} sorun
+
+# ---- Search: scopes ----
+Workspace	Çalışma Alanı
+Changed Files	Değişen Dosyalar
+Current Folder	Geçerli Klasör
+Search in:	Arama yeri:
+No file is open in this folder.	Bu klasörde açık dosya yok.
+Only the {} open file.|Only the {} open files.	Yalnızca açık {} dosya.
+No changed files.	Değişen dosya yok.
+Only the {} changed file.|Only the {} changed files.	Yalnızca değişen {} dosya.
+The current folder is not inside this folder.	Geçerli klasör bu klasörün içinde değil.
+Only in the folder {}.	Yalnızca {} klasöründe.
+The current folder is the workspace.	Geçerli klasör çalışma alanının kendisi.
+Search: Find in Workspace	Arama: Çalışma Alanında Bul
+Search: Find in Open Editors	Arama: Açık Düzenleyicilerde Bul
+Search: Find in Changed Files	Arama: Değişen Dosyalarda Bul
+Search: Find in Current Folder	Arama: Geçerli Klasörde Bul
+{0} Files to include is not used.	{0} “Dahil edilecek dosyalar” kullanılmıyor.
+
+# ---- Outline and breadcrumb symbols ----
+Changes the order of the symbols	Sembollerin sırasını değiştirir
+Filter symbols	Sembolleri süz
+Follow Cursor	İmleci Takip Et
+Go to symbol at this level	Bu düzeydeki sembole git
+Go: Pick Symbol at the Cursor's Level	Git: İmlecin Düzeyinden Sembol Seç
+No symbols match the filter.	Süzgece uyan sembol yok.
+Sort: Kind	Sıra: Tür
+Sort: Name	Sıra: Ad
+Sort: Position	Sıra: Konum
+heading	başlık
+section	bölüm
+type	tür
+{0} · line {1}	{0} · satır {1}
+{0}. Choose another symbol at this level.	{0}. Bu düzeyde başka bir sembol seçin.
