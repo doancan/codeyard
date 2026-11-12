@@ -144,13 +144,15 @@ impl Workbench {
         let host = self.remote.host.clone();
         let key = key.to_string();
         let k = key.clone();
+        // Only this start's events count while it is the slot's current one (a restart makes the next start current).
+        let start = self.lsp.rust.starts.begin(&key);
         self.lsp.tasks.push(cx.spawn(async move |this, cx| {
             use futures::StreamExt;
             // A busy UI keeps one diagnostics list per file and one progress line, not one entry per server message.
             let mut rx = ui::bridge_coalescing(rx, lsp::merge_server_event);
             while let Some(ev) = rx.next().await {
                 let alive = this.update(cx, |this, cx| {
-                    if this.lsp.generation == generation {
+                    if this.lsp.generation == generation && this.lsp.rust.starts.is_current(&k, start) {
                         this.on_lsp_event(&k, ev, cx);
                     }
                 });
@@ -261,6 +263,7 @@ impl Workbench {
                 }
                 return;
             }
+            ServerEvent::Status(_) | ServerEvent::Flycheck { .. } => return self.on_rust_server_event(key, ev, cx),
             ServerEvent::Message(m) => {
                 self.log_output(format!("[{key}] {}", m.chars().take(2000).collect::<String>()));
                 self.notice = Some(Notice::Info(m.into()));
@@ -311,6 +314,7 @@ impl Workbench {
                     return; // exited while starting: `on_lsp_started` handles it as an error
                 };
                 self.lsp.progress = None;
+                self.lsp.rust.servers.remove(key);
                 // Diagnostics and links of this server's files are dropped.
                 let mut affected = Vec::new();
                 for ed in self.all_editors() {
@@ -382,6 +386,9 @@ impl Workbench {
         self.lsp.tasks.clear();
         self.lsp.diagnostics.clear();
         self.lsp.progress = None;
+        self.lsp.rust.servers.clear();
+        self.lsp.rust.nextest.clear();
+        self.lsp.rust.starts.clear();
         self.lsp.restarts.clear();
     }
 
@@ -480,7 +487,7 @@ fn slot_key(lang: &str, root: &str, primary: Option<&str>) -> String {
     if Some(root) == primary { lang.to_string() } else { format!("{lang}@{root}") }
 }
 
-fn slot_language(slot: &str) -> &str {
+pub(super) fn slot_language(slot: &str) -> &str {
     slot.split_once('@').map_or(slot, |(l, _)| l)
 }
 

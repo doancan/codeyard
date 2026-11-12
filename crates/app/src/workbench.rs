@@ -1276,6 +1276,7 @@ impl Workbench {
             },
             lsp: state_glue::LspState {
                 cargo: Default::default(),
+                rust: Default::default(),
                 restricted_notified: Default::default(),
                 servers: Default::default(),
                 diagnostics: Default::default(),
@@ -2534,6 +2535,7 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
             }
             EditorEvent::OpenMergeEditor => return this.open_merge_editor(&OpenMergeEditor, window, cx),
             EditorEvent::SendRequest(line) => return this.send_request_at(Some(*line), window, cx),
+            EditorEvent::RunAt(line) => return this.run_mark_pressed(ed, *line, window, cx),
             EditorEvent::Extension(_) => return, // workbench_ext_lenses.rs
             EditorEvent::Cargo(choice) => return this.cargo_consent_chosen(*choice, window, cx),
             EditorEvent::Changed => {

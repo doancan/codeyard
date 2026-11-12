@@ -1,0 +1,101 @@
+[
+ {
+  "label": "run demo",
+  "location": {
+   "targetUri": "file:///work/demo/src/main.rs",
+   "targetRange": {
+    "start": {
+     "line": 0,
+     "character": 0
+    },
+    "end": {
+     "line": 2,
+     "character": 1
+    }
+   },
+   "targetSelectionRange": {
+    "start": {
+     "line": 0,
+     "character": 3
+    },
+    "end": {
+     "line": 0,
+     "character": 7
+    }
+   }
+  },
+  "kind": "cargo",
+  "args": {
+   "environment": {
+    "RUSTC_TOOLCHAIN": "/toolchain"
+   },
+   "cwd": "/work/demo",
+   "overrideCargo": null,
+   "workspaceRoot": "/work/demo",
+   "cargoArgs": [
+    "run",
+    "--package",
+    "demo",
+    "--bin",
+    "demo"
+   ],
+   "executableArgs": []
+  }
+ },
+ {
+  "label": "cargo check -p demo --all-targets",
+  "kind": "cargo",
+  "args": {
+   "environment": {
+    "RUSTC_TOOLCHAIN": "/toolchain"
+   },
+   "cwd": "/work/demo",
+   "overrideCargo": null,
+   "workspaceRoot": "/work/demo",
+   "cargoArgs": [
+    "check",
+    "--package",
+    "demo",
+    "--all-targets"
+   ],
+   "executableArgs": []
+  }
+ },
+ {
+  "label": "cargo run -p demo",
+  "kind": "cargo",
+  "args": {
+   "environment": {
+    "RUSTC_TOOLCHAIN": "/toolchain"
+   },
+   "cwd": "/work/demo",
+   "overrideCargo": null,
+   "workspaceRoot": "/work/demo",
+   "cargoArgs": [
+    "run",
+    "--package",
+    "demo"
+   ],
+   "executableArgs": []
+  }
+ },
+ {
+  "label": "cargo test -p demo --all-targets",
+  "kind": "cargo",
+  "args": {
+   "environment": {
+    "RUSTC_TOOLCHAIN": "/toolchain"
+   },
+   "cwd": "/work/demo",
+   "overrideCargo": null,
+   "workspaceRoot": "/work/demo",
+   "cargoArgs": [
+    "test",
+    "--package",
+    "demo",
+    "--all-targets"
+   ],
+   "executableArgs": []
+  }
+ }
+]

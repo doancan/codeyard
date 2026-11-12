@@ -257,10 +257,16 @@ pub fn servers_reload(old: &ServerOverrides, new: &ServerOverrides) -> ServersRe
     keys.sort_unstable();
     keys.dedup();
     let mut settings = Vec::new();
+    // No entry for a language is the default server with no settings, the same as an empty entry: going from one to the
+    // other (a setting that writes server settings for the first time) is a settings change, not a restart.
+    let empty = ServerSpec::default();
+    fn effective<'a>(key: &str, overrides: &'a ServerOverrides, empty: &'a ServerSpec) -> Option<&'a ServerSpec> {
+        override_for(key, overrides).unwrap_or(Some(empty))
+    }
     for key in keys {
-        match (override_for(key, old), override_for(key, new)) {
+        match (effective(key, old, &empty), effective(key, new, &empty)) {
             (a, b) if a == b => {}
-            (Some(Some(a)), Some(Some(b))) if !a.restart_needed(b) => settings.push(key.to_string()),
+            (Some(a), Some(b)) if !a.restart_needed(b) => settings.push(key.to_string()),
             _ => return ServersReload::Restart,
         }
     }

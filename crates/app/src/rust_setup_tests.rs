@@ -102,3 +102,23 @@ fn a_second_reset_in_the_same_second_keeps_the_first_backup() {
     assert_ne!(first, second);
     assert_eq!(std::fs::read_to_string(first).unwrap(), "{ \"mine\": 1 }", "the user's own file survives");
 }
+
+/// With `rust.target` set, the setup points rust-analyzer at the same target so checks and analysis fit what is built;
+/// without one it writes nothing about targets, and Reset removes the line either way.
+#[test]
+fn the_rust_setup_follows_the_chosen_target() {
+    let mut s = Settings::default();
+    let (plain, _) = rust_setup_change(USER, &s, false);
+    assert!(!plain.contains("cargo.target\""), "no target, no line: {plain}");
+
+    s.rust_build.target = Some("aarch64-unknown-linux-musl".into());
+    let (applied, diff) = rust_setup_change(USER, &s, false);
+    let v: Value = serde_json::from_str(&theme::themes::strip_jsonc(&applied)).unwrap();
+    assert_eq!(v["lsp.servers"]["rust"]["settings"]["rust-analyzer.cargo.target"], "aarch64-unknown-linux-musl");
+    assert!(diff.lines().any(|l| l.starts_with('+') && l.contains("rust-analyzer.cargo.target")), "{diff}");
+    assert_eq!(rust_setup_change(&applied, &s, false).1, "", "applying twice changes nothing");
+
+    // The target was cleared in the meantime: Reset still takes the line out, and the file is as it was.
+    let (reset, _) = rust_setup_change(&applied, &Settings::default(), true);
+    assert_eq!(reset, USER);
+}

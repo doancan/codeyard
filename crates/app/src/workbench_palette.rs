@@ -353,6 +353,20 @@ impl Workbench {
             Command::action("Cargo: Update All Dependencies in This File (Compatible)", rust_glue::cargo::UpdateAllCompatible),
             Command::action("Cargo: Update All Dependencies in This File to Latest", rust_glue::cargo::UpdateAllLatest),
             Command::action("Cargo: Check Dependency Updates", rust_glue::cargo::CheckDependencyUpdates),
+            Command::action("Rust: Run Runnable at Cursor", rust_glue::RustRunRunnable),
+            Command::action("Rust: Select Target…", rust_glue::RustSelectTarget),
+            Command::action("Rust: Explain Error at Cursor", rust_glue::RustExplainError),
+            Command::action("Rust: Open Documentation", rust_glue::RustOpenDocs),
+            Command::action("Rust: View HIR", rust_glue::RustViewHir),
+            Command::action("Rust: View MIR", rust_glue::RustViewMir),
+            Command::action("Rust: View Syntax Tree", rust_glue::RustViewSyntaxTree),
+            Command::action("Rust: Show rust-analyzer Status", rust_glue::RustShowStatus),
+            Command::action("Rust: Reload Workspace", rust_glue::RustReloadWorkspace),
+            Command::action("Rust: Rebuild Proc Macros", rust_glue::RustRebuildProcMacros),
+            Command::action("Rust: Run Flycheck", rust_glue::RustRunFlycheck),
+            Command::action("Rust: Cancel Flycheck", rust_glue::RustCancelFlycheck),
+            Command::action("Rust: Clear Flycheck", rust_glue::RustClearFlycheck),
+            Command::action("Rust: Restart rust-analyzer", rust_glue::RustRestartAnalyzer),
             Command::action("View: Output", ShowOutput),
             Command::action("Output: Clear", ClearOutput),
             Command::action("View: Ports (SSH port forwarding)", ShowPorts),
@@ -1102,6 +1116,7 @@ impl Workbench {
             ) => {
                 self.close_overlay(window, cx);
             }
+            (OverlayKind::RustChoice(_), _) => self.on_rust_choice_event(event, window, cx),
             (OverlayKind::ExtPick { .. } | OverlayKind::Input { purpose: InputPurpose::ExtInput { .. }, .. }, _) => {
                 self.on_extension_overlay_event(event, window, cx);
             }

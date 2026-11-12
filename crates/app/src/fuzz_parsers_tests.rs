@@ -509,7 +509,7 @@ fn language_server_and_debugger_replies_survive_any_shape() {
             let _ = parse_hierarchy(&v, None);
             let _ = parse_hierarchy(&v, Some("from"));
             let _ = parse_code_lenses(&v);
-            let _ = decode_semantic_tokens(&v, &legend);
+            let _ = decode_semantic_tokens(&v, &legend, &[]);
             let _ = parse_signature(&v);
             let _ = crate::dap::parse_bp_results(&v);
             let _ = crate::dap::parse_frames(&v);

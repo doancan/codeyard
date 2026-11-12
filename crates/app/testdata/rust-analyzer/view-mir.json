@@ -1,0 +1,1 @@
+"fn add() {\n    let _0: i32;\n    let a_1: i32;\n    let b_2: i32;\n    \n    \n    'bb0: {\n        _0 = a_1 + b_2;\n        StorageDead(b_2)\n        StorageDead(a_1)\n        Terminator { span: ExprId(Idx::<Expr>(3)), kind: Return };\n    }\n}\n"

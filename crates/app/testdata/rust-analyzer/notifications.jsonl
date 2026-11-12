@@ -1,0 +1,18 @@
+{"jsonrpc": "2.0", "method": "experimental/serverStatus", "params": {"health": "ok", "quiescent": false, "message": null}}
+{"jsonrpc": "2.0", "method": "experimental/serverStatus", "params": {"health": "ok", "quiescent": true, "message": null}}
+{"jsonrpc": "2.0", "method": "$/progress", "params": {"token": "rust-analyzer/flycheck/0", "value": {"title": "cargo check", "cancellable": true, "kind": "begin"}}}
+{"jsonrpc": "2.0", "method": "$/progress", "params": {"token": "rust-analyzer/flycheck/0", "value": {"cancellable": true, "message": "demo (lib)", "kind": "report"}}}
+{"jsonrpc": "2.0", "method": "$/progress", "params": {"token": "rust-analyzer/flycheck/0", "value": {"cancellable": true, "message": "demo (lib)", "kind": "report"}}}
+{"jsonrpc": "2.0", "method": "$/progress", "params": {"token": "rust-analyzer/flycheck/0", "value": {"cancellable": true, "message": "demo (bin)", "kind": "report"}}}
+{"jsonrpc": "2.0", "method": "$/progress", "params": {"token": "rust-analyzer/flycheck/0", "value": {"cancellable": true, "message": "demo (bin)", "kind": "report"}}}
+{"jsonrpc": "2.0", "method": "$/progress", "params": {"token": "rust-analyzer/flycheck/0", "value": {"kind": "end"}}}
+{"jsonrpc": "2.0", "method": "experimental/serverStatus", "params": {"health": "ok", "quiescent": false, "message": null}}
+{"jsonrpc": "2.0", "method": "experimental/serverStatus", "params": {"health": "ok", "quiescent": true, "message": null}}
+{"jsonrpc": "2.0", "method": "$/progress", "params": {"token": "rust-analyzer/flycheck/0", "value": {"title": "cargo check", "cancellable": true, "kind": "begin"}}}
+{"jsonrpc": "2.0", "method": "$/progress", "params": {"token": "rust-analyzer/flycheck/0", "value": {"kind": "end"}}}
+{"jsonrpc": "2.0", "method": "$/progress", "params": {"token": "rust-analyzer/flycheck/0", "value": {"title": "cargo check", "cancellable": true, "kind": "begin"}}}
+{"jsonrpc": "2.0", "method": "$/progress", "params": {"token": "rust-analyzer/flycheck/0", "value": {"kind": "end"}}}
+{"jsonrpc": "2.0", "method": "experimental/serverStatus", "params": {"health": "ok", "quiescent": false, "message": null}}
+{"jsonrpc": "2.0", "method": "experimental/serverStatus", "params": {"health": "ok", "quiescent": true, "message": null}}
+{"jsonrpc": "2.0", "method": "$/progress", "params": {"token": "rust-analyzer/flycheck/0", "value": {"title": "cargo check", "cancellable": true, "kind": "begin"}}}
+{"jsonrpc": "2.0", "method": "$/progress", "params": {"token": "rust-analyzer/flycheck/0", "value": {"kind": "end"}}}

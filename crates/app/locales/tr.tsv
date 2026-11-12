@@ -3816,3 +3816,76 @@ Looking up the latest versions on crates.io…	Son sürümler crates.io’da ara
 Show the latest versions of your dependencies? This contacts index.crates.io with the names of the crates in this file.	Bağımlılıklarınızın son sürümleri gösterilsin mi? Bunun için index.crates.io’ya bu dosyadaki crate adları gönderilir.
 Not now	Şimdi değil
 Don’t ask again	Bir daha sorma
+Activity:	Etkinlik:
+Click for details.	Ayrıntılar için tıklayın.
+Health:	Sağlık:
+Idle	Boşta
+Loading the workspace or indexing	Çalışma alanı yükleniyor veya dizinleniyor
+Opens the rust-analyzer status page	rust-analyzer durum sayfasını açar
+Proc macros rebuilt	Prosedürel makrolar yeniden derlendi
+Rebuilding proc macros…	Prosedürel makrolar yeniden derleniyor…
+Reloading the Rust workspace…	Rust çalışma alanı yeniden yükleniyor…
+Restarting rust-analyzer…	rust-analyzer yeniden başlatılıyor…
+Rust check cancelled	Rust denetimi iptal edildi
+Rust check results cleared	Rust denetim sonuçları temizlendi
+Rust check started	Rust denetimi başlatıldı
+Rust workspace reloaded	Rust çalışma alanı yeniden yüklendi
+Rust: Cancel Flycheck	Rust: Flycheck'i İptal Et
+Rust: Clear Flycheck	Rust: Flycheck Sonuçlarını Temizle
+Rust: Rebuild Proc Macros	Rust: Prosedürel Makroları Yeniden Derle
+Rust: Reload Workspace	Rust: Çalışma Alanını Yeniden Yükle
+Rust: Restart rust-analyzer	Rust: rust-analyzer'ı Yeniden Başlat
+Rust: Run Flycheck	Rust: Flycheck'i Çalıştır
+Rust: Show rust-analyzer Status	Rust: rust-analyzer Durumunu Göster
+Server report	Sunucu raporu
+Server:	Sunucu:
+What you can do	Yapabilecekleriniz
+rust-analyzer is not running for this file	rust-analyzer bu dosya için çalışmıyor
+rust-analyzer status	rust-analyzer durumu
+rust-analyzer: checking	rust-analyzer: denetliyor
+rust-analyzer: error	rust-analyzer: hata
+rust-analyzer: loading	rust-analyzer: yükleniyor
+rust-analyzer: ready	rust-analyzer: hazır
+rust-analyzer: warning	rust-analyzer: uyarı
+{0} (+{1} more)	{0} (+{1} tane daha)
+… (cut after {} characters)	… ({} karakterden sonra kesildi)
+Build for target	Hedef için derle
+Building…	Derleniyor…
+Cargo did not report an executable to debug	Cargo hata ayıklanacak bir çalıştırılabilir dosya bildirmedi
+Could not explain {0}: {1}	{0} açıklanamadı: {1}
+Could not list the installed targets: {}	Kurulu hedefler listelenemedi: {}
+Debug {}	{} için hata ayıkla
+Default: build for this machine	Varsayılan: bu makine için derle
+Error code {}	Hata kodu {}
+Explain error {}	{} hatasını açıkla
+HIR of {}	{} için HIR
+Looking up {}…	{} aranıyor…
+MIR of {}	{} için MIR
+No documentation found for the item at the cursor	İmlecin üstündeki öğe için belge bulunamadı
+No rustc error code at the cursor	İmlecin üstünde rustc hata kodu yok
+Nothing to run at the cursor: put it inside a test or main.	İmlecin üstünde çalıştırılacak bir şey yok: imleci bir testin veya main'in içine koyun.
+Nothing to run on this line.	Bu satırda çalıştırılacak bir şey yok.
+Nothing to show for the item at the cursor	İmlecin üstündeki öğe için gösterilecek bir şey yok
+Open a file inside a folder to run it.	Çalıştırmak için bir klasörün içindeki bir dosyayı açın.
+Open a folder first	Önce bir klasör açın
+Run or debug	Çalıştır veya hata ayıkla
+Run or debug on line {}	{}. satırda çalıştır veya hata ayıkla
+Run {}	{} çalıştır
+Syntax tree of {}	{} için sözdizimi ağacı
+The build failed. See Output and Problems for the compiler errors.	Derleme başarısız oldu. Derleyici hataları için Çıktı ve Sorunlar'a bakın.
+rust.target: {} is not a target triple (letters, digits, - _ .)	rust.target: {} bir hedef üçlüsü değil (harf, rakam, - _ .)
+target: {}	hedef: {}
+Rust: Run Runnable at Cursor	Rust: İmlecin Üstündekini Çalıştır
+Rust: Select Target…	Rust: Hedef Seç…
+Rust: Explain Error at Cursor	Rust: İmlecin Üstündeki Hatayı Açıkla
+Rust: Open Documentation	Rust: Belgeleri Aç
+Rust: View HIR	Rust: HIR'yi Göster
+Rust: View MIR	Rust: MIR'ı Göster
+Rust: View Syntax Tree	Rust: Sözdizimi Ağacını Göster
+cargo-nextest was not found, so the tests run with cargo test. Install it with `cargo install cargo-nextest`.	cargo-nextest bulunamadı, bu yüzden testler cargo test ile çalışıyor. `cargo install cargo-nextest` ile kurabilirsiniz.
+rust.semanticModifiers: unknown modifier {} ({})	rust.semanticModifiers: bilinmeyen değiştirici {0} ({1})
+The language server sent a documentation link that is not a web page or a local HTML file, so it was not opened	Dil sunucusu bir web sayfası ya da yerel HTML dosyası olmayan bir belge bağlantısı gönderdi; bu yüzden açılmadı
+Looking for cargo-nextest…	cargo-nextest aranıyor…
+Running with cargo-nextest. Documentation tests are not run.	cargo-nextest ile çalışıyor. Belge testleri çalıştırılmaz.
+Looking for installed targets…	Kurulu hedefler aranıyor…
+{} did not answer within 5 seconds	{} 5 saniye içinde yanıt vermedi

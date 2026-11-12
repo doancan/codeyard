@@ -101,6 +101,7 @@ fn to_lsp_diagnostic(extension: &str, d: &v::Diagnostic) -> Option<crate::lsp::D
         message,
         source: Some(extension.to_string()),
         code: d.code.as_deref().and_then(|c| shown_text(c, limits::ITEM_LEN)),
+        code_href: None,
         related: Vec::new(),
         more_related: 0,
         rendered: None,

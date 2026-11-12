@@ -736,7 +736,10 @@ pub fn write_default_settings(path: &std::path::Path) -> std::io::Result<Option<
 
 /// `text` with the Rust setup written (`reset`: removed), and the unified diff of that change (empty: no change).
 pub fn rust_setup_change(text: &str, s: &Settings, reset: bool) -> (String, String) {
-    let new = settings::rust_setup(s).iter().fold(text.to_string(), |t, (path, v)| settings::set_path_in(&t, path, (!reset).then_some(v)));
+    let mut new = settings::rust_setup(s).iter().fold(text.to_string(), |t, (path, v)| settings::set_path_in(&t, path, (!reset).then_some(v)));
+    if reset {
+        new = settings::set_path_in(&new, &settings::RUST_ANALYZER_TARGET, None);
+    }
     if new == text {
         return (new, String::new());
     }

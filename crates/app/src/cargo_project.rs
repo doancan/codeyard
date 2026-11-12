@@ -91,14 +91,22 @@ pub struct CargoTarget {
     pub build: BuildOptions,
 }
 
-/// How Cargo builds what is run or debugged: `rust.features`, `rust.noDefaultFeatures`, `rust.profile` and
-/// `rust.targetDir`. Cargo resolves a relative folder against the workspace root, on the machine that builds.
+/// The `rust.*` settings: how Cargo builds what is run or debugged (`rust.features`, `rust.noDefaultFeatures`,
+/// `rust.profile`, `rust.targetDir`, `rust.target`), what runs tests, and how rust-analyzer's hints look. Cargo resolves a relative folder against the workspace root, on the machine that builds.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BuildOptions {
     pub features: Vec<String>,
     pub no_default_features: bool,
     pub profile: Option<String>,
     pub target_dir: Option<String>,
+    /// `rust.target`: the target triple to build for (cross-compilation).
+    pub target: Option<String>,
+    /// `rust.testRunner`: `cargo test` or cargo-nextest for tests.
+    pub test_runner: crate::rust_toolchain::nextest::TestRunner,
+    /// `rust.inlayHints.*`: which kinds of hints rust-analyzer sends.
+    pub hints: crate::rust_toolchain::hints::HintKinds,
+    /// `rust.semanticModifiers`: which token modifiers are drawn.
+    pub modifiers: crate::rust_toolchain::hints::Modifiers,
 }
 
 impl BuildOptions {
@@ -113,6 +121,9 @@ impl BuildOptions {
         }
         if let Some(dir) = &self.target_dir {
             parts.push(crate::i18n::tf("output: {}", &[dir]));
+        }
+        if let Some(target) = &self.target {
+            parts.push(crate::i18n::tf("target: {}", &[target]));
         }
         (!parts.is_empty()).then(|| parts.join(" · "))
     }
@@ -150,6 +161,9 @@ impl CargoTarget {
         }
         if let Some(dir) = &self.build.target_dir {
             args.extend(["--target-dir".into(), dir.clone()]);
+        }
+        if let Some(target) = &self.build.target {
+            args.extend(["--target".into(), target.clone()]);
         }
         args
     }
