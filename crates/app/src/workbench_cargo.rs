@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use super::*;
 use crate::cargo_project::deps::config::{self, Source as ConfigSource};
 use crate::cargo_project::deps::edit::{self, Edit, EditError};
-use crate::cargo_project::deps::fetch::{CurlFetch, Fetch, FetchError, Response};
+use crate::cargo_project::deps::fetch::Fetch;
 use crate::cargo_project::deps::hints::{self, Lookups};
 use crate::cargo_project::deps::lock::Lock;
 use crate::cargo_project::deps::manifest::{self, Kind};
@@ -21,7 +21,11 @@ use crate::cargo_project::deps::{context, is_manifest};
 use crate::editor::CargoBinding;
 use crate::i18n::{t, tf, tn};
 
-gpui::actions!(cargo_deps, [AddDependency, RemoveDependency, UpdateDependency, UpdateAllCompatible, UpdateAllLatest]);
+/// The question about contacting crates.io, and the command that does it once (workbench_cargo_consent.rs).
+#[path = "workbench_cargo_consent.rs"]
+mod consent;
+
+gpui::actions!(cargo_deps, [AddDependency, RemoveDependency, UpdateDependency, UpdateAllCompatible, UpdateAllLatest, CheckDependencyUpdates]);
 
 /// The registries by endpoint, shared with the background jobs.
 pub struct Pool {
@@ -57,11 +61,13 @@ fn sanitize(url: &str) -> String {
 }
 
 /// What tests run against when they do not bring their own registry: nothing is reachable.
+#[cfg(test)]
 struct Unreachable;
 
+#[cfg(test)]
 impl Fetch for Unreachable {
-    fn get(&self, _: &str, _: Option<&str>) -> Result<Response, FetchError> {
-        Err(FetchError::Offline)
+    fn get(&self, _: &str, _: Option<&str>) -> Result<crate::cargo_project::deps::fetch::Response, crate::cargo_project::deps::fetch::FetchError> {
+        Err(crate::cargo_project::deps::fetch::FetchError::Offline)
     }
 }
 
@@ -86,11 +92,28 @@ pub(crate) struct CargoState {
     problems: HashMap<String, Vec<crate::lsp::Diagnostic>>,
     lookups: HashMap<String, Arc<Lookups>>,
     search: Option<gpui::Task<()>>,
+    /// Manifests the user asked to look up (Check Dependency Updates, Update All) while `rust.cargo.dependencyLookups` is off:
+    /// they are looked up and kept fresh until their tab closes.
+    explicit: std::collections::HashSet<String>,
+    /// An update waiting for the lookups of a manifest that was just asked for: (one dependency's key span or all, how).
+    pending: HashMap<String, (Option<Range<usize>>, Update)>,
+    /// "Not now" to the question about contacting crates.io: not asked again until the next start.
+    declined: bool,
 }
 
 impl CargoState {
     pub(crate) fn problems_of(&self, path: &str) -> Vec<crate::lsp::Diagnostic> {
         self.problems.get(path).cloned().unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn has_state_for_test(&self, path: &str) -> bool {
+        self.tasks.contains_key(path) || self.lookups.contains_key(path) || self.problems.contains_key(path) || self.explicit.contains(path)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn pool_dropped_for_test(&self) -> bool {
+        self.pool.is_none()
     }
 
     pub(crate) fn all_problems(&self) -> impl Iterator<Item = (&String, &Vec<crate::lsp::Diagnostic>)> {
@@ -132,18 +155,28 @@ fn read_lock(host: &dyn Host, manifest: &str, root: Option<&str>) -> Option<Lock
     }
 }
 
+/// Where the lookups for a manifest go: crates.io, or what the user's Cargo configuration replaces it with; `None` when the
+/// configuration points somewhere that cannot be asked. Over SSH the default is used. Reads files: not on the UI thread.
+fn resolve_endpoints(remote: bool, manifest: &str, cargo_home: Option<&std::path::Path>, trusted: bool) -> Option<Endpoints> {
+    let dir = if remote { None } else { manifest.rsplit_once('/').map(|(d, _)| PathBuf::from(d)) };
+    let Some(dir) = dir else { return Some(Endpoints::default()) };
+    match config::resolve(&config::read_chain(&dir, cargo_home, trusted)) {
+        ConfigSource::Endpoints(e) => Some(e),
+        ConfigSource::Unsupported => None,
+    }
+}
+
+/// A folder counts as trusted for running `cargo` and reading a project's Cargo configuration only when the file is inside a
+/// folder the user trusted: a file outside every folder has no author to trust.
+pub(crate) fn root_is_trusted(root: Option<&str>, trusted: impl Fn(&str) -> bool) -> bool {
+    root.is_some_and(trusted)
+}
+
 /// Parse, look up and build the hints. `None`: the text is not valid TOML right now, so what is shown stays.
 fn analyse(job: Job) -> Option<Analysis> {
     let manifest = manifest::parse(&job.text).ok()?;
-    let local_dir = (!job.host.is_remote()).then(|| job.path.rsplit_once('/').map(|(d, _)| PathBuf::from(d))).flatten();
-    let endpoints = match &local_dir {
-        Some(dir) => match config::resolve(&config::read_chain(dir, job.cargo_home.as_deref(), job.trusted)) {
-            ConfigSource::Endpoints(e) => e,
-            ConfigSource::Unsupported => {
-                return Some(Analysis { binding: None, lookups: Lookups::new(), manifest });
-            }
-        },
-        None => Endpoints::default(),
+    let Some(endpoints) = resolve_endpoints(job.host.is_remote(), &job.path, job.cargo_home.as_deref(), job.trusted) else {
+        return Some(Analysis { binding: None, lookups: Lookups::new(), manifest });
     };
     let registry = job.pool.registry(&endpoints);
     let lock = read_lock(job.host.as_ref(), &job.path, job.root.as_deref()).map(Arc::new);
@@ -160,11 +193,13 @@ impl Workbench {
             .cargo
             .pool
             .get_or_insert_with(|| {
-                if cfg!(test) {
-                    Pool::new(Arc::new(Unreachable), None)
-                } else {
-                    Pool::new(Arc::new(CurlFetch::new()), dirs::cache_dir().map(|d| d.join(host::ssh::APP_DIR).join("cargo-deps")))
-                }
+                #[cfg(test)]
+                return Pool::new(Arc::new(Unreachable), None);
+                #[cfg(not(test))]
+                Pool::new(
+                    Arc::new(crate::cargo_project::deps::fetch::CurlFetch::new()),
+                    dirs::cache_dir().map(|d| d.join(host::ssh::APP_DIR).join("cargo-deps")),
+                )
             })
             .clone()
     }
@@ -176,7 +211,9 @@ impl Workbench {
         if !is_manifest(&path) {
             return;
         }
-        if !cx.global::<Settings>().rust_dependency_lookups {
+        // Off by default: nothing is looked up on its own. A manifest the user asked about (Check Dependency Updates, Update
+        // All) is the exception, until its tab closes.
+        if !cx.global::<Settings>().rust_dependency_lookups && !self.lsp.cargo.explicit.contains(&path) {
             self.lsp.cargo.tasks.remove(&path);
             self.lsp.cargo.lookups.remove(&path);
             if self.lsp.cargo.problems.remove(&path).is_some() {
@@ -187,11 +224,13 @@ impl Workbench {
                 e.set_cargo(None, cx);
                 e.set_cargo_hints(Vec::new(), 0, cx);
             });
+            self.cargo_consider_consent(ed, cx);
             return;
         }
+        ed.update(cx, |e, cx| e.set_cargo_consent(false, cx));
         let root = self.root_of(&path, cx);
         let (host, pool) = (ed.read(cx).host_arc(), self.cargo_pool());
-        let trusted = root.as_deref().is_none_or(|r| self.is_trusted_root(r, cx));
+        let trusted = root_is_trusted(root.as_deref(), |r| self.is_trusted_root(r, cx));
         let cargo_home = (!cfg!(test)).then(|| config::cargo_home(std::env::var_os("CARGO_HOME"), dirs::home_dir())).flatten();
         let weak = ed.downgrade();
         let slot = path.clone();
@@ -247,7 +286,25 @@ impl Workbench {
             e.set_cargo_hints(hints, analysis.manifest.lines, cx);
             e.set_diagnostics(merged, cx);
         });
+        // An update the user asked for before the lookups existed.
+        if let Some((only, how)) = self.lsp.cargo.pending.remove(path) {
+            self.cargo_update_in(ed, only, how, cx);
+        }
         cx.notify();
+    }
+
+    /// The tab of a manifest closed: its tasks, lookups and problems go, and with the last manifest the registries (and what they
+    /// hold in memory) too.
+    pub(in crate::workbench) fn forget_cargo(&mut self, path: &str, cx: &App) {
+        let cargo = &mut self.lsp.cargo;
+        cargo.tasks.remove(path);
+        cargo.lookups.remove(path);
+        cargo.problems.remove(path);
+        cargo.pending.remove(path);
+        cargo.explicit.remove(path);
+        if !self.all_editors().iter().any(|e| is_manifest(&e.read(cx).path)) {
+            self.lsp.cargo.pool = None;
+        }
     }
 
     // --- Quick Fix ---
@@ -315,19 +372,26 @@ impl Workbench {
             notify(self, t("Open a Cargo.toml first"), cx);
             return None;
         };
-        if !cx.global::<Settings>().rust_dependency_lookups {
-            notify(self, t("Dependency lookups are off. Turn on rust.cargo.dependencyLookups in Settings."), cx);
-            return None;
-        }
         Some(ed)
     }
 
     /// Update one dependency (`only` is its key's span) or all of them from the lookups made for this file.
     fn cargo_update(&mut self, only: Option<Range<usize>>, how: Update, cx: &mut Context<Self>) {
         let Some(ed) = self.cargo_editor(cx) else { return };
+        self.cargo_update_in(&ed, only, how, cx);
+    }
+
+    fn cargo_update_in(&mut self, ed: &Entity<EditorView>, only: Option<Range<usize>>, how: Update, cx: &mut Context<Self>) {
+        let ed = ed.clone();
         let path = ed.read(cx).path.clone();
         let Some(lookups) = self.lsp.cargo.lookups.get(&path).cloned() else {
-            notify(self, t("The dependency versions are not loaded yet. Try again in a moment."), cx);
+            if cx.global::<Settings>().rust_dependency_lookups {
+                notify(self, t("The dependency versions are not loaded yet. Try again in a moment."), cx);
+            } else {
+                // Asking for an update is asking for the lookup: one fetch for this file, then the update.
+                self.lsp.cargo.pending.insert(path.clone(), (only, how));
+                self.cargo_look_up_now(&ed, cx);
+            }
             return;
         };
         let (text, version, _) = ed.read(cx).cargo_snapshot();
@@ -392,13 +456,13 @@ impl Workbench {
             return;
         };
         let (path, dirty) = (ed.read(cx).path.clone(), ed.read(cx).is_dirty());
-        let mut args = vec!["remove".to_string(), dep.key.clone()];
-        args.extend(section_flags(dep.kind, dep.target.as_deref()));
-        let use_cargo = !dirty && !dep.in_workspace_table && self.cargo_may_run(&path, cx);
+        // A key that is no crate name (a manifest can say anything) never reaches the command line: the text edit does it.
+        let args = remove_args(&dep);
+        let use_cargo = !dirty && !dep.in_workspace_table && args.is_some() && self.cargo_may_run(&path, cx);
         let host = ed.read(cx).host_arc();
         let task = cx.background_executor().spawn(async move {
             let mut why = None;
-            if use_cargo {
+            if let (true, Some(args)) = (use_cargo, args) {
                 match run_cargo(host.as_ref(), &path, &args) {
                     CargoRun::Done => return Ok(None),
                     CargoRun::Unavailable(m) | CargoRun::Failed(m) => why = Some(first_line(&m)),
@@ -409,10 +473,7 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| match result {
-                Ok(None) => {
-                    ed.update(cx, |e, cx| e.reload(cx));
-                    notify(this, t("Removed with cargo remove"), cx);
-                }
+                Ok(None) => this.cargo_finished(&ed, version, t("Removed with cargo remove").to_string(), cx),
                 Ok(Some((new, old, key, why))) => {
                     let applied = ed.update(cx, |e, cx| e.apply_text_edits(version, &diff(&old, &new), cx));
                     let done = match why {
@@ -446,7 +507,11 @@ impl Workbench {
             Some(Overlay { kind: OverlayKind::CargoAdd { path, .. }, .. }) => path.clone(),
             _ => return,
         };
-        let registry = self.active_editor().filter(|e| e.read(cx).path == path).and_then(|e| e.read(cx).cargo_registry());
+        // The search is the user's own request, so it needs no setting: the registry comes from the pool, not from the binding.
+        let Some(ed) = self.all_editors().into_iter().find(|e| e.read(cx).path == path) else { return };
+        let (remote, pool) = (ed.read(cx).host_arc().is_remote(), self.cargo_pool());
+        let trusted = root_is_trusted(self.root_of(&path, cx).as_deref(), |r| self.is_trusted_root(r, cx));
+        let cargo_home = (!cfg!(test)).then(|| config::cargo_home(std::env::var_os("CARGO_HOME"), dirs::home_dir())).flatten();
         self.lsp.cargo.search = None;
         let typed = query.trim().to_string();
         if typed.is_empty() {
@@ -459,8 +524,8 @@ impl Workbench {
             let found = cx
                 .background_executor()
                 .spawn(async move {
-                    match registry {
-                        Some(r) => r.search(&q),
+                    match resolve_endpoints(remote, &path, cargo_home.as_deref(), trusted) {
+                        Some(endpoints) => pool.registry(&endpoints).search(&q),
                         None => Err(crate::cargo_project::deps::registry::Failure::Unavailable),
                     }
                 })
@@ -505,10 +570,13 @@ impl Workbench {
         let (text, version, cursor) = ed.read(cx).cargo_snapshot();
         let kind = context::kind_at(&text, cursor).unwrap_or(Kind::Normal);
         let name = hit.name.clone();
+        // The name came from a search answer or from the keyboard; the version from a search answer.
+        let Some(args) = add_args(&hit, kind) else {
+            notify(self, tf("“{}” is not a crate name", &[&name]), cx);
+            return;
+        };
+        let hit = SearchHit { version: version_of(&hit), ..hit };
         let dirty = ed.read(cx).is_dirty();
-        let spec = if hit.version.is_empty() { name.clone() } else { format!("{name}@{}", hit.version) };
-        let mut args = vec!["add".to_string(), spec];
-        args.extend(section_flags(kind, None));
         let use_cargo = !dirty && !edit::is_virtual_root(&text) && self.cargo_may_run(&path, cx);
         let host = ed.read(cx).host_arc();
         let task = cx.background_executor().spawn(async move {
@@ -527,10 +595,7 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| match result {
-                Ok(None) => {
-                    ed.update(cx, |e, cx| e.reload(cx));
-                    notify(this, t("Added with cargo add"), cx);
-                }
+                Ok(None) => this.cargo_finished(&ed, version, t("Added with cargo add").to_string(), cx),
                 Ok(Some((new, old, name, why))) => {
                     let applied = ed.update(cx, |e, cx| e.apply_text_edits(version, &diff(&old, &new), cx));
                     let done = match why {
@@ -549,9 +614,30 @@ impl Workbench {
         .detach();
     }
 
-    /// `cargo` may run in the file's folder: not in an untrusted folder (a project's `.cargo/config.toml` can run programs).
+    /// `cargo` may run in the file's folder: not in an untrusted folder or outside every folder (a project's
+    /// `.cargo/config.toml` can run programs), and never in tests.
     fn cargo_may_run(&self, path: &str, cx: &App) -> bool {
-        self.root_of(path, cx).is_none_or(|r| self.is_trusted_root(&r, cx)) && !cfg!(test)
+        root_is_trusted(self.root_of(path, cx).as_deref(), |r| self.is_trusted_root(r, cx)) && !cfg!(test)
+    }
+
+    /// Cargo finished changing the file on disk: show it, unless the user typed meanwhile (their edits are not replaced; saving
+    /// then shows the usual conflict).
+    pub(in crate::workbench) fn cargo_finished(&mut self, ed: &Entity<EditorView>, version: u64, done: String, cx: &mut Context<Self>) {
+        let (dirty, current) = {
+            let e = ed.read(cx);
+            (e.is_dirty(), e.version())
+        };
+        if dirty || current != version {
+            notify(self, t("Cargo changed Cargo.toml on disk while you were editing it. Your edits were kept; saving asks which version to keep."), cx);
+            return;
+        }
+        ed.update(cx, |e, cx| e.reload(cx));
+        notify(self, done, cx);
+    }
+
+    #[cfg(test)]
+    pub fn cargo_finished_for_test(&mut self, ed: &Entity<EditorView>, version: u64, cx: &mut Context<Self>) {
+        self.cargo_finished(ed, version, "done".into(), cx);
     }
 
     #[cfg(test)]
@@ -587,7 +673,8 @@ fn explain(e: &EditError) -> String {
     }
 }
 
-/// `cargo add` / `cargo remove` flags for a dependency table.
+/// `cargo add` / `cargo remove` flags for a dependency table. A target is joined to its flag with `=`, so a value that looks
+/// like an option stays a value.
 fn section_flags(kind: Kind, target: Option<&str>) -> Vec<String> {
     let mut flags = match kind {
         Kind::Normal => Vec::new(),
@@ -595,9 +682,37 @@ fn section_flags(kind: Kind, target: Option<&str>) -> Vec<String> {
         Kind::Build => vec!["--build".to_string()],
     };
     if let Some(cfg) = target {
-        flags.extend(["--target".to_string(), cfg.to_string()]);
+        flags.push(format!("--target={cfg}"));
     }
     flags
+}
+
+/// The arguments of `cargo remove` for `dep`: flags first, then `--`, then the name. `None` when the key is no crate name.
+pub(crate) fn remove_args(dep: &manifest::Dep) -> Option<Vec<String>> {
+    valid_crate_name(&dep.key).then(|| {
+        let mut args = vec!["remove".to_string()];
+        args.extend(section_flags(dep.kind, dep.target.as_deref()));
+        args.extend(["--".to_string(), dep.key.clone()]);
+        args
+    })
+}
+
+/// A version from a search answer is used only when it is one.
+fn version_of(hit: &SearchHit) -> String {
+    semver::Version::parse(&hit.version).map(|v| v.to_string()).unwrap_or_default()
+}
+
+/// The arguments of `cargo add`: flags, `--`, then `name` or `name@version`. `None` when the name is no crate name.
+pub(crate) fn add_args(hit: &SearchHit, kind: Kind) -> Option<Vec<String>> {
+    if !valid_crate_name(&hit.name) {
+        return None;
+    }
+    let version = version_of(hit);
+    let spec = if version.is_empty() { hit.name.clone() } else { format!("{}@{version}", hit.name) };
+    let mut args = vec!["add".to_string()];
+    args.extend(section_flags(kind, None));
+    args.extend(["--".to_string(), spec]);
+    Some(args)
 }
 
 enum CargoRun {
@@ -607,9 +722,16 @@ enum CargoRun {
     Failed(String),
 }
 
+/// `args` with `--manifest-path` right after the subcommand: everything after `--` is a name.
+pub(crate) fn cargo_argv(manifest: &str, args: &[String]) -> Vec<String> {
+    let mut full = args.to_vec();
+    full.splice(1..1, ["--manifest-path".to_string(), manifest.to_string()]);
+    full
+}
+
 fn run_cargo(host: &dyn Host, manifest: &str, args: &[String]) -> CargoRun {
-    let mut full: Vec<&str> = args.iter().map(String::as_str).collect();
-    full.extend(["--manifest-path", manifest]);
+    let argv = cargo_argv(manifest, args);
+    let full: Vec<&str> = argv.iter().map(String::as_str).collect();
     match host.exec("cargo", &full, manifest.rsplit_once('/').map(|(d, _)| d), None) {
         Err(e) => CargoRun::Unavailable(crate::cargo_project::explain_failure(&e.to_string())),
         Ok(out) if out.ok() => CargoRun::Done,

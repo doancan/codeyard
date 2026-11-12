@@ -202,6 +202,7 @@ registry! {
     "cargo.updateDependency" => wb::rust_glue::cargo::UpdateDependency,
     "cargo.updateAllCompatible" => wb::rust_glue::cargo::UpdateAllCompatible,
     "cargo.updateAllLatest" => wb::rust_glue::cargo::UpdateAllLatest,
+    "cargo.checkDependencyUpdates" => wb::rust_glue::cargo::CheckDependencyUpdates,
     "workbench.action.output.toggleOutput" => wb::ShowOutput,
     "workbench.output.action.clearOutput" => wb::ClearOutput,
     "workbench.showPorts" => wb::ShowPorts,

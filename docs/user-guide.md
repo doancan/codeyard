@@ -1484,7 +1484,14 @@ session runs as before. On Windows with the MSVC toolchain they are not loaded (
 
 ## Cargo dependencies
 
-Open a `Cargo.toml` and Codeyard looks up the crates it names on crates.io. No language server is needed.
+Codeyard can look up the crates a `Cargo.toml` names on crates.io. No language server is needed. **This is off until you turn it
+on**: nothing contacts crates.io by itself. Open a `Cargo.toml` that has dependencies and a question appears above the text
+(it does not block typing): *Show the latest versions of your dependencies? This contacts index.crates.io with the names of
+the crates in this file.* **Enable** turns on `rust.cargo.dependencyLookups`, **Not now** hides the question until the next
+start, and **Don't ask again** is remembered. What you start yourself works without the setting, for the file you start it
+in: *Cargo: Check Dependency Updates* looks the file up once and shows the hints, *Cargo: Add Dependency…* searches
+crates.io as you type, and *Cargo: Update All Dependencies in This File* (and the update commands) look the file up and then
+update it. Such a file stays looked up until its tab closes.
 
 **Hints.** At the end of each dependency's line a short note says what your requirement means for the newest release:
 
@@ -1497,7 +1504,7 @@ Open a `Cargo.toml` and Codeyard looks up the crates it names on crates.io. No l
 | `not found on crates.io` | There is no crate with that name. |
 | `offline` | crates.io could not be reached. Nothing is cached for this crate yet. |
 
-Hints cover `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, `[target.….dependencies]` and
+Once looked up, hints cover `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, `[target.….dependencies]` and
 `[workspace.dependencies]`, in the short form (`serde = "1"`), inline tables, `[dependencies.serde]` tables and
 `package = "…"` renames. Entries with `path`, `git`, another `registry` or `workspace = true` get no hint and are never
 reported as problems. The colour comes from the theme (green, amber, red, grey); the same sentence is in the hint's tooltip
@@ -1530,8 +1537,8 @@ change is then in the open file until you save it.
 
 **Mirrors.** `CARGO_HOME` and `[source.crates-io] replace-with` are honoured: with a sparse mirror
 (`registry = "sparse+https://…"`) the versions and features come from the mirror and the crates.io API (search,
-descriptions, licences) is not used. A mirror that cannot be asked (a git index, a vendored directory), or plain `http`,
-turns the lookups off for that project. A project's own `.cargo/config.toml` is read only in a trusted folder. Over SSH the
+descriptions, licences) is not used. A mirror that cannot be asked (a git index, a vendored directory), plain `http`, or an
+address with a user name or password in it, turns the lookups off for that project. A project's own `.cargo/config.toml` is read only in a trusted folder. Over SSH the
 default index is used.
 
 ### What is sent
@@ -1550,8 +1557,12 @@ no file names or contents, no project name. The servers see your IP address as f
 Answers are cached in `~/Library/Caches/codeyard/cargo-deps` (`~/.cache/codeyard/cargo-deps` on Linux,
 `%LOCALAPPDATA%\codeyard\cargo-deps` on Windows); entries not refreshed for 60 days are deleted. After a failed connection
 nothing is tried again for 20 seconds, and an old cached answer is used (hints say so in their tooltip) instead of an error.
-Set `rust.cargo.dependencyLookups` to `false` to stop all of it: no request is made, no hint is shown, and the commands
-above say why they do nothing. The setting is in the [settings reference](settings.md).
+With `rust.cargo.dependencyLookups` off (the default) none of the first two requests is made on its own: no hint on open,
+no lookup on hover, no refresh in the background, no completion from the registry. They happen only when you run *Cargo:
+Add Dependency…* (the search), *Cargo: Check Dependency Updates* or an update command (the index files of that file's
+crates), and the hover or completion of a file you asked about. Turn the setting on and they happen as described above for
+every `Cargo.toml` you open; turn it off again to stop them. Memory is bounded: a registry keeps at most 256 crates and 64
+searches, and closing the last `Cargo.toml` drops them. The setting is in the [settings reference](settings.md).
 
 ## JSON and YAML schemas
 

@@ -40,7 +40,9 @@ What it is not:
   a new version: at most one successful check a day, which downloads two small files from github.com (the checksum list of the
   latest release and its signature). GitHub sees your IP address and that the request comes from `curl`; there are no cookies, no
   identifier and nothing about your files (see [Updates](docs/user-guide.md#updates) and
-  [what leaves your machine](docs/architecture.md#stack)).
+  [what leaves your machine](docs/architecture.md#stack)). Looking up the crates of a `Cargo.toml` on crates.io is off until you
+  turn it on, or ask for it in one file; the crate names are all it sends (see
+  [Cargo dependencies](docs/user-guide.md#cargo-dependencies)).
 - **No embedded web view.** The interface is drawn by GPUI. Markdown preview is drawn natively too.
 
 What to expect next to other editors:

@@ -237,6 +237,7 @@ impl Workbench {
             .on_action(cx.listener(Self::cargo_update_dependency))
             .on_action(cx.listener(Self::cargo_update_all_compatible))
             .on_action(cx.listener(Self::cargo_update_all_latest))
+            .on_action(cx.listener(Self::cargo_check_updates))
             .on_action(cx.listener(|this, _: &RestartLanguageServers, _, cx| {
                 this.restart_lsp(cx);
                 this.notice = Some(Notice::Info(crate::i18n::t("Restarting language servers…").into()));

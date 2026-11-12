@@ -82,8 +82,8 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
     (
         "rust.cargo.dependencyLookups",
         "boolean",
-        "`true`",
-        "Let `Cargo.toml` show the latest version of each dependency and complete crate names, versions and features. It asks index.crates.io for the crates named in the file and crates.io for search and descriptions; turn it off to stop all of that (see *Cargo dependencies* in the user guide for exactly what is sent).",
+        "`false`",
+        "Let `Cargo.toml` look up the crates it names on its own: the latest version of each dependency as a hint, and completion of crate names, versions and features. Off by default, so nothing contacts crates.io unless you start it: *Cargo: Add Dependency…*, *Cargo: Check Dependency Updates* and *Update All* each look up on request, and a one-time question above a `Cargo.toml` offers to turn this on. When on, it asks index.crates.io for the crates named in the file and crates.io for search and descriptions (see *Cargo dependencies* in the user guide for exactly what is sent).",
     ),
     ("workbench.colorCustomizations", "object", "`{}`", "Override single colour roles; an entry in `[Theme Name]` applies to that theme only."),
 ];

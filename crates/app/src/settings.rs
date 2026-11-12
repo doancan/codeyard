@@ -444,7 +444,7 @@ impl Default for Settings {
             spelling_comments: true,
             spell_languages: vec!["en".into()],
             rust_build: Default::default(),
-            rust_dependency_lookups: true,
+            rust_dependency_lookups: false,
             data_indent: 2,
             data_sort_keys: false,
             http_run_on: "workspace".into(),

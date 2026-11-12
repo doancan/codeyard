@@ -352,6 +352,7 @@ impl Workbench {
             Command::action("Cargo: Update Dependency at Cursor to Latest", rust_glue::cargo::UpdateDependency),
             Command::action("Cargo: Update All Dependencies in This File (Compatible)", rust_glue::cargo::UpdateAllCompatible),
             Command::action("Cargo: Update All Dependencies in This File to Latest", rust_glue::cargo::UpdateAllLatest),
+            Command::action("Cargo: Check Dependency Updates", rust_glue::cargo::CheckDependencyUpdates),
             Command::action("View: Output", ShowOutput),
             Command::action("Output: Clear", ClearOutput),
             Command::action("View: Ports (SSH port forwarding)", ShowPorts),

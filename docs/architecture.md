@@ -117,8 +117,12 @@ the tests. `editor_cargo.rs` binds a registry to a manifest's editor (hints, com
 | Spelling | `spellbook` (pure Rust Hunspell) | English built in, other languages installable |
 
 No server and no account; the extension registry is not live yet. Outbound requests: SchemaStore and schema downloads (cached 7 days, can be disabled),
-dictionary installs, GitHub pull request listing, requests sent from `.http` files and update checks. The update check is the one
-the app starts by itself, and only when the user chose daily checks (`update.check`); otherwise it happens when the user asks
+dictionary installs, GitHub pull request listing, requests sent from `.http` files, update checks and crates.io lookups for
+`Cargo.toml` (index.crates.io and crates.io, only the crate names and what the user types; see
+[Cargo dependencies](user-guide.md#cargo-dependencies)). The update check is the one the app starts by itself, and only when the
+user chose daily checks (`update.check`); the crates.io lookups also start by themselves, but only after the user turned on
+`rust.cargo.dependencyLookups` (off by default, asked once above a `Cargo.toml`), and otherwise run only when the user asks
+(*Cargo: Check Dependency Updates*, *Add Dependency…*, an update command). Otherwise a request happens when the user asks
 for one. It downloads two small files from github.com (see [Updates](#updates) for exactly what GitHub sees).
 
 ## Updates

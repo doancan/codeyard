@@ -28,6 +28,9 @@ fn rows(picker: &Entity<crate::picker::Picker>, cx: &mut VisualTestContext) -> V
     })
 }
 
+/// Settings text meaning "the file has no `rust.cargo.dependencyLookups`": the default.
+const UNSET: &str = "unset";
+
 const MANIFEST: &str = "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n\n[dependencies]\nserde = \"1.0.100\"\ntokio = \"=1.54.0\"\ncc = \"0.0\"\nno-such-crate-zzz = \"1\"\nlocal = { path = \"../local\" }\n";
 
 struct Fixture<'a> {
@@ -72,7 +75,12 @@ fn fixture_with<'a>(
     let d = dir(name);
     let cfg = d.join("config");
     std::fs::create_dir_all(&cfg).unwrap();
-    std::fs::write(cfg.join("settings.jsonc"), settings).unwrap();
+    // Lookups are off by default; the tests of the hints turn them on, and `UNSET` leaves the default alone.
+    let mut parsed: serde_json::Value = if settings == UNSET { serde_json::json!({}) } else { serde_json::from_str(settings).unwrap() };
+    if settings != UNSET {
+        parsed.as_object_mut().unwrap().entry("rust.cargo.dependencyLookups").or_insert(serde_json::json!(true));
+    }
+    std::fs::write(cfg.join("settings.jsonc"), parsed.to_string()).unwrap();
     let project = d.join("project");
     std::fs::create_dir_all(&project).unwrap();
     let file = project.join("Cargo.toml");
@@ -148,19 +156,216 @@ fn hints_are_hidden_once_the_line_count_changes_and_come_back_with_the_next_refr
     assert_eq!(f.hints()[0].0, 6);
 }
 
-#[gpui::test]
-fn lookups_off_asks_nothing_and_shows_nothing(cx: &mut TestAppContext) {
-    let mut f = fixture(cx, "off", MANIFEST, r#"{ "rust.cargo.dependencyLookups": false }"#, fake_registry(), false);
+fn idle(f: &mut Fixture<'_>) {
     for _ in 0..5 {
         f.cx.executor().advance_clock(std::time::Duration::from_millis(700));
         f.cx.run_until_parked();
     }
-    assert!(f.hints().is_empty());
-    assert_eq!(f.fake.count(), 0, "not one request");
-    assert!(!f.ed.read_with(f.cx, |e, _| e.has_cargo()));
-    // Commands say why they do nothing.
+}
+
+#[gpui::test]
+fn lookups_are_off_by_default_nothing_is_fetched_and_the_question_is_asked(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let mut f = fixture(cx, "off", MANIFEST, UNSET, fake_registry(), false);
+    idle(&mut f);
+    assert!(!f.wb.read_with(f.cx, |_, cx| cx.global::<crate::settings::Settings>().rust_dependency_lookups), "the default is off");
+    assert!(f.hints().is_empty() && !f.ed.read_with(f.cx, |e, _| e.has_cargo()));
+    assert_eq!(f.fake.count(), 0, "not one request on open or edit");
+    f.ed.update(f.cx, |e, cx| e.replace_all_text_for_test(&format!("{MANIFEST}# edited\n"), cx));
+    idle(&mut f);
+    assert_eq!(f.fake.count(), 0, "not one request after an edit");
+    // The hover has nothing to ask either.
+    let at = f.text().find("serde").unwrap();
+    assert_eq!(f.ed.read_with(f.cx, |e, _| e.cargo_hover_for_test(at + 1)), None);
+    assert!(f.ed.read_with(f.cx, |e, _| e.cargo_consent_shown()), "the one-time question is above the file");
+}
+
+#[gpui::test]
+fn the_question_is_not_asked_for_a_manifest_without_registry_dependencies(cx: &mut TestAppContext) {
+    let mut f = fixture(cx, "no-question", "[package]\nname = \"x\"\n\n[dependencies]\nlocal = { path = \"../x\" }\n", UNSET, fake_registry(), false);
+    idle(&mut f);
+    assert!(!f.ed.read_with(f.cx, |e, _| e.cargo_consent_shown()));
+    assert_eq!(f.fake.count(), 0);
+}
+
+#[gpui::test]
+fn check_dependency_updates_looks_the_file_up_once_on_request(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let mut f = fixture(cx, "check", MANIFEST, UNSET, fake_registry(), false);
+    idle(&mut f);
+    assert_eq!(f.fake.count(), 0);
+    f.run("Cargo: Check Dependency Updates");
+    wait_ticking(f.cx, "the hints", |cx| f.wb.read_with(cx, |wb, cx| wb.cargo_hints_for_test(&f.path, cx)).len() == 4);
+    assert_eq!(f.hints()[0], (5, "up to date (latest 1.0.229)".to_string()));
+    assert!(f.fake.count() > 0);
+    assert!(!f.ed.read_with(f.cx, |e, _| e.cargo_consent_shown()), "asked for: no question");
+    assert!(!f.wb.read_with(f.cx, |_, cx| cx.global::<crate::settings::Settings>().rust_dependency_lookups), "the setting stays off");
+}
+
+#[gpui::test]
+fn update_all_with_lookups_off_looks_up_then_updates(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let mut f = fixture(cx, "update-off", MANIFEST, UNSET, fake_registry(), false);
     f.run("Cargo: Update All Dependencies in This File (Compatible)");
-    assert!(notice(&f.wb, f.cx).contains("rust.cargo.dependencyLookups"), "{}", notice(&f.wb, f.cx));
+    wait_ticking(f.cx, "the update", |cx| f.ed.read_with(cx, |e, _| e.text()).contains("\"1.0.229\""));
+    assert_eq!(f.text(), MANIFEST.replace("\"1.0.100\"", "\"1.0.229\""));
+}
+
+#[gpui::test]
+fn add_dependency_searches_with_lookups_off_but_fetches_no_index_files(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let mut f = fixture(cx, "add-off", "[package]\nname = \"demo\"\n\n[dependencies]\ntokio = \"1\"\n", UNSET, fake_registry(), false);
+    f.run("Cargo: Add Dependency…");
+    let picker = f.wb.read_with(f.cx, |wb, _| wb.overlay_picker_for_test()).expect("the picker");
+    picker.update(f.cx, |p, cx| p.set_query("serde".into(), cx));
+    wait_ticking(f.cx, "the search", |cx| rows(&picker, cx).iter().any(|r| r.contains("serde-saphyr")));
+    f.cx.simulate_keystrokes("enter");
+    wait_ticking(f.cx, "the edit", |cx| f.ed.read_with(cx, |e, _| e.text()).contains("serde = "));
+    let calls = f.fake.calls.lock().unwrap().iter().map(|c| c.0.clone()).collect::<Vec<_>>();
+    assert!(calls.iter().all(|u| u.starts_with("https://crates.io/api/v1/crates?q=")), "only the search the user started: {calls:?}");
+}
+
+fn settings_text(f: &Fixture<'_>) -> String {
+    let cfg = std::path::Path::new(&f.path).parent().unwrap().parent().unwrap().join("config/settings.jsonc");
+    std::fs::read_to_string(cfg).unwrap()
+}
+
+#[gpui::test]
+fn enable_turns_the_setting_on_and_the_hints_appear(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let mut f = fixture(cx, "enable", MANIFEST, UNSET, fake_registry(), false);
+    idle(&mut f);
+    f.ed.update(f.cx, |_, cx| cx.emit(crate::editor::EditorEvent::Cargo(crate::editor::CargoChoice::Enable)));
+    wait_ticking(f.cx, "the hints", |cx| f.wb.read_with(cx, |wb, cx| wb.cargo_hints_for_test(&f.path, cx)).len() == 4);
+    assert!(f.wb.read_with(f.cx, |_, cx| cx.global::<crate::settings::Settings>().rust_dependency_lookups));
+    assert!(
+        settings_text(&f).contains("\"rust.cargo.dependencyLookups\": true") || settings_text(&f).contains("\"rust.cargo.dependencyLookups\":true"),
+        "{}",
+        settings_text(&f)
+    );
+    assert!(!f.ed.read_with(f.cx, |e, _| e.cargo_consent_shown()));
+}
+
+#[gpui::test]
+fn not_now_hides_the_question_for_the_session_and_fetches_nothing(cx: &mut TestAppContext) {
+    let mut f = fixture(cx, "not-now", MANIFEST, UNSET, fake_registry(), false);
+    idle(&mut f);
+    f.ed.update(f.cx, |_, cx| cx.emit(crate::editor::EditorEvent::Cargo(crate::editor::CargoChoice::NotNow)));
+    f.cx.run_until_parked();
+    assert!(!f.ed.read_with(f.cx, |e, _| e.cargo_consent_shown()));
+    // An edit does not bring it back; the stored answer is untouched.
+    f.ed.update(f.cx, |e, cx| e.replace_all_text_for_test(&format!("{MANIFEST}# edited\n"), cx));
+    idle(&mut f);
+    assert!(!f.ed.read_with(f.cx, |e, _| e.cargo_consent_shown()));
+    assert_eq!(f.fake.count(), 0);
+    assert_eq!(f.wb.read_with(f.cx, |wb, _| wb.persist.state.as_ref().and_then(|s| s.get("cargo.lookups.consent"))), None);
+}
+
+#[gpui::test]
+fn dont_ask_again_is_remembered_in_the_state_and_covers_other_manifests(cx: &mut TestAppContext) {
+    let mut f = fixture(cx, "never", MANIFEST, UNSET, fake_registry(), false);
+    idle(&mut f);
+    f.ed.update(f.cx, |_, cx| cx.emit(crate::editor::EditorEvent::Cargo(crate::editor::CargoChoice::Never)));
+    f.cx.run_until_parked();
+    assert_eq!(f.wb.read_with(f.cx, |wb, _| wb.persist.state.as_ref().and_then(|s| s.get("cargo.lookups.consent"))), Some("never".to_string()));
+    assert!(!f.wb.read_with(f.cx, |_, cx| cx.global::<crate::settings::Settings>().rust_dependency_lookups));
+    // Another manifest, opened later: no question.
+    let other = std::path::Path::new(&f.path).parent().unwrap().join("member/Cargo.toml");
+    std::fs::create_dir_all(other.parent().unwrap()).unwrap();
+    std::fs::write(&other, MANIFEST).unwrap();
+    let ed = crate::qa_editor_tests::open(&f.wb, &other, f.cx);
+    idle(&mut f);
+    assert!(!ed.read_with(f.cx, |e, _| e.cargo_consent_shown()));
+    assert_eq!(f.fake.count(), 0);
+}
+
+#[gpui::test]
+fn the_question_is_a_labelled_set_of_controls_in_the_accessibility_tree(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let mut f = fixture(cx, "question-a11y", MANIFEST, UNSET, fake_registry(), false);
+    idle(&mut f);
+    let wb = f.wb.clone();
+    let names = |cx: &mut VisualTestContext| -> Vec<(accesskit::Role, String)> {
+        let snap = wb.update_in(cx, |wb, window, cx| wb.a11y_snapshot(window, cx));
+        snap.to_tree().nodes.into_iter().filter_map(|(_, n)| Some((n.role(), n.label()?.to_string()))).collect()
+    };
+    wait_ticking(f.cx, "the controls", |cx| names(cx).iter().any(|(r, l)| *r == accesskit::Role::Button && l == "Enable"));
+    let all = names(f.cx);
+    for label in ["Not now", "Don’t ask again"] {
+        assert!(all.contains(&(accesskit::Role::Button, label.to_string())), "{label}: {all:?}");
+    }
+    assert!(all.iter().any(|(r, l)| *r == accesskit::Role::Label && l.starts_with("Show the latest versions of your dependencies?")), "{all:?}");
+}
+
+#[gpui::test]
+fn closing_the_last_manifest_forgets_its_lookups_and_registries(cx: &mut TestAppContext) {
+    let f = fixture(cx, "close", MANIFEST, "{}", fake_registry(), true);
+    wait_ticking(f.cx, "all lookups", |cx| f.wb.read_with(cx, |wb, cx| wb.cargo_hints_for_test(&f.path, cx)).len() == 4);
+    assert!(f.wb.read_with(f.cx, |wb, _| wb.lsp.cargo.has_state_for_test(&f.path)));
+    f.wb.update_in(f.cx, |wb, window, cx| wb.run_command_for_test("Editor: Close", window, cx));
+    f.cx.run_until_parked();
+    assert!(!f.wb.read_with(f.cx, |wb, _| wb.lsp.cargo.has_state_for_test(&f.path)), "state of the closed manifest is gone");
+    assert!(f.wb.read_with(f.cx, |wb, _| wb.lsp.cargo.pool_dropped_for_test()), "and the registries with their memory");
+}
+
+#[gpui::test]
+fn cargo_finishing_while_the_user_typed_leaves_the_buffer_alone(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let mut f = fixture(cx, "typing", "[dependencies]\nserde = \"1\"\n", "{}", fake_registry(), true);
+    let version = f.ed.read_with(f.cx, |e, _| e.version());
+    // `cargo add` (a process) rewrote the file while the user typed.
+    std::fs::write(&f.path, "[dependencies]\nserde = \"1\"\nitoa = \"1\"\n").unwrap();
+    f.ed.update(f.cx, |e, cx| e.replace_all_text_for_test("[dependencies]\nserde = \"1\"\n# my note\n", cx));
+    let (ed, wb) = (f.ed.clone(), f.wb.clone());
+    wb.update(f.cx, |wb, cx| wb.cargo_finished_for_test(&ed, version, cx));
+    assert_eq!(f.text(), "[dependencies]\nserde = \"1\"\n# my note\n", "the typed text is still there");
+    assert!(notice(&f.wb, f.cx).contains("Your edits were kept"), "{}", notice(&f.wb, f.cx));
+}
+
+#[gpui::test]
+fn cargo_finishing_with_an_untouched_buffer_shows_what_it_wrote(cx: &mut TestAppContext) {
+    let f = fixture(cx, "untouched", "[dependencies]\nserde = \"1\"\n", "{}", fake_registry(), true);
+    let version = f.ed.read_with(f.cx, |e, _| e.version());
+    std::fs::write(&f.path, "[dependencies]\nserde = \"1\"\nitoa = \"1\"\n").unwrap();
+    let (ed, wb) = (f.ed.clone(), f.wb.clone());
+    wb.update(f.cx, |wb, cx| wb.cargo_finished_for_test(&ed, version, cx));
+    wait_ticking(f.cx, "the reload", |cx| f.ed.read_with(cx, |e, _| e.text()).contains("itoa"));
+    assert_eq!(notice(&f.wb, f.cx), "done");
+}
+
+#[test]
+fn a_dependency_key_or_typed_name_cannot_become_an_option_of_cargo() {
+    use super::{add_args, cargo_argv, remove_args, root_is_trusted};
+    use crate::cargo_project::deps::manifest;
+    use crate::cargo_project::deps::registry::SearchHit;
+    let hit = |name: &str, version: &str| SearchHit { name: name.into(), version: version.into(), description: String::new() };
+    assert_eq!(add_args(&hit("--git", ""), manifest::Kind::Normal), None);
+    assert_eq!(add_args(&hit("--config=/x.toml", "1.0.0"), manifest::Kind::Normal), None);
+    assert_eq!(add_args(&hit("serde", "1.0.229"), manifest::Kind::Dev).unwrap(), ["add", "--dev", "--", "serde@1.0.229"]);
+    assert_eq!(add_args(&hit("serde", "--evil"), manifest::Kind::Normal).unwrap(), ["add", "--", "serde"], "a version that is none is dropped");
+    let m = manifest::parse("[dependencies]\n\"--config=/x.toml\" = \"1\"\nserde = \"1\"\n[target.'cfg(unix)'.dev-dependencies]\nlibc = \"0.2\"\n").unwrap();
+    assert_eq!(remove_args(&m.deps[0]), None, "refused: the text edit does it");
+    assert_eq!(remove_args(&m.deps[1]).unwrap(), ["remove", "--", "serde"]);
+    assert_eq!(remove_args(&m.deps[2]).unwrap(), ["remove", "--dev", "--target=cfg(unix)", "--", "libc"]);
+    // The manifest path comes right after the subcommand, never after `--`.
+    assert_eq!(
+        cargo_argv("/p/Cargo.toml", &["remove".to_string(), "--".to_string(), "serde".to_string()]),
+        ["remove", "--manifest-path", "/p/Cargo.toml", "--", "serde"]
+    );
+    // A file outside every folder has no author to trust; a folder is trusted when the user says so.
+    assert!(!root_is_trusted(None, |_| true));
+    assert!(root_is_trusted(Some("/work"), |r| r == "/work") && !root_is_trusted(Some("/work"), |_| false));
+}
+
+#[gpui::test]
+fn removing_a_hostile_key_edits_the_text_instead_of_running_cargo(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let text = "[dependencies]\n\"--config=/x.toml\" = \"1\"\nserde = \"1\"\n";
+    let mut f = fixture(cx, "hostile", text, "{}", fake_registry(), false);
+    f.cursor_on("--config");
+    f.run("Cargo: Remove Dependency at Cursor");
+    wait_ticking(f.cx, "the edit", |cx| !f.ed.read_with(cx, |e, _| e.text()).contains("--config"));
+    assert_eq!(f.text(), "[dependencies]\nserde = \"1\"\n");
 }
 
 #[gpui::test]

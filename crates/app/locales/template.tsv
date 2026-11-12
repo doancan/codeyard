@@ -210,6 +210,7 @@ Cannot tell which remote {} belongs to
 Cannot update {0}: {1}	
 Cannot use {} as an entry	
 Cannot use {} as an object key	
+Cargo changed Cargo.toml on disk while you were editing it. Your edits were kept; saving asks which version to keep.	
 Cargo dependency	
 Cargo did not report a Rust test executable	
 Cargo metadata has no packages	
@@ -223,6 +224,7 @@ Cargo was not found. Install Rust from https://rustup.rs and make sure `cargo` i
 Cargo.toml is not valid TOML yet.	
 Cargo.toml is not valid TOML: {}	
 Cargo: Add Dependency…	
+Cargo: Check Dependency Updates	
 Cargo: Remove Dependency at Cursor	
 Cargo: Update All Dependencies in This File (Compatible)	
 Cargo: Update All Dependencies in This File to Latest	
@@ -663,7 +665,6 @@ Deleting {}…
 Deleting…	
 Denials	
 Deny	
-Dependency lookups are off. Turn on rust.cargo.dependencyLookups in Settings.	
 Deprecated	
 Deprecated by its publisher.	
 Deprecated by its publisher: use {} instead.	
@@ -720,6 +721,7 @@ Don't Save
 Don't Trust	
 Don't Trust This Folder	
 Done	
+Don’t ask again	
 Download	
 Download Here	
 Download Page	
@@ -1375,6 +1377,7 @@ Logs
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
 Looking for tests…	
 Looking for {} in your registries…	
+Looking up the latest versions on crates.io…	
 Lost the connection to {}: {}. Your open files stay here and unsaved changes are kept, but they cannot be saved until you reconnect (File: Save a Copy to This Computer… keeps one locally).	
 Lost the connection to {}: {}. Your open files stay here.	
 Manage SSH hosts	
@@ -1627,6 +1630,7 @@ Not deleted: {}
 Not forwarded	
 Not in a git repository	
 Not installed; open setup instructions	
+Not now	
 Not paused	
 Not saved: {0} (U+{1}) cannot be written in {2}. Remove it, or save a copy as UTF-8.	
 Not saved: {0} cannot be written in {1}.	
@@ -2286,6 +2290,7 @@ Show the activity bar
 Show the author name on Source Control graph rows	
 Show the editor tab bar	
 Show the file path above the editor	
+Show the latest versions of your dependencies? This contacts index.crates.io with the names of the crates in this file.	
 Show the minimap	
 Show the short commit hash on Source Control graph rows	
 Show the status bar	
@@ -3611,6 +3616,7 @@ your words
 “{}” is called with the wrong number of arguments	
 “{}” is missing here	
 “{}” is not a branch of a known remote	
+“{}” is not a crate name	
 “{}” is not a free local port	
 “{}” is not a function this query language has	
 “{}” is not a number	

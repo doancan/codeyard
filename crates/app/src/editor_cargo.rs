@@ -31,6 +31,16 @@ pub struct CargoMarks {
     hints: Vec<Hint>,
     /// The document's line count when the hints were computed: once it changes they are stale and hidden.
     lines: usize,
+    /// The question about contacting crates.io is shown above the text.
+    consent: bool,
+}
+
+/// What the buttons of that question say.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CargoChoice {
+    Enable,
+    NotNow,
+    Never,
 }
 
 /// Everything needed to answer a hover in the background.
@@ -73,6 +83,67 @@ impl EditorView {
         self.cargo.binding = binding;
     }
 
+    pub fn set_cargo_consent(&mut self, shown: bool, cx: &mut Context<Self>) {
+        if self.cargo.consent != shown {
+            self.cargo.consent = shown;
+            cx.notify();
+        }
+    }
+
+    #[cfg(test)]
+    pub fn cargo_consent_shown(&self) -> bool {
+        self.cargo.consent
+    }
+
+    /// The question above the text, shown once while lookups are off (non-modal: typing goes on).
+    pub(super) fn cargo_banner(&self, p: &Palette, cx: &mut Context<Self>) -> Option<gpui::AnyElement> {
+        use crate::a11y_controls::{Control, click_on, said};
+        if !self.cargo.consent {
+            return None;
+        }
+        let name = self.name.to_string();
+        let choice = |id: &'static str, label: &'static str, primary: bool, which: CargoChoice| {
+            let (bg, fg) = if primary { (p.accent, p.on_accent) } else { (p.surface_hover, p.text) };
+            let el = div()
+                .id(id)
+                .h(px(24.))
+                .px(px(theme::SPACE[4]))
+                .flex()
+                .items_center()
+                .rounded(px(theme::radius::SM))
+                .bg(c(bg))
+                .text_color(c(fg))
+                .cursor_pointer()
+                .hover(|d| d.opacity(0.9))
+                .child(crate::i18n::t(label));
+            click_on(el, Control::button(name.clone(), id, crate::i18n::t(label), |_, _| {}), cx, move |e: &mut Self, _, _, cx| {
+                cx.emit(EditorEvent::Cargo(which));
+                e.cargo.consent = false;
+                cx.notify();
+            })
+        };
+        let message = crate::i18n::t("Show the latest versions of your dependencies? This contacts index.crates.io with the names of the crates in this file.");
+        Some(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(theme::SPACE[5]))
+                .px(px(theme::SPACE[6]))
+                .py(px(theme::SPACE[3]))
+                .bg(c(p.surface_raised))
+                .border_b_1()
+                .border_color(c(p.info))
+                .font_family(ui::UI_FONT)
+                .text_size(px(text::SM.0))
+                .child(icon("info", 16., p.info))
+                .child(div().flex_1().relative().child(message).child(said(name.clone(), "cargo-consent", accesskit::Role::Label, message)))
+                .child(choice("cargo-enable", crate::i18n::tr("Enable"), true, CargoChoice::Enable))
+                .child(choice("cargo-not-now", crate::i18n::tr("Not now"), false, CargoChoice::NotNow))
+                .child(choice("cargo-never", crate::i18n::tr("Don’t ask again"), false, CargoChoice::Never))
+                .into_any_element(),
+        )
+    }
+
     pub fn has_cargo(&self) -> bool {
         self.cargo.binding.is_some()
     }
@@ -81,10 +152,6 @@ impl EditorView {
     #[cfg(test)]
     pub fn cargo_hover_for_test(&self, ix: usize) -> Option<String> {
         self.cargo_hover_input(ix)?.run()
-    }
-
-    pub fn cargo_registry(&self) -> Option<Arc<Registry>> {
-        self.cargo.binding.as_ref().map(|b| b.registry.clone())
     }
 
     /// The text, its version and the cursor's byte offset: the input of an edit computed off the document.

@@ -229,7 +229,7 @@ mod schema_glue;
 mod spell_glue;
 #[path = "editor_syntax.rs"]
 mod syntax_glue;
-pub use cargo_glue::CargoBinding;
+pub use cargo_glue::{CargoBinding, CargoChoice};
 pub use schema_glue::SchemaBinding;
 
 pub enum EditorEvent {
@@ -265,6 +265,8 @@ pub enum EditorEvent {
     SendRequest(usize),
     /// Code lenses and inlay hints of extensions (workbench_ext_lenses.rs).
     Extension(ExtEvent),
+    /// A button of the question about contacting crates.io (editor_cargo.rs).
+    Cargo(CargoChoice),
 }
 
 /// Open completion list.
