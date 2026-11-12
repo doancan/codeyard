@@ -242,6 +242,8 @@ pub enum EditorEvent {
     Saved,
     /// A forced save replaced another version of the file (its text): keep a copy so it can be recovered.
     Overwrote(String),
+    /// The write failed (the edit stays unsaved): the window tells the user why, with a way to try again.
+    SaveFailed(host::HostError),
     /// Breakpoints changed (sent to the adapter if a session is open).
     BreakpointsChanged,
     /// Go to definition: position in another (or the same) file (0-based line, UTF-16 column).
@@ -1683,18 +1685,4 @@ impl EntityInputHandler for EditorView {
         self.enter_focused(window);
         self.index_for_position(point).map(|ix| self.buffer.char_to_utf16(ix))
     }
-}
-
-/// Workspace edit of the action run on save: the first action of the requested kind,
-/// completed with `codeAction/resolve` if it has no edit. Actions that run via a command are skipped
-/// (we don't want side effects outside the file during a save).
-fn source_action_edit(client: &crate::lsp::Client, params: serde_json::Value, kind: &str) -> Option<serde_json::Value> {
-    let timeout = std::time::Duration::from_secs(2);
-    let actions = crate::lsp::parse_code_actions(&client.request("textDocument/codeAction", params, timeout).ok()?);
-    let action = actions.into_iter().find(|a| a.kind == kind || a.kind.starts_with(&format!("{kind}.")))?;
-    let mut raw = action.raw;
-    if raw["edit"].is_null() && !raw["data"].is_null() {
-        raw = client.request("codeAction/resolve", raw.clone(), timeout).unwrap_or(raw);
-    }
-    (!raw["edit"].is_null()).then(|| raw["edit"].clone())
 }

@@ -27,6 +27,7 @@ impl Workbench {
                 .occlude()
                 .child(div().flex_none().pt(px(1.)).child(icon("circle-x", 16., p.danger)))
                 .child(div().flex_1().min_w_0().child(message.clone()))
+                .children(self.toast_action_button(p, cx))
                 .when(matches!(self.remote.conn, Conn::Failed { .. }), |d| {
                     d.child(
                         div()

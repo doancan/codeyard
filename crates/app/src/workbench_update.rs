@@ -26,6 +26,9 @@ pub(crate) use crate::update_backend::UpdateBackend;
 use crate::update_install::{InstallKind, InstallPlan, ManualReason};
 use crate::update_restart;
 
+#[path = "workbench_update_report.rs"]
+mod report;
+
 /// Keys in the state database (machine-written values stay out of `settings.jsonc`).
 const LAST_CHECK: &str = "update.last_check";
 const SKIPPED: &str = "update.skipped";
@@ -1050,6 +1053,7 @@ impl Workbench {
         if self.update.dialog == Dialog::Update {
             self.update.state = UpdateState::Error(failure);
         } else if phase == Phase::Check {
+            self.report_background_check_failure(&failure);
             self.update.state = UpdateState::Idle;
         } else {
             self.notify_with(
@@ -1268,10 +1272,11 @@ impl Workbench {
         self.persist.state.as_ref().and_then(|s| s.get(key))
     }
 
-    /// A failed write only costs a repeated notice or check, so it is logged, not shown.
+    /// A failed write costs a repeated notice or check: it is reported once per session (see `persist_failures.rs`).
     fn remember(&self, key: &str, value: &str) {
         if let Some(Err(e)) = self.persist.state.as_ref().map(|s| s.set(key, value)) {
             eprintln!("could not remember {key}: {e}");
+            self.persist_failed(super::notifications_glue::failures::Area::UpdateChoice, &e);
         }
     }
 
@@ -1285,6 +1290,7 @@ impl Workbench {
         self.update.last_check = Some(now);
         self.update.failures.clear();
         self.remember(LAST_CHECK, &unix_ms(now).to_string());
+        self.dismiss_notice_id(report::CHECK_FAILED_ID);
     }
 }
 

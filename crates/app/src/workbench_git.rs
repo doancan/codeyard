@@ -142,15 +142,19 @@ impl Workbench {
         }
         let (path, text) = (e.path.clone(), e.text_lines().join("\n"));
         let dir = crate::history::dir_for(&data, &self.history_host(), &path);
+        let folder = dir.clone();
         let task = cx.background_executor().spawn(async move { crate::history::record(&dir, &text) });
         cx.spawn(async move |this, cx| {
-            if let Ok(true) = task.await {
-                this.update(cx, |this, cx| {
-                    this.timeline.rev += 1;
-                    cx.notify();
-                })
-                .ok();
-            }
+            let result = task.await;
+            this.update(cx, |this, cx| {
+                match result {
+                    Ok(true) => this.timeline.rev += 1,
+                    Ok(false) => {}
+                    Err(e) => this.report_history_failed(&folder, &e),
+                }
+                cx.notify();
+            })
+            .ok();
         })
         .detach();
     }
@@ -321,14 +325,30 @@ impl Workbench {
         let e = entry.clone();
         let task = cx.background_executor().spawn(async move {
             let h = host.as_ref();
-            // The first commit has no parent: left side is empty.
-            let old = git::show(h, &root, &format!("{}^", e.hash), old_path.as_deref().unwrap_or(&e.path)).unwrap_or_default();
-            let new = git::show(h, &root, &e.hash, &e.path).unwrap_or_default();
-            (old, new)
+            // The first commit has no parent, and an added or deleted file is missing on one side: that side is empty. A failure of
+            // git is not: it would look like "file added".
+            if git::parent_is_cut(h, &root, &e.hash)? {
+                return Err(crate::i18n::t("This copy of the repository is a shallow clone and ends at this commit, so the file before it is not available.")
+                    .to_string());
+            }
+            let old = git::show_checked(h, &root, &format!("{}^", e.hash), old_path.as_deref().unwrap_or(&e.path))?;
+            let new = git::show_checked(h, &root, &e.hash, &e.path)?;
+            Ok::<_, String>((old.unwrap_or_default(), new.unwrap_or_default()))
         });
         cx.spawn_in(window, async move |this, cx| {
-            let (old, new) = task.await;
+            let result = task.await;
             this.update_in(cx, |this, window, cx| {
+                let (old, new) = match result {
+                    Ok(sides) => sides,
+                    Err(why) => {
+                        this.notify_detailed(
+                            NoticeSource::Git,
+                            Notice::Error(crate::i18n::tf("Could not read {0} at {1}: {2}", &[&entry.path, &entry.short, &first_line(&why)]).into()),
+                            why,
+                        );
+                        return cx.notify();
+                    }
+                };
                 let label = format!("{} {} · {}", entry.short, entry.subject, entry.author);
                 let view = cx.new(|cx| crate::diff::DiffView::new(entry.path.clone(), false, &old, &new, cx).with_label(label));
                 window.focus(&view.focus_handle(cx));

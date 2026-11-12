@@ -1,5 +1,6 @@
 //! Workbench: rendering: activity bar, explorer, timeline, outline.
 
+use super::notifications_glue::failures::Area;
 use super::*;
 
 /// Whether the activity bar's view buttons continue above and below what is visible.
@@ -832,10 +833,14 @@ impl Workbench {
         let (Some(ws), Some(s), Some(root)) = (self.persist.workspace_id, &self.persist.state, self.root(cx)) else { return };
         let prefix = format!("{}/", root.trim_end_matches('/'));
         let rels: Vec<String> = self.roots.primary.read(cx).open_dirs().iter().filter_map(|d| d.strip_prefix(&prefix).map(str::to_string)).take(300).collect();
-        let _ = s.set(&format!("tree:{ws}"), &rels.join("\n"));
+        if let Err(e) = s.set(&format!("tree:{ws}"), &rels.join("\n")) {
+            self.persist_failed(Area::Explorer, &e);
+        }
         let nests: Vec<String> =
             self.roots.primary.read(cx).open_nests().iter().filter_map(|d| d.strip_prefix(&prefix).map(str::to_string)).take(300).collect();
-        let _ = s.set(&format!("nests:{ws}"), &nests.join("\n"));
+        if let Err(e) = s.set(&format!("nests:{ws}"), &nests.join("\n")) {
+            self.persist_failed(Area::Explorer, &e);
+        }
     }
 
     /// Restore the open folders from the previous session.
@@ -850,8 +855,8 @@ impl Workbench {
     }
 
     pub(super) fn persist_sections(&mut self, cx: &mut Context<Self>) {
-        if let Some(s) = &self.persist.state {
-            let _ = s.set("explorer_sections", &self.sections.encode());
+        if let Some(Err(e)) = self.persist.state.as_ref().map(|s| s.set("explorer_sections", &self.sections.encode())) {
+            self.persist_failed(Area::Explorer, &e);
         }
         cx.notify();
     }

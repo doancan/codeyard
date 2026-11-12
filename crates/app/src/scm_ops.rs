@@ -175,8 +175,7 @@ impl ScmPanel {
     pub fn stage_in(&mut self, repo: Option<RepoKey>, paths: Vec<String>, cx: &mut Context<Self>) {
         let target = match self.target(repo) {
             Ok(t) => t,
-            Err(why) if repo.is_some() => return self.refuse(repo, why, cx),
-            Err(_) => return,
+            Err(why) => return self.refuse(repo, why, cx),
         };
         let conflicted: Vec<String> = self
             .status_of(repo)
@@ -209,8 +208,7 @@ impl ScmPanel {
     pub fn unstage_in(&mut self, repo: Option<RepoKey>, mut paths: Vec<String>, cx: &mut Context<Self>) {
         let target = match self.target(repo) {
             Ok(t) => t,
-            Err(why) if repo.is_some() => return self.refuse(repo, why, cx),
-            Err(_) => return,
+            Err(why) => return self.refuse(repo, why, cx),
         };
         // Rename: the old path is also unstaged (as deleted).
         if let Some(st) = self.status_of(repo) {

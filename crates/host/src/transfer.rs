@@ -151,7 +151,11 @@ fn finish_folder_commit(mut child: Child, cancel: &AtomicBool) -> Result<()> {
     };
     let stderr = receive.recv_timeout(std::time::Duration::from_secs(1)).unwrap_or_default();
     if interrupted.is_some() {
-        return Err(fail("folder finalization was interrupted; completed destination files are kept"));
+        // What the remote side said before it stopped is the best clue to why, so it travels with the message.
+        let said = String::from_utf8_lossy(&stderr);
+        let said = said.trim();
+        let message = "folder finalization was interrupted; completed destination files are kept";
+        return Err(fail(if said.is_empty() { message.to_string() } else { format!("{message}\n{said}") }));
     }
     if status.success() {
         Ok(())
@@ -211,6 +215,21 @@ fn cleanup_upload_tree(shell: Shell, stage: &str) {
     if let Ok(mut child) = spawn(shell(&format!("rm -rf -- {}", sh_quote(stage))), Stdio::null(), Stdio::null()) {
         let _ = child.wait();
     }
+}
+
+/// How long a child whose input was closed gets to finish and clean up before it is killed.
+const STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Wait for `child` to exit on its own (its stdin is closed), killing it only when it does not within [`STOP_GRACE`].
+fn stop_gracefully(child: &mut Child) {
+    let start = std::time::Instant::now();
+    while start.elapsed() < STOP_GRACE {
+        if !matches!(child.try_wait(), Ok(None)) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    kill(child);
 }
 
 fn kill(child: &mut Child) {
@@ -334,7 +353,9 @@ count=0; while [ ! -f {status} ] && [ "$count" -lt 10 ]; do sleep 1; count=$((co
             }
             Ok(false) => {
                 kill(&mut tar);
-                kill(&mut remote);
+                // Its input is closed: the remote shell stops and removes its staging folder itself. Killing it at once would leave
+                // the `tar -x` it started running, still writing into the folder that is deleted next.
+                stop_gracefully(&mut remote);
                 undo(true);
                 Err(HostError::Op(proto::Error::Cancelled))
             }
@@ -1465,3 +1486,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
     }
 }
+
+#[cfg(test)]
+#[path = "transfer_cancel_tests.rs"]
+mod cancel_tests;

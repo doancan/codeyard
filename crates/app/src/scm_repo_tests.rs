@@ -905,3 +905,20 @@ fn the_summary_reads_like_the_row() {
     let failing = Repo { status: None, error: Some("Git is paused".into()), ..repo };
     assert_eq!(summary(&failing), "Git is paused");
 }
+
+/// Staging or unstaging with no repository to act on says why, instead of doing nothing.
+#[gpui::test]
+fn staging_without_a_selected_repository_says_so(cx: &mut TestAppContext) {
+    let f = fixture("no-target");
+    let (_wb, scm, cx) = open(cx, &f.beta, 1);
+    scm.update(cx, |s, cx| {
+        s.status = None;
+        s.stage(vec!["same.txt".into()], cx);
+    });
+    assert_eq!(scm.read_with(cx, |s, _| s.result_text()).as_deref(), Some("Select a repository first"));
+    scm.update(cx, |s, cx| {
+        s.result = None;
+        s.unstage(vec!["same.txt".into()], cx);
+    });
+    assert_eq!(scm.read_with(cx, |s, _| s.result_text()).as_deref(), Some("Select a repository first"));
+}

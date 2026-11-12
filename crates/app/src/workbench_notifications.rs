@@ -5,11 +5,26 @@
 
 use super::*;
 use gpui::{SharedString, WeakFocusHandle};
-use model::{Action, Log, NoticeSource, Notification, Severity};
+use model::{Log, NoticeAction, NoticeSource, Notification, Severity};
 use std::collections::HashMap;
 
+#[path = "workbench_notification_actions.rs"]
+mod actions;
+#[path = "errors.rs"]
+pub(crate) mod errors;
+#[path = "persist_failures.rs"]
+pub(crate) mod failures;
+#[cfg(test)]
+#[path = "workbench_git_failure_tests.rs"]
+mod git_failure_tests;
+#[cfg(all(test, unix))]
+#[path = "workbench_notification_locks_tests.rs"]
+mod locks;
 #[path = "notifications.rs"]
 pub(crate) mod model;
+#[cfg(test)]
+#[path = "workbench_persist_failure_tests.rs"]
+mod persist_failure_tests;
 #[cfg(test)]
 #[path = "workbench_notifications_tests.rs"]
 mod tests;
@@ -48,6 +63,8 @@ impl Notice {
 /// text stays the same, so a screen reader is not told again.
 pub(crate) struct Toast {
     tick: u64,
+    /// The history entry this showing belongs to (its action is drawn on the card); none for a plain flash.
+    serial: Option<u64>,
     severity: Severity,
     text: SharedString,
 }
@@ -55,6 +72,8 @@ pub(crate) struct Toast {
 #[derive(Default)]
 pub(crate) struct NoticeCenter {
     log: Log,
+    /// Failures reported from `&self` code, posted at the next frame.
+    deferred: failures::Deferred,
     toast: Option<Toast>,
     dnd: bool,
     open: bool,
@@ -85,9 +104,10 @@ impl NoticeCenter {
     /// Do Not Disturb hides information and warnings; an error still shows its card (and is still announced).
     fn post(&mut self, n: Notification, severity: Severity) {
         let text: SharedString = n.message.clone().into();
-        self.log.post(n, now_secs());
-        if !self.dnd || severity == Severity::Error {
-            self.show(severity, text);
+        let quiet = n.quiet;
+        let posted = self.log.post(n, now_secs());
+        if !quiet && (!self.dnd || severity == Severity::Error) {
+            self.show(severity, text, Some(posted.serial));
         }
     }
 
@@ -110,9 +130,16 @@ impl NoticeCenter {
         self.buttons.get(&(serial, kind)).cloned().expect("sync_handles ran before the list was drawn")
     }
 
-    fn show(&mut self, severity: Severity, text: SharedString) {
+    /// The card of an entry that was removed from the history goes away with it.
+    fn drop_toast_of_missing_entry(&mut self) {
+        if self.toast.as_ref().and_then(|t| t.serial).is_some_and(|s| self.log.get(s).is_none()) {
+            self.toast = None;
+        }
+    }
+
+    fn show(&mut self, severity: Severity, text: SharedString, serial: Option<u64>) {
         self.tick += 1;
-        self.toast = Some(Toast { tick: self.tick, severity, text });
+        self.toast = Some(Toast { tick: self.tick, serial, severity, text });
     }
 }
 
@@ -136,6 +163,15 @@ impl Workbench {
     pub(crate) fn notify_with(&mut self, n: Notification) {
         let severity = n.severity;
         self.notices.post(n, severity);
+    }
+
+    /// Remove the entry with this id (a failure that has been put right), and its card when it is on screen.
+    pub(in crate::workbench) fn dismiss_notice_id(&mut self, id: &str) -> bool {
+        let removed = self.notices.log.dismiss_id(id);
+        if removed {
+            self.notices.drop_toast_of_missing_entry();
+        }
+        removed
     }
 
     /// Take the toast away (a progress message that is over, the error card closed). The history keeps the entry.
@@ -173,12 +209,13 @@ impl Workbench {
     /// A confirmation that is not worth a place in the history ("Copied" from the list itself).
     pub(crate) fn flash(&mut self, text: String) {
         if !self.notices.dnd {
-            self.notices.show(Severity::Info, text.into());
+            self.notices.show(Severity::Info, text.into(), None);
         }
     }
 
     /// Info and warnings leave the status bar after a few seconds; errors stay until closed.
     pub(crate) fn track_notice(&mut self, cx: &mut Context<Self>) {
+        self.post_deferred_notices();
         let Some(toast) = &self.notices.toast else {
             self.notices.timer = None;
             return;
@@ -208,6 +245,18 @@ impl Workbench {
             })
             .ok();
         }));
+    }
+
+    /// Press the button of the notification `serial`, as a click on it would.
+    #[cfg(test)]
+    pub(crate) fn run_notification_action_for_test(&mut self, serial: u64, window: &mut Window, cx: &mut Context<Self>) {
+        self.run_notification_action(serial, window, cx);
+    }
+
+    /// What the history holds, newest first.
+    #[cfg(test)]
+    pub(crate) fn history_for_test(&self) -> Vec<model::Entry> {
+        self.notices.log.newest_first().cloned().collect()
     }
 
     pub(super) fn unread_notifications(&self) -> (usize, usize) {
@@ -296,11 +345,10 @@ impl Workbench {
         self.flash(crate::i18n::t("Copied the notification").to_string());
     }
 
-    pub(super) fn run_notification_action(&mut self, serial: u64, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(Action { command, .. }) = self.notices.log.get(serial).and_then(|e| e.action) else { return };
-        let Some(run) = self.commands().into_iter().find(|c| c.label == command).map(|c| c.run) else { return };
-        self.close_notifications(window, cx);
-        self.run_command(run, window, cx);
+    /// The button of the notification on the card, if it has one.
+    pub(crate) fn toast_action(&self) -> Option<(u64, NoticeAction)> {
+        let serial = self.notices.toast.as_ref()?.serial?;
+        Some((serial, self.notices.log.get(serial)?.action.clone()?))
     }
 
     /// The button of the list that has the keyboard, if any.

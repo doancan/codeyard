@@ -65,6 +65,8 @@ path = "src/main.rs"
 
 [dev-dependencies]
 sha2 = "0.11.1"
+# Breaks the state database from outside, to see what the window says when saving fails (the `state` crate uses the same version).
+rusqlite = { version = "0.41.0", features = ["bundled"] }
 accesskit_consumer = "0.39.1"
 agent = { version = "0.9.1", path = "../agent" }
 # The test registry and Sigstore stand-in (`ext_core::testing`).

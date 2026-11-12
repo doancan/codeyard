@@ -815,6 +815,36 @@ saved) used to replace each other and vanish. Now every one is kept.
   a counter (`×3`) that moves to the top. Each row has **Copy** (the message and its details, such as a command's error
   output) and **Dismiss**; the header has **Do Not Disturb**, **Clear all** and **Close**. The list keeps the last 200
   messages and is empty again when you restart: nothing is saved to disk.
+- **Buttons on a message.** When there is something you can do about a message, its row has one button, and an error
+  card shows the same button: **Show in Folder** opens the file or folder in Finder or Explorer (the nearest folder that
+  still exists when the path is gone), **Open File** opens a file in a tab (a `settings.jsonc` that does not parse opens at the line of the mistake), **Retry** runs the failed step again (save the
+  file, write the setting, check for updates), and a few messages offer a command, such as *Check for Updates…*. A retry
+  that works removes the old failure from the list; saving the file by hand does the same. Retry is careful: it never
+  replaces a version another program wrote (if the file changed on disk it opens the tab and tells you to resolve the
+  conflict first), it only saves the file of the machine that failed, and it does not write a setting into another profile's
+  settings file or over a value that was changed in the file since. The buttons hold only a path or the name of a step, so a message
+  never keeps a window or a file open.
+- **Messages about files** say what failed, on which path, the likely reason and what to try. For example: "Could not save
+  /work/notes.md. The disk is full (or your quota is used up). Free some space and try again." The operating system's
+  own words are kept in the details, so **Copy** gives you both. Reasons that are covered: no permission, not found, name
+  already used, disk full, read-only disk, another disk, bad or too long name, folder not empty, in use by another
+  program, timeout, interrupted and a closed connection. A long path is shortened in the sentence (the start and the file
+  name stay); the whole path is in the details. Control characters and text-direction marks in a file name are written out
+  (`\u{202e}`), so a name cannot make a message read differently from what it says.
+- **Things saved in the background.** Codeyard remembers your tabs, layout, window position, the open folders of the
+  Explorer, additional folders and terminals in its state database. When that cannot be written (a full or read-only
+  disk), you get one warning for each of these per session, "Could not save your open tabs and layout; they will not be
+  restored next time", with a **Show in Folder** button for the state folder. It does not repeat on every save.
+- **Background update checks.** Being offline is expected, so a check that cannot reach the server is only written to the
+  list as information ("Couldn't check for updates", with the reason in the details), without a toast and without
+  counting on the bell. Repeats collapse into one row. A check that fails for a reason you can act on (a broken secure
+  connection, a signature that does not match) is a warning or an error with the details and a **Retry** button; a later check
+  that works removes it.
+- **Git and Local History.** A file's history never shows an empty side because git failed: you get the error instead
+  ("Could not read a.rs at 1a2b3c4: …"). A file that is simply new or deleted in a commit still shows as added or deleted, and
+  the oldest commit of a shallow clone says its history is cut instead of showing the whole file as added. When
+  Local History cannot write its copies (a full or read-only disk), one warning per session says so, with **Show in
+  Folder**.
 - **Keyboard.** In the open list, Up, Down, Home and End move between rows, Enter runs the row's button, Delete
   dismisses the row, ⌘C (Ctrl+C) copies it and Escape closes the list and puts the focus back where it was (or on the
   editor when that is gone). Tab and Shift+Tab walk the buttons (each row's action, Copy and Dismiss, then Do Not

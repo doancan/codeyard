@@ -545,3 +545,12 @@ fn switching_a_hint_kind_tells_the_rust_server_and_restarts_no_server() {
     let gone = servers(r#"{ "rust.inlayHints.types": false, "lsp.servers": { "rust": null } }"#);
     assert_eq!(servers_reload(&off, &gone), ServersReload::Restart);
 }
+
+/// A broken settings file names the line and column, and block comments above the mistake do not shift them.
+#[test]
+fn a_broken_settings_file_names_the_line_after_a_block_comment() {
+    let text = "{\n  /* the editor\n     font */\n  \"editor.fontSize\": 14,\n  \"editor.tabSize\": oops\n}\n";
+    let message = parse_scoped(text, &[]).unwrap_err();
+    assert!(message.contains("line 5 column"), "{message}");
+    assert!(message.contains("previous settings kept"), "{message}");
+}

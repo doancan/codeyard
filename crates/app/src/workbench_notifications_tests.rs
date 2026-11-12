@@ -3,6 +3,7 @@
 
 use gpui::{Entity, TestAppContext, VisualTestContext};
 
+use super::model::Action;
 use super::*;
 
 fn setup(cx: &mut TestAppContext) -> (Entity<Workbench>, &mut VisualTestContext) {

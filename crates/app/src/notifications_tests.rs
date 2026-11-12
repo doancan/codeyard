@@ -104,3 +104,26 @@ fn copy_text_has_the_detail_after_a_blank_line() {
     log.post(err("failed").detail("fatal: no remote"), 0);
     assert_eq!(copy_text(log.newest_first().next().unwrap()), "failed\n\nfatal: no remote");
 }
+
+#[test]
+fn a_quiet_entry_is_kept_but_never_unread() {
+    let mut log = Log::default();
+    let offline = |severity| Notification::new(severity, NoticeSource::Update, "Couldn't check for updates").id("update-check").quiet();
+    log.post(offline(Severity::Info), 1);
+    log.post(offline(Severity::Info), 2);
+    assert_eq!((log.len(), log.unread(), log.unread_errors()), (1, 0, 0));
+    log.post(offline(Severity::Warning), 3);
+    assert_eq!((log.len(), log.unread()), (1, 0), "quiet means quiet, whatever the severity");
+    // The same id posted loudly later is unread again.
+    log.post(Notification::new(Severity::Error, NoticeSource::Update, "bad signature").id("update-check"), 4);
+    assert_eq!((log.unread(), log.unread_errors()), (1, 1));
+}
+
+#[test]
+fn an_entry_can_be_removed_by_its_id() {
+    let mut log = Log::default();
+    log.post(err("a").id("one"), 1);
+    assert!(log.dismiss_id("one"));
+    assert!(!log.dismiss_id("one"));
+    assert!(log.is_empty());
+}

@@ -74,6 +74,12 @@ clock) and `workbench_notifications.rs` (a child of `workbench_panels.rs`: `Work
 message reaches the user; the toast, Do Not Disturb, the list's keyboard and commands) with `workbench_notifications_view.rs` (the bell and
 the list). Nothing assigns a toast directly, and the history is never persisted.
 
+A notification's button is a `NoticeAction` (a palette command, `Reveal(path)`, `OpenFile(path, line)` or `Retry(RetryKind)`): plain
+data, never a closure or an entity, so the history cannot keep anything alive. `workbench_notification_actions.rs` is the one place that
+turns an action into work. `errors.rs` is the pure text of a failed file operation (`describe_io`, `describe_host`: what failed, the path,
+the cause, a next step; the raw system text goes to the detail). `persist_failures.rs` queues a failure reported from `&self` code (the
+session saves) for the next frame and reports each area once per session.
+
 Compare Folders is three files: `compare_logic.rs` (matching two `HashTree` scans, plans, report; no UI), `compare_folders.rs` (the tab) and `workbench_compare.rs` (picker, trust gate, copies and deletes checked against the scan).
 
 The Explorer's tree (`tree.rs`) keeps its rows and events; the filter and file nesting hang off it as `#[path]` children:
