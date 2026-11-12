@@ -340,8 +340,8 @@ impl FilePlan {
         let mut range_new = 0..0;
         // Changes are in text order: only those inside the window are looked at.
         let (lo, hi) = (self.changes.partition_point(|o| o.start < start), self.changes.partition_point(|o| o.start < end));
-        for i in lo..hi.max(lo) {
-            let (o, s) = (&self.changes[i], selected.get(i).copied().unwrap_or(false));
+        for (i, o) in self.changes.iter().enumerate().take(hi.max(lo)).skip(lo) {
+            let s = selected.get(i).copied().unwrap_or(false);
             if o.end > end {
                 continue;
             }

@@ -21,9 +21,9 @@ fn tmp(name: &str) -> PathBuf {
 /// The exthost to run, or why these tests cannot run here.
 fn toolchain() -> Option<PathBuf> {
     let exthost = std::env::var_os("CODEYARD_EXTHOST").map(PathBuf::from).or_else(|| {
-        // target/debug/deps/cyx-… → target/debug/codeyard-exthost
+        // The test binary sits below target/debug/ (deps/, or build/cyx/<hash>/out/ with newer cargo).
         let exe = if cfg!(windows) { "codeyard-exthost.exe" } else { "codeyard-exthost" };
-        std::env::current_exe().ok()?.parent()?.parent().map(|d| d.join(exe)).filter(|p| p.is_file())
+        std::env::current_exe().ok()?.ancestors().skip(1).take(6).map(|d| d.join(exe)).find(|p| p.is_file())
     });
     let missing = if !build::target_installed() {
         Some("the wasm32-wasip2 target is not installed (rustup target add wasm32-wasip2)")

@@ -43,20 +43,18 @@ pub fn find_program(program: &str) -> Option<std::path::PathBuf> {
                 if ext.is_empty() || path.extension().is_some() { path } else { path.with_extension(ext) }
             })
         })
-        .find(|p| {
-            if !p.is_file() {
-                return false;
-            }
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                p.metadata().is_ok_and(|m| m.permissions().mode() & 0o111 != 0)
-            }
-            #[cfg(not(unix))]
-            {
-                true
-            }
-        })
+        .find(|p| p.is_file() && is_executable(p))
+}
+
+#[cfg(unix)]
+fn is_executable(path: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    path.metadata().is_ok_and(|m| m.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn is_executable(_: &std::path::Path) -> bool {
+    true
 }
 
 /// Platform-aware construction (login PATH, npm launchers, hidden Windows consoles).

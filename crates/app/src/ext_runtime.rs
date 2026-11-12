@@ -29,9 +29,10 @@ pub fn exthost_path() -> Option<PathBuf> {
     }
     let name = if cfg!(windows) { "codeyard-exthost.exe" } else { "codeyard-exthost" };
     let exe = std::env::current_exe().ok()?;
-    let dir = exe.parent()?;
-    // Beside the app; in a test binary (target/<profile>/deps/), one folder up.
-    [dir.join(name), dir.parent()?.join(name)].into_iter().find(|p| p.is_file())
+    // Beside the app. A test binary sits a few folders below target/<profile>/ (deps/, or build/<package>/<hash>/out/
+    // since cargo moved the intermediate files), so tests look upward for the one cargo built.
+    let levels = if cfg!(test) { 6 } else { 1 };
+    exe.ancestors().skip(1).take(levels).map(|d| d.join(name)).find(|p| p.is_file())
 }
 
 #[cfg(test)]
