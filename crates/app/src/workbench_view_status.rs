@@ -255,6 +255,25 @@ impl Workbench {
                         .on_click(cx.listener(|this, _, w, cx| this.show_ports(&ShowPorts, w, cx))),
                 )
             })
+            // The active settings profile; nothing is shown while the default profile is in use.
+            .when_some(self.cfg.profile.clone().filter(|_| width >= 700.), |d, name| {
+                let label = crate::i18n::tf("Profile: {}", &[&name]);
+                let tip = crate::i18n::tf("Settings profile “{}”. Click to switch profiles.", &[&name]);
+                let switch = |this: &mut Workbench, w: &mut Window, cx: &mut Context<Workbench>| {
+                    this.switch_profile(&super::settings_ui::profiles_glue::SwitchProfile, w, cx)
+                };
+                d.child(
+                    item()
+                        .id("sb-profile")
+                        .child(ctl("sb-profile", format!("{label}. {tip}"), switch))
+                        .cursor_pointer()
+                        .hover(|d| d.bg(c(p.surface_hover)))
+                        .child(icon("sliders", SB_ICON, p.text_muted))
+                        .child(div().max_w(px(140.)).truncate().child(name))
+                        .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone().into())).into())
+                        .on_click(cx.listener(move |this, _, w, cx| switch(this, w, cx))),
+                )
+            })
             // `--no-extensions`: always said, so a missing theme or language is never a mystery.
             .when(crate::ext::turned_off(), |d| {
                 d.child(

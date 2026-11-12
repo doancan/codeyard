@@ -648,6 +648,11 @@ registry! {
     "menu.up" => menu::MenuPrev,
     "menu.down" => menu::MenuNext,
     "field.submit" => field::FieldSubmit,
+    "profiles.create" => wb::settings_ui::profiles_glue::CreateProfile,
+    "profiles.switch" => wb::settings_ui::profiles_glue::SwitchProfile,
+    "profiles.rename" => wb::settings_ui::profiles_glue::RenameProfile,
+    "profiles.delete" => wb::settings_ui::profiles_glue::DeleteProfile,
+    "profiles.duplicate" => wb::settings_ui::profiles_glue::DuplicateProfile,
     // --- commands that only the palette had ---
     "http.sendRequest" => wb::SendRequest,
     "terminal.nextCommand" => crate::terminal::TermNextCommand,

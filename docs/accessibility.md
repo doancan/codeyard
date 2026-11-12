@@ -320,6 +320,7 @@ The tree, in the order a screen reader walks it:
   it. Do Not Disturb hides information and warning toasts only: an error card still appears and its live region is
   still announced.
   A repeated message does not change the text of the live region below, so it is not spoken again.
+- Settings profiles: while a profile other than the default is active, the status bar has a painted `Button` "Profile: {name}" (its description says that a click switches profiles); with the default profile nothing is added. The five *Profiles:* commands are pickers and prompts, so the usual list and field semantics apply; a refused name is the notice below, said as an error, with the reason ("… is a reserved name on Windows").
 - The notice in the status bar is a live region of its own: an error (including a file that could not be opened) is an
   `Alert` with `Live::Assertive`, so it interrupts speech; an information notice is a `Status` with `Live::Polite`.
 - While a picker is open (command palette, go to file, go to symbol, themes, branches and every other list that opens

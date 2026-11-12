@@ -27,6 +27,11 @@ A merge commit is created unless it can fast-forward. Conflicts are resolved in 
 A path dependency: not looked up on crates.io.	
 A pattern is one expression or statement, not several.	
 A pattern that is only a variable would match everything.	
+A profile name cannot contain combining marks; type the letter as one character.	
+A profile name cannot contain “{}”. Use letters, digits, spaces, - and _.	
+A profile name cannot end with a dot.	
+A profile name cannot start with a dot.	
+A profile name has at most {} characters.	
 A rebase is already in progress: use Git: Continue Rebase or Git: Abort Rebase	
 A request is still being sent; wait for its answer first.	
 A sign-in answer for {0} carried the code of {1}'s sign-in; it was ignored.	
@@ -582,6 +587,7 @@ Could not start debugging: {}
 Could not start the debug adapter: {}	
 Could not start the debug session: {}	
 Could not start the test runner: {}	
+Could not switch profile: {}	
 Could not switch to {0}: {1}	
 Could not tell whether it is merged ({}): git will refuse if commits would be lost.	
 Could not write {0}: {1}	
@@ -599,6 +605,7 @@ Create a launch configuration
 Create branch	
 Create file	
 Create folder	
+Create profile	
 Create scratch file	
 Create tag	
 Created branch {0} at {1}	
@@ -673,12 +680,14 @@ Delay for afterDelay (ms)
 Delete	
 Delete Permanently	
 Delete Tag…	
+Delete a profile	
 Delete branch {} on the remote?	
 Delete branch {}?	
 Delete from the left	
 Delete from the right	
 Delete tag {} on the remote?	
 Delete tag {}?	
+Delete the profile “{}”?	
 Delete which branch on the remote?	
 Delete which branch?	
 Delete which tag on the remote?	
@@ -779,6 +788,7 @@ Dropped {}
 Duplicate	
 Duplicate key	
 Duplicate key “{}”	
+Duplicate profile	
 Each file is written on its own; files that were not changed keep their contents.	
 Edit	
 Edit Condition…	
@@ -1509,12 +1519,14 @@ Move to Trash
 Move “{0}” into “{1}”?	
 Move “{}” to the Trash?	
 Name	
+Name of the copy (it starts with the settings, keybindings and snippets in use)	
 Name of the new branch (from the current one)	
 Name of the new branch (starts at this commit)	
 Name of the new branch (starts at {})	
 Name of the new extension, like my-theme	
 Name of the new file	
 Name of the new folder	
+Name of the new profile (empty settings, keybindings and snippets)	
 Name of the new theme (it joins the theme list)	
 Name of the stash (shown in the stash list)	
 Name with an extension: the extension picks the language (scratch.md, notes.json…)	
@@ -1540,6 +1552,7 @@ New URL of {}
 New Window	
 New branch name	
 New name	
+New name of the profile	
 New name of the remote	
 Newer versions of extensions from a registry: install (by themselves; versions that run code 48 hours after they are published; a version that asks for more permissions waits for your OK), notify (shown in the Extensions view; you install them) or off (nothing is downloaded until you ask). A withdrawn version is still replaced and a revoked one still stopped. Your own settings only; a folder cannot change it	
 Next	
@@ -1940,6 +1953,15 @@ Process exited with code {}
 Process exited with code {}. Press any key to close.	
 Processes	
 Profile new terminals use	
+Profile “{0}” is now “{1}”.	
+Profile “{}” deleted.	
+Profile “{}” is active.	
+Profile: {}	
+Profiles: Create…	
+Profiles: Delete…	
+Profiles: Duplicate Current…	
+Profiles: Rename…	
+Profiles: Switch…	
 Progress	
 Project	
 Project lifecycle commands will run. Rebuild replaces the container; persistent volumes are kept.	
@@ -2109,7 +2131,9 @@ Removing {}…
 Rename	
 Rename Symbol	
 Rename Terminal…	
+Rename a profile	
 Rename branch	
+Rename profile	
 Rename remote	
 Rename the matching HTML/XML tag while you edit one	
 Rename to	
@@ -2379,6 +2403,7 @@ Setting up key login for {}…
 Setting upstream of {}…	
 Setting: {}	
 Settings	
+Settings profile “{}”. Click to switch profiles.	
 Settings reset. The old file is kept as {}	
 Settings…	
 Several Rust targets reported this test name. Run it individually to identify the failing target.	
@@ -2540,6 +2565,7 @@ Suggestions pop up while typing (off: only Ctrl+Space)
 Sunday	
 Switch Workspace or Connect to Host…	
 Switch between 100% and fit	
+Switch to a profile	
 Switched to {}	
 Switched to {}. Your changes are in the stash: Git: Pop Latest Stash brings them back.	
 Switching to {}…	
@@ -2665,6 +2691,8 @@ The debug adapter exited before it started listening
 The debug adapter stopped	
 The debug adapter stopped (exit code {})	
 The debugger could not bind this breakpoint.	
+The default profile is active.	
+The default profile is already active.	
 The dependency versions are not loaded yet. Try again in a moment.	
 The destination window is no longer available.	
 The download finished but js-debug was not found in it.	
@@ -2683,6 +2711,7 @@ The file list could not be read: only opened folders are searched.
 The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
+The folder of “{}” with its settings, keybindings and snippets is deleted. This cannot be undone.	
 The host stopped responding. Installation files were retained because a process may still be running. Reconnect and inspect the destination before retrying.	
 The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	
 The input “{}” would run an editor command; use promptString or pickString.	
@@ -2701,6 +2730,8 @@ The patch was not applied: {}
 The pattern does not parse: {0} (line {1}, column {2})	
 The preLaunchTask “{0}” did not succeed ({1}), so debugging was not started. Check its terminal, then start debugging again.	
 The problem matcher of “{}” skipped a line it could not read (too long, or the pattern took too long). Problems from that task may be missing.	
+The profile “{}” cannot be read now. The default profile is active until it can.	
+The profile “{}” is missing or cannot be used. The default profile is active.	
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	
 The program is running: pause it first, or set a breakpoint.	
 The project's Rust toolchain is not installed. Run `rustup toolchain install` in the project folder.	
@@ -2769,10 +2800,13 @@ Themes live in {}: drop theme .json files there
 Themes, languages, language servers, snippets and key bindings that come with Codeyard are built in and always on.	
 There are no changes to put in a patch.	
 There are no local changes to stash	
+There are no profiles yet. Create one with “Profiles: Create…”.	
 There are no staged changes to stash	
 There are no stashes.	
+There is already a profile named “{}”. Names differ by more than letter case.	
 There is no breakpoint on this line (F9 adds one).	
 There is no commit to undo	
+There is no profile named “{}”.	
 There is no replacement to undo.	
 There is no request here. Write METHOD URL on a line, separate requests with ###.	
 There is no task called “{}”.	
@@ -2871,6 +2905,7 @@ Type a commit message first
 Type a crate name to search crates.io	
 Type a line number between 1 and {}	
 Type a name	
+Type a name for the profile.	
 Type a name from ~/.ssh/config or user@host	
 Type a query and press Enter to search.	
 Type a query. Esc closes the bar.	
@@ -3121,6 +3156,7 @@ a program
 a string is not closed	
 a theme must be a JSON object	
 about {0} MB · {1}	
+active	
 added	
 animated PNG, first frame shown	
 animated, {} frame|animated, {} frames	
@@ -3638,6 +3674,7 @@ your words
 {} conflict|{} conflicts	
 {} contains a request that:	
 {} contains code, but codeyard-exthost is missing beside Codeyard	
+{} copy	
 {} crashed three times and is turned off until Codeyard restarts.	
 {} crashed three times in a minute and was turned off.	
 {} crashed three times within a minute and is turned off until Codeyard restarts. Nothing was sent anywhere.	
@@ -3669,6 +3706,7 @@ your words
 {} has no length	
 {} has no newer version	
 {} has no valid hash in its package	
+{} has too many or too large snippet files to copy.	
 {} holds no changes to tracked files.	
 {} hour ago|{} hours ago	
 {} implementation|{} implementations	
@@ -3788,6 +3826,7 @@ your words
 {}s	
 {}w	
 {}y	
+“Default” is the profile everyone has. Choose another name.	
 “color” must be an object	
 “folders” must be a list	
 “localhost” means {0}: for a service on your own computer set http.runOn to {1}.	
@@ -3801,9 +3840,12 @@ your words
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	
 “{}” can't be opened	
 “{}” cannot be used in a key binding	
+“{}” has another spelling that is the same folder on macOS. Use the usual letter.	
 “{}” in Cargo.toml is not a table	
 “{}” is a built-in shortcut; an extension cannot change it	
+“{}” is a reserved name on Windows. Choose another.	
 “{}” is already a dependency here	
+“{}” is already the active profile.	
 “{}” is back to its default keys	
 “{}” is called with the wrong number of arguments	
 “{}” is missing here	
@@ -3823,6 +3865,7 @@ your words
 “{}” is not supported	
 “{}” is not the command of an active extension	
 “{}” is still running in this terminal. Close it anyway?	
+“{}” is the active profile. The default profile takes over, then the folder of “{}” with its settings, keybindings and snippets is deleted.	
 “{}” was not found in the file	
 “{}” was not found in ~/.ssh/config	
 “{}”: {} = {}	

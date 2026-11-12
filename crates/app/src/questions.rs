@@ -139,6 +139,19 @@ pub(crate) fn reset_settings(path: &str) -> Question {
     confirm(PromptLevel::Warning, t("Reset all settings to the defaults?").into(), detail, t("Reset"))
 }
 
+/// Deleting a settings profile removes its folder (settings, keybindings, snippets); the active one is left first.
+pub(crate) fn delete_profile(name: &str, active: bool) -> Question {
+    let detail = if active {
+        tf(
+            "“{}” is the active profile. The default profile takes over, then the folder of “{}” with its settings, keybindings and snippets is deleted.",
+            &[&name, &name],
+        )
+    } else {
+        tf("The folder of “{}” with its settings, keybindings and snippets is deleted. This cannot be undone.", &[&name])
+    };
+    confirm(PromptLevel::Warning, tf("Delete the profile “{}”?", &[&name]), detail, t("Delete"))
+}
+
 /// A request in a `.http` file that should not be sent without a look (`reasons`, one per line).
 pub(crate) fn send_request(file: &str, reasons: &[String]) -> Question {
     let detail = format!("{}\n• {}\n\n{}", tf("{} contains a request that:", &[&file]), reasons.join("\n• "), t("Only send it if you trust this file."));

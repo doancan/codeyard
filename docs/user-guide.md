@@ -652,6 +652,41 @@ search for `conflict` to list them. Some of the default keys already share a key
 place (the terminal's `⌘K` and the `⌘K` sequences); they are real and shown. A command is bound by its id, so a command
 without an id cannot be changed on this page. **Open keybindings.jsonc** opens the file itself.
 
+### Profiles
+
+A profile is a named bundle of your settings (the theme is one of them), keybindings and snippets. Use one for work and
+one for a demo, or one with big fonts for a talk. There are no accounts and nothing is synced: a profile is a folder.
+
+- *Profiles: Create…* makes a profile with the default settings, keybindings and no snippets, and switches to it.
+- *Profiles: Duplicate Current…* makes a copy of the profile in use (the default profile included) and switches to the copy.
+- *Profiles: Switch…* lists **Default** and your profiles. Settings, keybindings, snippets and the theme change at once, in
+  every window, without a restart. The status bar shows **Profile: name** while a profile other than the default is active;
+  click it to switch.
+- *Profiles: Rename…* and *Profiles: Delete…* work on the profiles you made. Deleting the active profile asks first, switches to
+  Default and then removes the folder.
+
+Profiles live in `~/.config/codeyard/profiles/<name>/` (`settings.jsonc`, `keybindings.jsonc`, `snippets/`). **Default is the
+config folder itself**, exactly as before: if you never create a profile, nothing is added to it and nothing changes. The
+active profile is named in `~/.config/codeyard/active-profile`; deleting that file switches back to Default. Editing a profile's
+files by hand works like editing the default ones.
+
+Layers, lowest first: the defaults, the active profile's `settings.jsonc` (instead of the default `settings.jsonc`), the
+workspace file, the project's `.codeyard/settings.jsonc`. A project's settings still win, and a project's restricted settings still
+need a trusted folder.
+
+A profile name is also a folder name, on every system, so it must be 1 to 40 letters, digits, spaces, `-`, `_` or `.`; it
+cannot start or end with a dot, be a Windows device name (`CON`, `NUL`, `COM1`, … also with an extension), be `Default`, contain
+combining marks (type `é` as one character), or differ from another profile only in letter case (`Work` and `work` are one folder on
+macOS and Windows). Turkish letters such as `ç ğ ı İ ö ş ü` are fine. If the active profile's folder disappears or
+`active-profile` holds something that is not a profile name, Codeyard uses the default profile and says so; if the folder is there but
+cannot be read right now (permissions, a network drive), the file is kept, the message appears once, and the profile returns when
+the folder can be read. Two spellings of one folder name (a letter followed by a combining mark, Hangul jamo, the Kelvin sign) are
+refused; Codeyard has no full Unicode normalization, so rarer look-alike characters are not detected.
+
+What is not part of a profile: extensions (installed extensions, their data and settings) and their update state, color theme
+*files* in `themes/`, recent folders, open windows and files, hot exit and other session state, spelling words, and the
+`security.workspaceTrust` decisions. These stay as they are when you switch. Extensions per profile are not supported.
+
 A project can override settings in `.codeyard/settings.jsonc` (or `.vscode/settings.json`).
 To start over, "Preferences: Reset Settings to Defaults…" (or **Reset All Settings…** on the Settings
 page, next to **Open settings.jsonc**) replaces `settings.jsonc` with this version's default file after

@@ -4017,3 +4017,47 @@ The problem matcher of “{}” skipped a line it could not read (too long, or t
 A key that types text cannot be a shortcut on its own. Add Ctrl, Alt or Cmd, or press a function key.	Yazı yazan bir tuş tek başına kısayol olamaz. Ctrl, Alt veya Cmd ekleyin ya da bir işlev tuşuna basın.
 Its “args” were removed with it.	“args” değerleri de onunla birlikte kaldırıldı.
 The settings folder is gone. Nothing was changed.	Ayar klasörü yok. Hiçbir şey değişmedi.
+# ---- Settings profiles ----
+Profiles: Create…	Profiller: Oluştur…
+Profiles: Switch…	Profiller: Geç…
+Profiles: Rename…	Profiller: Yeniden Adlandır…
+Profiles: Delete…	Profiller: Sil…
+Profiles: Duplicate Current…	Profiller: Geçerli Olanı Çoğalt…
+A profile name cannot contain combining marks; type the letter as one character.	Profil adı birleştirici işaret içeremez; harfi tek karakter olarak yazın.
+A profile name cannot contain “{}”. Use letters, digits, spaces, - and _.	Profil adı “{}” içeremez. Harf, rakam, boşluk, - ve _ kullanın.
+A profile name cannot end with a dot.	Profil adı noktayla bitemez.
+A profile name cannot start with a dot.	Profil adı noktayla başlayamaz.
+A profile name has at most {} characters.	Profil adı en çok {} karakter olabilir.
+Could not switch profile: {}	Profile geçilemedi: {}
+Create profile	Profil oluştur
+Delete a profile	Silinecek profili seçin
+Delete the profile “{}”?	“{}” profili silinsin mi?
+Duplicate profile	Profili çoğalt
+Name of the copy (it starts with the settings, keybindings and snippets in use)	Kopyanın adı (kullanımdaki ayarlar, kısayollar ve kod parçacıklarıyla başlar)
+Name of the new profile (empty settings, keybindings and snippets)	Yeni profilin adı (varsayılan ayarlar, kısayollar; kod parçacığı yok)
+New name of the profile	Profilin yeni adı
+Profile “{0}” is now “{1}”.	“{0}” profili artık “{1}”.
+Profile “{}” deleted.	“{}” profili silindi.
+Profile “{}” is active.	“{}” profili etkin.
+Profile: {}	Profil: {}
+Rename a profile	Adı değişecek profili seçin
+Rename profile	Profili yeniden adlandır
+Settings profile “{}”. Click to switch profiles.	Ayar profili “{}”. Profil değiştirmek için tıklayın.
+Switch to a profile	Geçilecek profili seçin
+The default profile is active.	Varsayılan profil etkin.
+The default profile is already active.	Varsayılan profil zaten etkin.
+The folder of “{}” with its settings, keybindings and snippets is deleted. This cannot be undone.	“{}” klasörü; ayarları, kısayolları ve kod parçacıklarıyla birlikte silinir. Bu geri alınamaz.
+The profile “{}” is missing or cannot be used. The default profile is active.	“{}” profili yok ya da kullanılamıyor. Varsayılan profil etkin.
+There are no profiles yet. Create one with “Profiles: Create…”.	Henüz profil yok. “Profiller: Oluştur…” ile bir tane oluşturun.
+There is already a profile named “{}”. Names differ by more than letter case.	“{}” adında bir profil zaten var. Adlar yalnızca büyük/küçük harfle ayrılamaz.
+There is no profile named “{}”.	“{}” adında bir profil yok.
+Type a name for the profile.	Profil için bir ad yazın.
+active	etkin
+{} copy	{} kopyası
+{} has too many or too large snippet files to copy.	{} içinde kopyalanamayacak kadar çok ya da büyük kod parçacığı dosyası var.
+“Default” is the profile everyone has. Choose another name.	“Default”, herkesin sahip olduğu profildir. Başka bir ad seçin.
+“{}” is a reserved name on Windows. Choose another.	“{}” Windows'ta ayrılmış bir addır. Başka bir ad seçin.
+“{}” is already the active profile.	“{}” zaten etkin profil.
+“{}” is the active profile. The default profile takes over, then the folder of “{}” with its settings, keybindings and snippets is deleted.	“{}” etkin profil. Önce varsayılan profil devralır, sonra “{}” klasörü; ayarları, kısayolları ve kod parçacıklarıyla birlikte silinir.
+The profile “{}” cannot be read now. The default profile is active until it can.	“{}” profili şu an okunamıyor. Okunabilene kadar varsayılan profil etkin.
+“{}” has another spelling that is the same folder on macOS. Use the usual letter.	“{}” karakterinin macOS'ta aynı klasöre denk gelen başka bir yazılışı var. Olağan harfi kullanın.

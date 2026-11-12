@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Keyboard Shortcuts page: "Preferences: Keyboard Shortcuts" is now a page with every command, one row per key, the context (`when`) and where the key comes from (default, extension, user), a search by name, id or key, and buttons to change a key (it listens for the keys, also a sequence such as `⌘K ⌘I` and keys of other layouts, and no shortcut acts while it does), add another one, remove it, reset the command or run it. It writes one entry to `keybindings.jsonc` and keeps your comments, other entries and line endings; a file that does not parse is never overwritten. Keys that more than one command uses are marked with the commands' names. It replaces the picker that added an empty line to the file; 33 commands that only the palette had now have ids for `keybindings.jsonc`.
 
+- Settings profiles: named bundles of settings (with the theme), keybindings and snippets in `~/.config/codeyard/profiles/<name>/`. *Profiles: Create…, Switch…, Rename…, Delete…* and *Duplicate Current…* manage them; switching applies at once in every window, the status bar shows the active profile, and the watcher follows its files. The default profile is the config folder as before, so nothing changes or is created until you make a profile. Names are checked for Windows and macOS (path characters, `CON`/`NUL`, trailing dots, letter-case twins), a missing profile falls back to the default with a notice, and extensions, themes files and session state stay shared.
+
 ### Fixed
 
 - SSH config: two saves at the same moment (two windows adding hosts) no longer fail on Windows with "The process cannot access the file"; they take turns.

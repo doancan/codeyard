@@ -319,6 +319,11 @@ impl Workbench {
             Command::action("Theme: Open User Themes Folder", OpenThemesFolder),
             Command::action("Preferences: Settings", ShowSettings),
             Command::action("Preferences: Keyboard Shortcuts", ShowKeyboardShortcuts),
+            Command::action("Profiles: Create…", settings_ui::profiles_glue::CreateProfile),
+            Command::action("Profiles: Switch…", settings_ui::profiles_glue::SwitchProfile),
+            Command::action("Profiles: Rename…", settings_ui::profiles_glue::RenameProfile),
+            Command::action("Profiles: Delete…", settings_ui::profiles_glue::DeleteProfile),
+            Command::action("Profiles: Duplicate Current…", settings_ui::profiles_glue::DuplicateProfile),
             Command::action("Preferences: Open Settings", OpenSettingsPage),
             Command::action("Preferences: Open Settings (JSON)", OpenSettings),
             Command::action("Help: Welcome", ShowWelcome),
@@ -829,6 +834,11 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.pick_setting(index, window, cx);
             }
+            (OverlayKind::Profile { action, names }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (action, name) = (*action, names.get(*index).cloned().flatten());
+                self.close_overlay(window, cx);
+                self.profile_picked(action, name, window, cx);
+            }
             (OverlayKind::SettingChoice { key, options }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let (key, value) = (*key, options[*index]);
                 self.close_overlay(window, cx);
@@ -1116,7 +1126,8 @@ impl Workbench {
                 | OverlayKind::CommitFiles { .. }
                 | OverlayKind::Switcher(_)
                 | OverlayKind::LspQuestion(_)
-                | OverlayKind::SettingChoice { .. },
+                | OverlayKind::SettingChoice { .. }
+                | OverlayKind::Profile { .. },
                 PickerEvent::Dismiss,
             ) => {
                 self.close_overlay(window, cx);

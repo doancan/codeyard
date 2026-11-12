@@ -749,6 +749,9 @@ mod tests {
     }
 }
 
+#[path = "workbench_profiles.rs"]
+pub(crate) mod profiles_glue;
+
 #[cfg(test)]
 #[path = "rust_setup_tests.rs"]
 mod rust_setup_tests;

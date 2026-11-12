@@ -207,7 +207,7 @@ impl Workbench {
 
     /// Read the user's snippets (`<settings folder>/snippets/*.json`); warnings are returned.
     pub(super) fn reload_snippets(&mut self) -> Vec<String> {
-        let Some(dir) = self.cfg.dir.as_ref().map(|d| d.join("snippets")) else { return Vec::new() };
+        let Some(dir) = self.snippets_dir() else { return Vec::new() };
         let (mut all, mut warnings) = (Vec::new(), Vec::new());
         for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
             let path = entry.path();
@@ -240,7 +240,7 @@ impl Workbench {
 
     /// A snippet file was saved: reread it.
     pub(super) fn reload_snippets_if_edited(&mut self, ed: &gpui::Entity<crate::editor::EditorView>, cx: &mut Context<Self>) {
-        let Some(dir) = self.cfg.dir.as_ref().map(|d| d.join("snippets")) else { return };
+        let Some(dir) = self.snippets_dir() else { return };
         if !std::path::Path::new(&ed.read(cx).path).starts_with(&dir) {
             return;
         }
@@ -290,7 +290,7 @@ impl Workbench {
 
     /// Open the user snippet file for the active file's language (from the template if missing).
     pub(super) fn configure_snippets(&mut self, _: &ConfigureSnippets, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(dir) = self.cfg.dir.clone().or_else(crate::settings::config_dir).map(|d| d.join("snippets")) else { return };
+        let Some(dir) = self.snippets_dir() else { return };
         let lang = self.active_editor().map(|e| crate::snippets::lang_of_path(&e.read(cx).path)).filter(|l| *l != "plaintext").unwrap_or("global");
         let path = dir.join(format!("{lang}.json"));
         let result = std::fs::create_dir_all(&dir).and_then(|_| if path.exists() { Ok(()) } else { std::fs::write(&path, crate::snippets::template(lang)) });
