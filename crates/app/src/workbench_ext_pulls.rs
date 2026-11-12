@@ -293,7 +293,7 @@ impl Workbench {
     }
 
     /// A Markdown page in a scratch file, opened at once (it is small and local) and shown as its preview.
-    fn show_pull_page(&mut self, name: String, page: &str, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn show_pull_page(&mut self, name: String, page: &str, window: &mut Window, cx: &mut Context<Self>) {
         let Some(path) = self.write_scratch(name, page, cx) else { return };
         let host = self.remote.local_host.clone();
         match crate::editor::load(host.as_ref(), &path, cx.global::<Settings>().fallback_encoding) {

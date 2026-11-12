@@ -348,7 +348,7 @@ impl Workbench {
                         div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).text_size(px(text::XS.0)).child(count.to_string()),
                     )
                     .into_any_element(),
-                ProblemRow::Problem { severity, text, detail, .. } => {
+                ProblemRow::Problem { severity, text, detail, explain, .. } => {
                     let (glyph, color) = match severity {
                         1 => ("circle-x", p.danger),
                         2 => ("alert", p.warning),
@@ -358,6 +358,7 @@ impl Workbench {
                         .child(icon(glyph, 14., color))
                         .child(div().flex_shrink().min_w_0().overflow_hidden().child(text))
                         .child(div().flex_none().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(detail))
+                        .when_some(explain, |row, (code, href)| row.child(self.explain_button(i, code, href, p, cx)))
                         .into_any_element()
                 }
                 ProblemRow::Related { text, .. } => problem_row(i, theme::SPACE[8] + 22., p, cx)
@@ -665,9 +666,27 @@ impl Workbench {
 /// One row of the Problems panel: a file, one of its problems, or a related location of that problem.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProblemRow {
-    File { path: String, dir: String, count: usize },
-    Problem { path: String, severity: u8, text: String, detail: String, line: u32, col: u32 },
-    Related { text: String, path: String, line: u32, col: u32 },
+    File {
+        path: String,
+        dir: String,
+        count: usize,
+    },
+    /// `explain`: the rustc error code of the problem and the link the server gave for it, when it has one.
+    Problem {
+        path: String,
+        severity: u8,
+        text: String,
+        detail: String,
+        line: u32,
+        col: u32,
+        explain: Option<(String, Option<String>)>,
+    },
+    Related {
+        text: String,
+        path: String,
+        line: u32,
+        col: u32,
+    },
 }
 
 /// The Problems panel's rows: files in path order, their problems by severity and position, each followed by its related
@@ -688,6 +707,7 @@ pub fn problem_rows(all: &std::collections::BTreeMap<String, Vec<crate::lsp::Dia
                 detail: format!("{source} [{}:{}]", d.start.0.saturating_add(1), d.start.1.saturating_add(1)),
                 line: d.start.0,
                 col: d.start.1,
+                explain: crate::rust_toolchain::explain::code_of(d.code.as_deref(), &d.message).map(|code| (code.to_string(), d.code_href.clone())),
             });
             for r in &d.related {
                 rows.push(ProblemRow::Related { text: crate::lsp::related_label(r, path, root), path: r.path.clone(), line: r.start.0, col: r.start.1 });

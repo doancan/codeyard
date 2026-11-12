@@ -36,6 +36,41 @@ fn within(starts: &[usize], runs: &[TextRun], range: &Range<usize>) -> Range<usi
     first..last
 }
 
+/// The semantic token modifiers over the syntax colours: `unsafe` is underlined in `warning`, `mutable` in the text's own
+/// colour, and a consumed value is in italics. `mods` are byte ranges with `MOD_*` flags.
+pub fn modifier_runs(runs: Vec<TextRun>, mods: &[(Range<usize>, u8)], warning: Hsla) -> Vec<TextRun> {
+    use crate::lsp::{MOD_CONSUMED, MOD_MUTABLE, MOD_UNSAFE};
+    if mods.is_empty() {
+        return runs;
+    }
+    let mut cuts: Vec<usize> = mods.iter().flat_map(|(r, _)| [r.start, r.end]).collect();
+    cuts.sort_unstable();
+    cuts.dedup();
+    let mut runs = split_runs_at(runs, &cuts);
+    let starts: Vec<usize> = runs
+        .iter()
+        .scan(0, |at, r| {
+            let start = *at;
+            *at += r.len;
+            Some(start)
+        })
+        .collect();
+    for (range, flags) in mods {
+        for i in within(&starts, &runs, range) {
+            let run = &mut runs[i];
+            if flags & MOD_UNSAFE != 0 {
+                run.underline = Some(UnderlineStyle { color: Some(warning), thickness: px(1.), wavy: false });
+            } else if flags & MOD_MUTABLE != 0 {
+                run.underline = Some(UnderlineStyle { color: Some(run.color), thickness: px(1.), wavy: false });
+            }
+            if flags & MOD_CONSUMED != 0 {
+                run.font.style = gpui::FontStyle::Italic;
+            }
+        }
+    }
+    runs
+}
+
 /// `marked`: the IME composition. `diags`: (range, colour, is an error). `brackets`: (byte, colour). Every position is cut once
 /// and every decoration is then found by binary search, so the cost grows with the line and the decorations, not with their product.
 pub fn overlay_runs(runs: Vec<TextRun>, marked: Option<&Range<usize>>, diags: &[(Range<usize>, Hsla, bool)], brackets: &[(usize, Hsla)]) -> Vec<TextRun> {
@@ -191,5 +226,29 @@ mod tests {
         assert_eq!(out.iter().map(|r| r.len).sum::<usize>(), n * 2, "no text is lost");
         assert!(out.iter().all(|r| r.len > 0), "no empty segment reaches the shaper");
         assert!(took < std::time::Duration::from_secs(2), "{n} brackets on one line took {took:?}: the work per bracket must not grow with the line");
+    }
+
+    #[test]
+    fn modifiers_underline_and_italicise_only_their_range() {
+        use crate::lsp::{MOD_CONSUMED, MOD_MUTABLE, MOD_UNSAFE};
+        let warning = hsla(0.1, 1., 0.5, 1.);
+        let out = modifier_runs(vec![run(10)], &[(2..4, MOD_UNSAFE), (4..6, MOD_MUTABLE), (6..8, MOD_CONSUMED), (8..9, MOD_UNSAFE | MOD_CONSUMED)], warning);
+        assert_eq!(out.iter().map(|r| r.len).collect::<Vec<_>>(), [2, 2, 2, 2, 1, 1]);
+        assert_eq!(out[0].underline, None);
+        assert_eq!(out[1].underline.as_ref().and_then(|u| u.color), Some(warning), "unsafe: the warning colour");
+        assert_eq!(out[2].underline.as_ref().and_then(|u| u.color), Some(out[2].color), "mutable: the text colour");
+        assert!(out[3].underline.is_none() && out[3].font.style == FontStyle::Italic, "consumed: italics only");
+        assert!(out[4].underline.is_some() && out[4].font.style == FontStyle::Italic);
+        assert_eq!(out[5].font.style, FontStyle::Normal);
+        assert_eq!(modifier_runs(vec![run(3)], &[], warning).len(), 1, "nothing marked, nothing split");
+    }
+
+    #[test]
+    fn modifiers_on_a_very_long_line_stay_linear() {
+        use crate::lsp::MOD_MUTABLE;
+        let mods: Vec<(Range<usize>, u8)> = (0..20_000).map(|i| (i * 40..i * 40 + 5, MOD_MUTABLE)).collect();
+        let out = modifier_runs(vec![run(800_000)], &mods, hsla(0., 1., 0.5, 1.));
+        assert_eq!(out.iter().map(|r| r.len).sum::<usize>(), 800_000);
+        assert_eq!(out.iter().filter(|r| r.underline.is_some()).count(), 20_000);
     }
 }

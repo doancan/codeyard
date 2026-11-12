@@ -1,0 +1,54 @@
+   Compiling demo v0.1.0 (/work/demo)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+────────────
+ Nextest run ID b911c22c-b14b-43a8-9a08-3bbe97219f76 with nextest profile: default
+    Starting 6 tests across 3 binaries
+        FAIL [   0.021s] (1/6) demo::integration panics_with_unicode
+  stdout ───
+
+    running 1 test
+    test panics_with_unicode ... FAILED
+
+    failures:
+
+    failures:
+        panics_with_unicode
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'panics_with_unicode' (1658448) panicked at tests/integration.rs:8:5:
+    beklenmeyen durum: ğüşıöç 😀
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.024s] (2/6) demo::bin/demo tests::main_is_fine
+        PASS [   0.025s] (3/6) demo::integration adds_from_outside
+        PASS [   0.027s] (4/6) demo tests::ignored_one
+        PASS [   0.027s] (5/6) demo tests::adds_up
+        FAIL [   0.027s] (6/6) demo tests::fails_on_purpose
+  stdout ───
+
+    running 1 test
+    test tests::fails_on_purpose ... FAILED
+
+    failures:
+
+    failures:
+        tests::fails_on_purpose
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'tests::fails_on_purpose' (1658455) panicked at src/lib.rs:21:9:
+    assertion `left == right` failed
+      left: 3
+     right: 4
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+────────────
+     Summary [   0.028s] 6 tests run: 4 passed, 2 failed, 0 skipped
+        FAIL [   0.021s] (1/6) demo::integration panics_with_unicode
+        FAIL [   0.027s] (6/6) demo tests::fails_on_purpose
+error: test run failed

@@ -5,10 +5,12 @@
 //! Independent of the UI; blocking calls are made on background threads.
 
 mod parse;
+mod rust;
 mod servers;
 mod transport;
 
 pub use parse::*;
+pub use rust::*;
 pub use servers::*;
 pub use transport::*;
 

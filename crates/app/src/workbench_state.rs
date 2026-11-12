@@ -95,6 +95,22 @@ pub(super) struct LspState {
     pub(super) http_trusted: std::collections::HashSet<String>, // `trust_key` of the file: same path, other host, asks again
     /// Hosts for which a schema-download approval question is open right now (so one host is asked about once).
     pub(super) schema_asking: std::collections::HashSet<String>,
+    /// rust-analyzer's health, checks and the like (see workbench_rust.rs).
+    pub(super) rust: RustState,
+}
+
+/// What the workbench knows about rust-analyzer beyond what any language server has.
+#[derive(Default)]
+pub(super) struct RustState {
+    /// Per server slot: its health and the check it is running.
+    pub(super) servers: std::collections::HashMap<String, crate::rust_toolchain::status::ServerInfo>,
+    /// Which start of each language server is the current one (for every language: events of an older start are dropped).
+    pub(super) starts: crate::rust_toolchain::status::Starts,
+    /// Whether `cargo nextest` was found in each folder.
+    pub(super) nextest: crate::rust_toolchain::nextest::ProbeMemory,
+    /// Tests: the commands that would have run (label, command line) instead of running Cargo.
+    #[cfg(test)]
+    pub(super) ran: Vec<(String, String)>,
 }
 
 /// Git state of the open folder and refresh flags (see workbench_git.rs).

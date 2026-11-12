@@ -57,6 +57,8 @@ pub(super) enum OverlayKind {
     Favorites(Vec<String>),
     /// "Tasks: Run Task…"
     Tasks(Vec<tasks::Task>),
+    /// A Rust picker: runnables to run or debug, target triples to build for.
+    RustChoice(super::rust_glue::Choice),
     /// Extra folder to remove from the workspace.
     RemoveFolder(Vec<String>),
     /// Debugger: exception filters (id, name); selecting toggles them.

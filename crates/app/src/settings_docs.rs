@@ -74,6 +74,42 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
     ("rust.noDefaultFeatures", "boolean", "`false`", "Build Run and Debug targets without the package's default features."),
     ("rust.profile", "string", "Cargo's default (`dev`)", "Cargo profile Run and Debug build with, e.g. `release` or a custom `[profile.*]`."),
     (
+        "rust.testRunner",
+        "`cargo`, `auto`, `nextest`",
+        "`cargo`",
+        "What runs Rust tests from the Testing view, *Test: Run Test at Cursor* and *Rust: Run Runnable at Cursor*. `cargo` (the default) runs `cargo test`. `auto` uses cargo-nextest when `cargo nextest` is installed and `cargo test` otherwise; `nextest` says so when it is missing and falls back to `cargo test`. Whether nextest is installed is looked for only in a folder you have trusted (Cargo reads the folder's configuration), within five seconds, and a missing one is remembered for five minutes. The output says when nextest runs the tests. Documentation tests are rustdoc's, so nextest does not run them.",
+    ),
+    (
+        "rust.inlayHints.types",
+        "boolean",
+        "`true`",
+        "Show rust-analyzer's type hints (`let x` → `: i32`). Needs `editor.inlayHints`. Sent to the server as `rust-analyzer.inlayHints.typeHints.enable`, unless `lsp.servers.rust.settings` sets that itself.",
+    ),
+    (
+        "rust.inlayHints.parameters",
+        "boolean",
+        "`true`",
+        "Show rust-analyzer's parameter name hints (`f(` `a:` `1)`), as `rust-analyzer.inlayHints.parameterHints.enable`.",
+    ),
+    (
+        "rust.inlayHints.chaining",
+        "boolean",
+        "`true`",
+        "Show rust-analyzer's hints on method chains (the type at the end of each line), as `rust-analyzer.inlayHints.chainingHints.enable`.",
+    ),
+    (
+        "rust.semanticModifiers",
+        "list of `unsafe`, `mutable`, `consumed`",
+        "`[\"unsafe\"]`",
+        "Which semantic token modifiers from rust-analyzer are drawn over the colours: `unsafe` is underlined in the warning colour, `mutable` is underlined and `consumed` (a value moved out by that use) is in italics. Needs `editor.semanticHighlighting`.",
+    ),
+    (
+        "rust.target",
+        "target triple",
+        "Cargo's own (this machine)",
+        "Target triple (`--target`) that Run, Debug, tests and *Rust: Run Runnable at Cursor* build for, e.g. `aarch64-unknown-linux-musl`; *Rust: Select Target…* lists the installed ones. *Preferences: Apply Rust Setup…* also points rust-analyzer at it.",
+    ),
+    (
         "rust.targetDir",
         "path",
         "Cargo's own",

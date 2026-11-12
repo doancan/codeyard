@@ -409,6 +409,21 @@ impl Workbench {
                         return;
                     }
                     match crate::testrun::plan_in_crate(&rel, &text, line, whole_file, package_json.as_deref(), context.as_ref()) {
+                        Some(run) if run.command.starts_with("cargo test") => {
+                            // Through cargo-nextest when `rust.testRunner` and the machine allow it.
+                            this.with_nextest_choice(root.clone(), window, cx, move |this, nextest, window, cx| {
+                                let windows = this.remote.host.info().os == "windows";
+                                let command = if nextest {
+                                    crate::rust_toolchain::nextest::convert(&run.command, windows, false).unwrap_or(run.command)
+                                } else {
+                                    run.command
+                                };
+                                if command.starts_with("cargo nextest ") {
+                                    this.notice = Some(Notice::Info(crate::rust_toolchain::nextest::notice().into()));
+                                }
+                                this.run_task(Task::shell(run.label, command, "test"), window, cx);
+                            });
+                        }
                         Some(run) => this.run_task(Task::shell(run.label, run.command, "test"), window, cx),
                         None => {
                             this.notice = Some(Notice::Info(

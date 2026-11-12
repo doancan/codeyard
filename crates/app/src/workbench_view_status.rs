@@ -290,6 +290,7 @@ impl Workbench {
                         .child(div().min_w_0().max_w(px(180.)).truncate().child(t)),
                 )
             })
+            .children(self.rust_status_item(p, width, cx))
             .child(
                 div()
                     .flex_1()

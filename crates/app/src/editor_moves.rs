@@ -31,6 +31,9 @@ impl EditorView {
     pub(super) fn after_edit(&mut self, cx: &mut Context<Self>) {
         self.error = None;
         self.symbol_hl.clear();
+        // A rename inside a line keeps the line count: the places rust-analyzer gave still belong to the old text.
+        self.run.reset();
+        self.modmarks.clear();
         if self.lsp.is_some() {
             // In-flight requests belong to the old document; if the line count changed, the line-based data is stale.
             self.lsp_epoch.fetch_add(1, std::sync::atomic::Ordering::SeqCst);

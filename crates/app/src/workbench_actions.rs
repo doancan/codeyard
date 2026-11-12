@@ -238,6 +238,20 @@ impl Workbench {
             .on_action(cx.listener(Self::cargo_update_all_compatible))
             .on_action(cx.listener(Self::cargo_update_all_latest))
             .on_action(cx.listener(Self::cargo_check_updates))
+            .on_action(cx.listener(Self::rust_run_runnable))
+            .on_action(cx.listener(Self::rust_select_target))
+            .on_action(cx.listener(Self::rust_explain_error))
+            .on_action(cx.listener(Self::rust_open_docs))
+            .on_action(cx.listener(Self::rust_view_hir))
+            .on_action(cx.listener(Self::rust_view_mir))
+            .on_action(cx.listener(Self::rust_view_syntax_tree))
+            .on_action(cx.listener(Self::rust_reload_workspace))
+            .on_action(cx.listener(Self::rust_rebuild_proc_macros))
+            .on_action(cx.listener(Self::rust_run_flycheck))
+            .on_action(cx.listener(Self::rust_cancel_flycheck))
+            .on_action(cx.listener(Self::rust_clear_flycheck))
+            .on_action(cx.listener(Self::rust_restart_analyzer))
+            .on_action(cx.listener(Self::rust_show_status))
             .on_action(cx.listener(|this, _: &RestartLanguageServers, _, cx| {
                 this.restart_lsp(cx);
                 this.notice = Some(Notice::Info(crate::i18n::t("Restarting language servers…").into()));

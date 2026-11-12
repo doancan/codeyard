@@ -234,15 +234,23 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
 pub fn rust_setup(s: &crate::settings::Settings) -> Vec<(Vec<&'static str>, serde_json::Value)> {
     use serde_json::json;
     let ra = |key| vec!["lsp.servers", "rust", "settings", key];
-    vec![
+    let mut setup = vec![
         (ra("rust-analyzer.check.command"), json!("clippy")),
         (ra("rust-analyzer.cargo.features"), json!(s.rust_build.features)),
         (ra("rust-analyzer.cargo.noDefaultFeatures"), json!(s.rust_build.no_default_features)),
         (ra("rust-analyzer.cargo.targetDir"), json!(true)),
         (vec!["editor.formatters", "rust"], json!("lsp")),
         (vec!["editor.formatOnSave"], json!(true)),
-    ]
+    ];
+    // Analysis and checks follow the target Run and Debug build for (`rust.target`).
+    if let Some(target) = &s.rust_build.target {
+        setup.push((ra("rust-analyzer.cargo.target"), json!(target)));
+    }
+    setup
 }
+
+/// The rust-analyzer setting the setup writes when `rust.target` is set; Reset removes it even after `rust.target` was cleared.
+pub const RUST_ANALYZER_TARGET: [&str; 4] = ["lsp.servers", "rust", "settings", "rust-analyzer.cargo.target"];
 
 pub const KEYBINDINGS_TEMPLATE: &str = r#"// codeyard keyboard shortcuts. These are added on top of the defaults.
 // "when" is optional: Editor, FileTree, Terminal, Picker, Workbench...

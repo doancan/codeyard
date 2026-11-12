@@ -54,6 +54,7 @@ Actions
 Activate Breakpoints	
 Activated {0} time, last at {1} by {2}|Activated {0} times, last at {1} by {2}	
 Activating the completed installation…	
+Activity:	
 Add	
 Add Configuration…	
 Add Cursor Above	
@@ -173,7 +174,9 @@ Brightness
 Bring a folder's tabs and unsaved changes back when you open it	
 Build and Open	
 Build failed: {}	
+Build for target	
 Building the tests…	
+Building…	
 Built-in	
 CPU	
 CPU usage	
@@ -213,6 +216,7 @@ Cannot use {} as an object key
 Cargo changed Cargo.toml on disk while you were editing it. Your edits were kept; saving asks which version to keep.	
 Cargo dependency	
 Cargo did not report a Rust test executable	
+Cargo did not report an executable to debug	
 Cargo metadata has no packages	
 Cargo metadata has no workspace members	
 Cargo package has no manifest path	
@@ -286,6 +290,7 @@ Clear filters
 Clear the picked lines (Escape)	
 Clear the search	
 Clear the search field	
+Click for details.	
 Click to remove this filter	
 Click to sort using current values. Order stays fixed during live updates.	
 Click: details · Double-click: open · Right-click: actions	
@@ -500,6 +505,7 @@ Could not create the scratch file: {}
 Could not create {0}: {1}	
 Could not create {}: {}	
 Could not download js-debug: {}	
+Could not explain {0}: {1}	
 Could not find the home folder; type an absolute path.	
 Could not find your home folder	
 Could not format: {}	
@@ -513,6 +519,7 @@ Could not keep a copy of the version that was on disk: {}
 Could not list branches: {}	
 Could not list files: {}	
 Could not list stashes: {}	
+Could not list the installed targets: {}	
 Could not list the server's ports: {}	
 Could not list worktrees: {}	
 Could not list: {}	
@@ -608,6 +615,7 @@ Debug Test: {}
 Debug session ended	
 Debug session stopped	
 Debug toolbar	
+Debug {}	
 Debug: Add Configuration…	
 Debug: Add Function Breakpoint…	
 Debug: Add Watch Expression…	
@@ -640,6 +648,7 @@ Debugger
 Dec	
 Decoded here only: nothing is sent or logged	
 Default terminal profile	
+Default: build for this machine	
 Delay for afterDelay (ms)	
 Delete	
 Delete Permanently	
@@ -871,6 +880,7 @@ Enter the remote as: name url
 Enter unstages the picked lines	
 Enter: path branch	
 Error	
+Error code {}	
 Errors and warnings	
 Esc keeps Restricted Mode. Change it later with Workspace: Manage Workspace Trust…	
 Evaluate	
@@ -891,6 +901,7 @@ Expand all results
 Expected KEY=value	
 Expected a cargo test command	
 Expected “{}”	
+Explain error {}	
 Explorer	
 Explorer (⇧⌘E)	
 Export as Text…	
@@ -1150,12 +1161,14 @@ Go: Symbol in Workspace…
 Graph	
 Graph starts with every branch	
 HEAD ↔ Staged	
+HIR of {}	
 HOME is not set	
 HTTP: Send Request	
 HTTP: Show Last Response Headers	
 Hard reset to {}?	
 Header	
 Health	
+Health:	
 Help	
 Help: About Codeyard	
 Help: Check for Updates…	
@@ -1187,6 +1200,7 @@ Hover
 Hover an option to preview the result.	
 Hue	
 Identical	
+Idle	
 If the remote branch moves while this question is open, git refuses.	
 Ignore Case	
 Ignore all	
@@ -1365,6 +1379,7 @@ Load more
 Loading container details…	
 Loading image…	
 Loading pull requests…	
+Loading the workspace or indexing	
 Loading {}…	
 Loading…	
 Local	
@@ -1375,11 +1390,15 @@ Local time is not available on this system
 Log	
 Logs	
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
+Looking for cargo-nextest…	
+Looking for installed targets…	
 Looking for tests…	
 Looking for {} in your registries…	
 Looking up the latest versions on crates.io…	
+Looking up {}…	
 Lost the connection to {}: {}. Your open files stay here and unsaved changes are kept, but they cannot be saved until you reconnect (File: Save a Copy to This Computer… keeps one locally).	
 Lost the connection to {}: {}. Your open files stay here.	
+MIR of {}	
 Manage SSH hosts	
 Manage SSH hosts…	
 Manage: About, Settings, Color Theme…	
@@ -1530,6 +1549,7 @@ No debug session. F5 starts one.
 No definition found	
 No description.	
 No differences.	
+No documentation found for the item at the cursor	
 No editor is in a window of its own.	
 No edits yet in this session.	
 No enclosing brackets	
@@ -1583,6 +1603,7 @@ No references found
 No results	
 No results in {} file.|No results in {} files.	
 No running containers.	
+No rustc error code at the cursor	
 No saved copies yet. Save the file to start its local history.	
 No setting matches.	
 No settings folder on this machine.	
@@ -1648,7 +1669,10 @@ Nothing to choose from.
 Nothing to commit	
 Nothing to rename here	
 Nothing to replace: the files no longer contain matches.	
+Nothing to run at the cursor: put it inside a test or main.	
+Nothing to run on this line.	
 Nothing to run: select some text or put the cursor on a line.	
+Nothing to show for the item at the cursor	
 Nothing to stage in these lines	
 Nothing to unstage in these lines	
 Nothing to update: the requirements are current.	
@@ -1705,10 +1729,12 @@ Open a file first
 Open a file first.	
 Open a file in a Git repository first.	
 Open a file in the editor first.	
+Open a file inside a folder to run it.	
 Open a file inside a folder to run its tests.	
 Open a file to see its history.	
 Open a file to see its structure.	
 Open a file with merge conflicts first.	
+Open a folder first	
 Open a folder first (⌘O), then create files in it.	
 Open a folder first, then save it as a project.	
 Open a folder first.	
@@ -1749,6 +1775,7 @@ Open worktree in this window
 Open ~/.ssh/config	
 Open “{}”	
 Opening…	
+Opens the rust-analyzer status page	
 Order of files and folders in the explorer	
 Origin	
 Outline	
@@ -1849,6 +1876,7 @@ Primary side bar: {}
 Problems	
 Problems: Copy Full Diagnostic	
 Problems: {}	
+Proc macros rebuilt	
 Process ended. Press any key to close.	
 Process exited with code {}	
 Process exited with code {}. Press any key to close.	
@@ -1937,6 +1965,7 @@ Rebased onto {}
 Rebasing onto {}…	
 Rebuild Dev Container…	
 Rebuild and Open	
+Rebuilding proc macros…	
 Recent	
 Recent denials	
 Reconnect	
@@ -1962,6 +1991,7 @@ Reinstall Previous Version
 Release Notes	
 Release Page	
 Reload history	
+Reloading the Rust workspace…	
 Remote & Languages	
 Remote Docker environments currently support attaching to existing containers. Create Dev Containers with a local Docker engine.	
 Remote Explorer	
@@ -2084,6 +2114,7 @@ Restart to update
 Restart without saving	
 Restarting language servers…	
 Restarting loses everything since the last save.	
+Restarting rust-analyzer…	
 Restore Panel Size	
 Restore window	
 Restored from the last session, only the first {} results were kept: they may be out of date. Rerun to refresh.	
@@ -2122,25 +2153,47 @@ Run Without Debugging
 Run a command	
 Run and Debug	
 Run and Debug (⌃⇧D)	
+Run or debug	
+Run or debug on line {}	
 Run task	
 Run the search again	
 Run this search again in the same folder	
 Run to Cursor	
+Run {}	
 Run {} with any arguments	
 Running	
 Running Process	
 Running code extensions in this window: why they started, how long their calls took, what was denied. Nothing here leaves this computer.	
 Running task: {}	
 Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	
+Running with cargo-nextest. Documentation tests are not run.	
 Running: {}	
 Running…	
+Rust check cancelled	
+Rust check results cleared	
+Rust check started	
 Rust formatters not loaded: {}	
 Rust language features are disabled. Enable lsp.enabled in Settings.	
 Rust language server is not ready. Check Output, then run “Developer: Restart Language Servers”.	
 Rust tests did not build. See Output and Problems for the compiler errors.	
+Rust workspace reloaded	
+Rust: Cancel Flycheck	
+Rust: Clear Flycheck	
 Rust: Expand Macro Recursively	
+Rust: Explain Error at Cursor	
 Rust: Locate Parent Module	
 Rust: Open Cargo.toml	
+Rust: Open Documentation	
+Rust: Rebuild Proc Macros	
+Rust: Reload Workspace	
+Rust: Restart rust-analyzer	
+Rust: Run Flycheck	
+Rust: Run Runnable at Cursor	
+Rust: Select Target…	
+Rust: Show rust-analyzer Status	
+Rust: View HIR	
+Rust: View MIR	
+Rust: View Syntax Tree	
 SSH Hosts	
 SSH host	
 SSH {0}: {1}. Docker must be installed and accessible to the SSH user on the remote host.	
@@ -2240,6 +2293,8 @@ Sending {} {}…
 Sep	
 Served folder (empty: automatic; relative to the workspace, or an absolute path on the active host)	
 Server binding	
+Server report	
+Server:	
 Servers	
 Services	
 Set	
@@ -2412,6 +2467,7 @@ Sync Changes {}
 Sync changes?	
 Synced	
 Syncing…	
+Syntax tree of {}	
 TOML dates were turned into text.	
 TOML needs a table at the top level, but this document is a {}	
 Tab Moves Focus	
@@ -2504,6 +2560,7 @@ The branch goes back to how it was before the rebase started.
 The branch is fully merged into the current branch.	
 The branch is removed from the remote repository for everyone. Local branches are not touched.	
 The branch moved while the question was open. Nothing was changed.	
+The build failed. See Output and Problems for the compiler errors.	
 The bundled service catalogue is invalid. Reinstall Codeyard before retrying.	
 The changes are too large for one patch.	
 The clipboard has no text.	
@@ -2544,6 +2601,7 @@ The folder could not be read on the server: {}
 The host stopped responding. Installation files were retained because a process may still be running. Reconnect and inspect the destination before retrying.	
 The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	
 The input “{}” would run an editor command; use promptString or pickString.	
+The language server sent a documentation link that is not a web page or a local HTML file, so it was not opened	
 The last background fetch failed: {}	
 The last command exited with code {}	
 The local port is busy	
@@ -2906,6 +2964,7 @@ Welcome (no recent folders yet)
 What kind of extension?	
 What opens at start: welcome (the start page), continue (where you left off, SSH hosts included) or blank (an empty window)	
 What runs after a commit: nothing, push or sync. Your own settings only; a folder cannot change it	
+What you can do	
 When a file, diff or page opens while the panel is maximized: shrink the panel to half, give it back its size, or move the terminal into a tab	
 When the close button of a tab shows	
 Where .http requests are sent from: the workspace host (the server when connected over SSH) or this computer	
@@ -2983,6 +3042,7 @@ by {}
 cancelled	
 cannot read “{}” in the path	
 cannot read “{}” of the response	
+cargo-nextest was not found, so the tests run with cargo test. Install it with `cargo install cargo-nextest`.	
 changes requested	
 class	
 click to open · Esc to close	
@@ -3184,6 +3244,15 @@ review needed
 revoked: {}	
 right	
 running	
+rust-analyzer is not running for this file	
+rust-analyzer status	
+rust-analyzer: checking	
+rust-analyzer: error	
+rust-analyzer: loading	
+rust-analyzer: ready	
+rust-analyzer: warning	
+rust.semanticModifiers: unknown modifier {} ({})	
+rust.target: {} is not a target triple (letters, digits, - _ .)	
 rustc not found	
 seconds	
 selected	
@@ -3207,6 +3276,7 @@ symbol
 symbolic links are not copied	
 syntax error at “{}”	
 tag	
+target: {}	
 task	
 terminal name	
 terminal.scrollback: {} lines can use hundreds of megabytes per terminal and slow down scrolling and search (up to {} is comfortable); applied as set	
@@ -3308,6 +3378,7 @@ workbench.colorCustomizations: unknown color role {0} (see crates/theme/design/t
 yanked	
 yanked: {}	
 your words	
+{0} (+{1} more)	
 {0} (from {1})	
 {0} (line {1}, column {2})	
 {0} (saved) ↔ {1} (editor)	
@@ -3462,6 +3533,7 @@ your words
 {} cursor|{} cursors	
 {} day ago|{} days ago	
 {} definition|{} definitions	
+{} did not answer within 5 seconds	
 {} download, including updates|{} downloads, including updates	
 {} download|{} downloads	
 {} entry is left out.|{} entries are left out.	
@@ -3633,6 +3705,7 @@ your words
 “{}” was not found in the file	
 “{}” was not found in ~/.ssh/config	
 “{}”: {} = {}	
+… (cut after {} characters)	
 … {} more	
 … {} more line|… {} more lines	
 … {} running	

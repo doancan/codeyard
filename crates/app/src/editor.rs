@@ -223,8 +223,12 @@ pub use popups_glue::HoverRow;
 pub use popups_glue::PopupsA11y;
 #[path = "editor_render.rs"]
 mod render_glue;
+#[path = "editor_runnables.rs"]
+mod run_glue;
 #[path = "editor_schema.rs"]
 mod schema_glue;
+#[path = "editor_semantic.rs"]
+mod semantic_glue;
 #[path = "editor_spell.rs"]
 mod spell_glue;
 #[path = "editor_syntax.rs"]
@@ -267,6 +271,8 @@ pub enum EditorEvent {
     Extension(ExtEvent),
     /// A button of the question about contacting crates.io (editor_cargo.rs).
     Cargo(CargoChoice),
+    /// The run mark in the gutter of this line (0-based) was pressed.
+    RunAt(u32),
 }
 
 /// Open completion list.
@@ -489,6 +495,8 @@ pub struct EditorView {
     /// A block stage operation is in progress (so two writes to the same index don't collide).
     stage_busy: bool,
     lenses: std::collections::HashMap<usize, Vec<crate::lsp::Lens>>,
+    run: run_glue::RunMarks,
+    modmarks: semantic_glue::ModifierMarks,
     /// Semantic token roles: line -> (start, length (UTF-16), role).
     sem: std::collections::HashMap<usize, Vec<(u32, u32, Role)>>,
     hl_task: Option<gpui::Task<()>>,
@@ -970,6 +978,8 @@ impl EditorView {
             symbol_hl: Vec::new(),
             stage_busy: false,
             lenses: Default::default(),
+            run: Default::default(),
+            modmarks: Default::default(),
             sem: Default::default(),
             hl_task: None,
             inlays: Default::default(),

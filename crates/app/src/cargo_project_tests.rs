@@ -127,6 +127,10 @@ fn the_chosen_features_profile_and_output_folder_reach_the_build() {
         no_default_features: true,
         profile: Some("release".into()),
         target_dir: Some("out dir".into()),
+        target: None,
+        test_runner: Default::default(),
+        hints: Default::default(),
+        modifiers: Default::default(),
     };
     let args = target.build_args();
     let tail = &args[args.iter().position(|a| a == "--features").unwrap()..];

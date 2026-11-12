@@ -9,7 +9,7 @@ use std::time::Duration;
 use host::{Host, ProcEvent};
 use serde_json::{Value, json};
 
-use super::{Diagnostic, ServerConfig, parse_diagnostics, path_to_uri};
+use super::{Diagnostic, FlycheckStep, ServerConfig, ServerStatus, parse_diagnostics, parse_flycheck_progress, parse_server_status, path_to_uri};
 
 // --- Framing ---
 
@@ -90,6 +90,13 @@ pub enum ServerEvent {
     },
     /// Ongoing work ("indexing 45%"); `None`: finished.
     Progress(Option<String>),
+    /// rust-analyzer's `experimental/serverStatus`.
+    Status(ServerStatus),
+    /// A step of the check rust-analyzer runs on save (`cargo check`, `clippy`); the token tells workspaces apart.
+    Flycheck {
+        token: String,
+        step: FlycheckStep,
+    },
     /// Message from the server to the user (error/warning).
     Message(String),
     /// `window/logMessage`: for the Output panel (type: 1 error … 4 log).
@@ -120,6 +127,11 @@ pub fn merge_server_event(queue: &mut std::collections::VecDeque<ServerEvent>, e
     let slot = match &ev {
         ServerEvent::Diagnostics { path, .. } => queue.iter_mut().find(|e| matches!(e, ServerEvent::Diagnostics { path: p, .. } if p == path)),
         ServerEvent::Progress(_) => queue.iter_mut().find(|e| matches!(e, ServerEvent::Progress(_))),
+        ServerEvent::Status(_) => queue.iter_mut().find(|e| matches!(e, ServerEvent::Status(_))),
+        // The target being checked is replaced by the next one; the start and the end of a run are kept.
+        ServerEvent::Flycheck { token, step: FlycheckStep::Report(_) } => {
+            queue.iter_mut().find(|e| matches!(e, ServerEvent::Flycheck { token: t, step: FlycheckStep::Report(_) } if t == token))
+        }
         _ => None,
     };
     match slot {
@@ -466,7 +478,16 @@ fn handle_notification(msg: &Value, method: &str, events: &mpsc::Sender<ServerEv
                 let _ = events.send(ServerEvent::Diagnostics { path, diagnostics });
             }
         }
+        "experimental/serverStatus" => {
+            if let Some(status) = parse_server_status(&msg["params"]) {
+                let _ = events.send(ServerEvent::Status(status));
+            }
+        }
         "$/progress" => {
+            if let Some((token, step)) = parse_flycheck_progress(&msg["params"]) {
+                let _ = events.send(ServerEvent::Flycheck { token, step });
+                return;
+            }
             let v = &msg["params"]["value"];
             let text = match v["kind"].as_str() {
                 Some("end") => None,
@@ -522,6 +543,9 @@ fn initialize_params(root: &str, init_options: Option<&Value>) -> Value {
         "capabilities": {
             "general": { "positionEncodings": ["utf-16"] },
             "window": { "workDoneProgress": true },
+            // rust-analyzer reports its health and whether it is idle only to clients that ask, and offers a local copy of
+            // the docs only to those that can open one. Other servers ignore the key.
+            "experimental": { "serverStatusNotification": true, "localDocs": true },
             "workspace": {
                 "configuration": true,
                 "workspaceFolders": true,
@@ -534,7 +558,7 @@ fn initialize_params(root: &str, init_options: Option<&Value>) -> Value {
             },
             "textDocument": {
                 "synchronization": { "didSave": true, "dynamicRegistration": false },
-                "publishDiagnostics": { "relatedInformation": true, "dataSupport": true },
+                "publishDiagnostics": { "relatedInformation": true, "dataSupport": true, "codeDescriptionSupport": true },
                 "hover": { "contentFormat": ["markdown", "plaintext"] },
                 "definition": { "linkSupport": true },
                 "references": {},
@@ -548,7 +572,7 @@ fn initialize_params(root: &str, init_options: Option<&Value>) -> Value {
                 "semanticTokens": {
                     "requests": { "full": true },
                     "tokenTypes": SEMANTIC_TYPES,
-                    "tokenModifiers": [],
+                    "tokenModifiers": ["unsafe", "mutable", "consuming"],
                     "formats": ["relative"],
                 },
                 "typeHierarchy": {},
@@ -776,6 +800,58 @@ mod tests {
         assert_eq!(rrx.try_recv().unwrap(), Err(RpcError { code: Some(METHOD_NOT_FOUND), message: "unknown".into() }), "the code is kept");
         assert_eq!(clip_text("kısa", 10), "kısa");
         assert_eq!(clip_text("şğüiö", 3), "şğü…");
+    }
+
+    #[test]
+    fn rust_analyzer_status_and_flycheck_progress_get_their_own_events() {
+        let host: Arc<dyn Host> = Arc::new(host::local());
+        let (tx, rx) = mpsc::channel();
+        let pending: Pending = Arc::default();
+        let settings: SharedSettings = Arc::default();
+        let text = std::fs::read_to_string(format!("{}/testdata/rust-analyzer/notifications.jsonl", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        for line in text.lines() {
+            route(serde_json::from_str(line).unwrap(), &pending, &tx, &host, 0, &settings);
+        }
+        route(
+            json!({ "method": "$/progress", "params": { "token": "rustAnalyzer/Roots Scanned", "value": { "kind": "report", "message": "1/15" } } }),
+            &pending,
+            &tx,
+            &host,
+            0,
+            &settings,
+        );
+        let events: Vec<ServerEvent> = rx.try_iter().collect();
+        assert!(matches!(&events[0], ServerEvent::Status(s) if !s.quiescent));
+        assert!(matches!(&events[1], ServerEvent::Status(s) if s.quiescent));
+        assert!(matches!(&events[2], ServerEvent::Flycheck { step: FlycheckStep::Begin(t), .. } if t == "cargo check"));
+        let flycheck = events.iter().filter(|e| matches!(e, ServerEvent::Flycheck { .. })).count();
+        assert_eq!(flycheck, 12, "the three runs of the real stream: one with four reports, two without");
+        assert!(matches!(events.last(), Some(ServerEvent::Progress(Some(t))) if t.contains("1/15")), "other progress stays generic");
+    }
+
+    #[test]
+    fn a_stalled_ui_keeps_the_latest_status_and_checked_target_but_not_a_run_boundary() {
+        let mut q = std::collections::VecDeque::new();
+        let status = |quiescent| ServerEvent::Status(ServerStatus { quiescent, ..Default::default() });
+        let report = |token: &str, m: &str| ServerEvent::Flycheck { token: token.into(), step: FlycheckStep::Report(m.into()) };
+        merge_server_event(&mut q, ServerEvent::Flycheck { token: "t0".into(), step: FlycheckStep::Begin("cargo check".into()) });
+        for i in 0..1000 {
+            merge_server_event(&mut q, status(i % 2 == 0));
+            merge_server_event(&mut q, report("t0", &format!("crate {i}")));
+            merge_server_event(&mut q, report("t1", &format!("other {i}")));
+        }
+        merge_server_event(&mut q, ServerEvent::Flycheck { token: "t0".into(), step: FlycheckStep::End });
+        assert_eq!(q.len(), 5, "begin, one status, one report per token, end");
+        assert!(matches!(&q[1], ServerEvent::Status(s) if !s.quiescent), "the last status wins");
+        assert!(matches!(&q[2], ServerEvent::Flycheck { step: FlycheckStep::Report(m), .. } if m == "crate 999"));
+        assert!(matches!(q.back(), Some(ServerEvent::Flycheck { step: FlycheckStep::End, .. })));
+    }
+
+    #[test]
+    fn the_client_asks_for_status_notifications_and_local_docs() {
+        let caps = &initialize_params("/w", None)["capabilities"]["experimental"];
+        assert_eq!(caps["serverStatusNotification"], true);
+        assert_eq!(caps["localDocs"], true);
     }
 
     fn items(sections: &[Value]) -> Value {

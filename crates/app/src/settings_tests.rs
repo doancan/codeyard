@@ -467,3 +467,81 @@ fn a_warning_names_the_layer_the_value_came_from() {
     let (_, w) = parse_layers("{}", &layers).unwrap();
     assert!(w.len() == 1 && w[0].starts_with(".codeyard/settings.jsonc: editor.tabSize"), "{w:?}");
 }
+
+/// The Rust toolchain settings of this wave: the target, the test runner, the hint kinds (which reach rust-analyzer as its
+/// own settings) and the token modifiers; every wrong value is reported and ignored.
+#[test]
+fn the_rust_toolchain_settings_are_read_checked_and_reach_the_server() {
+    let (s, w) = parse_layers(
+        r#"{ "rust.target": " aarch64-unknown-linux-musl ", "rust.testRunner": "nextest", "rust.inlayHints.types": false, "rust.inlayHints.chaining": false,
+              "rust.semanticModifiers": ["mutable", "consumed"] }"#,
+        &[],
+    )
+    .unwrap();
+    assert!(w.is_empty(), "{w:?}");
+    let b = &s.rust_build;
+    assert_eq!(b.target.as_deref(), Some("aarch64-unknown-linux-musl"));
+    assert_eq!(b.test_runner, crate::rust_toolchain::nextest::TestRunner::Nextest);
+    assert_eq!(b.modifiers.0, crate::lsp::MOD_MUTABLE | crate::lsp::MOD_CONSUMED);
+    assert_eq!(b.summary().as_deref(), Some("target: aarch64-unknown-linux-musl"));
+    let rust = crate::lsp::server_for("rust", &s.lsp_servers).unwrap();
+    assert_eq!(rust.command, "rust-analyzer", "only the settings are the server's, not its command");
+    assert_eq!(*rust.settings, json!({ "rust-analyzer": { "inlayHints": { "typeHints": { "enable": false }, "chainingHints": { "enable": false } } } }));
+
+    // The defaults: nothing sent to the server, only `unsafe` drawn.
+    let (s, _) = parse_layers("{}", &[]).unwrap();
+    assert!(s.lsp_servers.is_empty());
+    assert_eq!((s.rust_build.target, s.rust_build.modifiers.0), (None, crate::lsp::MOD_UNSAFE));
+
+    // The user's own server settings win, and a turned-off Rust server stays off.
+    let (s, _) = parse_layers(
+        r#"{ "rust.inlayHints.types": false, "rust.inlayHints.parameters": false,
+              "lsp.servers": { "rust": { "settings": { "rust-analyzer.inlayHints.typeHints.enable": true } } } }"#,
+        &[],
+    )
+    .unwrap();
+    let tree = &*crate::lsp::server_for("rust", &s.lsp_servers).unwrap().settings;
+    assert_eq!(tree["rust-analyzer"]["inlayHints"]["typeHints"]["enable"], true);
+    assert_eq!(tree["rust-analyzer"]["inlayHints"]["parameterHints"]["enable"], false);
+    let (s, _) = parse_layers(r#"{ "rust.inlayHints.types": false, "lsp.servers": { "rust": null } }"#, &[]).unwrap();
+    assert!(crate::lsp::server_for("rust", &s.lsp_servers).is_none());
+
+    // Mistakes are named and ignored.
+    let (s, w) = parse_layers(
+        r#"{ "rust.target": "a b; touch x", "rust.testRunner": "fast", "rust.semanticModifiers": ["mutable", "shiny"], "rust.inlayHints.types": 3 }"#,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(
+        (s.rust_build.target, s.rust_build.test_runner),
+        (None, crate::rust_toolchain::nextest::TestRunner::Cargo),
+        "an unknown runner is the default, cargo"
+    );
+    assert_eq!(s.rust_build.modifiers.0, crate::lsp::MOD_MUTABLE);
+    assert!(w.iter().any(|m| m.contains("rust.target") && m.contains("not a target triple")), "{w:?}");
+    assert!(w.iter().any(|m| m.contains("rust.testRunner") && m.contains("unknown value")), "{w:?}");
+    assert!(w.iter().any(|m| m.contains("rust.semanticModifiers") && m.contains("shiny")), "{w:?}");
+    assert!(w.iter().any(|m| m.contains("rust.inlayHints.types")), "{w:?}");
+}
+
+/// Switching an inlay hint kind off or on changes the Rust server's settings and nothing else: the running server is told,
+/// and no language server restarts.
+#[test]
+fn switching_a_hint_kind_tells_the_rust_server_and_restarts_no_server() {
+    use crate::lsp::{ServersReload, servers_reload};
+    let servers = |text: &str| parse_layers(text, &[]).unwrap().0.lsp_servers;
+    let others = r#""lsp.servers": { "go": { "command": "gopls" }, "python": { "settings": { "a": 1 } } }"#;
+    let on = servers(&format!("{{ {others} }}"));
+    let off = servers(&format!(r#"{{ "rust.inlayHints.types": false, {others} }}"#));
+    assert_eq!(servers_reload(&on, &off), ServersReload::Settings(vec!["rust".into()]));
+    assert_eq!(servers_reload(&off, &on), ServersReload::Settings(vec!["rust".into()]));
+    let both = servers(&format!(r#"{{ "rust.inlayHints.types": false, "rust.inlayHints.chaining": false, {others} }}"#));
+    assert_eq!(servers_reload(&off, &both), ServersReload::Settings(vec!["rust".into()]));
+    assert_eq!(servers_reload(&on, &on), ServersReload::Unchanged);
+    // The user's own Rust entry, with a command of theirs, changes the same way.
+    let mine = |hint: &str| servers(&format!(r#"{{ {hint} "lsp.servers": {{ "rust": {{ "command": "my-ra", "settings": {{ "x": 1 }} }} }} }}"#));
+    assert_eq!(servers_reload(&mine(""), &mine(r#""rust.inlayHints.parameters": false,"#)), ServersReload::Settings(vec!["rust".into()]));
+    // Turning the server itself off still restarts.
+    let gone = servers(r#"{ "rust.inlayHints.types": false, "lsp.servers": { "rust": null } }"#);
+    assert_eq!(servers_reload(&off, &gone), ServersReload::Restart);
+}

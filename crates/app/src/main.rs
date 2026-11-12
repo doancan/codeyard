@@ -16,7 +16,6 @@ mod cargo_args;
 mod cargo_project;
 mod color;
 mod commands;
-// --- compare ---
 mod compare_folders;
 mod compare_logic;
 #[cfg(test)]
@@ -205,6 +204,7 @@ mod resource_monitor;
 mod resources;
 #[cfg(test)]
 mod rust_hardening_tests;
+mod rust_toolchain;
 mod scm;
 mod search;
 mod search_doc;

@@ -484,7 +484,7 @@ impl Default for Settings {
 
 #[path = "settings_templates.rs"]
 mod templates;
-pub use templates::{KEYBINDINGS_TEMPLATE, TEMPLATE, rust_setup};
+pub use templates::{KEYBINDINGS_TEMPLATE, RUST_ANALYZER_TARGET, TEMPLATE, rust_setup};
 #[path = "settings_text.rs"]
 mod text;
 pub use text::{Seg, array_items, members, set_path_in, set_string_in, set_value_in, value_range};
@@ -1094,6 +1094,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         }
         Some(_) => warnings.push(format!("settings.jsonc: {}", crate::i18n::tf("{}: expected an object", &[&"lsp.servers"]))),
     }
+    rust::apply_hint_settings(&mut s);
     match obj.get("spelling.languages") {
         None | Some(Value::Null) => {}
         Some(Value::Array(a)) => {
@@ -1320,7 +1321,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "editor.matchBrackets",
         "editor.folding",
     ];
-    for k in obj.keys().filter(|k| !KNOWN.contains(&k.as_str()) && !quiet.contains(k)) {
+    for k in obj.keys().filter(|k| !KNOWN.contains(&k.as_str()) && !rust::KEYS.contains(&k.as_str()) && !quiet.contains(k)) {
         // A setting an installed extension declares: kept when its value has the declared type.
         if k.starts_with("ext.") {
             match crate::ext::check_setting(k, &obj[k]) {

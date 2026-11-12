@@ -49,7 +49,7 @@ pub fn selection(command: &str) -> Result<Vec<String>, String> {
     Ok(args)
 }
 
-fn words(text: &str) -> Option<Vec<String>> {
+pub(crate) fn words(text: &str) -> Option<Vec<String>> {
     let mut out = Vec::new();
     let mut word = String::new();
     let mut quote = None;

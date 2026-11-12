@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use super::{Range16, path_to_uri, uri_to_path};
+use super::{Range16, modifier_flags, path_to_uri, uri_to_path};
 
 // --- Diagnostics ---
 
@@ -18,6 +18,8 @@ pub struct Diagnostic {
     pub source: Option<String>,
     /// The diagnostic's code (`E0382`), numbers as text.
     pub code: Option<String>,
+    /// Where the server explains the code (`codeDescription.href`), when it is a web link.
+    pub code_href: Option<String>,
     /// Secondary locations ("value moved here"), at most `MAX_RELATED`.
     pub related: Vec<Related>,
     /// How many more related locations the server sent beyond `related`.
@@ -167,6 +169,7 @@ fn parse_diagnostic(d: &Value) -> Diagnostic {
         }
         std::sync::Arc::from(text)
     });
+    let code_href = d["codeDescription"]["href"].as_str().filter(|h| h.starts_with("https://") || h.starts_with("http://")).map(|h| super::clip_text(h, 500));
     Diagnostic {
         start,
         end,
@@ -174,6 +177,7 @@ fn parse_diagnostic(d: &Value) -> Diagnostic {
         message: d["message"].as_str().unwrap_or_default().to_string(),
         source: d["source"].as_str().map(str::to_string),
         code,
+        code_href,
         related,
         more_related,
         rendered,
@@ -777,10 +781,13 @@ pub struct SemToken {
     pub start: u32,
     pub len: u32,
     pub kind: String,
+    /// The `MOD_*` flags of the modifiers the editor draws (`unsafe`, `mutable`, `consuming`).
+    pub mods: u8,
 }
 
-/// `semanticTokens/full` data (relative quintuples) → tokens. `legend`: the server's type table.
-pub fn decode_semantic_tokens(data: &Value, legend: &[String]) -> Vec<SemToken> {
+/// `semanticTokens/full` data (relative quintuples) → tokens. `legend`: the server's type table; `modifiers`: its modifier
+/// table, whose bit `i` in a token's set is the modifier `modifiers[i]`.
+pub fn decode_semantic_tokens(data: &Value, legend: &[String], modifiers: &[String]) -> Vec<SemToken> {
     const MAX_TOKENS: usize = 200_000;
     let Some(a) = data.as_array() else { return Vec::new() };
     // Malformed data (a non-number item, a length not a multiple of five) would shift all tokens: drop it.
@@ -800,7 +807,7 @@ pub fn decode_semantic_tokens(data: &Value, legend: &[String]) -> Vec<SemToken> 
             col = col.saturating_add(to_u32(t[1]));
         }
         if let Some(k) = usize::try_from(t[3]).ok().and_then(|i| legend.get(i)).filter(|k| !k.is_empty()) {
-            out.push(SemToken { line, start: col, len: to_u32(t[2]), kind: k.clone() });
+            out.push(SemToken { line, start: col, len: to_u32(t[2]), kind: k.clone(), mods: modifier_flags(t[4], modifiers) });
         }
     }
     out
@@ -963,28 +970,28 @@ mod tests {
         // Relative encoding: (0,2,3,k0) (0,5,2,k1) (2,1,4,k0)
         let data = serde_json::json!([0, 2, 3, 0, 0, 0, 5, 2, 1, 0, 2, 1, 4, 0, 0]);
         let legend = vec!["function".to_string(), "variable".to_string()];
-        let t = decode_semantic_tokens(&data, &legend);
+        let t = decode_semantic_tokens(&data, &legend, &[]);
         assert_eq!(
             t,
             vec![
-                SemToken { line: 0, start: 2, len: 3, kind: "function".into() },
-                SemToken { line: 0, start: 7, len: 2, kind: "variable".into() },
-                SemToken { line: 2, start: 1, len: 4, kind: "function".into() },
+                SemToken { line: 0, start: 2, len: 3, kind: "function".into(), mods: 0 },
+                SemToken { line: 0, start: 7, len: 2, kind: "variable".into(), mods: 0 },
+                SemToken { line: 2, start: 1, len: 4, kind: "function".into(), mods: 0 },
             ]
         );
-        assert!(decode_semantic_tokens(&serde_json::Value::Null, &legend).is_empty());
+        assert!(decode_semantic_tokens(&serde_json::Value::Null, &legend, &[]).is_empty());
     }
 
     #[test]
     fn hostile_semantic_tokens_and_uri_remapping() {
         let legend = vec!["function".to_string()];
         let huge = serde_json::json!([0, 4294967295u64, 4294967295u64, 0, 0, 0, 4294967295u64, 1, 0, 0]);
-        let t = decode_semantic_tokens(&huge, &legend);
+        let t = decode_semantic_tokens(&huge, &legend, &[]);
         assert_eq!(t.len(), 2);
         assert_eq!(t[1].start, u32::MAX, "overflow saturates, no panic");
-        assert!(decode_semantic_tokens(&serde_json::json!([0, 1, 2, 0]), &legend).is_empty(), "length is not a multiple of five");
-        assert!(decode_semantic_tokens(&serde_json::json!([0, "x", 2, 0, 0]), &legend).is_empty(), "non-number item");
-        assert!(decode_semantic_tokens(&serde_json::json!([0, 1, 2, 9, 0]), &legend).is_empty(), "type not in the legend");
+        assert!(decode_semantic_tokens(&serde_json::json!([0, 1, 2, 0]), &legend, &[]).is_empty(), "length is not a multiple of five");
+        assert!(decode_semantic_tokens(&serde_json::json!([0, "x", 2, 0, 0]), &legend, &[]).is_empty(), "non-number item");
+        assert!(decode_semantic_tokens(&serde_json::json!([0, 1, 2, 9, 0]), &legend, &[]).is_empty(), "type not in the legend");
         let edit = serde_json::json!({
             "changes": { "file:///a/old/x.ts": [], "file:///a/other.ts": [] },
             "documentChanges": [{ "textDocument": { "uri": "file:///a/old.ts", "version": 1 }, "edits": [] }]

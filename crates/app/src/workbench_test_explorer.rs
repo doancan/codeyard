@@ -217,6 +217,16 @@ impl Workbench {
         }
         // Dropping the task (Stop, or a new run) cancels it; `stop_tests` cleans up after it.
         self.jobs.tests.run = Some(cx.spawn(async move |this, cx| {
+            // Rust tests go through cargo-nextest when `rust.testRunner` and the machine allow it (looked up while the run
+            // already shows as started, so Stop works at once).
+            let windows = this.update(cx, |this, _| this.remote.host.info().os == "windows").unwrap_or(false);
+            let jobs = if Self::has_rust_jobs(&jobs) && super::rust_glue::use_nextest(&this, cx, &root).await {
+                let line = format!("\x1b[2m{}\x1b[0m\n", crate::rust_toolchain::nextest::notice());
+                out.update(cx, |t, cx| t.append(line.as_bytes(), cx)).ok();
+                Self::nextest_jobs(jobs, windows)
+            } else {
+                jobs
+            };
             for job in jobs {
                 let header = format!("\x1b[1m$ {}\x1b[0m\n", job.command);
                 out.update(cx, |t, cx| t.append(header.as_bytes(), cx)).ok();

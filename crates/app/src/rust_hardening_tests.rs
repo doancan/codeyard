@@ -286,6 +286,10 @@ fn debug_server_with_options(wb: &gpui::Entity<crate::workbench::Workbench>, cx:
             no_default_features: false,
             profile: Some("fast".into()),
             target_dir: Some("chosen out".into()),
+            target: None,
+            test_runner: Default::default(),
+            hints: Default::default(),
+            modifiers: Default::default(),
         };
     });
     let pending = std::sync::Arc::new(std::sync::Mutex::new(None));
