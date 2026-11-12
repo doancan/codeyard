@@ -140,10 +140,7 @@ fn reply(wb: &Entity<Workbench>, cx: &mut VisualTestContext, button: &str) -> St
 }
 
 fn skip() -> bool {
-    if !crate::ext_runtime::code_runs_for_test() {
-        return true;
-    }
-    false
+    !crate::ext_runtime::code_runs_for_test()
 }
 
 #[gpui::test]

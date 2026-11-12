@@ -649,8 +649,8 @@ fn selection_toggles_changes_files_and_counts() {
     assert_eq!(chosen.state(1), Tri::None);
     chosen.toggle_item(&p, 1);
     assert_eq!(chosen.state(1), Tri::All);
-    for i in 0..p.items.len() {
-        chosen.0[i].iter_mut().for_each(|x| *x = false);
+    for row in chosen.0.iter_mut().take(p.items.len()) {
+        row.iter_mut().for_each(|x| *x = false);
     }
     assert_eq!(chosen.blocker(&p), Some(Blocker::Nothing));
 }
