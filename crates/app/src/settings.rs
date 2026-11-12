@@ -120,6 +120,8 @@ pub struct Settings {
     pub panel_first_terminal_maximized: bool,
     /// What the log file records (`diagnostics.logLevel`).
     pub log_level: crate::diagnostics::log::Level,
+    /// Whether a language server's multi-file edit is reviewed before it is applied (`editor.refactorPreview`).
+    pub refactor_preview: crate::lsp::refactor::plan::ReviewMode,
     /// Closing a terminal asks first: "running" (a program is in the foreground), "always" or "never".
     pub terminal_confirm_close: String,
     /// Terminal profiles per operating system of the machine (`terminal.profiles.macos` / `.linux` / `.windows`).
@@ -375,6 +377,7 @@ impl Default for Settings {
             panel_open_from_maximized: "half".into(),
             panel_first_terminal_maximized: true,
             log_level: crate::diagnostics::log::Level::Info,
+            refactor_preview: Default::default(),
             terminal_confirm_close: "never".into(),
             terminal_profiles: Default::default(),
             terminal_default_profile: None,
@@ -499,6 +502,8 @@ pub use scope::USER_ONLY_KEYS;
 pub use scope::{Scope, ScopedLayer, Sources, is_user_only, name_layer};
 #[path = "settings_keybindings.rs"]
 mod keybindings;
+#[path = "settings_lsp.rs"]
+mod lsp_servers;
 #[path = "settings_rust.rs"]
 mod rust;
 #[path = "settings_scale.rs"]
@@ -602,37 +607,6 @@ pub fn parse_scoped(user: &str, layers: &[ScopedLayer]) -> Result<(Settings, Vec
     Ok((s, warnings, sources))
 }
 
-/// One `lsp.servers` entry: `Some(None)` turns the language off, `None` is malformed. An object needs at least one of
-/// `command`, `settings` and `initializationOptions`; a `settings` value that is not an object is warned about and the rest
-/// of the entry still applies.
-fn server_entry(lang: &str, cfg: &Value, warnings: &mut Vec<String>) -> Option<Option<crate::lsp::ServerSpec>> {
-    let o = match cfg {
-        Value::Null => return Some(None),
-        Value::String(cmd) if !cmd.trim().is_empty() => return Some(Some((cmd.clone(), Vec::new()).into())),
-        Value::Object(o) => o,
-        _ => return None,
-    };
-    let command = match o.get("command") {
-        None => None,
-        Some(Value::String(c)) if !c.trim().is_empty() => Some(c.clone()),
-        Some(_) => return None,
-    };
-    if command.is_none() && !o.contains_key("settings") && !o.contains_key("initializationOptions") {
-        return None;
-    }
-    let args = o.get("args").and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default();
-    let settings = match o.get("settings") {
-        None | Some(Value::Null) => Value::Null,
-        Some(v @ Value::Object(_)) => crate::lsp::expand_dotted(v),
-        Some(_) => {
-            warnings.push(format!("settings.jsonc: {}", crate::i18n::tf("{}: expected an object", &[&format!("lsp.servers.{lang}.settings")])));
-            Value::Null
-        }
-    };
-    let init_options = o.get("initializationOptions").filter(|v| !v.is_null()).cloned();
-    Some(Some(crate::lsp::ServerSpec { command, args, settings: std::sync::Arc::new(settings), init_options, program: None }))
-}
-
 fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<String>) {
     let mut s = Settings::default();
     let mut warnings = Vec::new();
@@ -724,6 +698,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     terminal::parse(&mut s, &mut r, obj);
     workbench::parse(&mut s, &mut r);
     rust::parse(&mut s, &mut r);
+    lsp_servers::parse(&mut s, &mut r);
     if let Some(v) = r.bool("window.restoreSession") {
         s.restore_session = v;
     }
@@ -1083,7 +1058,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         None | Some(Value::Null) => {}
         Some(Value::Object(m)) => {
             for (lang, cfg) in m {
-                match server_entry(lang, cfg, &mut warnings) {
+                match lsp_servers::server_entry(lang, cfg, &mut warnings) {
                     Some(e) => s.lsp_servers.push((lang.clone(), e)),
                     None => warnings.push(format!(
                         "settings.jsonc: {}",
@@ -1324,7 +1299,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "editor.matchBrackets",
         "editor.folding",
     ];
-    for k in obj.keys().filter(|k| !KNOWN.iter().chain(&rust::KEYS).chain(workbench::KEYS).any(|n| *n == k.as_str()) && !quiet.contains(k)) {
+    for k in
+        obj.keys().filter(|k| !KNOWN.iter().chain(&rust::KEYS).chain(workbench::KEYS).chain(&lsp_servers::KEYS).any(|n| *n == k.as_str()) && !quiet.contains(k))
+    {
         // A setting an installed extension declares: kept when its value has the declared type.
         if k.starts_with("ext.") {
             match crate::ext::check_setting(k, &obj[k]) {

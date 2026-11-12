@@ -51,6 +51,7 @@ status bar reports it.
 | `editor.matchBrackets` | `true` / `false` | `true` | Highlight the matching bracket |
 | `editor.minimap.enabled` | `true` / `false` | `true` | Show the minimap |
 | `editor.quickSuggestions` | `true` / `false` | `true` | Suggestions pop up while typing (off: only Ctrl+Space) |
+| `editor.refactorPreview` | `auto`, `always`, `never` | `auto` | Review a language server's rename or quick fix before it is applied: auto (when it changes several files or moves, creates or deletes files), always or never (file operations are always reviewed) |
 | `editor.renderLineHighlight` | `line`, `none` | `line` | Highlight the line with the cursor |
 | `editor.renderWhitespace` | `none`, `boundary`, `all` | `none` | Show spaces and tabs as marks |
 | `editor.semanticHighlighting.enabled` | `true` / `false` | `true` | Color symbols by their meaning, from the language server |
