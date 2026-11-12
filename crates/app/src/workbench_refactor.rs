@@ -51,9 +51,10 @@ struct Batch {
     buffers: Vec<UndoBuffer>,
 }
 
-/// The plan under review.
+/// The plan under review. The page is held weakly: closing its tab (or opening another page in its place) drops it, and
+/// that answers the edit's `done` with `false`.
 struct Review {
-    view: Entity<RefactorPreview>,
+    view: WeakEntity<RefactorPreview>,
     plan: Arc<RefactorPlan>,
     host: Arc<dyn Host>,
     done: Option<Done>,
@@ -64,6 +65,10 @@ pub(super) struct RefactorState {
     review: Option<Review>,
     /// The page's events; kept after the apply, for the report's Undo and Close.
     page_sub: Option<Subscription>,
+    /// Told when the page is dropped.
+    release_sub: Option<Subscription>,
+    /// What had the keyboard before the page opened (the editor the rename was made in): it gets it back when the page closes.
+    return_focus: Option<gpui::FocusHandle>,
     batch: Option<Batch>,
     /// Stops the transaction that is running (the page's Stop).
     cancel: Option<Arc<AtomicBool>>,
@@ -199,9 +204,14 @@ impl Workbench {
         if let Some(old) = self.lsp.refactor.review.take() {
             finish(old.done, false, self, cx);
         }
+        // A page replacing a page keeps the first one's return place.
+        if self.lsp.refactor.return_focus.is_none() || !matches!(self.tabs.page, Some(Page::Refactor(_))) {
+            self.lsp.refactor.return_focus = window.focused(cx);
+        }
         let view = cx.new(|cx| RefactorPreview::new(title, plan.clone(), cx));
         let sub = cx.subscribe_in(&view, window, |this, _, ev: &RefactorEvent, window, cx| this.on_refactor_event(ev, window, cx));
-        self.lsp.refactor.review = Some(Review { view: view.clone(), plan, host, done });
+        self.lsp.refactor.review = Some(Review { view: view.downgrade(), plan, host, done });
+        self.lsp.refactor.release_sub = Some(cx.observe_release(&view, |this, _, cx| this.refactor_page_released(cx)));
         self.lsp.refactor.page_sub = Some(sub);
         self.tabs.page = Some(Page::Refactor(view.clone()));
         self.tabs._page_sub = None;
@@ -214,11 +224,21 @@ impl Workbench {
         cx.notify();
     }
 
+    /// The page was dropped without a choice (its tab closed, another page opened in its place): the edit is turned down.
+    fn refactor_page_released(&mut self, cx: &mut Context<Self>) {
+        if self.lsp.refactor.review.as_ref().is_some_and(|r| r.view.upgrade().is_none())
+            && let Some(review) = self.lsp.refactor.review.take()
+        {
+            finish(review.done, false, self, cx);
+        }
+    }
+
     fn on_refactor_event(&mut self, ev: &RefactorEvent, window: &mut Window, cx: &mut Context<Self>) {
         match ev {
             RefactorEvent::Apply => {
                 let Some(review) = &self.lsp.refactor.review else { return };
-                let (view, plan, host) = (review.view.clone(), review.plan.clone(), review.host.clone());
+                let Some(view) = review.view.upgrade() else { return };
+                let (plan, host) = (review.plan.clone(), review.host.clone());
                 let chosen = view.read(cx).chosen().clone();
                 if !Arc::ptr_eq(&self.remote.host, &host) || self.root(cx).as_deref() != Some(plan.root.as_str()) {
                     let why = t("The connection or folder changed since the preview. Nothing was changed.").to_string();
@@ -230,11 +250,14 @@ impl Workbench {
             RefactorEvent::Discard => {
                 // Also the page of an edit that was applied: only the report is left, and closing it answers nobody.
                 if let Some(Page::Refactor(view)) = &self.tabs.page
-                    && self.lsp.refactor.review.as_ref().is_none_or(|r| r.view == *view)
+                    && self.lsp.refactor.review.as_ref().is_none_or(|r| r.view.entity_id() == view.entity_id())
                 {
                     self.close_page(cx);
                     self.lsp.refactor.page_sub = None;
-                    window.focus(&self.focus_handle);
+                    match self.lsp.refactor.return_focus.take() {
+                        Some(handle) => window.focus(&handle),
+                        None => window.focus(&self.focus_handle),
+                    }
                 }
                 if let Some(review) = self.lsp.refactor.review.take() {
                     finish(review.done, false, self, cx);
@@ -510,7 +533,7 @@ impl Workbench {
     /// The window's host or folder changed: a page open for the old one cannot apply (it says so when Apply is pressed).
     #[cfg(test)]
     pub fn refactor_page_for_test(&self) -> Option<Entity<RefactorPreview>> {
-        self.lsp.refactor.review.as_ref().map(|r| r.view.clone())
+        self.lsp.refactor.review.as_ref().and_then(|r| r.view.upgrade())
     }
 
     #[cfg(test)]

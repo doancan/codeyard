@@ -586,3 +586,119 @@ fn path_helpers_resolve_dots_and_compare_whole_components() {
     assert!(!inside("/ws", "/ws/demo"));
     assert!(inside("/anything", "/"));
 }
+
+struct Rng(u64);
+impl Rng {
+    fn next(&mut self) -> u64 {
+        self.0 ^= self.0 << 13;
+        self.0 ^= self.0 >> 7;
+        self.0 ^= self.0 << 17;
+        self.0
+    }
+    fn below(&mut self, n: usize) -> usize {
+        (self.next() % n.max(1) as u64) as usize
+    }
+}
+
+/// (line, UTF-16 column) of a UTF-16 index: a line ends at `\n`, and `\r\n` counts as one break.
+fn position_of(units: &[u16], index: usize) -> (u32, u32) {
+    let (mut line, mut start) = (0, 0);
+    for (i, u) in units[..index].iter().enumerate() {
+        if *u == 0x0a {
+            line += 1;
+            start = i + 1;
+        }
+    }
+    (line, (index - start) as u32)
+}
+
+/// The edits are applied on UTF-16 code units, the way the protocol defines them, and compared with the plan's bytes.
+#[test]
+fn random_edits_over_random_text_match_an_independent_utf16_implementation() {
+    let atoms = ["a", "b", " ", "ş", "ğ", "😀", "🦀", "ü", "x", "İ"];
+    let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
+    let mut checked = 0;
+    for round in 0..600 {
+        let crlf = round % 3 == 0;
+        let mut text = String::new();
+        for _ in 0..rng.below(50) {
+            if rng.below(6) == 0 {
+                text.push_str(if crlf { "\r\n" } else { "\n" });
+            } else {
+                text.push_str(atoms[rng.below(atoms.len())]);
+            }
+        }
+        let units: Vec<u16> = text.encode_utf16().collect();
+        // Places an edit may start or end: between characters, and not between the `\r` and the `\n` of one break.
+        let mut bounds = Vec::new();
+        let mut at = 0;
+        for ch in text.chars() {
+            bounds.push(at);
+            at += ch.len_utf16();
+        }
+        bounds.push(at);
+        bounds.retain(|&b| !(b > 0 && b < units.len() && units[b - 1] == 0x0d && units[b] == 0x0a));
+        let mut picks: Vec<usize> = (0..rng.below(8) * 2).map(|_| bounds[rng.below(bounds.len())]).collect();
+        picks.sort();
+        let ranges: Vec<(usize, usize)> = picks.chunks(2).filter(|c| c.len() == 2).map(|c| (c[0], c[1])).collect();
+        if ranges.is_empty() {
+            continue;
+        }
+        let replacements: Vec<String> = ranges.iter().map(|_| (0..rng.below(4)).map(|_| atoms[rng.below(atoms.len())]).collect()).collect();
+        // What the protocol says: replace each range of code units, last first so earlier ranges keep their places.
+        let mut out = units.clone();
+        for ((s, e), new) in ranges.iter().zip(&replacements).rev() {
+            out.splice(*s..*e, new.encode_utf16());
+        }
+        let expected = String::from_utf16(&out).unwrap();
+        let mut list: Vec<Value> = ranges
+            .iter()
+            .zip(&replacements)
+            .map(|((s, e), new)| {
+                let (a, b) = (position_of(&units, *s), position_of(&units, *e));
+                replace(a.0, a.1, b.0, b.1, new)
+            })
+            .collect();
+        // The server's order does not matter, except between inserts in one place (the array's order is theirs).
+        let starts: std::collections::HashSet<_> = ranges.iter().map(|r| r.0).collect();
+        if starts.len() == ranges.len() && round % 2 == 0 {
+            list.reverse();
+        }
+        let mut env = FakeEnv::demo();
+        env.files.insert("/ws/demo/src/r.rs".into(), text.as_bytes().to_vec());
+        let p = plan(&json!({ "documentChanges": [text_edit("/ws/demo/src/r.rs", Value::Null, Value::Array(list))] }), &env);
+        let f = &file(&p, "/ws/demo/src/r.rs").file;
+        assert!(f.problem.is_none(), "round {round}: {:?} for {text:?} {ranges:?}", f.problem);
+        let got = String::from_utf8(f.output_bytes(&vec![true; f.changes.len()]).unwrap()).unwrap();
+        assert_eq!(got, expected, "round {round}: {text:?} {ranges:?} {replacements:?}");
+        checked += 1;
+    }
+    assert!(checked > 300, "most rounds had edits: {checked}");
+}
+
+/// Whatever a server sends, the plan neither panics nor lets a refused file be written.
+#[test]
+fn hostile_positions_never_panic_and_never_write_a_refused_file() {
+    let mut rng = Rng(0xdead_beef_cafe_f00d);
+    let mut env = FakeEnv::demo();
+    env.put("/ws/demo/src/h.rs", "a😀b\r\nçş\n\nlast");
+    let wild = [0, 1, 2, 3, 4, 5, 6, 7, 100, u32::MAX, 1 << 20];
+    for round in 0..2000 {
+        let list: Vec<Value> = (0..rng.below(6))
+            .map(|_| {
+                let (l0, c0, l1, c1) = (wild[rng.below(wild.len())], wild[rng.below(wild.len())], wild[rng.below(wild.len())], wild[rng.below(wild.len())]);
+                replace(l0, c0, l1, c1, ["", "x", "😀\n", "\r\n"][rng.below(4)])
+            })
+            .collect();
+        let edit = json!({ "documentChanges": [text_edit("/ws/demo/src/h.rs", json!(rng.below(3)), Value::Array(list))] });
+        let p = build(parse(&edit), &env, &roots(), "local".into(), "/ws/demo".into(), Encoding::Utf8).unwrap();
+        for item in p.files() {
+            let all = vec![true; item.file.changes.len()];
+            if item.file.problem.is_some() {
+                assert!(item.file.output_bytes(&all).is_err(), "round {round}");
+            } else if !item.file.changes.is_empty() {
+                assert!(String::from_utf8(item.file.output_bytes(&all).unwrap()).is_ok(), "round {round}");
+            }
+        }
+    }
+}

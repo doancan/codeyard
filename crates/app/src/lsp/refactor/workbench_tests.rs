@@ -507,3 +507,47 @@ fn the_page_is_drawn_with_rows_for_a_long_refactoring_and_a_narrow_window(cx: &m
     assert_eq!(v.read_with(cx, |v, _| v.rows_for_test().len()), 400 * 3);
     cx.simulate_resize(gpui::size(gpui::px(1280.), gpui::px(800.)));
 }
+
+#[gpui::test]
+fn closing_the_tab_or_opening_another_page_turns_the_edit_down(cx: &mut TestAppContext) {
+    let (d, edit) = project("rp-close", true);
+    let (wb, cx) = setup(cx);
+    open(&wb, &d, cx);
+    let told = Told::default();
+    propose(&wb, &edit, &told, cx);
+    wait_page(&wb, cx);
+    wb.update(cx, |wb, cx| wb.close_page_for_test(cx));
+    cx.run_until_parked();
+    assert_eq!(told.all(), [false], "the server waiting for an answer gets one");
+    assert!(page(&wb, cx).is_none());
+    assert_eq!(read(&d, "a.rs"), "fn a() { x(); }\n");
+    // Another refactoring in its place: the first is turned down, the second waits.
+    let (first, second) = (Told::default(), Told::default());
+    propose(&wb, &edit, &first, cx);
+    let v1 = wait_page(&wb, cx);
+    propose(&wb, &edit, &second, cx);
+    cx.run_until_parked();
+    wait_ticking(cx, "the second page", |cx| page(&wb, cx).is_some_and(|v| v != v1));
+    assert_eq!(first.all(), [false]);
+    assert!(second.all().is_empty());
+}
+
+#[gpui::test]
+fn an_untrusted_folder_gets_no_edits_from_a_language_server(cx: &mut TestAppContext) {
+    let (d, edit) = project("rp-untrusted", true);
+    let cfg = config("rp-untrusted-cfg", json!({ "security.workspaceTrust.enabled": true }));
+    cx.update(|cx| {
+        crate::bind_keys(cx);
+        cx.set_global(crate::ui::ActiveTheme(theme::DARK));
+        cx.set_global(crate::settings::Settings { workspace_trust: true, lsp_enabled: false, ..crate::settings::Settings::default() });
+    });
+    let (wb, cx) = cx.add_window_view(move |window, cx| Workbench::with_state(state::State::in_memory().ok(), Some(cfg), window, cx));
+    open(&wb, &d, cx);
+    assert!(wb.read_with(cx, |wb, cx| wb.restricted_for_test(cx)), "the folder is not trusted");
+    let told = Told::default();
+    propose(&wb, &edit, &told, cx);
+    assert!(page(&wb, cx).is_none());
+    assert_eq!(told.all(), [false]);
+    assert!(wb.read_with(cx, |wb, _| wb.notice_text()).is_some_and(|t| t.contains("not trusted")));
+    assert_eq!(read(&d, "a.rs"), "fn a() { x(); }\n");
+}
