@@ -543,6 +543,11 @@ impl Workbench {
     }
 
     #[cfg(test)]
+    pub fn remote_host_for_test(&self) -> Arc<dyn Host> {
+        self.remote.host.clone()
+    }
+
+    #[cfg(test)]
     pub fn set_refactor_fs_for_test(&mut self, fs: Arc<dyn Fs>) {
         self.lsp.refactor.fs = Some(fs);
     }

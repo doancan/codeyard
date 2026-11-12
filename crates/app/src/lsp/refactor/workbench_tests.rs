@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 
 use super::apply::Fs;
 use super::preview::RefactorPreview;
-use crate::qa_integration_tests::wait_ticking;
+use crate::qa_integration_tests::{wait_secs, wait_ticking};
 use crate::qa_workbench_tests::{fresh, open, open_in, setup, setup_with_config};
 use crate::replace_apply::Store;
 use crate::workbench::Workbench;
@@ -506,6 +506,36 @@ fn the_page_is_drawn_with_rows_for_a_long_refactoring_and_a_narrow_window(cx: &m
     assert!(cx.debug_bounds("rp-row-900").is_none(), "rows off screen are not built");
     assert_eq!(v.read_with(cx, |v, _| v.rows_for_test().len()), 400 * 3);
     cx.simulate_resize(gpui::size(gpui::px(1280.), gpui::px(800.)));
+}
+
+/// Over SSH the plan reads, and the transaction writes, through the connection's host: the same page, the same rollback.
+#[gpui::test]
+fn a_refactoring_over_ssh_is_planned_and_written_on_the_server_and_rolls_back_there(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("rp-ssh") else { return };
+    let (d, edit) = project("rp-ssh-proj", true);
+    let (wb, cx) = crate::qa_integration_tests::ssh_workbench(cx, &d);
+    assert!(wb.read_with(cx, |wb, _| wb.remote_host_label_for_test()).is_some(), "the window is on the remote host");
+    let told = Told::default();
+    propose(&wb, &edit, &told, cx);
+    let v = wait_page(&wb, cx);
+    let rows = v.read_with(cx, |v, _| v.rows_for_test());
+    assert_eq!(rows.iter().filter(|r| r.starts_with("[x] ")).count(), 3, "{rows:?}");
+    // The server refuses the second write: everything is taken back there.
+    let remote = wb.read_with(cx, |wb, _| wb.remote_host_for_test());
+    let fs = Faulty { inner: remote, fail_write: 1, writes: Default::default() };
+    wb.update(cx, |wb, _| wb.set_refactor_fs_for_test(Arc::new(fs)));
+    press(&v, cx, &["apply"]);
+    wait_phase(&v, "review", cx);
+    assert_eq!((read(&d, "a.rs"), read(&d, "b.rs")), ("fn a() { x(); }\n".into(), "fn b() { x(); }\n".into()));
+    // Without the fault: written.
+    wb.update(cx, |wb, _| wb.set_refactor_fs_for_test(Arc::new(wb.remote_host_for_test())));
+    press(&v, cx, &["apply"]);
+    wait_secs(cx, 30, "the apply over ssh", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_secs(1));
+        phase(&v, cx) == "done"
+    });
+    assert_eq!(read(&d, "c.rs"), "fn c() {\n    k();\n    k();\n}\n");
+    assert_eq!(told.all(), [true]);
 }
 
 #[gpui::test]
