@@ -1,0 +1,98 @@
+{
+ "documentChanges": [
+  {
+   "textDocument": {
+    "uri": "file:///ws/demo/src/main.rs",
+    "version": 1
+   },
+   "edits": [
+    {
+     "range": {
+      "start": {
+       "line": 0,
+       "character": 4
+      },
+      "end": {
+       "line": 0,
+       "character": 8
+      }
+     },
+     "newText": "araçlar"
+    },
+    {
+     "range": {
+      "start": {
+       "line": 5,
+       "character": 16
+      },
+      "end": {
+       "line": 5,
+       "character": 20
+      }
+     },
+     "newText": "araçlar"
+    },
+    {
+     "range": {
+      "start": {
+       "line": 7,
+       "character": 36
+      },
+      "end": {
+       "line": 7,
+       "character": 40
+      }
+     },
+     "newText": "araçlar"
+    }
+   ]
+  },
+  {
+   "textDocument": {
+    "uri": "file:///ws/demo/src/ayar.rs",
+    "version": null
+   },
+   "edits": [
+    {
+     "range": {
+      "start": {
+       "line": 0,
+       "character": 11
+      },
+      "end": {
+       "line": 0,
+       "character": 15
+      }
+     },
+     "newText": "araçlar"
+    }
+   ]
+  },
+  {
+   "textDocument": {
+    "uri": "file:///ws/demo/src/rapor.rs",
+    "version": null
+   },
+   "edits": [
+    {
+     "range": {
+      "start": {
+       "line": 0,
+       "character": 11
+      },
+      "end": {
+       "line": 0,
+       "character": 15
+      }
+     },
+     "newText": "araçlar"
+    }
+   ]
+  },
+  {
+   "kind": "rename",
+   "oldUri": "file:///ws/demo/src/util.rs",
+   "newUri": "file:///ws/demo/src/ara%C3%A7lar.rs"
+  }
+ ]
+}

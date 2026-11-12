@@ -4135,3 +4135,29 @@ Help: Copy Diagnostics	Yardım: Tanılama Bilgisini Kopyala
 Help: Open Log File	Yardım: Günlük Dosyasını Aç
 Help: Reveal Log Folder	Yardım: Günlük Klasörünü Göster
 The last session ended without closing normally, and no crash report explains why.	Son oturum normal şekilde kapanmadı ve nedenini açıklayan bir çökme raporu yok.
+A folder cannot be moved into itself.	Bir klasör kendi içine taşınamaz.
+Already exists; Codeyard never overwrites a file in a refactoring.	Zaten var; Codeyard bir yeniden düzenlemede hiçbir dosyanın üzerine yazmaz.
+An edit ends before it starts.	Bir düzenleme bitişinden önce başlıyor.
+An open folder is never deleted by a refactoring.	Açık bir klasör hiçbir yeniden düzenlemeyle silinmez.
+Could not remove {}; delete it by hand.	{} kaldırılamadı; elle silin.
+Could not take back {0}: {1}. Check it before going on.	{0} geri alınamadı: {1}. Devam etmeden önce kontrol edin.
+Created {}	{} oluşturuldu
+Edit {} of the language server is malformed.	Dil sunucusunun {}. düzenlemesi bozuk.
+Edits overlap, so the server's answer cannot be trusted. Nothing in this file is changed.	Düzenlemeler çakışıyor, bu yüzden sunucunun yanıtına güvenilemez. Bu dosyada hiçbir şey değiştirilmedi.
+Has unsaved changes the language server has not seen: save or revert it first.	Dil sunucusunun görmediği kaydedilmemiş değişiklikler var: önce kaydedin ya da geri alın.
+Has unsaved changes: save or revert it first.	Kaydedilmemiş değişiklikler var: önce kaydedin ya da geri alın.
+Line {0} does not exist (the file has {1} lines).	{0}. satır yok (dosyada {1} satır var).
+Line {0}, column {1} is inside a character.	{0}. satır, {1}. sütun bir karakterin ortasında.
+Not a file: {}	Dosya değil: {}
+Outside the open folders: {}	Açık klasörlerin dışında: {}
+The edit list is missing.	Düzenleme listesi yok.
+The file to delete is not there.	Silinecek dosya yok.
+The file to rename is not there.	Yeniden adlandırılacak dosya yok.
+The file was edited while the language server was working, so its answer no longer fits. Try again.	Dil sunucusu çalışırken dosya düzenlendi, bu yüzden yanıtı artık uymuyor. Yeniden deneyin.
+The language server's refactoring is too large to review ({0} files, {1} changes; the limit is {2} files and {3} changes). Nothing was changed.	Dil sunucusunun yeniden düzenlemesi gözden geçirilemeyecek kadar büyük ({0} dosya, {1} değişiklik; sınır {2} dosya ve {3} değişiklik). Hiçbir şey değiştirilmedi.
+The new name is taken; Codeyard never overwrites a file in a refactoring.	Yeni ad kullanımda; Codeyard bir yeniden düzenlemede hiçbir dosyanın üzerine yazmaz.
+The refactoring failed, so everything it had done was taken back. Nothing was changed.	Yeniden düzenleme başarısız oldu, bu yüzden yaptığı her şey geri alındı. Hiçbir şey değiştirilmedi.
+The server gave two different document versions for this file.	Sunucu bu dosya için iki farklı belge sürümü verdi.
+The server's edit is for version {0} of this file, the editor has version {1}.	Sunucunun düzenlemesi bu dosyanın {0}. sürümü için, düzenleyicide {1}. sürüm var.
+Unknown file operation “{}”	Bilinmeyen dosya işlemi “{}”
+{} file|{} files	{} dosya

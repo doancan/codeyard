@@ -20,6 +20,7 @@ A compatible Node.js runtime could not be used on this host. Install Node.js 22.
 A container operation is running. Use Docker: Cancel Operation before starting another.	
 A file named “{}” is already there; a folder cannot replace it. Rename or remove it first.	
 A file you opened names a schema that is hosted on {}. Downloading it sends a request to that server (your IP address and the schema's address). Only allow it if you trust the file and the host.	
+A folder cannot be moved into itself.	
 A folder named “{}” is already there; a file cannot replace it. Rename or remove it first.	
 A git dependency: not looked up on crates.io.	
 A key that types text cannot be a shortcut on its own. Add Ctrl, Alt or Cmd, or press a function key.	
@@ -110,6 +111,7 @@ Allow Host…
 Allow file access	
 Allow for this session	
 Already debugging: Shift+F5 stops the session.	
+Already exists; Codeyard never overwrites a file in a refactoring.	
 Already formatted	
 Already listed after an update? Remove it with − and add it again.	
 Already minified	
@@ -118,8 +120,10 @@ Also get its pre-releases, at once and before others get them
 Also used by {}	
 Always open *.{0} as {1}	
 Amended {}	
+An edit ends before it starts.	
 An entry of keybindings.jsonc has no key	
 An existing file with the same name is never overwritten.	
+An open folder is never deleted by a refactoring.	
 Anchors and aliases were expanded.	
 Another debug adapter	
 Another git process is using this repository. If none is running, a crash left {} behind: delete it and try again.	
@@ -587,6 +591,7 @@ Could not refresh container data: {}. Check Docker access on the SSH host and re
 Could not remember your update choices; Codeyard may ask or check again.	
 Could not remove the instance: {}	
 Could not remove the server: {}	
+Could not remove {}; delete it by hand.	
 Could not rename {}.	
 Could not reserve a temporary Git reference.	
 Could not reserve a temporary file for comparison.	
@@ -616,6 +621,7 @@ Could not start the debug session: {}
 Could not start the test runner: {}	
 Could not switch profile: {}	
 Could not switch to {0}: {1}	
+Could not take back {0}: {1}. Check it before going on.	
 Could not tell whether it is merged ({}): git will refuse if commits would be lost.	
 Could not write {0}: {1}	
 Could not write {}.	
@@ -638,6 +644,7 @@ Create scratch file
 Create tag	
 Create the folder first, or check that the path is right.	
 Created branch {0} at {1}	
+Created {}	
 Creating {}…	
 Current	
 Current Folder	
@@ -825,6 +832,7 @@ Edit Condition…
 Edit Host…	
 Edit a host	
 Edit which SSH host?	
+Edit {} of the language server is malformed.	
 Edit “{}”: which setting?	
 Edit, test, set up key login, remove	
 Editing, search, Git and themes work as usual.	
@@ -922,6 +930,7 @@ Editor: Undo
 Editor: Unfold	
 Editor: Unfold All	
 Editor: Unfold Recursively	
+Edits overlap, so the server's answer cannot be trusted. Nothing in this file is changed.	
 Empty folder	
 Empty group: ⌘P opens a file here	
 Empty the folder first, or delete its contents too.	
@@ -1241,6 +1250,8 @@ HOME is not set
 HTTP: Send Request	
 HTTP: Show Last Response Headers	
 Hard reset to {}?	
+Has unsaved changes the language server has not seen: save or revert it first.	
+Has unsaved changes: save or revert it first.	
 Header	
 Health	
 Health:	
@@ -1437,6 +1448,8 @@ Line Numbers
 Line endings for this file (applied on save)	
 Line height in pixels	
 Line numbers in the gutter	
+Line {0} does not exist (the file has {1} lines).	
+Line {0}, column {1} is inside a character.	
 Line {0}: {1}	
 Line {0}: {1} → {2}	
 Line {} added	
@@ -1734,6 +1747,7 @@ None of this repository's remotes is on github.com, and no installed extension p
 None yet	
 None: it only adds data to Codeyard.	
 Not Now	
+Not a file: {}	
 Not activated in this window yet	
 Not breaking on exceptions.	
 Not changed (cancelled): {}	
@@ -1887,6 +1901,7 @@ Outline
 Output	
 Output of {}	
 Output: Clear	
+Outside the open folders: {}	
 Overview	
 Overwrite	
 Panel	
@@ -2743,6 +2758,7 @@ The destination window is no longer available.
 The disk is full (or your quota is used up).	
 The disk or folder is read-only.	
 The download finished but js-debug was not found in it.	
+The edit list is missing.	
 The editor could not move to a new window: {}	
 The element can't be renamed.	
 The file changed during the write ({})	
@@ -2756,6 +2772,9 @@ The file is not open any more.
 The file is not tracked by Git.	
 The file is too large for an outline.	
 The file list could not be read: only opened folders are searched.	
+The file to delete is not there.	
+The file to rename is not there.	
+The file was edited while the language server was working, so its answer no longer fits. Try again.	
 The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
@@ -2767,6 +2786,7 @@ The host stopped responding. Installation files were retained because a process 
 The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	
 The input “{}” would run an editor command; use promptString or pickString.	
 The language server sent a documentation link that is not a web page or a local HTML file, so it was not opened	
+The language server's refactoring is too large to review ({0} files, {1} changes; the limit is {2} files and {3} changes). Nothing was changed.	
 The last background fetch failed: {}	
 The last command exited with code {}	
 The last session ended without closing normally, and no crash report explains why.	
@@ -2775,6 +2795,7 @@ The local port was not changed: {}. Back on localhost:{}
 The managed installation is incomplete or belongs to another catalogue. Reinstall the services to repair it.	
 The name has characters this system does not allow.	
 The name or the path is too long.	
+The new name is taken; Codeyard never overwrites a file in a refactoring.	
 The new version couldn't be installed from here. You can download it from the release page instead.	
 The number {} cannot be written in JSON	
 The open folder is no longer listed in the workspace file.	
@@ -2798,6 +2819,7 @@ The query is too long
 The query needs more work than allowed; narrow it down	
 The query was edited: press Enter or Rerun to search for it.	
 The quoted value is not closed	
+The refactoring failed, so everything it had done was taken back. Nothing was changed.	
 The release notes are longer: read the rest at {}	
 The release notes are longer: read the rest on GitHub.	
 The remote has commits you do not have: pull first (Git: Pull), then push. To overwrite them instead, use Git: Push (Force).	
@@ -2815,10 +2837,12 @@ The search or the connection changed while the preview was being made. Preview a
 The secondary side bar shows no view.	
 The selection is neither a JWT nor a Unix timestamp	
 The server did not answer within 60 seconds.	
+The server gave two different document versions for this file.	
 The server no longer accepts an account password: use a personal access token as the password (or sign in with the GitHub CLI: gh auth login).	
 The server protects this branch and refuses direct pushes: push to another branch and open a pull request.	
 The server refused the login: check the account and that the token may push.	
 The server wants credentials that were not given: try again and enter them when asked, or set up an SSH key.	
+The server's edit is for version {0} of this file, the editor has version {1}.	
 The settings file is not {} any more (another profile?). Nothing was written.	
 The settings folder is gone. Nothing was changed.	
 The shell has exited	
@@ -3002,6 +3026,7 @@ Uninstall
 Uninstall {}?	
 Uninstall…	
 Unknown configuration “{}” in compound “{}”	
+Unknown file operation “{}”	
 Unknown input “{0}” in “{1}”	
 Unknown outcome, check before retrying: {0} ({1})	
 Unknown theme '{0}'. Available: {1}	
@@ -3766,6 +3791,7 @@ your words
 {} file skipped, parse errors|{} files skipped, parse errors	
 {} file still has conflicts: resolve it and stage it first|{} files still have conflicts: resolve them and stage them first	
 {} files	
+{} file|{} files	
 {} forwarded	
 {} gets pre-releases from now on.	
 {} gets releases only; the pre-release you have stays until a release passes it.	

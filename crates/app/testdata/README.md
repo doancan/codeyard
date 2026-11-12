@@ -59,6 +59,23 @@ Run in `demo` with `cargo-nextest nextest run …` (stdout and stderr together, 
 `FLAKY`, `TIMEOUT` and signal lines are not in these files (nothing in `demo` retries or times out); the tests for them use
 lines written by hand from nextest's documentation and say so.
 
+## `refactor/`
+
+A second package, `refactor/demo/src/`, with a symbol used in four files: `hesapla` in `util.rs`, called from `main.rs`,
+`ayar.rs` (after Turkish letters and an emoji on the same line, so the UTF-16 columns matter) and `rapor.rs` (CRLF on disk;
+the fixture here has LF so checkouts do not change it, and the tests put the CRLF back). Captured with rust-analyzer
+0.3.2887-standalone (f04c372864 2026-05-03, the official release binary), client capabilities
+`workspace.workspaceEdit.documentChanges` and `resourceOperations: [create, rename, delete]`, the files opened with version 1
+and the answer waited for until the server was idle. The folder of the machine it was captured on is replaced by `/ws/demo`.
+
+| File | Request |
+| --- | --- |
+| `rename_fn.json` | `textDocument/rename` of `hesapla` to `topla` at `util.rs` 0:7 (`util.rs` is open, so its edit has version 1; the others are `null`) |
+| `rename_mod.json` | `textDocument/rename` of the module `util` to `araçlar` at `main.rs` 0:4: text edits in three files and a `rename` of `util.rs` to `araçlar.rs` |
+
+Create and delete operations are not in these captures (rust-analyzer sent none for these requests); their tests use edits
+written by hand, in the shape of the protocol.
+
 ## Other
 
 `rustc-explain-E0382.md`: `rustc --explain E0382`. Output of `rustup target list --installed` was not captured: rustup was not

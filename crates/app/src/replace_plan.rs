@@ -104,6 +104,9 @@ pub enum Problem {
     Unreadable(String),
     /// No match in the file's current text.
     NoChanges,
+    /// Refused for a reason only its maker knows (a refactoring edit that is stale, overlaps or points outside the folder);
+    /// the text is already translated.
+    Refused(String),
 }
 
 impl Problem {
@@ -114,6 +117,7 @@ impl Problem {
             Problem::Unencodable { ch, encoding } => crate::i18n::tf("“{0}” cannot be written in {1}: not changed.", &[ch, encoding]),
             Problem::Unreadable(e) => crate::i18n::tf("Could not read: {}", &[e]),
             Problem::NoChanges => crate::i18n::t("No matches in this file any more.").into(),
+            Problem::Refused(why) => why.clone(),
         }
     }
 }
@@ -177,6 +181,37 @@ impl FilePlan {
         let changes = find_changes(&text, pattern, eol, limit);
         let problem = unencodable(&changes, encoding);
         // Nothing can ever be written for a file without changes: its text and bytes are not kept.
+        let (text, original) = if changes.is_empty() { (String::new(), Arc::new(Vec::new())) } else { (text, original) };
+        FilePlan { path, version, encoding, bom, text, original, changes, problem }
+    }
+
+    /// A plan for changes that are not found by a search (a language server's refactoring). `make` gets the file's decoded text
+    /// and its first line ending and answers with the changes in text order, without overlaps, or why the file is refused.
+    /// Everything else follows `build`: the encoding must round-trip, and nothing the encoding cannot store is proposed.
+    pub fn from_edits(path: String, source: Source, fallback: Encoding, make: impl FnOnce(&str, &str) -> Result<Vec<Change>, String>) -> FilePlan {
+        let (text, encoding, bom, version, original, eol) = match source {
+            Source::Buffer { text, epoch, version, encoding } => {
+                let hash = proto::content_hash(text.as_bytes());
+                (text, encoding, false, Version::Buffer { epoch, version, hash }, Arc::new(Vec::new()), "\n")
+            }
+            Source::Disk { bytes, hash } => match decode(&bytes, fallback) {
+                Ok((text, encoding, bom)) => {
+                    let eol = first_eol(&text);
+                    (text, encoding, bom, Version::Disk { hash }, Arc::new(bytes), eol)
+                }
+                Err(problem) => {
+                    let mut file = FilePlan::unreadable(path, String::new());
+                    file.version = Version::Disk { hash };
+                    file.problem = Some(problem);
+                    return file;
+                }
+            },
+        };
+        let (changes, refused) = match make(&text, eol) {
+            Ok(changes) => (changes, None),
+            Err(why) => (Vec::new(), Some(Problem::Refused(why))),
+        };
+        let problem = refused.or_else(|| unencodable(&changes, encoding));
         let (text, original) = if changes.is_empty() { (String::new(), Arc::new(Vec::new())) } else { (text, original) };
         FilePlan { path, version, encoding, bom, text, original, changes, problem }
     }
@@ -422,7 +457,7 @@ fn find_changes(text: &str, pattern: &Pattern, eol: &str, limit: usize) -> Vec<C
 }
 
 /// Line breaks inside a replacement become the file's line ending.
-fn unify_breaks(text: &str, eol: &str) -> String {
+pub(crate) fn unify_breaks(text: &str, eol: &str) -> String {
     if !text.contains(['\n', '\r']) {
         return text.to_string();
     }

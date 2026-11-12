@@ -5,6 +5,7 @@
 //! Independent of the UI; blocking calls are made on background threads.
 
 mod parse;
+pub mod refactor;
 mod rust;
 mod servers;
 mod transport;
