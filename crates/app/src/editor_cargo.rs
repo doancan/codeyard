@@ -106,6 +106,8 @@ impl EditorView {
             let (bg, fg) = if primary { (p.accent, p.on_accent) } else { (p.surface_hover, p.text) };
             let el = div()
                 .id(id)
+                .flex_none()
+                .whitespace_nowrap()
                 .h(px(24.))
                 .px(px(theme::SPACE[4]))
                 .flex()
@@ -136,7 +138,7 @@ impl EditorView {
                 .font_family(ui::UI_FONT)
                 .text_size(px(text::SM.0))
                 .child(icon("info", 16., p.info))
-                .child(div().flex_1().relative().child(message).child(said(name.clone(), "cargo-consent", accesskit::Role::Label, message)))
+                .child(div().flex_1().min_w_0().relative().child(message).child(said(name.clone(), "cargo-consent", accesskit::Role::Label, message)))
                 .child(choice("cargo-enable", crate::i18n::tr("Enable"), true, CargoChoice::Enable))
                 .child(choice("cargo-not-now", crate::i18n::tr("Not now"), false, CargoChoice::NotNow))
                 .child(choice("cargo-never", crate::i18n::tr("Don’t ask again"), false, CargoChoice::Never))
