@@ -39,6 +39,11 @@ pub(super) enum OverlayKind {
     },
     /// Language server results: locations (references), symbols, code actions.
     Locations(Vec<(String, u32, u32)>),
+    /// "Cargo: Add Dependency…": the manifest and the crates the search returned.
+    CargoAdd {
+        path: String,
+        hits: Vec<crate::cargo_project::deps::registry::SearchHit>,
+    },
     Symbols(Vec<(u32, u32)>),
     CodeActions {
         actions: Vec<crate::lsp::CodeAction>,

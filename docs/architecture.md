@@ -85,6 +85,12 @@ generated test commands back into literal Cargo argv. Debug executable paths com
 directory guesses. `workbench_debug_save.rs` coordinates workspace saves before discovery/build/start and cancels
 the start on a save error, Stop or a changed workspace. Editor saves keep their hash/conflict protection.
 
+`Cargo.toml` dependency intelligence lives in `cargo_deps*.rs`, hung off `cargo_project.rs` (`cargo_project::deps`; `main.rs`
+is at its size limit). The core (manifest parsing with `toml_edit`, version logic with `semver`, the sparse-index client, the
+cache, text edits) knows nothing of GPUI; the network is one trait, `Fetch`, with the system `curl` behind it and a fake in
+the tests. `editor_cargo.rs` binds a registry to a manifest's editor (hints, completion, hover); `workbench_cargo.rs`
+(a child of `workbench_rust.rs`) refreshes it, runs Quick Fix, the palette commands and `cargo add` / `cargo remove`.
+
 ## Stack
 
 | Layer | Choice | Why |
@@ -111,8 +117,12 @@ the start on a save error, Stop or a changed workspace. Editor saves keep their 
 | Spelling | `spellbook` (pure Rust Hunspell) | English built in, other languages installable |
 
 No server and no account; the extension registry is not live yet. Outbound requests: SchemaStore and schema downloads (cached 7 days, can be disabled),
-dictionary installs, GitHub pull request listing, requests sent from `.http` files and update checks. The update check is the one
-the app starts by itself, and only when the user chose daily checks (`update.check`); otherwise it happens when the user asks
+dictionary installs, GitHub pull request listing, requests sent from `.http` files, update checks and crates.io lookups for
+`Cargo.toml` (index.crates.io and crates.io, only the crate names and what the user types; see
+[Cargo dependencies](user-guide.md#cargo-dependencies)). The update check is the one the app starts by itself, and only when the
+user chose daily checks (`update.check`); the crates.io lookups also start by themselves, but only after the user turned on
+`rust.cargo.dependencyLookups` (off by default, asked once above a `Cargo.toml`), and otherwise run only when the user asks
+(*Cargo: Check Dependency Updates*, *Add Dependency…*, an update command). Otherwise a request happens when the user asks
 for one. It downloads two small files from github.com (see [Updates](#updates) for exactly what GitHub sees).
 
 ## Updates

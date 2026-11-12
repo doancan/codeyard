@@ -501,6 +501,7 @@ impl Workbench {
             return;
         }
         let path = ed.read(cx).path.clone();
+        self.forget_cargo(&path, cx);
         self.discard_response_file(&path);
         self.drop_backup(&path, cx);
         let (line, col) = ed.read(cx).cursor_position();

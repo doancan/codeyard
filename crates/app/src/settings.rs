@@ -252,6 +252,8 @@ pub struct Settings {
     pub spell_languages: Vec<String>,
     /// `rust.features`, `rust.noDefaultFeatures`, `rust.profile`, `rust.targetDir`: how Run and Debug build with Cargo.
     pub rust_build: crate::cargo_project::BuildOptions,
+    /// `rust.cargo.dependencyLookups`: Cargo.toml hints, completion and hover ask crates.io (cargo_deps.rs).
+    pub rust_dependency_lookups: bool,
     // --- data ---
     /// Data lens: spaces per level in JSON and YAML output, and whether output keys are sorted.
     pub data_indent: usize,
@@ -442,6 +444,7 @@ impl Default for Settings {
             spelling_comments: true,
             spell_languages: vec!["en".into()],
             rust_build: Default::default(),
+            rust_dependency_lookups: false,
             data_indent: 2,
             data_sort_keys: false,
             http_run_on: "workspace".into(),
@@ -1169,6 +1172,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "rust.noDefaultFeatures",
         "rust.profile",
         "rust.targetDir",
+        "rust.cargo.dependencyLookups",
         // --- data ---
         "data.indent",
         "data.sortKeys",

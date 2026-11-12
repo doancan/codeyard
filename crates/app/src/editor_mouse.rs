@@ -431,6 +431,9 @@ impl EditorView {
                     .into_any_element(),
             );
         }
+        if let Some(question) = self.cargo_banner(p, cx) {
+            return Some(question);
+        }
         self.error.clone().map(|e| {
             div()
                 .flex()

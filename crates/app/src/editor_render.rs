@@ -355,7 +355,12 @@ impl Render for EditorView {
                                                     };
                                                     let code = window.text_system().shape_line(text.clone().into(), px(font_size), &[run], None).width;
                                                     // Extension lenses and hints name their extension.
-                                                    let tip: SharedString = match (id == "line-end-hint").then(|| this.ext_eol_tooltip(ix)).flatten() {
+                                                    let more = match id {
+                                                        "line-end-hint" => this.ext_eol_tooltip(ix),
+                                                        "extension-decoration" => this.cargo_detail(ix),
+                                                        _ => None,
+                                                    };
+                                                    let tip: SharedString = match more {
                                                         Some(t) => format!("{hint}\n{t}").into(),
                                                         None => hint.clone(),
                                                     };
@@ -716,7 +721,18 @@ impl Render for EditorView {
                                                                 Some(h) => format!("{text} · {h}"),
                                                                 None => text,
                                                             };
-                                                            d.child(annotation("extension-decoration", shown.into(), super::tone_color(&p, tone), 0.8))
+                                                            let said = this.cargo_detail(ix).map(|detail| {
+                                                                crate::a11y_controls::said(
+                                                                    this.name.to_string(),
+                                                                    format!("dep{ix}"),
+                                                                    accesskit::Role::Label,
+                                                                    detail,
+                                                                )
+                                                            });
+                                                            d.child(
+                                                                annotation("extension-decoration", shown.into(), super::tone_color(&p, tone), 0.8)
+                                                                    .children(said),
+                                                            )
                                                         },
                                                     )
                                                     // Right-aligned inside the space left after the shaped code.

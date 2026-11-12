@@ -183,6 +183,8 @@ actions!(
     ]
 );
 
+#[path = "editor_cargo.rs"]
+mod cargo_glue;
 #[path = "editor_color.rs"]
 mod color_glue;
 #[path = "editor_complete.rs"]
@@ -227,6 +229,7 @@ mod schema_glue;
 mod spell_glue;
 #[path = "editor_syntax.rs"]
 mod syntax_glue;
+pub use cargo_glue::{CargoBinding, CargoChoice};
 pub use schema_glue::SchemaBinding;
 
 pub enum EditorEvent {
@@ -262,6 +265,8 @@ pub enum EditorEvent {
     SendRequest(usize),
     /// Code lenses and inlay hints of extensions (workbench_ext_lenses.rs).
     Extension(ExtEvent),
+    /// A button of the question about contacting crates.io (editor_cargo.rs).
+    Cargo(CargoChoice),
 }
 
 /// Open completion list.
@@ -565,6 +570,8 @@ pub struct EditorView {
     lsp_root: Option<String>,
     /// JSON/YAML schema (completion and hover come from here when there is no language server); bound by the Workbench.
     schema: Option<Arc<SchemaBinding>>,
+    /// Cargo.toml dependency hints, completion and hover (editor_cargo.rs).
+    cargo: cargo_glue::CargoMarks,
     /// Open color picker (if any).
     color_picker: Option<color_glue::ColorPicker>,
     /// Spell checker (bound by the Workbench); `None` when off.
@@ -1021,6 +1028,7 @@ impl EditorView {
             peek_seq: 0,
             hover_task: None,
             schema: None,
+            cargo: Default::default(),
             color_picker: None,
             spell: None,
             fence_cache: Default::default(),

@@ -521,6 +521,9 @@ impl Workbench {
         for (p, d) in self.extension_problems() {
             all.entry(p.clone()).or_default().extend(d);
         }
+        for (p, d) in self.lsp.cargo.all_problems() {
+            all.entry(p.clone()).or_default().extend(d.iter().cloned());
+        }
         all
     }
 
@@ -529,6 +532,7 @@ impl Workbench {
         let mut d = self.lsp.diagnostics.get(path).cloned().unwrap_or_default();
         d.extend(self.jobs.problems.iter().filter(|(p, _)| p == path).map(|(_, x)| x.clone()));
         d.extend(self.extension_diagnostics_for(path));
+        d.extend(self.lsp.cargo.problems_of(path));
         d
     }
 

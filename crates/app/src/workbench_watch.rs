@@ -234,6 +234,7 @@ impl Workbench {
         if ext_schemas_changed
             || (old.schema_associations.as_slice(), old.schema_download, old.schema_validate)
                 != (new.schema_associations.as_slice(), new.schema_download, new.schema_validate)
+            || old.rust_dependency_lookups != new.rust_dependency_lookups
         {
             for ed in self.all_editors() {
                 self.schedule_schema(&ed, Duration::ZERO, cx);

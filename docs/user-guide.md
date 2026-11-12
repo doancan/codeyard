@@ -22,6 +22,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Workspaces with several folders](#workspaces-with-several-folders)
 - [Language servers](#language-servers)
 - [Working in Rust](#working-in-rust)
+- [Cargo dependencies](#cargo-dependencies)
 - [JSON and YAML schemas](#json-and-yaml-schemas)
 - [Data tools](#data-tools)
 - [Colours](#colours)
@@ -1480,6 +1481,88 @@ Variables view shows a `String` as `"merhaba"` and a `Vec` or `HashMap` with its
 Cargo folder: your own `initCommands` run after ours, and an entry that imports `lldb_lookup` itself is left alone. If the
 formatters cannot be loaded (no `rustc`, or a toolchain without them), the Debug Console says why in one line and the
 session runs as before. On Windows with the MSVC toolchain they are not loaded (see [platforms](platforms.md)).
+
+## Cargo dependencies
+
+Codeyard can look up the crates a `Cargo.toml` names on crates.io. No language server is needed. **This is off until you turn it
+on**: nothing contacts crates.io by itself. Open a `Cargo.toml` that has dependencies and a question appears above the text
+(it does not block typing): *Show the latest versions of your dependencies? This contacts index.crates.io with the names of
+the crates in this file.* **Enable** turns on `rust.cargo.dependencyLookups`, **Not now** hides the question until the next
+start, and **Don't ask again** is remembered. What you start yourself works without the setting, for the file you start it
+in: *Cargo: Check Dependency Updates* looks the file up once and shows the hints, *Cargo: Add Dependency…* searches
+crates.io as you type, and *Cargo: Update All Dependencies in This File* (and the update commands) look the file up and then
+update it. Such a file stays looked up until its tab closes.
+
+**Hints.** At the end of each dependency's line a short note says what your requirement means for the newest release:
+
+| Note | Meaning |
+| --- | --- |
+| `up to date (latest 1.0.229)` | The requirement allows the latest stable release. |
+| `update available: 2.0.0` | The latest stable release is outside the requirement. |
+| `yanked: 1.0.95` | The locked version, or every version the requirement allows, was withdrawn. It is also a warning in Problems (never an error). |
+| `no version matches` | No published version satisfies the requirement. |
+| `not found on crates.io` | There is no crate with that name. |
+| `offline` | crates.io could not be reached. Nothing is cached for this crate yet. |
+
+Once looked up, hints cover `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, `[target.….dependencies]` and
+`[workspace.dependencies]`, in the short form (`serde = "1"`), inline tables, `[dependencies.serde]` tables and
+`package = "…"` renames. Entries with `path`, `git`, another `registry` or `workspace = true` get no hint and are never
+reported as problems. The colour comes from the theme (green, amber, red, grey); the same sentence is in the hint's tooltip
+and in the accessibility tree ("serde is up to date: “1” allows the latest release, 1.0.229"). When `Cargo.lock` is next
+to the manifest (or above it in the workspace), a locked version that was yanked is flagged even if the requirement allows
+newer ones.
+
+**Completion.** Type a crate name at the start of a line in a dependency table to search crates.io; the entry is written
+with the latest version (`serde = "1.0.229"`) and the crate's description is shown next to the item. Inside the quotes of a
+version, the published versions come newest first, releases before pre-releases, yanked ones last. Inside `features = [ … ]`
+the crate's own feature names are offered with what each enables; the ones already listed are left out.
+
+**Hover.** Hover a dependency for its description, licence, the latest version, the version `Cargo.lock` resolved, and the
+docs.rs and repository addresses. Hover a feature name for what it enables.
+
+**Updating.** *Quick Fix* (⌘.) on a dependency offers *Update “serde” to the latest version* and, when it differs, *Update to
+the newest compatible version*, and for the whole file *Update N dependencies … to their newest compatible versions* and *… to
+the latest versions*. The palette has the same as *Cargo: Update Dependency at Cursor to Latest*, *Cargo: Update All
+Dependencies in This File (Compatible)* and *Cargo: Update All Dependencies in This File to Latest*. Only the version text
+changes: `"1.0.100"` becomes `"1.0.229"`, `"1"` stays `"1"` while the latest is 1.x, `"~1.2"` becomes `"~2.3"`, `">=1, <2"`
+becomes the plain latest version. Everything is one undo step.
+
+**Adding and removing.** *Cargo: Add Dependency…* opens a search; type part of a name and choose a crate (the name as typed is
+always offered, which also works offline). It goes into the table the cursor is in (`[dev-dependencies]` and so on), or into
+`[workspace.dependencies]` in a manifest that is only a workspace root. *Cargo: Remove Dependency at Cursor* removes the entry
+under the cursor, with the table form `[dependencies.name]` as a whole. When the file has no unsaved changes, the folder is
+trusted and `cargo` is installed, Codeyard runs `cargo add` or `cargo remove` (which also update `Cargo.lock`, and use the
+network the way `cargo` does in a terminal). Otherwise it edits the text itself, keeping comments, spacing and order; the
+change is then in the open file until you save it.
+
+**Mirrors.** `CARGO_HOME` and `[source.crates-io] replace-with` are honoured: with a sparse mirror
+(`registry = "sparse+https://…"`) the versions and features come from the mirror and the crates.io API (search,
+descriptions, licences) is not used. A mirror that cannot be asked (a git index, a vendored directory), plain `http`, or an
+address with a user name or password in it, turns the lookups off for that project. A project's own `.cargo/config.toml` is read only in a trusted folder. Over SSH the
+default index is used.
+
+### What is sent
+
+Lookups use the system `curl`, over HTTPS only, with a 5 s connect and 12 s total timeout, no redirects, a 16 MiB size cap,
+at most four requests at once and at most one crates.io API request per second. Every request carries
+`User-Agent: codeyard/<version> (https://github.com/doancan/codeyard)` and nothing else of yours: no cookies, no account,
+no file names or contents, no project name. The servers see your IP address as for any web request.
+
+| Request | When | What it contains |
+| --- | --- | --- |
+| `GET https://index.crates.io/<path>/<crate>` | For each crate in a manifest you open or edit, unless its answer is cached and younger than 3 hours (a missing crate: 1 hour). | The crate name in the address, and `If-None-Match` with the ETag of the cached copy. |
+| `GET https://crates.io/api/v1/crates?q=<text>&per_page=20` | A pause after you type a crate name in a dependency table, or in *Cargo: Add Dependency…*. | The text you typed. |
+| `GET https://crates.io/api/v1/crates/<crate>?include=` and `…/<crate>/<version>` | The first time you hover a dependency (kept for 7 days). | The crate name and its latest version. |
+
+Answers are cached in `~/Library/Caches/codeyard/cargo-deps` (`~/.cache/codeyard/cargo-deps` on Linux,
+`%LOCALAPPDATA%\codeyard\cargo-deps` on Windows); entries not refreshed for 60 days are deleted. After a failed connection
+nothing is tried again for 20 seconds, and an old cached answer is used (hints say so in their tooltip) instead of an error.
+With `rust.cargo.dependencyLookups` off (the default) none of the first two requests is made on its own: no hint on open,
+no lookup on hover, no refresh in the background, no completion from the registry. They happen only when you run *Cargo:
+Add Dependency…* (the search), *Cargo: Check Dependency Updates* or an update command (the index files of that file's
+crates), and the hover or completion of a file you asked about. Turn the setting on and they happen as described above for
+every `Cargo.toml` you open; turn it off again to stop them. Memory is bounded: a registry keeps at most 256 crates and 64
+searches, and closing the last `Cargo.toml` drops them. The setting is in the [settings reference](settings.md).
 
 ## JSON and YAML schemas
 

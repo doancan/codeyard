@@ -2,6 +2,7 @@
 # Copy this file to `<code>.tsv`, put the translation after the TAB (see docs/translating.md). A key containing `|` is a plural
 # entry: write one form per plural form of the language, separated by `|`. Do not edit the left column.
 (+{} more)	
+(from the cache, offline)	
 (modified)	
 (nothing)	
 (the lines are removed)	
@@ -20,7 +21,9 @@ A container operation is running. Use Docker: Cancel Operation before starting a
 A file named “{}” is already there; a folder cannot replace it. Rename or remove it first.	
 A file you opened names a schema that is hosted on {}. Downloading it sends a request to that server (your IP address and the schema's address). Only allow it if you trust the file and the host.	
 A folder named “{}” is already there; a file cannot replace it. Rename or remove it first.	
+A git dependency: not looked up on crates.io.	
 A merge commit is created unless it can fast-forward. Conflicts are resolved in Source Control.	
+A path dependency: not looked up on crates.io.	
 A pattern is one expression or statement, not several.	
 A pattern that is only a variable would match everything.	
 A rebase is already in progress: use Git: Continue Rebase or Git: Abort Rebase	
@@ -66,6 +69,7 @@ Add a debug configuration
 Add a host	
 Add comment	
 Add comment…	
+Add dependency	
 Add remote	
 Add to .gitignore	
 Add to Favorites	
@@ -74,11 +78,14 @@ Add worktree
 Add “{}” to the dictionary	
 Added	
 Added remote {}	
+Added with cargo add	
 Added worktree {}: open it with Git: Open Worktree…	
 Added {} to .gitignore	
+Added “{0}” by editing the file (cargo add: {1}). Save the file to keep it.	
 Added “{}”	
 Added “{}” for this session only: there is no settings folder to keep your dictionary in.	
 Added “{}” to your dictionary.	
+Added “{}”. Save the file to keep it.	
 Adding comment…	
 Adding remote…	
 Adding worktree…	
@@ -203,6 +210,8 @@ Cannot tell which remote {} belongs to
 Cannot update {0}: {1}	
 Cannot use {} as an entry	
 Cannot use {} as an object key	
+Cargo changed Cargo.toml on disk while you were editing it. Your edits were kept; saving asks which version to keep.	
+Cargo dependency	
 Cargo did not report a Rust test executable	
 Cargo metadata has no packages	
 Cargo metadata has no workspace members	
@@ -212,6 +221,14 @@ Cargo package has no targets
 Cargo reported {0} executables for target {1}	
 Cargo target has no name	
 Cargo was not found. Install Rust from https://rustup.rs and make sure `cargo` is on the PATH of this machine.	
+Cargo.toml is not valid TOML yet.	
+Cargo.toml is not valid TOML: {}	
+Cargo: Add Dependency…	
+Cargo: Check Dependency Updates	
+Cargo: Remove Dependency at Cursor	
+Cargo: Update All Dependencies in This File (Compatible)	
+Cargo: Update All Dependencies in This File to Latest	
+Cargo: Update Dependency at Cursor to Latest	
 Categories	
 Change	
 Change All Occurrences	
@@ -470,6 +487,7 @@ Copying {0} item was not confirmed: {1}|Copying {0} items was not confirmed; fir
 Copying…	
 Could not add the configuration: {}	
 Could not add the instance: {}	
+Could not add “{}”: cargo is not available and its version is not known offline.	
 Could not allow the server: {}	
 Could not be compared	
 Could not blame: {}	
@@ -698,10 +716,12 @@ Docker: Show Containers and Services…
 Docker: {}	
 Docker: {}. Check Output and verify that the selected engine is running.	
 Docker: {}. Check Output. Dev Container creation requires the separately installed Dev Container CLI.	
+Documentation: {}	
 Don't Save	
 Don't Trust	
 Don't Trust This Folder	
 Done	
+Don’t ask again	
 Download	
 Download Here	
 Download Page	
@@ -840,6 +860,8 @@ Enable Web Preview for HTML, CSS and JavaScript (user settings only; stops serve
 Enable Web Preview in Settings > Modules to preview HTML files.	
 Enable container environments (user settings only; disconnect containers before disabling)	
 Enabled	
+Enables nothing else	
+Enables: {}	
 Encoding for files that are not UTF-8	
 End files with a newline when saving	
 Enter a folder path on {}…	
@@ -1011,6 +1033,7 @@ Forward ports opened on SSH hosts
 Forwarded Address	
 Forwarded Ports	
 Friday	
+From the registry “{}”: not looked up.	
 From the {0} registry, published by {1}	
 Get Pre-releases	
 Get only releases of this extension from now on	
@@ -1156,6 +1179,7 @@ Highlight the matching bracket
 History is collected while monitoring is active. CPU can exceed 100% across cores. Rates need two samples; counter resets show no rate.	
 History of {}	
 Hold Shift or ⌥ to select text	
+Homepage: {}	
 Host and client id of your {} server, such as git.example.com 3f2a9c	
 Host name (from ~/.ssh/config) or user@host	
 Host name of the server {} may connect to, such as github.example.com	
@@ -1310,6 +1334,7 @@ Let {0} run programs on {1}?
 Let {0} sign in to your {1} account?	
 Let {0} use your account on {1}?	
 Let {} read the clipboard?	
+License: {}	
 Lifecycle: {}	
 Lightweight editing, on this machine or over SSH.	
 Line Numbers	
@@ -1352,6 +1377,7 @@ Logs
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
 Looking for tests…	
 Looking for {} in your registries…	
+Looking up the latest versions on crates.io…	
 Lost the connection to {}: {}. Your open files stay here and unsaved changes are kept, but they cannot be saved until you reconnect (File: Save a Copy to This Computer… keeps one locally).	
 Lost the connection to {}: {}. Your open files stay here.	
 Manage SSH hosts	
@@ -1442,6 +1468,7 @@ Names can't contain / or be . or ..
 Names only	
 Native program (C, C++, Rust, Swift)	
 Native programs	
+Needs Rust {} or newer	
 Needs attention	
 Network I/O total	
 Network RX / TX rate	
@@ -1495,6 +1522,7 @@ No containers in this Docker environment.
 No containers in this environment.	
 No containers match the current filters.	
 No crash reports: Codeyard has not crashed.	
+No crates matching “{}”	
 No debug adapter for type “{0}”. Supported: lldb (C, C++, Rust, Swift), go, python; or add {1} to the configuration.	
 No debug configuration: add .vscode/launch.json, or open a Cargo / Go project or a Python file.	
 No debug session.	
@@ -1547,6 +1575,7 @@ No problems.
 No problems. Language servers start when you open a file.	
 No profiles or shells were found on this machine.	
 No published ports	
+No published version matches the requirement	
 No quick fixes here	
 No recent folders	
 No recently opened files	
@@ -1601,6 +1630,7 @@ Not deleted: {}
 Not forwarded	
 Not in a git repository	
 Not installed; open setup instructions	
+Not now	
 Not paused	
 Not saved: {0} (U+{1}) cannot be written in {2}. Remove it, or save a copy as UTF-8.	
 Not saved: {0} cannot be written in {1}.	
@@ -1621,6 +1651,7 @@ Nothing to replace: the files no longer contain matches.
 Nothing to run: select some text or put the cursor on a line.	
 Nothing to stage in these lines	
 Nothing to unstage in these lines	
+Nothing to update: the requirements are current.	
 Nothing was installed. Run the command again with --accept-permissions to grant these, or install it from the Extensions view.	
 Nothing was installed. This release isn't signed, so Codeyard can't verify it.	
 Nothing was installed. What the update server sent didn't match the signed checksums, so Codeyard discarded it.	
@@ -1667,6 +1698,7 @@ Open System Settings
 Open View: {0} ({1})	
 Open a .code-workspace file in the editor first.	
 Open a .http or .rest file to send requests.	
+Open a Cargo.toml first	
 Open a Markdown file (.md) to preview it.	
 Open a Rust file first	
 Open a file first	
@@ -1867,6 +1899,7 @@ Pushing tags…
 Pushing {}…	
 Pushing…	
 Put the cursor inside a merge conflict	
+Put the cursor on a dependency first	
 Put the cursor on a symbol to rename it	
 Python: attach to a debug server	
 Python: current file	
@@ -1958,6 +1991,7 @@ Remove Host…
 Remove a host	
 Remove blank lines at the end of a file when saving	
 Remove control characters from pasted text	
+Remove dependency “{}”	
 Remove folder from workspace	
 Remove from Favorites	
 Remove from Recent	
@@ -1974,9 +2008,12 @@ Remove “{}” from ~/.ssh/config?
 Removed	
 Removed from favorites: {}	
 Removed remote {}	
+Removed with cargo remove	
 Removed worktree {}	
 Removed {} from “{}”.	
+Removed “{0}” by editing the file (cargo remove: {1}). Save the file to keep it.	
 Removed “{}” from ~/.ssh/config	
+Removed “{}”. Save the file to keep it.	
 Removing {}…	
 Rename	
 Rename Symbol	
@@ -2018,6 +2055,8 @@ Repository changed while the operation was pending.
 Repository discovery failed	
 Repository is no longer available: {}	
 Repository: {}	
+Requirement “{0}”, Cargo.lock has {1}	
+Requirement “{}”	
 Rerun	
 Reset	
 Reset All Settings…	
@@ -2147,9 +2186,11 @@ Search commands to bind a key
 Search commits	
 Search commits (message, author, hash)	
 Search containers, images or projects…	
+Search failed: {}	
 Search files by name	
 Search files by name (> commands, : line, # symbols, ? help)	
 Search installed extensions	
+Search is not available for this project's registry	
 Search log messages or timestamps…	
 Search results	
 Search results are incomplete; rerun before replacing.	
@@ -2249,6 +2290,7 @@ Show the activity bar
 Show the author name on Source Control graph rows	
 Show the editor tab bar	
 Show the file path above the editor	
+Show the latest versions of your dependencies? This contacts index.crates.io with the names of the crates in this file.	
 Show the minimap	
 Show the short commit hash on Source Control graph rows	
 Show the status bar	
@@ -2448,6 +2490,7 @@ Test: Stop Running Tests
 Testing	
 Testing {}…	
 Tests: {0} passed, {1} failed	
+That dependency is gone.	
 That does not look like a repository address.	
 The JavaScript debugger is already installed.	
 The README is shortened here; the full one is in the package.	
@@ -2481,11 +2524,13 @@ The debug adapter exited before it started listening
 The debug adapter stopped	
 The debug adapter stopped (exit code {})	
 The debugger could not bind this breakpoint.	
+The dependency versions are not loaded yet. Try again in a moment.	
 The destination window is no longer available.	
 The download finished but js-debug was not found in it.	
 The editor could not move to a new window: {}	
 The element can't be renamed.	
 The file changed during the write ({})	
+The file changed meanwhile. Try again.	
 The file changed on disk while you were editing. Nothing was saved.	
 The file changed since this diff was shown. It has been reloaded: pick the lines again.	
 The file could not be read.	
@@ -2559,6 +2604,7 @@ The update couldn't be installed
 The update couldn't be verified	
 The update failed part-way and Codeyard couldn't put the previous version back. It may be at {0}. If Codeyard doesn't start, move it back to {1}.	
 The update failed. Click for details.	
+The version comes from [workspace.dependencies].	
 The version that was on disk has been kept in Local History.	
 The view could not move to a new window: {}	
 The workspace changed. Open the source project and review its container configuration again.	
@@ -2674,6 +2720,7 @@ Tuesday
 Two tasks are called “{}”.	
 Type > for commands	
 Type a commit message first	
+Type a crate name to search crates.io	
 Type a line number between 1 and {}	
 Type a name	
 Type a name from ~/.ssh/config or user@host	
@@ -2722,16 +2769,23 @@ Unsupported encoding: the file would not be written back exactly, so it is not c
 Unterminated quote in the Cargo test command	
 Untracked files will be deleted. This can't be undone.	
 Unwrapped lines	
+Up to date: the latest release is {}	
 Up to {} editors can be in windows of their own.	
 Update	
 Update Now	
 Update available	
+Update available: {}	
 Update failed	
 Update installed	
 Update installed. Restart Codeyard to finish.	
 Update needs your OK	
 Update {}	
+Update {} dependency in this file to its newest compatible version|Update {} dependencies in this file to their newest compatible versions	
+Update {} dependency in this file to the latest version|Update {} dependencies in this file to the latest versions	
+Update “{0}” to the latest version, {1}	
+Update “{0}” to {1}, the newest compatible version	
 Updated the URL of {}	
+Updated {} dependency|Updated {} dependencies	
 Updates paused	
 Updating .gitignore…	
 Updating {}…	
@@ -2746,6 +2800,7 @@ Uploading has to wait: the connection is still being set up.
 Uploading is not possible in this workspace.	
 Uploading needs the connection to {}, which failed: use Reconnect first.	
 Uploading works with a connected SSH host: connect first (⌃R).	
+Use the name as typed	
 User Forwarded	
 User: {}	
 Username	
@@ -2764,6 +2819,7 @@ Version {} asks for more than the version you have, which keeps running until yo
 Version {} is available.	
 Version {} is installed.	
 Version {} waits: the registry's list is more than 3 days old.	
+Version {} was yanked	
 Versions	
 View	
 View File History	
@@ -2944,6 +3000,7 @@ could not list
 could not load pull requests	
 could not read {}: {}	
 could not run curl on {}: {}	
+crates.io could not be reached (offline?)	
 curl is not installed on {0}; install it or set http.runOn to {1}	
 curl returned no response headers	
 current	
@@ -2974,6 +3031,7 @@ edit the file by hand
 editor.formatters.{}: expected “lsp” or an extension id	
 empty body	
 empty variable	
+enabled by default	
 ended	
 ended before it was ready	
 entry	
@@ -2992,6 +3050,8 @@ expression to watch (e.g. total * 2, items.len())
 extensions.registries[{0}]: the name “{1}” is used twice	
 failed	
 failed (exit code {})	
+feature {0} of {1}: enables nothing else	
+feature {0} of {1}: enables {2}	
 features: {}	
 fetches {} from {}	
 field	
@@ -3042,6 +3102,7 @@ keymap preset “{}” is not installed
 label, e.g. web (empty: none)	
 language server is not running	
 language “{0}” names grammar “{1}”, which Codeyard does not have	
+latest	
 latest {} open	
 left	
 light	
@@ -3053,6 +3114,7 @@ lines {0}–{1}
 link target differs	
 local agent, protocol test	
 local port, e.g. 8080	
+lookup failed	
 merge	
 merged	
 method	
@@ -3069,11 +3131,13 @@ no default features
 no file name	
 no item {} in the response	
 no upstream	
+no version matches	
 no “{}” in the response	
 not UTF-8	
 not a PNG, JPEG, GIF, WebP or SVG image	
 not available	
 not declared	
+not found on crates.io	
 not run	
 not run: a dependency failed	
 not run: too many tasks in the background	
@@ -3083,9 +3147,11 @@ not set
 not signed in to {0}; call auth.session with “{1}” first	
 now	
 of {}	
+offline	
 only the first {} files were looked at (search.structural.maxFiles)	
 open	
 operator	
+optional dependency	
 output: {}	
 package	
 partly selected	
@@ -3219,6 +3285,8 @@ unknown role: {}
 unknown setting {}	
 unknown variable {}	
 unrecognized theme format (expected “color” or “colors”)	
+up to date (latest {})	
+update available: {}	
 uploading agent	
 uploads a file whose name comes from a variable ({})	
 uploads {}, which is outside this file's folder	
@@ -3237,6 +3305,8 @@ with subfolders
 withdrawn	
 withdrawn by its publisher	
 workbench.colorCustomizations: unknown color role {0} (see crates/theme/design/tokens.json: {1})	
+yanked	
+yanked: {}	
 your words	
 {0} (from {1})	
 {0} (line {1}, column {2})	
@@ -3252,6 +3322,7 @@ your words
 {0} and {1} cannot be multiplied	
 {0} and {1} cannot be subtracted	
 {0} and {1} cannot have their containment checked	
+{0} can be updated: “{1}” does not allow the latest release, {2}	
 {0} can now sign in to {1}.	
 {0} cannot be used with {1}	
 {0} commit{1} only exist on this branch and will be lost (the reflog keeps them for a while).	
@@ -3268,6 +3339,7 @@ your words
 {0} is now published by {1}, not {2} as before; review it with Extensions: Install from Registry…	
 {0} is signed in to {1} as {2}.	
 {0} is signed out of {1}.	
+{0} is up to date: “{1}” allows the latest release, {2}	
 {0} isn't available ({1}). Or set “lsp.servers” in settings.	
 {0} isn't available on {1} ({2}). Or set “lsp.servers” in settings.	
 {0} isn't available on {1}. Or set “lsp.servers” in settings.	
@@ -3328,14 +3400,20 @@ your words
 {0}: expected {1} or a list of kinds	
 {0}: expected {1} or null	
 {0}: finish signing in to {1} in your browser.	
+{0}: lookup failed: {1}	
 {0}: no answer from {1}	
+{0}: no published version matches “{1}”	
+{0}: no published version matches “{1}” (latest is {2})	
 {0}: signed in as {1}	
+{0}: version {1} was yanked and should not be used	
+{0}: version {1} was yanked from crates.io. Update to a release that is not yanked.	
 {0}: {1} cannot be written in TOML	
 {0}: {1} does not fit in a TOML integer (64 bits, signed)	
 {0}: {1} to pull, {2} to push. Click to sync.	
 {0}: {1}. Start the selected container engine and check Output.	
 {0}: “{1}” is not a name .env files can hold (letters, digits and _)	
 {0}{1} found	
+{1} has no feature named {0}	
 {{$processEnv}} needs a name	
 {} (Enter)	
 {} (curl exit {})	
@@ -3483,6 +3561,7 @@ your words
 {}: .env holds only text; nested values need the “joined with __” choice	
 {}: TOML has no null; give it a value or remove it	
 {}: connection failed	
+{}: crates.io could not be reached	
 {}: expected a file pattern or a list of patterns	
 {}: expected a list	
 {}: expected a list of numbers ({}–{})	
@@ -3496,6 +3575,7 @@ your words
 {}: invalid color {}	
 {}: no answer from the debug adapter	
 {}: no changed files.	
+{}: no crate with this name on crates.io	
 {}: no open pull requests.	
 {}: not signed in	
 {}: path must not contain control characters	
@@ -3530,10 +3610,13 @@ your words
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	
 “{}” can't be opened	
 “{}” cannot be used in a key binding	
+“{}” in Cargo.toml is not a table	
 “{}” is a built-in shortcut; an extension cannot change it	
+“{}” is already a dependency here	
 “{}” is called with the wrong number of arguments	
 “{}” is missing here	
 “{}” is not a branch of a known remote	
+“{}” is not a crate name	
 “{}” is not a free local port	
 “{}” is not a function this query language has	
 “{}” is not a number	
@@ -3547,6 +3630,7 @@ your words
 “{}” is not supported	
 “{}” is not the command of an active extension	
 “{}” is still running in this terminal. Close it anyway?	
+“{}” was not found in the file	
 “{}” was not found in ~/.ssh/config	
 “{}”: {} = {}	
 … {} more	

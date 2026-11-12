@@ -859,6 +859,12 @@ impl Workbench {
         if self.try_spell_fix(window, cx) {
             return;
         }
+        // A Cargo.toml's dependency fixes (workbench_cargo.rs).
+        let fixes = self.cargo_fixes(cx);
+        if !fixes.is_empty() {
+            self.show_quick_fixes(fixes.into_iter().map(super::providers_glue::QuickFix::Cargo).collect(), window, cx);
+            return;
+        }
         // Extensions with code actions for this file: their actions next to the language server's.
         if self.quick_fix_with_extensions(window, cx) {
             return;
