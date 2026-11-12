@@ -206,12 +206,32 @@ impl RefactorPreview {
         self.phase == Phase::Review && self.chosen.counts().0 > 0 && self.chosen.blocker(&self.plan).is_none()
     }
 
+    /// Each chosen delete as the question names it: a file by its name, a folder with what is in it (how many files, how
+    /// big, the first names).
     fn deletes(&self) -> Vec<String> {
         self.chosen
             .selected_resources(&self.plan)
             .into_iter()
             .filter_map(|r| match &r.op {
-                Resource::Delete { path, .. } if !r.noop => Some(self.display(path)),
+                Resource::Delete { path, .. } if !r.noop => Some(match &r.info {
+                    Some(info) if info.files > 0 || info.top_count > 0 => {
+                        let more = info.top_count.saturating_sub(info.top.len());
+                        let mut names = info.top.join(", ");
+                        if more > 0 {
+                            names = crate::i18n::tf("{0} and {1} more", &[&names, &more]);
+                        }
+                        crate::i18n::tf(
+                            "{0} with {1}, {2}: {3}",
+                            &[
+                                &self.display(path),
+                                &crate::i18n::tn("{} file", "{} files", info.files, &[]),
+                                &crate::compare_logic::human_size(info.bytes),
+                                &names,
+                            ],
+                        )
+                    }
+                    _ => self.display(path),
+                }),
                 _ => None,
             })
             .collect()
@@ -462,9 +482,9 @@ impl RefactorPreview {
                 } else {
                     match (&r.op, &r.resolved) {
                         (Resource::Delete { dir: true, .. }, _) => {
-                            crate::i18n::t("Deletes the folder and everything in it for good; it is not moved to the trash.").to_string()
+                            crate::i18n::t("Permanently deletes the folder and everything in it; it is not moved to the trash.").to_string()
                         }
-                        (Resource::Delete { .. }, _) => crate::i18n::t("Deletes the file for good; it is not moved to the trash.").to_string(),
+                        (Resource::Delete { .. }, _) => crate::i18n::t("Permanently deletes the file; it is not moved to the trash.").to_string(),
                         (_, Some(real)) => crate::i18n::tf("Real location: {}", &[real]),
                         _ => state(self.chosen.state(i)).to_string(),
                     }
@@ -616,8 +636,8 @@ impl RefactorPreview {
     fn confirm_text(&self) -> String {
         let names = self.deletes();
         crate::i18n::tn(
-            "Delete {0} item for good? It is not moved to the trash: {1}",
-            "Delete {0} items for good? They are not moved to the trash: {1}",
+            "Permanently delete {0} item? It cannot be undone and is not moved to the trash: {1}",
+            "Permanently delete {0} items? They cannot be undone and are not moved to the trash: {1}",
             names.len(),
             &[&names.join(", ")],
         )
@@ -691,6 +711,11 @@ impl RefactorPreview {
             "escape" => self.request_discard(cx),
             other => panic!("unknown key {other}"),
         }
+    }
+
+    #[cfg(test)]
+    pub fn confirm_text_for_test(&self) -> String {
+        self.confirm_text()
     }
 
     #[cfg(test)]

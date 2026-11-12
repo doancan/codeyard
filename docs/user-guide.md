@@ -1718,8 +1718,12 @@ Everything a language server sends is checked, and what fails the check is shown
 - Positions are read as the protocol says (UTF-16 columns, so Turkish letters and emoji line up). A position inside a
   character, a line that does not exist, or edits that overlap refuse that file. Encoding, byte-order mark and line
   endings are kept as they are.
-- Create and Rename never overwrite: a name that is taken refuses the operation. Deleting needs a second go: Apply Selected
-  asks first and names what goes. Deleted files are removed for good, not moved to the trash. A folder you opened is never deleted.
+- Create and Rename never overwrite: a name that is taken refuses the operation.
+- Deleting is **permanent**: the host protocol has no trash, so a deleted file or folder is gone for good, and a refactoring
+  that has a delete cannot be undone. Apply Selected asks a second time and names what goes; for a folder it says how many
+  files and how many bytes it holds and lists its first entries ("and 3 more"). A delete is refused when the server did not
+  ask for `recursive` and the folder is not empty, when the folder is or holds a `.git`, when a file under it is open with
+  unsaved changes, and for a folder you opened.
 - A refactoring over 1,000 files or 20,000 changes is refused with its counts; nothing is written.
 
 Applying is all or nothing. Open editors take their changes first (unsaved, like any edit); then the files on disk and the
@@ -1729,8 +1733,17 @@ back is named in the report. **Undo** on the finished page takes back the text c
 (⌘Z in the editor does the same for one file) and the old bytes of each file written, but only where nothing changed since.
 A refactoring with file operations has no Undo; use your version control.
 
-Some servers also ask to apply an edit while a command runs (`workspace/applyEdit`). One with file operations is shown the
-same way, and the server gets its answer when you apply or discard. A quick fix that has an edit and a command runs
+While the files are written Codeyard keeps a small record of the steps in its state folder on this computer (for an SSH folder
+too) and removes it when the steps are done or taken back. If Codeyard is killed or crashes in the middle, the next start tells
+you, once, that a refactoring was interrupted and names the files that may be half-changed. The record holds paths only, no
+copies of the files: it cannot restore anything, so check the named files with your version control. Each write is checked
+again when it happens (a file changed since the review, a link that now points outside the folder, or a file open with unsaved
+changes stops the whole apply and takes back the steps already done).
+
+Some servers also ask to apply an edit while a command runs (`workspace/applyEdit`). Every such edit goes the same way as a
+rename: `editor.refactorPreview` decides whether it is shown (a change inside one open file is applied at once), the trust and
+folder checks apply, and the server gets its answer when you apply (`applied: true`) or discard or when Codeyard refuses it
+(`applied: false` with a reason). In a folder you have not trusted nothing is applied. A quick fix that has an edit and a command runs
 the command only after its edit was applied.
 
 ## Working in Rust

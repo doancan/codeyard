@@ -65,6 +65,32 @@ pub trait Env {
     /// Called once with every path the edit and the folders name, so a remote host can answer `resolve` for all of them in
     /// one request.
     fn prepare(&self, _paths: &[String]) {}
+    /// What a folder holds, for the safety checks and the question before a delete. Walks at most `DIR_WALK_LIMIT` entries.
+    fn dir_info(&self, _path: &str) -> DirInfo {
+        DirInfo::default()
+    }
+    /// The open documents at or below `path`: (path, has unsaved changes).
+    fn open_paths_under(&self, _path: &str) -> Vec<(String, bool)> {
+        Vec::new()
+    }
+}
+
+/// Entries looked at when a folder is to be deleted; a bigger folder is refused (what it holds cannot be shown).
+pub const DIR_WALK_LIMIT: usize = 20_000;
+
+/// What deleting a folder would take.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DirInfo {
+    /// Files below it (not folders).
+    pub files: usize,
+    pub bytes: u64,
+    /// Entries directly in it (files and folders), and the first few names.
+    pub top_count: usize,
+    pub top: Vec<String>,
+    /// A `.git` at any depth.
+    pub has_git: bool,
+    /// The walk stopped at `DIR_WALK_LIMIT`.
+    pub truncated: bool,
 }
 
 /// A file operation, resolved to what it will do.
@@ -83,6 +109,8 @@ pub struct ResourceItem {
     pub noop: bool,
     /// For the review: the real location, when it differs from the path the server gave.
     pub resolved: Option<String>,
+    /// For a folder to delete: what is in it.
+    pub info: Option<DirInfo>,
 }
 
 pub struct FileItem {
@@ -109,6 +137,8 @@ impl Item {
 pub struct RefactorPlan {
     pub host: String,
     pub root: String,
+    /// The open folders, resolved: writes are checked against them again when they happen.
+    pub roots: Vec<String>,
     pub items: Vec<Item>,
     /// Parts of the server's edit that were not usable at all.
     pub skipped: Vec<String>,
@@ -310,6 +340,8 @@ enum Virtual {
 
 struct Overlay {
     entries: Vec<(Vec<String>, Virtual)>,
+    /// Every path an operation has set, in order: what edits to a path were meant for depends on how many came before.
+    log: Vec<Vec<String>>,
 }
 
 impl Overlay {
@@ -328,8 +360,16 @@ impl Overlay {
         })
     }
 
+    /// How many operations so far created, moved or removed `path` or a folder above it: edits to it before and after one
+    /// are for different files.
+    fn generation(&self, path: &str) -> usize {
+        let key = parts(path);
+        self.log.iter().filter(|set| starts_with(&key, set)).count()
+    }
+
     fn set(&mut self, path: &str, v: Virtual) {
         let key = parts(path);
+        self.log.push(key.clone());
         self.entries.retain(|(at, _)| !(at.len() == key.len() && starts_with(at, &key)));
         self.entries.push((key, v));
     }
@@ -391,15 +431,15 @@ pub fn build(parsed: Parsed, env: &dyn Env, roots: &[String], host: String, root
         .chain(roots.iter().cloned())
         .collect();
     env.prepare(&named);
-    let mut b = Builder { env, roots: roots.iter().map(|r| env.resolve(r)).collect(), overlay: Overlay { entries: Vec::new() } };
+    let mut b = Builder { env, roots: roots.iter().map(|r| env.resolve(r)).collect(), overlay: Overlay { entries: Vec::new(), log: Vec::new() } };
     // First pass: operations in the server's order, with text edits of the same file gathered into one entry.
     let mut slots: Vec<Slot> = Vec::new();
-    let mut at: HashMap<String, usize> = HashMap::new();
+    let mut at: HashMap<(String, usize), usize> = HashMap::new();
     for op in parsed.ops {
         match op {
             Op::Text(t) => {
                 let key = clean(&t.path);
-                let key = if cfg!(windows) { key.to_lowercase() } else { key };
+                let key = (if cfg!(windows) { key.to_lowercase() } else { key }, b.overlay.generation(&t.path));
                 let needs = match b.overlay.lookup(&t.path) {
                     Some((Virtual::Created(i), _)) => Some(*i),
                     Some((Virtual::Moved { op, .. }, _)) => Some(*op),
@@ -431,7 +471,7 @@ pub fn build(parsed: Parsed, env: &dyn Env, roots: &[String], host: String, root
             Slot::Text { op, needs } => Item::File(FileItem { file: file_plan(&b, op, needs, fallback), needs }),
         });
     }
-    Ok(RefactorPlan { host, root, items, skipped: parsed.skipped })
+    Ok(RefactorPlan { host, root, roots: b.roots.clone(), items, skipped: parsed.skipped })
 }
 
 enum Slot {
@@ -455,7 +495,7 @@ fn merge(have: &mut TextOp, more: TextOp) {
 
 fn resource_item(b: &mut Builder<'_>, op: Op, index: usize) -> ResourceItem {
     fn refuse(op: Resource, why: impl Into<String>) -> ResourceItem {
-        ResourceItem { op, problem: Some(why.into()), noop: false, resolved: None }
+        ResourceItem { op, problem: Some(why.into()), noop: false, resolved: None, info: None }
     }
     match op {
         Op::Create { path, overwrite: _, ignore_if_exists } => {
@@ -467,12 +507,12 @@ fn resource_item(b: &mut Builder<'_>, op: Op, index: usize) -> ResourceItem {
             let resolved = (!same_path(&real, &path)).then_some(real);
             if b.kind(&path) != Kind::Missing {
                 if ignore_if_exists {
-                    return ResourceItem { op: item, problem: None, noop: true, resolved };
+                    return ResourceItem { op: item, problem: None, noop: true, resolved, info: None };
                 }
                 return refuse(item, crate::i18n::t("Already exists; Codeyard never overwrites a file in a refactoring."));
             }
             b.overlay.set(&path, Virtual::Created(index));
-            ResourceItem { op: item, problem: None, noop: false, resolved }
+            ResourceItem { op: item, problem: None, noop: false, resolved, info: None }
         }
         Op::Rename { from, to, overwrite: _, ignore_if_exists } => {
             let item = Resource::Rename { from: from.clone(), to: to.clone() };
@@ -485,14 +525,14 @@ fn resource_item(b: &mut Builder<'_>, op: Op, index: usize) -> ResourceItem {
                 return refuse(item, crate::i18n::t("The file to rename is not there."));
             }
             if same_path(&from, &to) {
-                return ResourceItem { op: item, problem: None, noop: true, resolved: None };
+                return ResourceItem { op: item, problem: None, noop: true, resolved: None, info: None };
             }
             if inside(&to, &from) {
                 return refuse(item, crate::i18n::t("A folder cannot be moved into itself."));
             }
             if b.kind(&to) != Kind::Missing {
                 if ignore_if_exists {
-                    return ResourceItem { op: item, problem: None, noop: true, resolved: None };
+                    return ResourceItem { op: item, problem: None, noop: true, resolved: None, info: None };
                 }
                 return refuse(item, crate::i18n::t("The new name is taken; Codeyard never overwrites a file in a refactoring."));
             }
@@ -505,9 +545,9 @@ fn resource_item(b: &mut Builder<'_>, op: Op, index: usize) -> ResourceItem {
             };
             b.overlay.set(&from, Virtual::Gone);
             b.overlay.set(&to, Virtual::Moved { origin, op: index });
-            ResourceItem { op: item, problem: None, noop: false, resolved: None }
+            ResourceItem { op: item, problem: None, noop: false, resolved: None, info: None }
         }
-        Op::Delete { path, recursive: _, ignore_if_not_exists } => {
+        Op::Delete { path, recursive, ignore_if_not_exists } => {
             let kind = b.kind(&path);
             let item = Resource::Delete { path: path.clone(), dir: kind == Kind::Dir };
             let real = match b.allowed(&path) {
@@ -516,7 +556,7 @@ fn resource_item(b: &mut Builder<'_>, op: Op, index: usize) -> ResourceItem {
             };
             if kind == Kind::Missing {
                 if ignore_if_not_exists {
-                    return ResourceItem { op: item, problem: None, noop: true, resolved: None };
+                    return ResourceItem { op: item, problem: None, noop: true, resolved: None, info: None };
                 }
                 return refuse(item, crate::i18n::t("The file to delete is not there."));
             }
@@ -524,12 +564,32 @@ fn resource_item(b: &mut Builder<'_>, op: Op, index: usize) -> ResourceItem {
             if b.roots.iter().any(|r| inside(r, &real)) {
                 return refuse(item, crate::i18n::t("An open folder is never deleted by a refactoring."));
             }
+            if parts(&path).last().is_some_and(|n| same_name(n, ".git")) {
+                return refuse(item, crate::i18n::t("A .git folder is never deleted by a refactoring."));
+            }
+            let mut info = None;
+            if kind == Kind::Dir && b.overlay.lookup(&path).is_none() {
+                let found = b.env.dir_info(&path);
+                if found.has_git {
+                    return refuse(item, crate::i18n::t("It holds a Git repository (.git), which a refactoring never deletes."));
+                }
+                if found.truncated {
+                    return refuse(item, crate::i18n::t("It holds too many files to check what would be deleted."));
+                }
+                if !recursive && found.top_count > 0 {
+                    return refuse(item, crate::i18n::t("The folder is not empty and the server did not ask to delete what is in it."));
+                }
+                if let Some((inner, _)) = b.env.open_paths_under(&path).into_iter().find(|(_, dirty)| *dirty) {
+                    return refuse(item, crate::i18n::tf("{} has unsaved changes: save or revert it first.", &[&inner]));
+                }
+                info = Some(found);
+            }
             if b.env.open_doc(&path).is_some_and(|d| d.dirty) {
                 return refuse(item, crate::i18n::t("Has unsaved changes: save or revert it first."));
             }
             let resolved = (!same_path(&real, &path)).then_some(real);
             b.overlay.set(&path, Virtual::Gone);
-            ResourceItem { op: item, problem: None, noop: false, resolved }
+            ResourceItem { op: item, problem: None, noop: false, resolved, info }
         }
         Op::Text(_) => unreachable!("text edits are handled by the caller"),
     }

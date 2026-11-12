@@ -539,6 +539,126 @@ fn a_refactoring_over_ssh_is_planned_and_written_on_the_server_and_rolls_back_th
 }
 
 #[gpui::test]
+fn a_file_opened_and_typed_into_after_the_review_is_not_written_under(cx: &mut TestAppContext) {
+    let (d, edit) = project("rp-late-dirty", false);
+    let (wb, cx) = setup(cx);
+    open(&wb, &d, cx);
+    propose(&wb, &edit, &Told::default(), cx);
+    let v = wait_page(&wb, cx);
+    // Both files were planned from the disk. a.rs is opened and typed into now.
+    open_in(&wb, &d.join("a.rs"), cx);
+    wb.update(cx, |wb, cx| {
+        let e = wb.editor_for_path_for_test(&s(&d.join("a.rs")), cx).unwrap();
+        e.update(cx, |e, cx| e.replace_all_text_for_test("fn a() { x(); } // mine\n", cx));
+    });
+    press(&v, cx, &["apply"]);
+    wait_phase(&v, "review", cx);
+    assert_eq!(v.read_with(cx, |v, _| v.report_for_test()), ["a.rs has unsaved changes: save or revert it first."]);
+    assert_eq!((read(&d, "a.rs"), read(&d, "b.rs")), ("fn a() { x(); }\n".into(), "fn b() { x(); }\n".into()));
+    assert_eq!(editor_text(&wb, &d.join("a.rs"), cx), "fn a() { x(); } // mine\n");
+}
+
+#[gpui::test]
+fn a_file_opened_clean_after_the_review_shows_the_text_that_was_written(cx: &mut TestAppContext) {
+    let (d, edit) = project("rp-late-clean", false);
+    let (wb, cx) = setup(cx);
+    open(&wb, &d, cx);
+    propose(&wb, &edit, &Told::default(), cx);
+    let v = wait_page(&wb, cx);
+    open_in(&wb, &d.join("a.rs"), cx);
+    press(&v, cx, &["apply"]);
+    wait_phase(&v, "done", cx);
+    assert_eq!(read(&d, "a.rs"), "fn a() { k(); }\n");
+    wait_ticking(cx, "the editor to show it", |cx| editor_text(&wb, &d.join("a.rs"), cx) == "fn a() { k(); }\n");
+    assert!(!dirty(&wb, &d.join("a.rs"), cx));
+}
+
+/// Looks at the folder of the journal when the first write happens.
+struct Spy {
+    inner: Arc<dyn Host>,
+    journal_dir: PathBuf,
+    seen: std::sync::Mutex<Vec<usize>>,
+}
+
+impl Store for Spy {
+    fn read(&self, path: &str) -> Result<(Vec<u8>, u64), HostError> {
+        self.inner.read(path)
+    }
+    fn write(&self, path: &str, data: Vec<u8>, expect: Option<u64>) -> Result<u64, HostError> {
+        let records = std::fs::read_dir(&self.journal_dir)
+            .map_or(0, |d| d.flatten().filter(|e| e.file_name().to_string_lossy().starts_with("refactor-journal-")).count());
+        self.seen.lock().unwrap().push(records);
+        self.inner.write(path, data, expect)
+    }
+}
+
+impl Fs for Spy {
+    fn create(&self, path: &str) -> Result<(), HostError> {
+        self.inner.create_file(path)
+    }
+    fn rename(&self, from: &str, to: &str) -> Result<(), HostError> {
+        self.inner.rename(from, to)
+    }
+    fn delete(&self, path: &str) -> Result<(), HostError> {
+        self.inner.delete(path)
+    }
+    fn is_dir(&self, path: &str) -> bool {
+        self.inner.is_dir(path)
+    }
+    fn dir_is_empty(&self, path: &str) -> bool {
+        self.inner.dir_is_empty(path)
+    }
+}
+
+#[gpui::test]
+fn a_record_of_the_transaction_exists_while_it_runs_and_an_old_one_is_reported_at_start(cx: &mut TestAppContext) {
+    let (d, edit) = project("rp-journal", true);
+    let journal_dir = root("rp-journal-dir");
+    let (wb, cx) = setup(cx);
+    open(&wb, &d, cx);
+    wb.update(cx, |wb, _| wb.set_refactor_journal_dir_for_test(journal_dir.clone()));
+    let spy = Arc::new(Spy { inner: Arc::new(host::local()), journal_dir: journal_dir.clone(), seen: Default::default() });
+    let probe = spy.clone();
+    wb.update(cx, |wb, _| wb.set_refactor_fs_for_test(spy));
+    propose(&wb, &edit, &Told::default(), cx);
+    let v = wait_page(&wb, cx);
+    press(&v, cx, &["apply"]);
+    wait_phase(&v, "done", cx);
+    assert_eq!(*probe.seen.lock().unwrap(), [1, 1, 1], "the record was there before every write");
+    let left = std::fs::read_dir(&journal_dir).unwrap().count();
+    assert_eq!(left, 0, "and is gone when the transaction ended");
+    // What a killed Codeyard left: reported once, naming the files.
+    let stale = json!({ "pid": 4_194_000, "started": 1, "host": "Local", "root": s(&d), "steps": [{ "op": "write", "path": s(&d.join("a.rs")) }, { "op": "rename", "path": s(&d.join("b.rs")) }] });
+    std::fs::write(journal_dir.join("refactor-journal-4194000-0.json"), stale.to_string()).unwrap();
+    wb.update(cx, |wb, cx| wb.warn_interrupted_refactor_for_test(cx));
+    wait_ticking(cx, "the warning", |cx| wb.read_with(cx, |wb, _| wb.notice_text()).is_some_and(|t| t.starts_with("A refactoring was interrupted")));
+    let text = wb.read_with(cx, |wb, _| wb.notice_text()).unwrap();
+    assert!(text.contains("a.rs") && text.contains("b.rs"), "{text}");
+    assert_eq!(std::fs::read_dir(&journal_dir).unwrap().count(), 0, "reported once");
+}
+
+#[gpui::test]
+fn a_delete_of_a_folder_asks_with_what_is_in_it_and_says_permanently(cx: &mut TestAppContext) {
+    let d = root("rp-delete-info");
+    write(&d, "gone/a.txt", "12345");
+    write(&d, "gone/sub/b.txt", "123");
+    for i in 0..6 {
+        write(&d, &format!("gone/f{i}.txt"), "x");
+    }
+    let edit = json!({ "documentChanges": [{ "kind": "delete", "uri": crate::lsp::path_to_uri(&s(&d.join("gone"))), "options": { "recursive": true } }] });
+    let (wb, cx) = setup(cx);
+    open(&wb, &d, cx);
+    propose(&wb, &edit, &Told::default(), cx);
+    let v = wait_page(&wb, cx);
+    press(&v, cx, &["space", "apply"]);
+    assert_eq!(phase(&v, cx), "confirm");
+    let question = v.read_with(cx, |v, _| v.confirm_text_for_test());
+    assert!(question.starts_with("Permanently delete 1 item?"), "{question}");
+    assert!(question.contains("gone with 8 files, ") && question.contains("and 3 more"), "{question}");
+    assert!(d.join("gone").exists());
+}
+
+#[gpui::test]
 fn closing_the_tab_or_opening_another_page_turns_the_edit_down(cx: &mut TestAppContext) {
     let (d, edit) = project("rp-close", true);
     let (wb, cx) = setup(cx);

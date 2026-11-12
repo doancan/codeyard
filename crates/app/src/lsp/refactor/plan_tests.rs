@@ -72,6 +72,24 @@ impl Env for FakeEnv {
     fn resolve(&self, path: &str) -> String {
         self.real(path)
     }
+    fn dir_info(&self, path: &str) -> DirInfo {
+        let prefix = format!("{}/", self.real(path));
+        let mut info = DirInfo::default();
+        let mut top: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for (p, bytes) in self.files.iter().filter(|(p, _)| p.starts_with(&prefix)) {
+            info.files += 1;
+            info.bytes += bytes.len() as u64;
+            let rest = &p[prefix.len()..];
+            top.insert(rest.split('/').next().unwrap().to_string());
+            info.has_git |= rest.split('/').any(|c| c == ".git");
+        }
+        info.top_count = top.len();
+        info.top = top.into_iter().take(5).collect();
+        info
+    }
+    fn open_paths_under(&self, path: &str) -> Vec<(String, bool)> {
+        self.open.iter().filter(|(p, _)| inside(p, path)).map(|(p, d)| (p.clone(), d.dirty)).collect()
+    }
 }
 
 fn roots() -> Vec<String> {
@@ -500,6 +518,68 @@ fn a_deleted_file_is_gone_for_the_operations_after_it() {
         &env,
     );
     assert!(p.resources().all(|r| r.problem.is_none()), "deleting then creating the same path works");
+}
+
+#[test]
+fn edits_before_and_after_a_create_or_rename_of_the_same_path_are_for_different_files() {
+    let env = FakeEnv::demo();
+    // Edit a.rs, move it away, make a new a.rs, edit that: the last edit's positions are for the new, empty file.
+    let a = "/ws/demo/src/util.rs";
+    let edit = ops(json!([
+        text_edit(a, Value::Null, json!([replace(0, 7, 0, 14, "topla")])),
+        { "kind": "rename", "oldUri": format!("file://{a}"), "newUri": "file:///ws/demo/src/moved.rs" },
+        { "kind": "create", "uri": format!("file://{a}") },
+        text_edit(a, Value::Null, json!([replace(0, 0, 0, 0, "// new\n")])),
+    ]));
+    let p = plan(&edit, &env);
+    let files: Vec<&FileItem> = p.files().filter(|f| f.file.path == a).collect();
+    assert_eq!(files.len(), 2, "one entry for each version of the path");
+    assert_eq!(files[0].needs, None);
+    assert_eq!(files[1].needs, Some(2), "the second needs the create");
+    assert_eq!(files[0].file.output_bytes(&[true]).unwrap(), UTIL_RS.replace("fn hesapla", "fn topla").as_bytes());
+    assert_eq!(files[1].file.output_bytes(&[true]).unwrap(), b"// new\n");
+    // Order is the server's: edit, rename, create, edit.
+    let kinds: Vec<&str> = p.items.iter().map(|i| if matches!(i, Item::File(_)) { "file" } else { "op" }).collect();
+    assert_eq!(kinds, ["file", "op", "op", "file"]);
+    // Edits to a path with no operation on it between them are still one entry.
+    let same = ops(json!([
+        text_edit(a, Value::Null, json!([replace(0, 7, 0, 14, "topla")])),
+        { "kind": "create", "uri": "file:///ws/demo/src/other_new.rs" },
+        text_edit(a, Value::Null, json!([replace(2, 0, 2, 1, "A")])),
+    ]));
+    assert_eq!(plan(&same, &env).files().filter(|f| f.file.path == a).count(), 1);
+}
+
+#[test]
+fn deleting_a_folder_honors_recursive_and_refuses_what_must_never_go() {
+    let mut env = FakeEnv::demo();
+    env.dirs.extend(["/ws/demo/full".to_string(), "/ws/demo/empty".to_string(), "/ws/demo/repo".to_string(), "/ws/demo/.git".to_string()]);
+    env.put("/ws/demo/full/a.txt", "12345");
+    env.put("/ws/demo/full/sub/b.txt", "123");
+    env.put("/ws/demo/repo/.git/HEAD", "ref");
+    env.put("/ws/demo/repo/x.txt", "x");
+    env.put("/ws/demo/.git/config", "c");
+    let one = |path: &str, opts: Value, env: &FakeEnv| {
+        let edit = ops(json!([{ "kind": "delete", "uri": format!("file://{path}"), "options": opts }]));
+        plan(&edit, env).resources().next().map(|r| (r.problem.clone(), r.info.clone())).unwrap()
+    };
+    // Not recursive and not empty: refused, as the protocol says.
+    assert!(one("/ws/demo/full", json!({}), &env).0.unwrap().contains("not empty"));
+    // Recursive: allowed, with what is in it.
+    let (problem, info) = one("/ws/demo/full", json!({ "recursive": true }), &env);
+    let info = info.unwrap();
+    assert!(problem.is_none());
+    assert_eq!((info.files, info.bytes, info.top_count, info.top.clone()), (2, 8, 2, vec!["a.txt".to_string(), "sub".to_string()]));
+    // An empty folder needs no `recursive`.
+    assert!(one("/ws/demo/empty", json!({}), &env).0.is_none());
+    // A repository, or anything holding one, never.
+    assert!(one("/ws/demo/.git", json!({ "recursive": true }), &env).0.unwrap().contains(".git"));
+    assert!(one("/ws/demo/repo", json!({ "recursive": true }), &env).0.unwrap().contains("Git repository"));
+    // A folder with an open file that has unsaved changes: refused; a clean one is fine.
+    env.open.insert("/ws/demo/full/a.txt".into(), OpenDoc { dirty: true, ..doc("12345") });
+    assert!(one("/ws/demo/full", json!({ "recursive": true }), &env).0.unwrap().contains("unsaved changes"));
+    env.open.insert("/ws/demo/full/a.txt".into(), doc("12345"));
+    assert!(one("/ws/demo/full", json!({ "recursive": true }), &env).0.is_none());
 }
 
 // --- Limits, summaries ---

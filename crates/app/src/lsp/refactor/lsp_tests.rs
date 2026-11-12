@@ -201,29 +201,104 @@ fn a_server_edit_with_file_operations_is_reviewed_and_answered_when_chosen(cx: &
         } else {
             press(&v, cx, &["escape"]);
             wait_ticking(cx, "the answer", |_| !replies(&fake, 41).is_empty());
-            assert_eq!(replies(&fake, 41), [json!({ "applied": false })]);
+            assert_eq!(replies(&fake, 41)[0]["applied"], false);
+            assert!(replies(&fake, 41)[0]["failureReason"].is_string(), "a refusal says why");
             assert!(other.exists() && !moved.exists());
         }
     }
 }
 
-/// An edit without file operations from `workspace/applyEdit` keeps working as it did: applied at once.
+/// A text-only `workspace/applyEdit` goes through the same path: an edit in one open file is applied at once (and answered),
+/// one in a file that is not open is reviewed first.
 #[gpui::test]
-fn a_server_edit_without_file_operations_is_applied_at_once_as_before(cx: &mut TestAppContext) {
+fn a_text_only_server_edit_is_applied_at_once_in_an_open_file_and_reviewed_otherwise(cx: &mut TestAppContext) {
     let d = dir("rp-apply-edit-plain");
     let (lib, other) = project(&d);
-    let ask = json!({ "id": 42, "method": "workspace/applyEdit", "params": { "edit": { "changes": {
-        crate::lsp::path_to_uri(&s(&other)): [at(0, 11, 12, "k")],
-    } } } });
-    let Some(fake) = FakeServer::new(&d.join("server"), &json!({ "on_open": [ask] })) else { return };
+    let in_open =
+        json!({ "id": 42, "method": "workspace/applyEdit", "params": { "edit": { "documentChanges": [edits(&lib, json!(1), vec![at(0, 7, 8, "k")])] } } });
+    let in_closed = json!({ "id": 43, "method": "workspace/applyEdit", "params": { "edit": { "changes": { crate::lsp::path_to_uri(&s(&other)): [at(0, 11, 12, "k")] } } } });
+    let Some(fake) = FakeServer::new(&d.join("server"), &json!({ "on_open": [in_open, in_closed] })) else { return };
     let cfg = d.join("config");
     std::fs::create_dir_all(&cfg).unwrap();
     write_settings(&cfg, &fake, json!({}), json!({}));
     let (wb, cx) = setup_with_config(cx, &cfg);
     open_project(&wb, cx, &d.join("project"));
-    wait_ticking(cx, "the answer", |_| !replies(&fake, 42).is_empty());
+    wait_ticking(cx, "the answer for the open file", |_| !replies(&fake, 42).is_empty());
     assert_eq!(replies(&fake, 42), [json!({ "applied": true })]);
-    wait_ticking(cx, "the file", |_| std::fs::read_to_string(&other).unwrap().starts_with("use crate::k;"));
+    let lib_text = wb.read_with(cx, |wb, cx| wb.editor_for_path_for_test(&s(&lib), cx).map(|e| e.read(cx).buffer_text()));
+    assert_eq!(lib_text.as_deref(), Some("pub fn k() {}\n"));
+    // The closed file is shown first; the server waits.
+    wait_ticking(cx, "the review", |cx| page(&wb, cx).is_some());
+    settle(cx);
+    assert!(replies(&fake, 43).is_empty());
+    assert_eq!(std::fs::read_to_string(&other).unwrap(), "use crate::f;\nfn g() { f(); }\n");
+    let v = page(&wb, cx).unwrap();
+    press(&v, cx, &["apply"]);
+    wait_ticking(cx, "the answer for the closed file", |_| !replies(&fake, 43).is_empty());
+    assert_eq!(replies(&fake, 43), [json!({ "applied": true })]);
+    assert!(std::fs::read_to_string(&other).unwrap().starts_with("use crate::k;"));
+}
+
+/// Fifty closed files with `always`: reviewed, and answered `applied: false` when discarded.
+#[gpui::test]
+fn fifty_files_from_the_server_are_reviewed_and_a_discard_is_answered(cx: &mut TestAppContext) {
+    let d = dir("rp-apply-edit-many");
+    let (_lib, _other) = project(&d);
+    let mut list = Vec::new();
+    for i in 0..50 {
+        let p = d.join(format!("project/src/m{i:02}.rs"));
+        std::fs::write(&p, "fn m() { f(); }\n").unwrap();
+        list.push(edits(&p, Value::Null, vec![at(0, 9, 10, "k")]));
+    }
+    let ask = json!({ "id": 44, "method": "workspace/applyEdit", "params": { "edit": { "documentChanges": list } } });
+    let Some(fake) = FakeServer::new(&d.join("server"), &json!({ "on_open": [ask] })) else { return };
+    let cfg = d.join("config");
+    std::fs::create_dir_all(&cfg).unwrap();
+    write_settings(&cfg, &fake, json!({}), json!({ "editor.refactorPreview": "always" }));
+    let (wb, cx) = setup_with_config(cx, &cfg);
+    open_project(&wb, cx, &d.join("project"));
+    wait_ticking(cx, "the review", |cx| page(&wb, cx).is_some());
+    let v = page(&wb, cx).unwrap();
+    assert_eq!(v.read_with(cx, |v, _| v.rows_for_test().iter().filter(|r| r.starts_with("[x] ")).count()), 50);
+    settle(cx);
+    assert!(replies(&fake, 44).is_empty());
+    press(&v, cx, &["escape"]);
+    wait_ticking(cx, "the answer", |_| !replies(&fake, 44).is_empty());
+    assert_eq!(replies(&fake, 44)[0]["applied"], false);
+    assert!(replies(&fake, 44)[0]["failureReason"].is_string());
+    assert_eq!(std::fs::read_to_string(d.join("project/src/m00.rs")).unwrap(), "fn m() { f(); }\n");
+}
+
+/// The trust gate applies to the server's own edits too: a folder that is not (or no longer) trusted is refused and the
+/// server is told why.
+#[gpui::test]
+fn a_server_edit_in_an_untrusted_folder_is_refused_with_a_reason(cx: &mut TestAppContext) {
+    let d = dir("rp-apply-edit-untrusted");
+    let (lib, other) = project(&d);
+    let ask =
+        json!({ "id": 45, "method": "workspace/applyEdit", "params": { "edit": { "documentChanges": [edits(&lib, json!(1), vec![at(0, 7, 8, "k")])] } } });
+    // The server asks after it has been asked to rename; the gate is turned on in between (the folder was trusted when it
+    // started and is not any more).
+    let scenario = json!({ "capabilities": { "renameProvider": true }, "responses": { "textDocument/rename": { "result": null } }, "after": { "textDocument/rename": [ask] } });
+    let Some(fake) = FakeServer::new(&d.join("server"), &scenario) else { return };
+    let cfg = d.join("config");
+    std::fs::create_dir_all(&cfg).unwrap();
+    write_settings(&cfg, &fake, json!({}), json!({}));
+    let (wb, cx) = setup_with_config(cx, &cfg);
+    open_project(&wb, cx, &d.join("project"));
+    wait_for_open(&fake, cx);
+    cx.update(|_, cx| {
+        let mut settings = cx.global::<crate::settings::Settings>().clone();
+        settings.workspace_trust = true;
+        cx.set_global(settings);
+    });
+    assert!(wb.read_with(cx, |wb, cx| wb.restricted_for_test(cx)), "the folder is untrusted now");
+    rename_to(&wb, cx, "k");
+    wait_ticking(cx, "the answer", |_| !replies(&fake, 45).is_empty());
+    assert_eq!(replies(&fake, 45)[0]["applied"], false);
+    assert!(replies(&fake, 45)[0]["failureReason"].is_string());
     assert!(page(&wb, cx).is_none());
-    let _ = lib;
+    let lib_text = wb.read_with(cx, |wb, cx| wb.editor_for_path_for_test(&s(&lib), cx).map(|e| e.read(cx).buffer_text()));
+    assert_eq!(lib_text.as_deref(), Some("pub fn f() {}\n"));
+    assert_eq!(std::fs::read_to_string(&other).unwrap(), "use crate::f;\nfn g() { f(); }\n");
 }

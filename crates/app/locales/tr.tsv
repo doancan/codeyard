@@ -4168,9 +4168,6 @@ Could not take back the change in {}: it was edited since. Undo it in the editor
 Create {}	{} oluştur
 Delete and Apply	Sil ve Uygula
 Delete {}	{} sil
-Delete {0} item for good? It is not moved to the trash: {1}|Delete {0} items for good? They are not moved to the trash: {1}	{0} öğe kalıcı olarak silinsin mi? Çöp kutusuna taşınmaz: {1}
-Deletes the file for good; it is not moved to the trash.	Dosyayı kalıcı olarak siler; çöp kutusuna taşınmaz.
-Deletes the folder and everything in it for good; it is not moved to the trash.	Klasörü ve içindeki her şeyi kalıcı olarak siler; çöp kutusuna taşınmaz.
 Done.	Tamam.
 Edit requested by the language server	Dil sunucusunun istediği düzenleme
 Nothing selected.	Hiçbir şey seçilmedi.
@@ -4197,3 +4194,14 @@ Write the selected changes; nothing else is touched ({}Enter)	Seçilen değişik
 {} needs a file operation that is not selected.	{} seçilmemiş bir dosya işlemine ihtiyaç duyuyor.
 Line {0}, column {1}: “{2}” → “{3}”	{0}. satır, {1}. sütun: “{2}” → “{3}”
 The files changed since the preview. Discard this page and start the refactoring again.	Dosyalar önizlemeden sonra değişti. Bu sayfadan vazgeçip yeniden düzenlemeyi baştan başlatın.
+A .git folder is never deleted by a refactoring.	Bir .git klasörü hiçbir yeniden düzenlemeyle silinmez.
+A refactoring was interrupted; these files may be half-changed: {}	Bir yeniden düzenleme yarıda kaldı; şu dosyalar yarı değişmiş olabilir: {}
+It holds a Git repository (.git), which a refactoring never deletes.	İçinde bir Git deposu (.git) var; yeniden düzenleme bunu asla silmez.
+It holds too many files to check what would be deleted.	Neyin silineceğini denetlemek için içinde çok fazla dosya var.
+Permanently delete {0} item? It cannot be undone and is not moved to the trash: {1}|Permanently delete {0} items? They cannot be undone and are not moved to the trash: {1}	{0} öğe kalıcı olarak silinsin mi? Geri alınamaz ve çöp kutusuna taşınmaz: {1}
+Permanently deletes the file; it is not moved to the trash.	Dosyayı kalıcı olarak siler; çöp kutusuna taşınmaz.
+Permanently deletes the folder and everything in it; it is not moved to the trash.	Klasörü ve içindeki her şeyi kalıcı olarak siler; çöp kutusuna taşınmaz.
+The folder is not empty and the server did not ask to delete what is in it.	Klasör boş değil ve sunucu içindekilerin silinmesini istemedi.
+{0} and {1} more	{0} ve {1} tane daha
+{0} with {1}, {2}: {3}	{0}: {1}, {2}: {3}
+{} has unsaved changes: save or revert it first.	{} içinde kaydedilmemiş değişiklikler var: önce kaydedin ya da geri alın.

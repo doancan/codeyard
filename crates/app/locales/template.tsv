@@ -13,6 +13,7 @@
 1 minute	
 15 minutes	
 5 minutes	
+A .git folder is never deleted by a refactoring.	
 A command failed with code {}	
 A command finished	
 A command is running	
@@ -35,6 +36,7 @@ A profile name cannot end with a dot.
 A profile name cannot start with a dot.	
 A profile name has at most {} characters.	
 A rebase is already in progress: use Git: Continue Rebase or Git: Abort Rebase	
+A refactoring was interrupted; these files may be half-changed: {}	
 A request is still being sent; wait for its answer first.	
 A sign-in answer for {0} carried the code of {1}'s sign-in; it was ignored.	
 A sync is already running.	
@@ -733,7 +735,6 @@ Delete which branch on the remote?
 Delete which branch?	
 Delete which tag on the remote?	
 Delete which tag?	
-Delete {0} item for good? It is not moved to the trash: {1}|Delete {0} items for good? They are not moved to the trash: {1}	
 Delete {}	
 Delete “{0}” from {1}?	
 Delete “{}” permanently?	
@@ -742,8 +743,6 @@ Deleted tag {0} on {1}
 Deleted tag {}	
 Deleted {}	
 Deleted “{0}” from {1}	
-Deletes the file for good; it is not moved to the trash.	
-Deletes the folder and everything in it for good; it is not moved to the trash.	
 Deleting {}…	
 Deleting…	
 Denials	
@@ -1377,6 +1376,8 @@ It can't be moved to the Trash ({}). Deleting it permanently can't be undone.
 It connects only to the servers you allow here, such as the one in its “{}” setting.	
 It declares no permissions.	
 It does not exist (it may have been moved or deleted).	
+It holds a Git repository (.git), which a refactoring never deletes.	
+It holds too many files to check what would be deleted.	
 It is a folder, not a file.	
 It may send requests to {0} over HTTPS, with whatever it can read or store, such as a token you give it. Remove it on the extension's page in Extensions.	
 It may sign in to your account on {0} with the OAuth application you registered there (client id {1}, redirect URI {2}). Codeyard signs its requests to {0} with that account; the extension never sees the token. Remove it on the extension's page in Extensions.	
@@ -1947,7 +1948,10 @@ Payload
 Permalink copied.	
 Permalink copied. The file has changes that are not committed, so the link shows the committed version.	
 Permanently delete {0} item on {1}?|Permanently delete {0} items on {1}?	
+Permanently delete {0} item? It cannot be undone and is not moved to the trash: {1}|Permanently delete {0} items? They cannot be undone and are not moved to the trash: {1}	
 Permanently delete “{0}” on {1}?	
+Permanently deletes the file; it is not moved to the trash.	
+Permanently deletes the folder and everything in it; it is not moved to the trash.	
 Permission switches	
 Permissions	
 Permissions: none.	
@@ -2806,6 +2810,7 @@ The files changed since the preview. Discard this page and start the refactoring
 The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
+The folder is not empty and the server did not ask to delete what is in it.	
 The folder is not empty.	
 The folder it belongs in does not exist.	
 The folder of “{}” with its settings, keybindings and snippets is deleted. This cannot be undone.	
@@ -3664,6 +3669,7 @@ your words
 {0} and {1} cannot be multiplied	
 {0} and {1} cannot be subtracted	
 {0} and {1} cannot have their containment checked	
+{0} and {1} more	
 {0} can be updated: “{1}” does not allow the latest release, {2}	
 {0} can now sign in to {1}.	
 {0} cannot be used with {1}	
@@ -3714,6 +3720,7 @@ your words
 {0} was updated to version {1}.	
 {0} went back to version {1}: its publisher withdrew {2}.	
 {0} went back to version {1}: the registry revoked {2}.	
+{0} with {1}, {2}: {3}	
 {0} {1} ({2}) asks to:	
 {0} {1} waits for your OK in the Extensions view.	
 {0} {1}: I/O {2}, overhead {3}	
@@ -3840,6 +3847,7 @@ your words
 {} has no newer version	
 {} has no valid hash in its package	
 {} has too many or too large snippet files to copy.	
+{} has unsaved changes: save or revert it first.	
 {} holds no changes to tracked files.	
 {} hour ago|{} hours ago	
 {} implementation|{} implementations	

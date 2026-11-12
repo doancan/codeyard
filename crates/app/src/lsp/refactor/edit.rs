@@ -39,6 +39,7 @@ pub enum Op {
 }
 
 impl Op {
+    #[cfg(test)]
     pub fn is_resource(&self) -> bool {
         !matches!(self, Op::Text(_))
     }
@@ -53,6 +54,7 @@ pub struct Parsed {
 }
 
 impl Parsed {
+    #[cfg(test)]
     pub fn has_resource_ops(&self) -> bool {
         self.ops.iter().any(Op::is_resource)
     }

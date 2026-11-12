@@ -139,7 +139,7 @@ fn fixture(name: &str) -> (PathBuf, Vec<Step>) {
 #[test]
 fn every_kind_of_step_lands_and_the_deleted_folder_is_really_gone() {
     let (d, steps) = fixture("ok");
-    let tx = run(&host(), steps, &no_cancel());
+    let tx = run(&host(), steps, &no_cancel(), &[]);
     assert!(tx.ok(), "{:?}", tx.steps);
     assert_eq!(
         snapshot(&d),
@@ -167,7 +167,7 @@ fn a_failure_at_any_step_leaves_the_folder_exactly_as_it_was() {
             let _ = op;
             (counter.fetch_add(1, Ordering::SeqCst) == failing).then(|| HostError::Op(proto::Error::PermissionDenied(path.into())))
         });
-        let tx = run(&fs, steps, &no_cancel());
+        let tx = run(&fs, steps, &no_cancel(), &[]);
         assert!(!tx.ok());
         assert_eq!(snapshot(&d), before, "step {failing} failed: {:?}", tx.steps);
         assert!(tx.undo.is_empty());
@@ -184,7 +184,7 @@ fn a_file_changed_after_the_preview_is_a_conflict_that_takes_everything_back() {
     // The preview read "OLD"; somebody saved other text since.
     steps.insert(2, write_step(&d.join("a.txt"), "OLD\n", "NEW\n"));
     let before = snapshot(&d);
-    let tx = run(&host(), steps, &no_cancel());
+    let tx = run(&host(), steps, &no_cancel(), &[]);
     assert_eq!(snapshot(&d), before);
     assert!(tx.steps.iter().any(|(_, o)| *o == StepOutcome::Conflict), "{:?}", tx.steps);
     let lines = report(&tx, &[], |p| p.rsplit('/').next().unwrap().to_string());
@@ -200,7 +200,7 @@ fn a_rename_never_overwrites_a_name_that_is_taken_and_the_earlier_steps_are_take
     std::fs::write(d.join("hedef.txt"), "mine\n").unwrap();
     steps.push(Step::Rename { from: s(&d.join("a.txt")), to: s(&d.join("hedef.txt")) });
     let before = snapshot(&d);
-    let tx = run(&host(), steps, &no_cancel());
+    let tx = run(&host(), steps, &no_cancel(), &[]);
     assert_eq!(snapshot(&d), before);
     assert_eq!(std::fs::read_to_string(d.join("hedef.txt")).unwrap(), "mine\n");
     assert!(matches!(&tx.steps[4].1, StepOutcome::Failed(why) if why.contains("already exists")), "{:?}", tx.steps[4]);
@@ -211,7 +211,7 @@ fn a_rename_never_overwrites_a_name_that_is_taken_and_the_earlier_steps_are_take
 fn a_create_that_finds_the_file_there_fails_instead_of_truncating_it() {
     let d = dir("create-exists");
     std::fs::write(d.join("a.txt"), "keep\n").unwrap();
-    let tx = run(&host(), vec![Step::Create { path: s(&d.join("a.txt")) }], &no_cancel());
+    let tx = run(&host(), vec![Step::Create { path: s(&d.join("a.txt")) }], &no_cancel(), &[]);
     assert!(!tx.ok());
     assert_eq!(std::fs::read_to_string(d.join("a.txt")).unwrap(), "keep\n");
     std::fs::remove_dir_all(&d).ok();
@@ -226,7 +226,7 @@ fn a_step_that_cannot_be_taken_back_is_named_with_where_it_stands() {
     let fs = Faulty::new(move |op, path| {
         (op == "rename" && path.ends_with(&format!("-> {stuck}"))).then(|| HostError::Op(proto::Error::AlreadyExists(stuck.clone())))
     });
-    let tx = run(&fs, steps, &no_cancel());
+    let tx = run(&fs, steps, &no_cancel(), &[]);
     assert!(tx.steps.iter().any(|(_, o)| matches!(o, StepOutcome::RollbackFailed(_))));
     // Everything else was taken back: the file stands where the rename left it.
     assert!(d.join("taşındı.txt").exists());
@@ -249,12 +249,12 @@ fn stopping_in_the_middle_takes_back_what_was_done() {
             flag.store(true, Ordering::SeqCst);
         }
     });
-    let tx = run(&fs, steps, &cancel);
+    let tx = run(&fs, steps, &cancel, &[]);
     assert_eq!(snapshot(&d), before);
     assert!(matches!(&tx.steps[2].1, StepOutcome::Failed(why) if why.contains("Stopped")), "{:?}", tx.steps);
     // Stopped before anything: nothing was started.
     let (d2, steps) = fixture("stop-first");
-    let tx = run(&host(), steps, &AtomicBool::new(true));
+    let tx = run(&host(), steps, &AtomicBool::new(true), &[]);
     assert!(tx.steps.iter().skip(1).all(|(_, o)| *o == StepOutcome::NotRun));
     assert_eq!(snapshot(&d2).len(), 4);
     std::fs::remove_dir_all(&d).ok();
@@ -292,12 +292,12 @@ fn a_write_whose_reply_was_lost_but_landed_counts_as_done() {
             self.0.dir_is_empty(path)
         }
     }
-    let tx = run(&LostReply(host()), vec![write_step(&d.join("a.txt"), "alpha\n", "ALPHA\n")], &no_cancel());
+    let tx = run(&LostReply(host()), vec![write_step(&d.join("a.txt"), "alpha\n", "ALPHA\n")], &no_cancel(), &[]);
     assert!(tx.ok(), "{:?}", tx.steps);
     assert_eq!(tx.undo[0].hash_after, proto::content_hash(b"ALPHA\n"));
     // And a later failure still takes that write back.
     let steps = vec![write_step(&d.join("a.txt"), "ALPHA\n", "Alpha!\n"), Step::Rename { from: s(&d.join("nope")), to: s(&d.join("nope2")) }];
-    let tx = run(&host(), steps, &no_cancel());
+    let tx = run(&host(), steps, &no_cancel(), &[]);
     assert!(!tx.ok());
     assert_eq!(std::fs::read_to_string(d.join("a.txt")).unwrap(), "ALPHA\n");
     std::fs::remove_dir_all(&d).ok();
@@ -334,7 +334,7 @@ fn a_write_that_never_landed_is_not_blamed_on_the_rollback() {
         }
     }
     let steps = vec![Step::Create { path: s(&d.join("n.txt")) }, write_step(&d.join("a.txt"), "alpha\n", "ALPHA\n")];
-    let tx = run(&Dropped(host()), steps, &no_cancel());
+    let tx = run(&Dropped(host()), steps, &no_cancel(), &[]);
     assert!(!tx.ok());
     assert!(!d.join("n.txt").exists());
     assert_eq!(std::fs::read_to_string(d.join("a.txt")).unwrap(), "alpha\n");
@@ -348,7 +348,7 @@ fn a_leftover_tombstone_is_reported_not_hidden() {
     std::fs::write(d.join("a.txt"), "a\n").unwrap();
     // Removing the hidden name fails: the delete is done (the file is no longer at its path) but the name is reported.
     let fs = Faulty::new(|op, path| (op == "delete" && path.contains(".codeyard-removed")).then(|| HostError::Op(proto::Error::PermissionDenied(path.into()))));
-    let tx = run(&fs, vec![Step::Delete { path: s(&d.join("a.txt")) }], &no_cancel());
+    let tx = run(&fs, vec![Step::Delete { path: s(&d.join("a.txt")) }], &no_cancel(), &[]);
     assert!(tx.ok());
     assert_eq!(tx.leftovers.len(), 1);
     assert!(!d.join("a.txt").exists());
@@ -362,7 +362,7 @@ fn undo_puts_the_text_back_only_for_files_nobody_changed_since() {
     let d = dir("undo");
     std::fs::write(d.join("a.txt"), "alpha\n").unwrap();
     std::fs::write(d.join("b.txt"), "beta\n").unwrap();
-    let tx = run(&host(), vec![write_step(&d.join("a.txt"), "alpha\n", "ALPHA\n"), write_step(&d.join("b.txt"), "beta\n", "BETA\n")], &no_cancel());
+    let tx = run(&host(), vec![write_step(&d.join("a.txt"), "alpha\n", "ALPHA\n"), write_step(&d.join("b.txt"), "beta\n", "BETA\n")], &no_cancel(), &[]);
     std::fs::write(d.join("b.txt"), "BETA edited\n").unwrap();
     let outcomes = undo(&host(), &tx.undo, &no_cancel());
     assert_eq!(std::fs::read_to_string(d.join("a.txt")).unwrap(), "alpha\n");
@@ -410,7 +410,7 @@ fn a_server_edit_is_planned_selected_and_written_end_to_end() {
     let prepared = prepare(&p, &chosen);
     assert!(prepared.skipped.is_empty() && prepared.buffers.is_empty());
     assert_eq!(prepared.steps.len(), 5);
-    let tx = run(&host(), prepared.steps, &no_cancel());
+    let tx = run(&host(), prepared.steps, &no_cancel(), &[]);
     assert!(tx.ok(), "{:?}", tx.steps);
     assert_eq!(std::fs::read_to_string(d.join("a.rs")).unwrap(), "pub fn topla() {}\n");
     assert_eq!(std::fs::read(d.join("b.rs")).unwrap(), b"use crate::a::{x, y, topla};\n    topla();\r\n".to_vec());
@@ -430,7 +430,7 @@ fn deselecting_one_change_writes_only_the_others() {
     // a.rs is left out altogether.
     chosen.toggle_item(&p, 0);
     let prepared = prepare(&p, &chosen);
-    let tx = run(&host(), prepared.steps, &no_cancel());
+    let tx = run(&host(), prepared.steps, &no_cancel(), &[]);
     assert!(tx.ok());
     assert_eq!(std::fs::read_to_string(d.join("a.rs")).unwrap(), "pub fn hesapla() {}\n");
     assert_eq!(std::fs::read(d.join("b.rs")).unwrap(), b"use crate::a::{x, y, topla};\n    hesapla();\r\n".to_vec());
@@ -445,7 +445,7 @@ fn a_file_changed_on_disk_after_the_plan_was_made_is_refused_and_nothing_else_ch
     let p = plan::build(parse(&edit_in(&d)), &env, &[s(&d)], "local".into(), s(&d), crate::encoding::Encoding::Utf8).unwrap();
     std::fs::write(d.join("b.rs"), "// somebody was here\n").unwrap();
     let before = snapshot(&d);
-    let tx = run(&host(), prepare(&p, &Chosen::initial(&p)).steps, &no_cancel());
+    let tx = run(&host(), prepare(&p, &Chosen::initial(&p)).steps, &no_cancel(), &[]);
     assert!(!tx.ok());
     assert!(tx.steps.iter().any(|(_, o)| *o == StepOutcome::Conflict));
     assert_eq!(snapshot(&d), before, "a.rs was written first and was taken back");
@@ -484,7 +484,7 @@ fn open_documents_become_buffer_jobs_with_the_state_they_were_planned_from() {
 #[test]
 fn report_lines_say_what_changed_in_words() {
     let (d, steps) = fixture("report");
-    let tx = run(&host(), steps, &no_cancel());
+    let tx = run(&host(), steps, &no_cancel(), &[]);
     let lines = report(&tx, &[("b.rs".to_string(), 2)], |p| p.rsplit('/').next().unwrap().to_string());
     let texts: Vec<_> = lines.iter().map(|(l, _)| l.as_str()).collect();
     assert_eq!(texts[0], "Changed 3 changes in 2 files");
@@ -492,4 +492,35 @@ fn report_lines_say_what_changed_in_words() {
     assert!(texts.contains(&"Renamed şablon 😀.txt to taşındı.txt"), "{texts:?}");
     assert!(lines.iter().all(|(_, bad)| !bad));
     std::fs::remove_dir_all(&d).ok();
+}
+
+/// A link that led inside the folder at review time and was pointed elsewhere before Apply: the write is refused, nothing
+/// lands outside, and what was done is taken back.
+#[cfg(unix)]
+#[test]
+fn a_link_retargeted_after_the_review_cannot_lead_a_write_out_of_the_folder() {
+    let d = dir("retarget");
+    let outside = dir("retarget-outside");
+    std::fs::create_dir(d.join("real")).unwrap();
+    std::fs::write(d.join("real/x.txt"), "a\n").unwrap();
+    std::fs::write(outside.join("x.txt"), "a\n").unwrap();
+    std::fs::write(d.join("first.txt"), "1\n").unwrap();
+    std::os::unix::fs::symlink(d.join("real"), d.join("link")).unwrap();
+    let steps = || vec![write_step(&d.join("first.txt"), "1\n", "one\n"), write_step(&d.join("link/x.txt"), "a\n", "b\n")];
+    // Still inside: written.
+    let tx = run(&host(), steps(), &no_cancel(), &[s(&d)]);
+    assert!(tx.ok(), "{:?}", tx.steps);
+    assert_eq!(std::fs::read_to_string(d.join("real/x.txt")).unwrap(), "b\n");
+    std::fs::write(d.join("first.txt"), "1\n").unwrap();
+    std::fs::write(d.join("real/x.txt"), "a\n").unwrap();
+    // Retargeted after the review.
+    std::fs::remove_file(d.join("link")).unwrap();
+    std::os::unix::fs::symlink(&outside, d.join("link")).unwrap();
+    let tx = run(&host(), steps(), &no_cancel(), &[s(&d)]);
+    assert!(!tx.ok());
+    assert!(matches!(&tx.steps[1].1, StepOutcome::Failed(why) if why.starts_with("Outside the open folders")), "{:?}", tx.steps);
+    assert_eq!(std::fs::read_to_string(outside.join("x.txt")).unwrap(), "a\n");
+    assert_eq!(std::fs::read_to_string(d.join("first.txt")).unwrap(), "1\n", "the write before it was taken back");
+    std::fs::remove_dir_all(&d).ok();
+    std::fs::remove_dir_all(&outside).ok();
 }

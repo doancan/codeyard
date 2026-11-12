@@ -1422,6 +1422,7 @@ impl Workbench {
         wb.poll_extension_updates(window, cx);
         wb.poll_autofetch(window, cx);
         wb.listen_fs(cx);
+        wb.warn_interrupted_refactor(cx);
         wb
     }
 

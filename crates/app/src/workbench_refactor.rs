@@ -15,11 +15,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use gpui::WeakEntity;
 
+use super::notifications_glue::model::{Notification, Severity};
 use super::*;
-use crate::i18n::t;
+use crate::i18n::{t, tf};
 use crate::lsp::refactor::apply::{self, Fs, Step, Transaction};
 use crate::lsp::refactor::edit;
 use crate::lsp::refactor::env::HostEnv;
+use crate::lsp::refactor::journal::{self, Journal};
 use crate::lsp::refactor::plan::{self, Chosen, OpenDoc, PlanError, RefactorPlan};
 use crate::lsp::refactor::preview::{RefactorEvent, RefactorPreview};
 use crate::replace_apply::{Outcome, Report, UndoDisk};
@@ -74,9 +76,11 @@ pub(super) struct RefactorState {
     cancel: Option<Arc<AtomicBool>>,
     /// What the server was told of each open document when the quick fixes now listed were asked for.
     pub(super) listed: HashMap<String, (u64, i64)>,
-    /// Tests write through a host that injects failures.
+    /// Tests write through a host that injects failures, and keep the record of a transaction in a folder of their own.
     #[cfg(test)]
     pub(super) fs: Option<Arc<dyn Fs>>,
+    #[cfg(test)]
+    pub(super) journal_dir: Option<std::path::PathBuf>,
 }
 
 impl Workbench {
@@ -115,6 +119,22 @@ impl Workbench {
                 (e.path.clone(), doc)
             })
             .collect()
+    }
+
+    /// The server's own `workspace/applyEdit`: reviewed or applied as the setting says, with the trust and folder checks and the
+    /// all-or-nothing apply of every other edit. The server is answered when it is decided; a refusal says why.
+    pub(super) fn apply_edit_request(&mut self, client: Arc<crate::lsp::Client>, id: serde_json::Value, edit: &serde_json::Value, cx: &mut Context<Self>) {
+        let snapshot = self.refactor_snapshot(&client, cx);
+        let source = EditSource { title: t("Edit requested by the language server").into(), client: Some(client.clone()), snapshot };
+        let done: Done = Box::new(move |_, applied, _| {
+            let answer = if applied {
+                serde_json::json!({ "applied": true })
+            } else {
+                serde_json::json!({ "applied": false, "failureReason": "The edit was refused or turned down in Codeyard." })
+            };
+            client.respond(id, answer);
+        });
+        self.review_workspace_edit(source, edit, Some(done), cx);
     }
 
     /// A language server's edit: make the plan, then review it or apply it, as `editor.refactorPreview` says. `done` runs with
@@ -294,6 +314,17 @@ impl Workbench {
         let editors = self.all_editors();
         let open = |path: &str, cx: &App| editors.iter().find(|e| e.read(cx).path == path && e.read(cx).uses_host(&host)).cloned();
         // Every editor must still hold exactly the text the plan was made from; one that does not stops everything.
+        // A file planned from the disk that an editor holds now with unsaved text (opened and typed into since the review) is
+        // not written under it; a clean one is reloaded after the write.
+        for step in &prepared.steps {
+            if let Step::Write { path, .. } = step
+                && let Some(e) = open(path, cx)
+                && e.read(cx).is_dirty()
+            {
+                let lines = vec![(crate::i18n::tf("{} has unsaved changes: save or revert it first.", &[&name_in(&plan, path)]), true)];
+                return self.refactor_failed(lines, view, done, window, cx);
+            }
+        }
         let mut targets = Vec::new();
         for job in &prepared.buffers {
             match open(&job.path, cx) {
@@ -323,7 +354,16 @@ impl Workbench {
         self.lsp.refactor.cancel = Some(cancel.clone());
         let fs = self.refactor_fs(&host);
         let steps = prepared.steps;
-        let task = cx.background_executor().spawn(async move { apply::run(fs.as_ref(), steps, &cancel) });
+        let (journal_dir, label, root, roots) = (self.refactor_journal_dir(), host.label(), plan.root.clone(), plan.roots.clone());
+        let task = cx.background_executor().spawn(async move {
+            // The record of what is about to happen, for the next start if this process dies in the middle.
+            let journal = journal_dir.and_then(|dir| Journal::begin(&dir, &label, &root, &steps));
+            let tx = apply::run(fs.as_ref(), steps, &cancel, &roots);
+            if let Some(journal) = journal {
+                journal.finish(tx.steps.iter().any(|(_, o)| matches!(o, apply::StepOutcome::RollbackFailed(_))));
+            }
+            tx
+        });
         let handle = self.window_handle;
         cx.spawn(async move |this, cx| {
             let tx = task.await;
@@ -333,6 +373,37 @@ impl Workbench {
                     this.refactor_done(plan, tx, buffers, buffer_counts, skipped, view, host, done, window, cx)
                 })
                 .ok();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Where the record of a running transaction is kept: next to the state database, on this computer. Tests choose their own.
+    fn refactor_journal_dir(&self) -> Option<std::path::PathBuf> {
+        #[cfg(test)]
+        return self.lsp.refactor.journal_dir.clone();
+        #[cfg(not(test))]
+        return super::state_path().and_then(|p| p.parent().map(std::path::Path::to_path_buf));
+    }
+
+    /// At start: a transaction that never ended (the program died in the middle) is reported, once, with the files it may have
+    /// left half-changed. Reading the folder is done on a background thread.
+    pub(super) fn warn_interrupted_refactor(&mut self, cx: &mut Context<Self>) {
+        let Some(dir) = self.refactor_journal_dir() else { return };
+        let task = cx.background_executor().spawn(async move { journal::take_interrupted(&dir) });
+        cx.spawn(async move |this, cx| {
+            let found = task.await;
+            this.update(cx, |this, _| {
+                for left in found {
+                    let files: Vec<String> = left.steps.iter().map(|(path, op)| format!("{path} ({op})")).collect();
+                    let message = tf(
+                        "A refactoring was interrupted; these files may be half-changed: {}",
+                        &[&left.steps.iter().map(|(p, _)| ui::file_name(p).to_string()).collect::<Vec<_>>().join(", ")],
+                    );
+                    let detail = format!("{} · {}\n{}", left.host, left.root, files.join("\n"));
+                    this.notify_with(Notification::new(Severity::Warning, NoticeSource::Language, message).detail(detail));
+                }
             })
             .ok();
         })
@@ -414,7 +485,15 @@ impl Workbench {
         let mut touched = Vec::new();
         for (step, _) in &tx.steps {
             match step {
-                Step::Write { path, .. } | Step::Create { path } => touched.push(path.clone()),
+                Step::Write { path, .. } => {
+                    touched.push(path.clone());
+                    // An editor that holds the file clean shows the new text.
+                    let open = self.all_editors().into_iter().find(|e| e.read(cx).path == *path && e.read(cx).uses_host(&host));
+                    if let Some(e) = open.filter(|e| !e.read(cx).is_dirty()) {
+                        e.update(cx, |e, cx| e.reload(cx));
+                    }
+                }
+                Step::Create { path } => touched.push(path.clone()),
                 Step::Rename { from, to } => {
                     self.after_move(from.clone(), to.clone(), cx);
                     touched.push(to.clone());
@@ -545,6 +624,16 @@ impl Workbench {
     #[cfg(test)]
     pub fn remote_host_for_test(&self) -> Arc<dyn Host> {
         self.remote.host.clone()
+    }
+
+    #[cfg(test)]
+    pub fn set_refactor_journal_dir_for_test(&mut self, dir: std::path::PathBuf) {
+        self.lsp.refactor.journal_dir = Some(dir);
+    }
+
+    #[cfg(test)]
+    pub fn warn_interrupted_refactor_for_test(&mut self, cx: &mut Context<Self>) {
+        self.warn_interrupted_refactor(cx);
     }
 
     #[cfg(test)]

@@ -310,20 +310,11 @@ impl Workbench {
                 }
             }
             ServerEvent::ApplyEdit { id, edit } => {
-                // An edit that creates, moves or deletes files is reviewed; the server gets its answer once the user has chosen.
-                if crate::lsp::refactor::edit::parse(&edit).has_resource_ops()
-                    && let Some(ServerSlot::Running(client)) = self.lsp.servers.get(key)
-                {
+                // Every edit the server asks for goes through the review path (`editor.refactorPreview`, the trust gate, the
+                // checks and the all-or-nothing apply); the server is answered when it is decided.
+                if let Some(ServerSlot::Running(client)) = self.lsp.servers.get(key) {
                     let client = client.clone();
-                    let snapshot = self.refactor_snapshot(&client, cx);
-                    let source = EditSource { title: t("Edit requested by the language server").into(), client: Some(client.clone()), snapshot };
-                    let done: Done = Box::new(move |_, applied, _| client.respond(id, serde_json::json!({ "applied": applied })));
-                    return self.review_workspace_edit(source, &edit, Some(done), cx);
-                }
-                // After a code action command the server asks for an edit.
-                let applied = self.apply_workspace_edit(&edit, cx);
-                if let Some(ServerSlot::Running(c)) = self.lsp.servers.get(key) {
-                    c.respond(id, serde_json::json!({ "applied": applied }));
+                    self.apply_edit_request(client, id, &edit, cx);
                 }
             }
             ServerEvent::Exited(code) => {

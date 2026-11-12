@@ -32,6 +32,11 @@ pub trait Fs: Store {
     fn delete(&self, path: &str) -> Result<(), HostError>;
     fn is_dir(&self, path: &str) -> bool;
     fn dir_is_empty(&self, path: &str) -> bool;
+    /// `path` with `..` and symbolic links resolved, as the plan checked it. The default is the path itself (a fake without
+    /// links).
+    fn resolve(&self, path: &str) -> String {
+        path.to_string()
+    }
 }
 
 impl Fs for Arc<dyn Host> {
@@ -49,6 +54,9 @@ impl Fs for Arc<dyn Host> {
     }
     fn dir_is_empty(&self, path: &str) -> bool {
         self.as_ref().read_dir(path).is_ok_and(|entries| entries.is_empty())
+    }
+    fn resolve(&self, path: &str) -> String {
+        super::plan::Env::resolve(&super::env::HostEnv::new(self.clone(), Default::default()), path)
     }
 }
 
@@ -134,8 +142,10 @@ fn tombstone(path: &str) -> String {
     format!("{dir}/.codeyard-removed-{}-{n}-{name}", std::process::id())
 }
 
-/// Run the steps in order. A failing step, or `cancel`, takes back everything done so far.
-pub fn run(fs: &dyn Fs, steps: Vec<Step>, cancel: &AtomicBool) -> Transaction {
+/// Run the steps in order. A failing step, or `cancel`, takes back everything done so far. Before each step the paths it
+/// touches are resolved again and must still be inside `roots` (the resolved open folders; none: not checked): a symbolic
+/// link moved between the review and now cannot lead a write out of the folder.
+pub fn run(fs: &dyn Fs, steps: Vec<Step>, cancel: &AtomicBool, roots: &[String]) -> Transaction {
     let mut journal: Vec<(usize, Back)> = Vec::new();
     let mut tombstones: Vec<String> = Vec::new();
     let mut outcomes: Vec<StepOutcome> = vec![StepOutcome::NotRun; steps.len()];
@@ -145,6 +155,11 @@ pub fn run(fs: &dyn Fs, steps: Vec<Step>, cancel: &AtomicBool) -> Transaction {
         if cancel.load(Ordering::SeqCst) {
             failed = true;
             outcomes[i] = StepOutcome::Failed(crate::i18n::t("Stopped.").into());
+            break;
+        }
+        if let Some(real) = escapes(fs, step, roots) {
+            outcomes[i] = StepOutcome::Failed(crate::i18n::tf("Outside the open folders: {}", &[&real]));
+            failed = true;
             break;
         }
         let result: Result<Back, (StepOutcome, Option<Back>)> = match step {
@@ -196,6 +211,18 @@ pub fn run(fs: &dyn Fs, steps: Vec<Step>, cancel: &AtomicBool) -> Transaction {
     // Everything worked: now the deletes become real.
     let leftovers = tombstones.into_iter().filter(|t| fs.delete(t).is_err()).collect();
     Transaction { steps: steps.into_iter().zip(outcomes).collect(), undo, leftovers }
+}
+
+/// The real location of a path a step touches that is not inside the open folders, if there is one.
+fn escapes(fs: &dyn Fs, step: &Step, roots: &[String]) -> Option<String> {
+    if roots.is_empty() {
+        return None;
+    }
+    let paths: Vec<&str> = match step {
+        Step::Create { path } | Step::Delete { path } | Step::Write { path, .. } => vec![path],
+        Step::Rename { from, to } => vec![from, to],
+    };
+    paths.into_iter().map(|p| fs.resolve(p)).find(|real| !roots.iter().any(|r| super::plan::inside(real, r)))
 }
 
 /// The folders above `path` that the create will have to make, deepest first.

@@ -6,7 +6,11 @@ use std::sync::{Arc, Mutex};
 
 use host::{Host, HostError};
 
-use super::plan::{Env, Kind, OpenDoc};
+use super::plan::{DIR_WALK_LIMIT, DirInfo, Env, Kind, OpenDoc, inside};
+
+/// Names of a folder's entries kept for the question before it is deleted, and files whose size is asked for.
+const TOP_NAMES: usize = 5;
+const SIZED_FILES: usize = 2_000;
 
 pub struct HostEnv {
     host: Arc<dyn Host>,
@@ -55,6 +59,51 @@ impl Env for HostEnv {
         for (path, answer) in paths.iter().zip(answers) {
             cache.insert(path.clone(), answer.ok().map(|real| tidy(&real)));
         }
+    }
+
+    fn dir_info(&self, path: &str) -> DirInfo {
+        let mut info = DirInfo::default();
+        let mut seen = 0usize;
+        let mut pending = vec![(path.to_string(), true)];
+        while let Some((dir, top)) = pending.pop() {
+            let Ok(entries) = self.host.read_dir(&dir) else {
+                // Unreadable: what it holds is unknown, so it is not deleted.
+                info.truncated = true;
+                return info;
+            };
+            for entry in entries {
+                seen += 1;
+                if seen > DIR_WALK_LIMIT {
+                    info.truncated = true;
+                    return info;
+                }
+                if top {
+                    info.top_count += 1;
+                    if info.top.len() < TOP_NAMES {
+                        info.top.push(entry.name.clone());
+                    }
+                }
+                if entry.name == ".git" {
+                    info.has_git = true;
+                }
+                let child = format!("{}/{}", dir.trim_end_matches('/'), entry.name);
+                if entry.kind == proto::Kind::Dir {
+                    pending.push((child, false));
+                } else {
+                    info.files += 1;
+                    if info.files <= SIZED_FILES
+                        && let Ok(meta) = self.host.lstat(&child)
+                    {
+                        info.bytes += meta.size;
+                    }
+                }
+            }
+        }
+        info
+    }
+
+    fn open_paths_under(&self, path: &str) -> Vec<(String, bool)> {
+        self.open.iter().filter(|(p, _)| inside(p, path)).map(|(p, d)| (p.clone(), d.dirty)).collect()
     }
 
     fn resolve(&self, path: &str) -> String {

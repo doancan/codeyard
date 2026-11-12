@@ -5,6 +5,7 @@
 pub mod apply;
 pub mod edit;
 pub mod env;
+pub mod journal;
 #[cfg(test)]
 mod lsp_tests;
 pub mod plan;
