@@ -127,12 +127,18 @@ The tree, in the order a screen reader walks it:
   frame. Actions name the commit hash, worktree path, file of that commit or label the tree showed: from an outdated
   tree they do nothing when it changed, and a header or the search toggle only acts from the state that was read.
 - While the Problems panel is open, a `List` labeled with the number of problems: first a polite `Status` with the
-  counts ("2 errors, 1 warnings", spoken when it changes), then a `Heading` per file and a `ListItem` per problem
-  ("Error: …", with file, line and column as its description) or related location, each with `Click` to open it and its
-  painted frame. A problem holds a "Quick Fix…" `Button` (a list popup): it opens the problem at its place and asks for
-  its fixes there, as Quick Fix at the caret does; they come as the picker below, whose option applies the fix, and the
-  keyboard is back in the editor afterwards. At most 2,000 rows are exposed. With nothing to show, a polite `Status`
-  says "No problems.". An activation from an outdated tree opens or fixes nothing unless the same row is still at the
+  counts ("2 errors, 1 warnings", spoken when it changes; with a filter on, "Showing 2 of 3 problems: 1 errors, 0
+  warnings, 1 information"), then a `Heading` per file (expanded or collapsed; `Click` folds or opens its problems) and
+  a `ListItem` per problem ("Error: …", with file, line, column and source as its description) or related location,
+  each with `Click` to open it and its painted frame. A problem holds a "Quick Fix…" `Button` (a list popup): it opens
+  the problem at its place and asks for its fixes there, as Quick Fix at the caret does; they come as the picker below,
+  whose option applies the fix, and the keyboard is back in the editor afterwards. A second `Button`, "Copy Problem",
+  copies the problem's line. At most 2,000 rows are exposed. With nothing to show, a polite `Status` says "No
+  problems." or, when the filter hides everything, "No problems match the filter.". The filter bar is painted controls
+  of the surface "Problems": the switches "Show Errors", "Show Warnings" and "Show Information" (toggle `Button`s with
+  their count as description), the text input "Filter problems", and the buttons "Active File Only" (a toggle), "Sort:
+  File" (it names the current order; pressing it changes the order), "Collapse All Files" / "Expand All Files" and
+  "Copy All Problems". The list takes the keyboard as one stop (Up, Down, Home, End, Enter), like the other lists. An activation from an outdated tree opens or fixes nothing unless the same row is still at the
   same place.
 - While the bottom panel is open, a `TabList` with its tabs (Problems, Output, Debug Console while debugging, Ports,
   Terminal), the selected one marked and counts as descriptions; `Click` switches tabs. While Output is shown, a polite

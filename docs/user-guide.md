@@ -1415,6 +1415,18 @@ in Problems they are rows under the problem; a click opens the place. The proble
 `-->` arrows, notes and help, ready to paste into a question or a search. When a server repeats those places as hints of
 their own, Problems shows them once, under their problem. Scratch files get no language server.
 
+**Filtering and ordering Problems.** The bar above the list has three switches (errors, warnings, information and
+hints) that each show how many problems there are of their kind, a filter box, **Active File Only**, a sort button, a
+button that folds or opens every file, and **Copy All Problems**. The filter box takes words: a problem is listed when
+every word is found in its path, message, code or source, ignoring case (and Turkish i/ı). While something is hidden the
+panel says "Showing 6 of 18 problems". Each row shows the message, then its code, source and line:column. A click on a
+file's line folds or opens its problems; Tab puts the keyboard on the list, Up and Down move, Enter does what a click does.
+**Sort** cycles *File* (files in path order, the worst problem of each first), *Severity* (files with errors first) and
+*Line* (each file's problems in the order of the code). **Copy Problem** (the button on a hovered row) copies the problem
+as `src/lib.rs:12:5: error [rustc E0382] message`; on a file's line it copies all of that file's problems. The palette has
+*Problems: Copy All* and *Problems: Toggle Active File Only*. The switches, text, sort order and folded files are
+remembered for each workspace.
+
 Besides errors, suggestions, hover and definition: rename (F2), references (⇧F12), symbols
 in the file (⇧⌘O), quick fixes (⌘.), format (⇧⌥F, or `"editor.formatOnSave": true`) and
 parameter hints while typing a call. `"editor.codeActionsOnSave": { "source.organizeImports":

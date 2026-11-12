@@ -54,6 +54,7 @@ Actions
 Activate Breakpoints	
 Activated {0} time, last at {1} by {2}|Activated {0} times, last at {1} by {2}	
 Activating the completed installation…	
+Active File Only	
 Activity:	
 Add	
 Add Configuration…	
@@ -249,6 +250,7 @@ Changed {0} file ({1} file operations skipped)|Changed {0} files ({1} file opera
 Changed {0} in {1}	
 Changed {} file|Changed {} files	
 Changes	
+Changes the order of the problems	
 Check Daily	
 Check JSON and YAML files against their schema (problems, hover, suggestions)	
 Check comments in code files too (prose files are always checked)	
@@ -335,6 +337,7 @@ Codeyard {} is available. Click for details.
 Codeyard {} is installed. Click for details.	
 Collapse	
 Collapse All	
+Collapse All Files	
 Collapse All Inside	
 Collapse Folders	
 Collapse all results	
@@ -450,11 +453,13 @@ Copied
 Copied {}	
 Copied {} item ({}) to {}|Copied {} items ({}) to {}	
 Copied {} item.|Copied {} items.	
+Copied {} problem|Copied {} problems	
 Copied {}.	
 Copied “{}” ({}) to {}	
 Copied: {}	
 Copy	
 Copy Address	
+Copy All Problems	
 Copy Call Stack	
 Copy Commit Hash	
 Copy Last Command Output	
@@ -463,6 +468,7 @@ Copy Line Up
 Copy Message	
 Copy Path	
 Copy Port Number	
+Copy Problem	
 Copy Relative Path	
 Copy Report	
 Copy Value	
@@ -893,6 +899,7 @@ Everything resolved so far in this merge is discarded.
 Existing custom server commands are preserved. Services start only in trusted folders. Closing this tab cancels an installation that has not reached activation.	
 Exit	
 Expand	
+Expand All Files	
 Expand All Inside	
 Expand Emmet abbreviations (div.box>ul>li*3) with Tab	
 Expand Folders (the selected one, or the open file's folders)	
@@ -1001,6 +1008,7 @@ Files: {0}/{1}
 Files: {}	
 Filter	
 Filter (e.g. text, path)	
+Filter problems	
 Filtering needs sh, tail, grep and cut on the host (on Windows: Git Bash or WSL). {}	
 Filtering {0} for “{1}”…	
 Find	
@@ -1559,6 +1567,7 @@ No extension registry is set up yet. Add one to extensions.registries in your se
 No extension registry is set up yet. Add one to extensions.registries in your settings.	
 No extensions installed. Install one from a .cyx file or a folder.	
 No favorites yet: right-click a file → Add to Favorites, or “Favorites: Toggle Active File”.	
+No file is open.	
 No file “{}” in this project	
 No files in this folder	
 No folder is open.	
@@ -1591,6 +1600,7 @@ No parent module found
 No previous version is in the store.	
 No problem at the cursor	
 No problems in this file	
+No problems match the filter.	
 No problems.	
 No problems. Language servers start when you open a file.	
 No profiles or shells were found on this machine.	
@@ -1874,7 +1884,9 @@ Previous session ended; started a new shell
 Primary Side Bar	
 Primary side bar: {}	
 Problems	
+Problems: Copy All	
 Problems: Copy Full Diagnostic	
+Problems: Toggle Active File Only	
 Problems: {}	
 Proc macros rebuilt	
 Process ended. Press any key to close.	
@@ -2320,10 +2332,13 @@ Shell for new terminals (empty: login shell)
 Show All	
 Show Changed Files…	
 Show Codeyard in Finder	
+Show Errors	
+Show Information	
 Show Installed	
 Show Only Failed Tests	
 Show Output	
 Show Stash…	
+Show Warnings	
 Show a color swatch next to #rrggbb values	
 Show a tooltip when the mouse rests on a word	
 Show changed files	
@@ -2354,6 +2369,8 @@ Show type and parameter name hints from the language server
 Show who last changed the cursor line (and when) at the end of the line	
 Showing the first 100,000 files of a very large folder	
 Showing the last successful snapshot.	
+Showing {0} of {1} problems	
+Showing {0} of {1} problems: {2} errors, {3} warnings, {4} information	
 Shrink Selection	
 Side by side	
 Sign In…	
@@ -2374,6 +2391,9 @@ Solid folders colored and marked by purpose, solid files colored by language
 Some bytes are not valid UTF-8 and are shown as replacement characters	
 Sort by {}	
 Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order)	
+Sort: File	
+Sort: Line	
+Sort: Severity	
 Source Control	
 Source Control (⌃⇧G)	
 Source Control graph view: graph (branch lanes), compact (one line per commit) or dates (grouped by day)	
@@ -3403,6 +3423,7 @@ your words
 {0} could not draw this view: {1}	
 {0} could not start: {1}	
 {0} errors, {1} warnings	
+{0} errors, {1} warnings, {2} information	
 {0} failed to start: {1}	
 {0} files and {1} folders go from {2} ({3}) to {4} ({5}). Files that exist there are replaced; anything that changed since the scan is left alone.	
 {0} has no package for {1}	
@@ -3605,6 +3626,7 @@ your words
 {} outgoing call|{} outgoing calls	
 {} parent module|{} parent modules	
 {} ports are forwarded	
+{} problems	
 {} reference|{} references	
 {} removed	
 {} result in 1 file|{} results in 1 file	

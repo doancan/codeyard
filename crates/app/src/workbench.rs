@@ -134,7 +134,7 @@ mod nav_glue;
 #[path = "workbench_palette.rs"]
 mod palette_glue;
 #[path = "workbench_panels.rs"]
-mod panels_glue;
+pub(crate) mod panels_glue;
 #[cfg(test)]
 pub use panels_glue::ProblemRow;
 #[cfg(test)]
@@ -1324,6 +1324,7 @@ impl Workbench {
                 web_preview: Default::default(),
                 panel: Some(Panel::Explorer),
                 bottom: Bottom::Terminal,
+                problems: Default::default(),
                 sidebar_w,
                 resizing_sidebar: false,
                 panel_open: false,
@@ -1937,6 +1938,7 @@ impl Workbench {
         self.restore_tree(cx);
         self.restore_extra_roots(cx);
         self.load_debug_state(cx);
+        self.load_problems_filter(cx);
         self.load_favorites();
         self.restore_forwards(cx);
         self.load_project_settings(cx);

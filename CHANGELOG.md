@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rust: `rust.inlayHints.types`, `.parameters` and `.chaining` switch rust-analyzer's hint kinds off one by one, and `rust.semanticModifiers` draws its `unsafe`, `mutable` and consumed token modifiers (underline, underline, italics).
 - Diff viewer: an overview ruler at the right edge marks every change (green added, red removed, half and half changed), shows the part on screen and scrolls on a click or drag. Unchanged lines fold to three lines of context ("83 unchanged lines", click to open, ⌘K ⌘O for all). Both sides have syntax colors. **Whitespace** (⌘K ⌘H) ignores trailing or all whitespace. The header gains a change counter ("3 of 12") with previous and next buttons, names for both sides, and a copy-path button. Binary and very large files show a message instead of a diff.
 
+- Problems panel: a filter bar with switches for errors, warnings and information (each with its count), a text filter (path, message, code, source), **Active File Only**, a sort button (file, severity, line), fold and unfold of each file, and **Copy All Problems** / **Copy Problem**. Rows show the code and the source in columns of their own, the list can be used from the keyboard, and the filtered count is announced to screen readers. The filter is remembered for each workspace. New palette commands: *Problems: Copy All* and *Problems: Toggle Active File Only*.
+
 ### Fixed
 
 - SSH config: two saves at the same moment (two windows adding hosts) no longer fail on Windows with "The process cannot access the file"; they take turns.

@@ -344,6 +344,8 @@ impl Workbench {
             Command::action("Preferences: Reset Settings to Defaults…", settings_ui::ResetSettings),
             Command::action("View: Problems", ShowProblems),
             Command::action("Problems: Copy Full Diagnostic", CopyFullDiagnostic),
+            Command::action("Problems: Copy All", panels_glue::CopyAllProblems),
+            Command::action("Problems: Toggle Active File Only", panels_glue::ToggleProblemsActiveFile),
             Command::action("Rust: Expand Macro Recursively", RustExpandMacro),
             Command::action("Rust: Locate Parent Module", RustParentModule),
             Command::action("Rust: Open Cargo.toml", RustOpenCargoToml),

@@ -229,6 +229,8 @@ impl Workbench {
             .on_action(cx.listener(|this, _: &ShowSettings, window, cx| this.show_settings_picker(window, cx)))
             .on_action(cx.listener(|this, _: &ShowKeyboardShortcuts, window, cx| this.show_shortcuts_picker(window, cx)))
             .on_action(cx.listener(|this, _: &CopyFullDiagnostic, _, cx| this.copy_full_diagnostic(cx)))
+            .on_action(cx.listener(Self::copy_all_problems))
+            .on_action(cx.listener(Self::toggle_problems_active_file))
             .on_action(cx.listener(Self::rust_expand_macro))
             .on_action(cx.listener(Self::rust_parent_module))
             .on_action(cx.listener(Self::rust_open_cargo_toml))
