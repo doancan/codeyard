@@ -80,8 +80,7 @@ pub fn start(name: &str) -> Option<Sshd> {
 fn try_start(name: &str) -> Result<Sshd, String> {
     let turn = TURN.lock().unwrap_or_else(|e| e.into_inner());
     let sshd = Path::new("/usr/sbin/sshd");
-    // target/<profile>/deps/codeyard-… → target/<profile>/codeyard-agent
-    let agents = std::env::current_exe().ok().and_then(|e| Some(e.parent()?.parent()?.to_path_buf())).ok_or("no test executable path")?;
+    let agents = agents_dir().ok_or("no test executable path")?;
     if !sshd.exists() {
         return Err("/usr/sbin/sshd is missing".into());
     }
@@ -183,7 +182,7 @@ pub struct FakeDocker {
 
 pub fn start_fake_docker(name: &str) -> Option<FakeDocker> {
     let turn = TURN.lock().unwrap_or_else(|e| e.into_inner());
-    let agents = std::env::current_exe().ok()?.parent()?.parent()?.to_path_buf();
+    let agents = agents_dir()?;
     if !agents.join("codeyard-agent").is_file() {
         return skip(name, "codeyard-agent is missing (build it: cargo build -p agent)");
     }
@@ -220,4 +219,12 @@ impl Drop for FakeDocker {
         }
         let _ = std::fs::remove_dir_all(&self.dir);
     }
+}
+
+/// The folder holding `codeyard-agent`: target/<profile>/, a few levels above the test binary (deps/, or
+/// build/<package>/<hash>/out/ with newer cargo).
+fn agents_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let mut above = exe.ancestors().skip(1).take(6);
+    above.clone().find(|d| d.join("codeyard-agent").is_file()).or_else(|| above.nth(1)).map(Path::to_path_buf)
 }
