@@ -25,7 +25,9 @@ fn base_dir() -> PathBuf {
 }
 
 pub(crate) fn qa_dir(name: &str) -> PathBuf {
-    let dir = base_dir().join(format!("{name}-{}", std::process::id()));
+    // Two tests (or one shared fixture) asking for the same name must not share a directory.
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let dir = base_dir().join(format!("{name}-{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     crate::ui::canonical_for_test(&dir)

@@ -79,6 +79,8 @@ pub(in crate::workbench) struct OutlineState {
     pub(in crate::workbench) stale: bool,
     /// What the line patterns found for the new text, used if the server does not answer.
     fallback: Option<(Vec<Symbol>, bool)>,
+    /// Tests only: the server is not asked, so a test decides what its answer is (`apply_server_answer`).
+    ask_paused: bool,
 }
 
 /// What is worked out from the symbols (and the filter and sort), so a frame does not do it again.
@@ -310,6 +312,9 @@ impl Workbench {
     /// line patterns' while the file is still the same text, and a failure or an empty answer leaves them.
     fn ask_server_for_symbols(&mut self, ed: Entity<EditorView>, key: Option<(String, u64)>, cx: &mut Context<Self>) {
         let Some((path, _)) = key.clone() else { return };
+        if self.outline.ask_paused {
+            return;
+        }
         let Some((client, ..)) = ed.update(cx, |e, _| e.lsp_context()) else {
             self.use_pattern_symbols();
             return;
@@ -323,27 +328,30 @@ impl Workbench {
         let request = cx.background_executor().spawn(async move { client.request("textDocument/documentSymbol", params, SERVER_WAIT) });
         self.outline.server = Some(cx.spawn(async move |this, cx| {
             let answer = request.await;
-            this.update(cx, |this, cx| {
-                if this.outline.key != key {
-                    return;
-                }
-                this.outline.server = None;
-                let from_server = answer.map(|value| model::from_lsp(&crate::lsp::parse_symbols(&value))).unwrap_or_default();
-                if from_server.is_empty() {
-                    this.use_pattern_symbols();
-                    cx.notify();
-                    return;
-                }
-                this.outline.set_symbols(from_server);
-                this.outline.supported = true;
-                this.outline.source = Source::Server;
-                this.outline.stale = false;
-                this.outline.fallback = None;
-                this.outline.followed.set(None);
-                cx.notify();
-            })
-            .ok();
+            this.update(cx, |this, cx| this.apply_server_answer(&key, answer, cx)).ok();
         }));
+    }
+
+    /// The server's answer for the text with `key`: its symbols replace what is on show; an error or no symbols leave the
+    /// line patterns' symbols (an answer for text that has moved on is dropped).
+    fn apply_server_answer(&mut self, key: &Option<(String, u64)>, answer: Result<serde_json::Value, String>, cx: &mut Context<Self>) {
+        if self.outline.key != *key {
+            return;
+        }
+        self.outline.server = None;
+        let from_server = answer.map(|value| model::from_lsp(&crate::lsp::parse_symbols(&value))).unwrap_or_default();
+        if from_server.is_empty() {
+            self.use_pattern_symbols();
+            cx.notify();
+            return;
+        }
+        self.outline.set_symbols(from_server);
+        self.outline.supported = true;
+        self.outline.source = Source::Server;
+        self.outline.stale = false;
+        self.outline.fallback = None;
+        self.outline.followed.set(None);
+        cx.notify();
     }
 
     /// The sort button's words.

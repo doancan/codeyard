@@ -193,7 +193,8 @@ fn the_picker_stays_inside_a_narrow_window(cx: &mut TestAppContext) {
 }
 
 /// After an edit the server's last answer stays (marked stale) until its answer for the new text arrives: the symbols
-/// never go back to the line patterns in between.
+/// never go back to the line patterns in between. The server's answer is applied by the test (the server is not asked
+/// for the edit), so nothing depends on how fast a real one answers.
 #[gpui::test]
 fn an_edit_keeps_the_servers_symbols_on_show_until_the_new_answer(cx: &mut TestAppContext) {
     let d = dir("outline-stale");
@@ -201,27 +202,47 @@ fn an_edit_keeps_the_servers_symbols_on_show_until_the_new_answer(cx: &mut TestA
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/lib.rs"), SHAPES).unwrap();
     let range = |a: u32, b: u32| json!({ "start": { "line": a, "character": 0 }, "end": { "line": b, "character": 1 } });
-    let answer = json!([{ "name": "OnlyTheServerKnowsThis", "kind": 5, "range": range(0, 7), "selectionRange": range(0, 0) }]);
+    let answer = |name: &str| json!([{ "name": name, "kind": 5, "range": range(0, 7), "selectionRange": range(0, 0) }]);
     let Some(fake) = FakeServer::new(
         &d.join("server"),
-        &json!({ "capabilities": { "documentSymbolProvider": true }, "responses": { "textDocument/documentSymbol": { "result": answer } } }),
+        &json!({ "capabilities": { "documentSymbolProvider": true }, "responses": { "textDocument/documentSymbol": { "result": answer("OnlyTheServerKnowsThis") } } }),
     ) else {
         return;
     };
     let (wb, cx) = setup_with(cx, Settings { lsp_enabled: true, lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Settings::default() });
     open_project(&wb, cx, &root);
     wait_ticking(cx, "the server's symbols", |cx| source(&wb, cx) == Source::Server);
-    wb.update_in(cx, |wb, window, cx| wb.focus_active_editor(window, cx));
-    cx.simulate_input("// edit\n");
-    // The re-extraction runs now (no wait for the typing pause); the server has not answered yet.
+    let state = |wb: &Entity<Workbench>, cx: &mut VisualTestContext| {
+        wb.read_with(cx, |wb, _| (wb.outline.stale, wb.outline.source, wb.outline.symbols.iter().map(|s| s.name.clone()).collect::<Vec<_>>()))
+    };
+    // An edit, re-extracted at once (no wait for the typing pause), without asking the server.
+    let edit_and_extract = |wb: &Entity<Workbench>, cx: &mut VisualTestContext, text: &str| {
+        wb.update(cx, |wb, _| wb.outline.ask_paused = true);
+        wb.update_in(cx, |wb, window, cx| wb.focus_active_editor(window, cx));
+        cx.simulate_input(text);
+        wb.update(cx, |wb, cx| {
+            wb.outline.computed_at = None;
+            wb.sync_outline(cx);
+        });
+    };
+    edit_and_extract(&wb, cx, "// edit\n");
+    assert_eq!(state(&wb, cx), (true, Source::Server, vec!["OnlyTheServerKnowsThis".to_string()]), "the last answer stays, marked stale");
+    // The new answer replaces it.
     wb.update(cx, |wb, cx| {
-        wb.outline.computed_at = None;
-        wb.sync_outline(cx);
+        let key = wb.outline.key.clone();
+        wb.apply_server_answer(&key, Ok(answer("Fresh")), cx);
     });
-    let (stale, source_now, names) =
-        wb.read_with(cx, |wb, _| (wb.outline.stale, wb.outline.source, wb.outline.symbols.iter().map(|s| s.name.clone()).collect::<Vec<_>>()));
-    assert_eq!((stale, source_now, names), (true, Source::Server, vec!["OnlyTheServerKnowsThis".to_string()]), "the last answer stays, marked stale");
-    wait_ticking(cx, "the new answer", |cx| wb.read_with(cx, |wb, _| !wb.outline.stale));
-    assert_eq!(source(&wb, cx), Source::Server);
-    assert!(fake.received("textDocument/documentSymbol").len() >= 2);
+    assert_eq!(state(&wb, cx), (false, Source::Server, vec!["Fresh".to_string()]));
+    // Another edit; this time the server fails: the line patterns take over, once.
+    edit_and_extract(&wb, cx, "// again\n");
+    assert!(state(&wb, cx).0);
+    wb.update(cx, |wb, cx| {
+        let key = wb.outline.key.clone();
+        wb.apply_server_answer(&key, Err("no answer".into()), cx);
+    });
+    let (stale, source_now, names) = state(&wb, cx);
+    assert_eq!((stale, source_now, names.len()), (false, Source::Patterns, 5));
+    // An answer for text that has moved on is dropped.
+    wb.update(cx, |wb, cx| wb.apply_server_answer(&Some(("elsewhere".into(), 0)), Ok(answer("Late")), cx));
+    assert_eq!(source(&wb, cx), Source::Patterns);
 }
