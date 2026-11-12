@@ -244,6 +244,7 @@ impl Workbench {
                 Some(Page::Merge(view)) => view.focus_handle(cx),
                 Some(Page::Compare(view)) => view.focus_handle(cx),
                 Some(Page::Search(view)) => view.focus_handle(cx),
+                Some(Page::Refactor(view)) => view.focus_handle(cx),
                 Some(Page::Terminal(view)) => view.focus_handle(cx),
                 _ => self.focus_handle.clone(),
             };

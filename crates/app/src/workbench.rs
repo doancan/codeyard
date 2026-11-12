@@ -167,6 +167,8 @@ pub(crate) mod rust_glue;
 // --- git-refs ---
 #[path = "workbench_recover.rs"]
 mod recover_glue;
+#[path = "workbench_refactor.rs"]
+pub(crate) mod refactor_glue;
 #[path = "workbench_refs.rs"]
 mod refs_glue;
 #[path = "workbench_render.rs"]
@@ -594,6 +596,8 @@ enum Page {
     Settings(Entity<crate::settings_page::SettingsPage>),
     Markdown(Entity<crate::markdown::MarkdownPreview>),
     Shortcuts(Entity<crate::shortcuts_page::ShortcutsPage>),
+    /// A language server's refactoring under review (workbench_refactor.rs).
+    Refactor(Entity<crate::lsp::refactor::preview::RefactorPreview>),
     LanguageServices(Entity<crate::language_services_page::LanguageServicesPage>),
     Merge(Entity<crate::merge::MergeView>),
     // --- compare ---
@@ -1264,6 +1268,7 @@ impl Workbench {
                 cargo: Default::default(),
                 rust: Default::default(),
                 restricted_notified: Default::default(),
+                refactor: Default::default(),
                 servers: Default::default(),
                 diagnostics: Default::default(),
                 output: Default::default(),
@@ -1417,6 +1422,7 @@ impl Workbench {
         wb.poll_extension_updates(window, cx);
         wb.poll_autofetch(window, cx);
         wb.listen_fs(cx);
+        wb.warn_interrupted_refactor(cx);
         wb
     }
 

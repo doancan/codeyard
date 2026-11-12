@@ -941,7 +941,7 @@ pub struct AccessView {
 }
 
 /// Keep `range` of `line` visible within about `DIFF_CHARS` characters: trims around it and adds "…".
-fn window_around(line: &str, range: std::ops::Range<usize>) -> (String, std::ops::Range<usize>) {
+pub(crate) fn window_around(line: &str, range: std::ops::Range<usize>) -> (String, std::ops::Range<usize>) {
     let range = range.start.min(line.len())..range.end.min(line.len());
     let lead: usize = line[..range.start].chars().count();
     let (start, prefix) = if lead > 40 {
@@ -1409,7 +1409,7 @@ impl SearchEditor {
 }
 
 /// A 14 px checkbox: checked, partly checked or empty; dimmed when it cannot be changed.
-fn checkbox(id: impl Into<gpui::ElementId>, state: Tri, enabled: bool, p: &theme::Palette) -> gpui::Stateful<gpui::Div> {
+pub(crate) fn checkbox(id: impl Into<gpui::ElementId>, state: Tri, enabled: bool, p: &theme::Palette) -> gpui::Stateful<gpui::Div> {
     let glyph = match state {
         Tri::All => "check",
         Tri::Some => "minus",

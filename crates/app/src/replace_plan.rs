@@ -104,6 +104,9 @@ pub enum Problem {
     Unreadable(String),
     /// No match in the file's current text.
     NoChanges,
+    /// Refused for a reason only its maker knows (a refactoring edit that is stale, overlaps or points outside the folder);
+    /// the text is already translated.
+    Refused(String),
 }
 
 impl Problem {
@@ -114,6 +117,7 @@ impl Problem {
             Problem::Unencodable { ch, encoding } => crate::i18n::tf("“{0}” cannot be written in {1}: not changed.", &[ch, encoding]),
             Problem::Unreadable(e) => crate::i18n::tf("Could not read: {}", &[e]),
             Problem::NoChanges => crate::i18n::t("No matches in this file any more.").into(),
+            Problem::Refused(why) => why.clone(),
         }
     }
 }
@@ -181,6 +185,37 @@ impl FilePlan {
         FilePlan { path, version, encoding, bom, text, original, changes, problem }
     }
 
+    /// A plan for changes that are not found by a search (a language server's refactoring). `make` gets the file's decoded text
+    /// and its first line ending and answers with the changes in text order, without overlaps, or why the file is refused.
+    /// Everything else follows `build`: the encoding must round-trip, and nothing the encoding cannot store is proposed.
+    pub fn from_edits(path: String, source: Source, fallback: Encoding, make: impl FnOnce(&str, &str) -> Result<Vec<Change>, String>) -> FilePlan {
+        let (text, encoding, bom, version, original, eol) = match source {
+            Source::Buffer { text, epoch, version, encoding } => {
+                let hash = proto::content_hash(text.as_bytes());
+                (text, encoding, false, Version::Buffer { epoch, version, hash }, Arc::new(Vec::new()), "\n")
+            }
+            Source::Disk { bytes, hash } => match decode(&bytes, fallback) {
+                Ok((text, encoding, bom)) => {
+                    let eol = first_eol(&text);
+                    (text, encoding, bom, Version::Disk { hash }, Arc::new(bytes), eol)
+                }
+                Err(problem) => {
+                    let mut file = FilePlan::unreadable(path, String::new());
+                    file.version = Version::Disk { hash };
+                    file.problem = Some(problem);
+                    return file;
+                }
+            },
+        };
+        let (changes, refused) = match make(&text, eol) {
+            Ok(changes) => (changes, None),
+            Err(why) => (Vec::new(), Some(Problem::Refused(why))),
+        };
+        let problem = refused.or_else(|| unencodable(&changes, encoding));
+        let (text, original) = if changes.is_empty() { (String::new(), Arc::new(Vec::new())) } else { (text, original) };
+        FilePlan { path, version, encoding, bom, text, original, changes, problem }
+    }
+
     /// A file that could not be read: shown with the reason, never changed.
     pub fn unreadable(path: String, why: String) -> FilePlan {
         FilePlan {
@@ -239,6 +274,45 @@ impl FilePlan {
             out.push((start..end, c.new.clone()));
         }
         out
+    }
+
+    /// The line `n` lines before (`n < 0`) or after (`n > 0`) the lines a change covers, as it is in the file: its 1-based number
+    /// and its text without the line break, cut to about `DIFF_WINDOW` bytes like `line_diff`. `None` past either end of the file.
+    pub fn neighbour_line(&self, change: usize, n: isize) -> Option<(u32, String)> {
+        let c = self.changes.get(change)?;
+        let text = &self.text;
+        let line_start = |at: usize| text[..at].rfind('\n').map_or(0, |i| i + 1);
+        let line_end = |at: usize| text[at..].find('\n').map_or(text.len(), |i| at + i);
+        let (mut start, mut number) =
+            if n < 0 { (line_start(c.start), c.line) } else { (line_start(c.end), c.line + text[c.start..c.end].matches('\n').count() as u32) };
+        let mut end = line_end(start);
+        for _ in 0..n.unsigned_abs() {
+            if n < 0 {
+                if start == 0 {
+                    return None;
+                }
+                start = line_start(start - 1);
+                end = line_end(start);
+                number -= 1;
+            } else {
+                if end >= text.len() {
+                    return None;
+                }
+                start = end + 1;
+                if start >= text.len() {
+                    return None;
+                }
+                end = line_end(start);
+                number += 1;
+            }
+        }
+        if n == 0 {
+            return None;
+        }
+        let line = text[start..end].strip_suffix('\r').unwrap_or(&text[start..end]);
+        let cut = text.floor_char_boundary(start + DIFF_WINDOW.min(line.len())) - start;
+        let more = if cut < line.len() { "…" } else { "" };
+        Some((number, format!("{}{more}", &line[..cut])))
     }
 
     /// The line a change is on, before and after the selected changes on that line: (old line, new line, the change's
@@ -422,7 +496,7 @@ fn find_changes(text: &str, pattern: &Pattern, eol: &str, limit: usize) -> Vec<C
 }
 
 /// Line breaks inside a replacement become the file's line ending.
-fn unify_breaks(text: &str, eol: &str) -> String {
+pub(crate) fn unify_breaks(text: &str, eol: &str) -> String {
     if !text.contains(['\n', '\r']) {
         return text.to_string();
     }

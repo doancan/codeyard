@@ -46,6 +46,13 @@ pub const CATALOG: &[Entry] = &[
     e("editor.wordHighlight", crate::i18n::tr("Highlight other uses of the word under the cursor"), Kind::Bool),
     e("editor.indentGuides", crate::i18n::tr("Show indent guides"), Kind::Bool),
     e("editor.formatOnSave", crate::i18n::tr("Format with the language server when saving"), Kind::Bool),
+    e(
+        "editor.refactorPreview",
+        crate::i18n::tr(
+            "Review a language server's rename or quick fix before it is applied: auto (when it changes several files or moves, creates or deletes files), always or never (file operations are always reviewed)",
+        ),
+        Kind::Choice(&["auto", "always", "never"]),
+    ),
     e("editor.autoClosingBrackets", crate::i18n::tr("Insert the closing bracket or quote"), Kind::Bool),
     e("editor.wordBasedSuggestions", crate::i18n::tr("Suggest words from the file when there is no language server"), Kind::Bool),
     e("files.autoSave", crate::i18n::tr("Save files automatically"), Kind::Choice(&["off", "afterDelay", "onFocusChange"])),
@@ -312,6 +319,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "editor.wordHighlight" => json!(s.word_highlight),
         "editor.indentGuides" => json!(s.indent_guides),
         "editor.formatOnSave" => json!(s.format_on_save),
+        "editor.refactorPreview" => json!(s.refactor_preview.as_str()),
         "editor.formatOnPaste" => json!(s.format_on_paste),
         "editor.formatOnType" => json!(s.format_on_type),
         "editor.editorconfig" => json!(s.editorconfig),

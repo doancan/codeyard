@@ -403,6 +403,9 @@ impl Workbench {
             let c = client.clone();
             (client, cx.background_executor().spawn(async move { c.request("textDocument/codeAction", params, Duration::from_secs(15)) }))
         });
+        if let Some((client, _)) = &lsp {
+            self.lsp.refactor.listed = self.refactor_snapshot(client, cx);
+        }
         let document = v::Document { uri: ext_broker::uri(&path), language: language.clone(), version: job.version as u32, text: job.text };
         let pos = |(line, character): (u32, u32)| v::Position { line, character };
         let request = Request::CodeActions {
@@ -500,7 +503,8 @@ impl Workbench {
                     .collect();
                 changes.insert(crate::lsp::path_to_uri(&path), serde_json::Value::Array(list));
             }
-            self.apply_workspace_edit(&serde_json::json!({ "changes": changes }), cx);
+            let source = super::refactor_glue::EditSource { title: action.title.clone(), client: None, snapshot: Default::default() };
+            self.review_workspace_edit(source, &serde_json::json!({ "changes": changes }), None, cx);
         }
         match action.command {
             Some(command) => self.run_extension_command_id(&extension, &command, "null".into(), window, cx),

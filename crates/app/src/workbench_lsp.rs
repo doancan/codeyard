@@ -7,6 +7,7 @@ use std::sync::{Arc, mpsc};
 use gpui::{AppContext as _, Context, Entity, SharedString, WeakEntity, Window};
 
 use super::notifications_glue::model::{Action, Notification, Severity};
+use super::refactor_glue::{Done, EditSource};
 use super::{
     CodeActions, FindReferences, FormatDocument, FormatSelection, GoToSymbol, InputPurpose, Notice, NoticeSource, OverlayKind, RenameSymbol, SaveAll, Workbench,
 };
@@ -309,10 +310,11 @@ impl Workbench {
                 }
             }
             ServerEvent::ApplyEdit { id, edit } => {
-                // After a code action command the server asks for an edit.
-                let applied = self.apply_workspace_edit(&edit, cx);
-                if let Some(ServerSlot::Running(c)) = self.lsp.servers.get(key) {
-                    c.respond(id, serde_json::json!({ "applied": applied }));
+                // Every edit the server asks for goes through the review path (`editor.refactorPreview`, the trust gate, the
+                // checks and the all-or-nothing apply); the server is answered when it is decided.
+                if let Some(ServerSlot::Running(client)) = self.lsp.servers.get(key) {
+                    let client = client.clone();
+                    self.apply_edit_request(client, id, &edit, cx);
                 }
             }
             ServerEvent::Exited(code) => {
@@ -600,13 +602,14 @@ impl Workbench {
 
     pub(super) fn rename_symbol_to(&mut self, client: Arc<Client>, path: String, pos: (u32, u32), name: String, cx: &mut Context<Self>) {
         let params = json!({ "textDocument": { "uri": lsp::path_to_uri(&path) }, "position": { "line": pos.0, "character": pos.1 }, "newName": name });
+        // What the server was told of each open document when it was asked: the answer is checked against it.
+        let snapshot = self.refactor_snapshot(&client, cx);
+        let source = EditSource { title: tf("Rename to “{}”", &[&name]), client: Some(client.clone()), snapshot };
         let task = cx.background_executor().spawn(async move { client.request("textDocument/rename", params, Duration::from_secs(15)) });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| match result {
-                Ok(v) if !v.is_null() => {
-                    this.apply_workspace_edit(&v, cx);
-                }
+                Ok(v) if !v.is_null() => this.review_workspace_edit(source, &v, None, cx),
                 Ok(_) => this.notify(NoticeSource::Language, Notice::Info(t("Nothing to rename here").into())),
                 Err(e) => this.notify(NoticeSource::Language, Notice::Error(e.into())),
             })
@@ -902,6 +905,7 @@ impl Workbench {
             "context": { "diagnostics": diagnostics },
         });
         let c = client.clone();
+        self.lsp.refactor.listed = self.refactor_snapshot(&client, cx);
         self.lsp_call(
             client,
             "textDocument/codeAction",
@@ -927,6 +931,11 @@ impl Workbench {
 
     /// If it has no edit, `codeAction/resolve` first; then the edit and/or command.
     pub(super) fn run_code_action(&mut self, client: Arc<Client>, action: lsp::CodeAction, cx: &mut Context<Self>) {
+        let title = action.title.clone();
+        // A listed action's edit was computed against the documents as they were when the list was asked for; one the server
+        // resolves now, against how they are now.
+        let resolves = action.raw["edit"].is_null() && action.raw["command"].is_null() && !action.raw["data"].is_null();
+        let snapshot = if resolves { self.refactor_snapshot(&client, cx) } else { std::mem::take(&mut self.lsp.refactor.listed) };
         let task = cx.background_executor().spawn(async move {
             let mut raw = action.raw;
             if raw["edit"].is_null() && raw["command"].is_null() && !raw["data"].is_null() {
@@ -937,15 +946,28 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let (client, raw) = task.await;
             this.update(cx, |this, cx| {
-                if !raw["edit"].is_null() {
-                    this.apply_workspace_edit(&raw["edit"], cx);
-                }
                 // Command: either the action itself (a `command` string) or a `command` object inside it.
                 let cmd = if raw["command"].is_string() { raw.clone() } else { raw["command"].clone() };
-                if let Some(name) = cmd["command"].as_str() {
-                    let params = json!({ "command": name, "arguments": cmd["arguments"].clone() });
-                    cx.background_executor().spawn(async move { client.request("workspace/executeCommand", params, Duration::from_secs(30)) }).detach();
+                let run_command = {
+                    let client = client.clone();
+                    move |cx: &mut Context<Workbench>| {
+                        if let Some(name) = cmd["command"].as_str() {
+                            let params = json!({ "command": name, "arguments": cmd["arguments"].clone() });
+                            cx.background_executor().spawn(async move { client.request("workspace/executeCommand", params, Duration::from_secs(30)) }).detach();
+                        }
+                    }
+                };
+                if raw["edit"].is_null() {
+                    return run_command(cx);
                 }
+                // The command runs once the edit is applied; one the user turns down in the review does not.
+                let source = EditSource { title, client: Some(client), snapshot };
+                let done: Done = Box::new(move |_, applied, cx| {
+                    if applied {
+                        run_command(cx);
+                    }
+                });
+                this.review_workspace_edit(source, &raw["edit"], Some(done), cx);
             })
             .ok();
         })

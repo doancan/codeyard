@@ -522,6 +522,14 @@ impl EditorView {
         cx.notify();
     }
 
+    /// Before a request whose answer edits several documents: sends the changes not yet sent, and says which state the server now
+    /// has of this document: (the buffer's version, the document version the server was told). `None` without a server.
+    pub fn lsp_snapshot(&mut self) -> Option<(u64, i64)> {
+        self.lsp.as_ref()?;
+        self.sync_lsp();
+        Some((self.buffer.version(), self.lsp_version))
+    }
+
     /// Document version for language server requests (see `apply_lsp_edits_if_unchanged`).
     pub fn lsp_buffer_version(&self) -> u64 {
         self.buffer.version()

@@ -1,0 +1,153 @@
+{
+ "documentChanges": [
+  {
+   "textDocument": {
+    "uri": "file:///ws/demo/src/util.rs",
+    "version": 1
+   },
+   "edits": [
+    {
+     "range": {
+      "start": {
+       "line": 0,
+       "character": 7
+      },
+      "end": {
+       "line": 0,
+       "character": 14
+      }
+     },
+     "newText": "topla"
+    },
+    {
+     "range": {
+      "start": {
+       "line": 5,
+       "character": 4
+      },
+      "end": {
+       "line": 5,
+       "character": 11
+      }
+     },
+     "newText": "topla"
+    }
+   ]
+  },
+  {
+   "textDocument": {
+    "uri": "file:///ws/demo/src/ayar.rs",
+    "version": null
+   },
+   "edits": [
+    {
+     "range": {
+      "start": {
+       "line": 0,
+       "character": 17
+      },
+      "end": {
+       "line": 0,
+       "character": 24
+      }
+     },
+     "newText": "topla"
+    },
+    {
+     "range": {
+      "start": {
+       "line": 3,
+       "character": 33
+      },
+      "end": {
+       "line": 3,
+       "character": 40
+      }
+     },
+     "newText": "topla"
+    },
+    {
+     "range": {
+      "start": {
+       "line": 4,
+       "character": 4
+      },
+      "end": {
+       "line": 4,
+       "character": 11
+      }
+     },
+     "newText": "topla"
+    }
+   ]
+  },
+  {
+   "textDocument": {
+    "uri": "file:///ws/demo/src/main.rs",
+    "version": null
+   },
+   "edits": [
+    {
+     "range": {
+      "start": {
+       "line": 5,
+       "character": 22
+      },
+      "end": {
+       "line": 5,
+       "character": 29
+      }
+     },
+     "newText": "topla"
+    },
+    {
+     "range": {
+      "start": {
+       "line": 7,
+       "character": 42
+      },
+      "end": {
+       "line": 7,
+       "character": 49
+      }
+     },
+     "newText": "topla"
+    }
+   ]
+  },
+  {
+   "textDocument": {
+    "uri": "file:///ws/demo/src/rapor.rs",
+    "version": null
+   },
+   "edits": [
+    {
+     "range": {
+      "start": {
+       "line": 0,
+       "character": 17
+      },
+      "end": {
+       "line": 0,
+       "character": 24
+      }
+     },
+     "newText": "topla"
+    },
+    {
+     "range": {
+      "start": {
+       "line": 3,
+       "character": 4
+      },
+      "end": {
+       "line": 3,
+       "character": 11
+      }
+     },
+     "newText": "topla"
+    }
+   ]
+  }
+ ]
+}

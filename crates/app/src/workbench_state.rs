@@ -61,6 +61,8 @@ pub(super) struct LspState {
     pub(super) servers: std::collections::HashMap<String, lsp_glue::ServerSlot>,
     /// Folders for which the user was told the language server is off because the folder is untrusted (notified once per folder).
     pub(super) restricted_notified: std::collections::HashSet<String>,
+    /// A refactoring under review, and the last one applied (see workbench_refactor.rs).
+    pub(super) refactor: super::refactor_glue::RefactorState,
     pub(super) diagnostics: std::collections::BTreeMap<String, Vec<crate::lsp::Diagnostic>>,
     /// Output panel: language server logs (most recent 5,000 lines).
     pub(super) output: std::collections::VecDeque<String>,

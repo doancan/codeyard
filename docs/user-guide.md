@@ -22,6 +22,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Testing](#testing)
 - [Workspaces with several folders](#workspaces-with-several-folders)
 - [Language servers](#language-servers)
+- [Refactor Preview](#refactor-preview)
 - [Working in Rust](#working-in-rust)
 - [Cargo dependencies](#cargo-dependencies)
 - [JSON and YAML schemas](#json-and-yaml-schemas)
@@ -1680,6 +1681,70 @@ parameter hints while typing a call. `"editor.codeActionsOnSave": { "source.orga
 file is saved anyway). Invisible characters (zero-width spaces, bidi controls) and Cyrillic / Greek
 letters inside Latin words are boxed (`"editor.unicodeHighlight.enabled"`), which exposes
 "Trojan Source" tricks and look-alike identifiers.
+
+## Refactor Preview
+
+A rename (F2) or a quick fix (⌘.) can change many files. When it would change more than one file, a file that is not
+open in an editor, or when it creates, renames or deletes files, Codeyard shows it on a **Refactor Preview** tab before
+anything is written. A change inside one open file is applied at once, as one undo step of that editor. The setting
+`editor.refactorPreview` decides:
+
+| Value | Meaning |
+| --- | --- |
+| `auto` (default) | Review an edit that reaches several files, a file that is not open, or any file operation |
+| `always` | Review every edit of a language server |
+| `never` | Apply at once; an edit with file operations, or with a file that is refused, is still shown |
+
+The page lists each file with a check box and, under it, every change as the old line (the changed text struck out) and
+the new line, with one unchanged line around it (the buttons beside **Context** show 0 to 3). A file operation is a row
+of its own: **Create**, **Rename** or **Delete**. Choose what you want, then press **Apply Selected**; **Discard** closes
+the page and writes nothing. Edits that belong to a file an operation creates or moves are chosen together with it.
+
+| Key | Does |
+| --- | --- |
+| Up, Down | Move through the rows |
+| Space | Choose or clear the file, change or operation |
+| Enter | Open the change in its file (on a file: fold it) |
+| Left, Right | Fold a file, or go from a change to its file; unfold |
+| ⌘Enter (Ctrl+Enter) | Apply Selected |
+| Esc | Discard (back, at the question before a delete) |
+
+Everything a language server sends is checked, and what fails the check is shown with the reason and cannot be chosen:
+
+- A file outside the open folders, after `..` and symbolic links are resolved, is refused with its real location. Codeyard
+  never creates, renames, deletes or writes there.
+- An open file typed into after the request, an edit for another version of the file than the editor has, or unsaved text
+  that the server was never told about: refused. A file that changed on disk after the preview stops the whole apply.
+- Positions are read as the protocol says (UTF-16 columns, so Turkish letters and emoji line up). A position inside a
+  character, a line that does not exist, or edits that overlap refuse that file. Encoding, byte-order mark and line
+  endings are kept as they are.
+- Create and Rename never overwrite: a name that is taken refuses the operation.
+- Deleting is **permanent**: the host protocol has no trash, so a deleted file or folder is gone for good, and a refactoring
+  that has a delete cannot be undone. Apply Selected asks a second time and names what goes; for a folder it says how many
+  files and how many bytes it holds and lists its first entries ("and 3 more"). A delete is refused when the server did not
+  ask for `recursive` and the folder is not empty, when the folder is or holds a `.git`, when a file under it is open with
+  unsaved changes, and for a folder you opened.
+- A refactoring over 1,000 files or 20,000 changes is refused with its counts; nothing is written.
+
+Applying is all or nothing. Open editors take their changes first (unsaved, like any edit); then the files on disk and the
+file operations run in the order the server gave. If a step fails, or you press **Stop**, everything done is taken back: a
+created file is removed, a rename is renamed back, a deleted file comes back, a written file gets its old bytes. A step that cannot be taken
+back is named in the report. **Undo** on the finished page takes back the text changes: one step in each open editor
+(⌘Z in the editor does the same for one file) and the old bytes of each file written, but only where nothing changed since.
+A refactoring with file operations has no Undo; use your version control.
+
+While the files are written Codeyard keeps a small record of the steps in its state folder on this computer (for an SSH folder
+too) and removes it when the steps are done or taken back. If Codeyard is killed or crashes in the middle, the next start tells
+you, once, that a refactoring was interrupted and names the files that may be half-changed. The record holds paths only, no
+copies of the files: it cannot restore anything, so check the named files with your version control. Each write is checked
+again when it happens (a file changed since the review, a link that now points outside the folder, or a file open with unsaved
+changes stops the whole apply and takes back the steps already done).
+
+Some servers also ask to apply an edit while a command runs (`workspace/applyEdit`). Every such edit goes the same way as a
+rename: `editor.refactorPreview` decides whether it is shown (a change inside one open file is applied at once), the trust and
+folder checks apply, and the server gets its answer when you apply (`applied: true`) or discard or when Codeyard refuses it
+(`applied: false` with a reason). In a folder you have not trusted nothing is applied. A quick fix that has an edit and a command runs
+the command only after its edit was applied.
 
 ## Working in Rust
 

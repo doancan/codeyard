@@ -3076,11 +3076,18 @@ fn language_server_rename_references_symbols_fix_format_signature(cx: &mut TestA
     cx.simulate_keystrokes("f2");
     cx.simulate_input("toplam");
     cx.simulate_keystrokes("enter");
+    // Three files: the edit is shown on the Refactor Preview page first, and applied with its key.
+    wait_for(cx, "önizleme", |cx| wb.read_with(cx, |wb, _| wb.page_for_test()) == Some(("refactor", true)));
+    cx.simulate_keystrokes("cmd-enter");
     wait_for(cx, "yeniden adlandırma", |cx| text(cx).contains("toplam(1,2)"));
     wait_for(cx, "kapalı dosya diskte", |cx| {
         cx.run_until_parked();
         std::fs::read_to_string(dir.join("lib.h")).unwrap().contains("toplam(") && std::fs::read_to_string(dir.join("lib.c")).unwrap().contains("toplam(")
     });
+
+    // The page keeps the report of what was written until it is closed.
+    cx.simulate_keystrokes("escape");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), None);
 
     // ⇧⌥F: format (single undo step).
     let before = text(cx);

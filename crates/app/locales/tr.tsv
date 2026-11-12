@@ -4135,3 +4135,73 @@ Help: Copy Diagnostics	Yardım: Tanılama Bilgisini Kopyala
 Help: Open Log File	Yardım: Günlük Dosyasını Aç
 Help: Reveal Log Folder	Yardım: Günlük Klasörünü Göster
 The last session ended without closing normally, and no crash report explains why.	Son oturum normal şekilde kapanmadı ve nedenini açıklayan bir çökme raporu yok.
+A folder cannot be moved into itself.	Bir klasör kendi içine taşınamaz.
+Already exists; Codeyard never overwrites a file in a refactoring.	Zaten var; Codeyard bir yeniden düzenlemede hiçbir dosyanın üzerine yazmaz.
+An edit ends before it starts.	Bir düzenleme bitişinden önce başlıyor.
+An open folder is never deleted by a refactoring.	Açık bir klasör hiçbir yeniden düzenlemeyle silinmez.
+Could not remove {}; delete it by hand.	{} kaldırılamadı; elle silin.
+Could not take back {0}: {1}. Check it before going on.	{0} geri alınamadı: {1}. Devam etmeden önce kontrol edin.
+Created {}	{} oluşturuldu
+Edit {} of the language server is malformed.	Dil sunucusunun {}. düzenlemesi bozuk.
+Edits overlap, so the server's answer cannot be trusted. Nothing in this file is changed.	Düzenlemeler çakışıyor, bu yüzden sunucunun yanıtına güvenilemez. Bu dosyada hiçbir şey değiştirilmedi.
+Has unsaved changes the language server has not seen: save or revert it first.	Dil sunucusunun görmediği kaydedilmemiş değişiklikler var: önce kaydedin ya da geri alın.
+Has unsaved changes: save or revert it first.	Kaydedilmemiş değişiklikler var: önce kaydedin ya da geri alın.
+Line {0} does not exist (the file has {1} lines).	{0}. satır yok (dosyada {1} satır var).
+Line {0}, column {1} is inside a character.	{0}. satır, {1}. sütun bir karakterin ortasında.
+Not a file: {}	Dosya değil: {}
+Outside the open folders: {}	Açık klasörlerin dışında: {}
+The edit list is missing.	Düzenleme listesi yok.
+The file to delete is not there.	Silinecek dosya yok.
+The file to rename is not there.	Yeniden adlandırılacak dosya yok.
+The file was edited while the language server was working, so its answer no longer fits. Try again.	Dil sunucusu çalışırken dosya düzenlendi, bu yüzden yanıtı artık uymuyor. Yeniden deneyin.
+The language server's refactoring is too large to review ({0} files, {1} changes; the limit is {2} files and {3} changes). Nothing was changed.	Dil sunucusunun yeniden düzenlemesi gözden geçirilemeyecek kadar büyük ({0} dosya, {1} değişiklik; sınır {2} dosya ve {3} değişiklik). Hiçbir şey değiştirilmedi.
+The new name is taken; Codeyard never overwrites a file in a refactoring.	Yeni ad kullanımda; Codeyard bir yeniden düzenlemede hiçbir dosyanın üzerine yazmaz.
+The refactoring failed, so everything it had done was taken back. Nothing was changed.	Yeniden düzenleme başarısız oldu, bu yüzden yaptığı her şey geri alındı. Hiçbir şey değiştirilmedi.
+The server gave two different document versions for this file.	Sunucu bu dosya için iki farklı belge sürümü verdi.
+The server's edit is for version {0} of this file, the editor has version {1}.	Sunucunun düzenlemesi bu dosyanın {0}. sürümü için, düzenleyicide {1}. sürüm var.
+Unknown file operation “{}”	Bilinmeyen dosya işlemi “{}”
+{} file|{} files	{} dosya
+Review a language server's rename or quick fix before it is applied: auto (when it changes several files or moves, creates or deletes files), always or never (file operations are always reviewed)	Dil sunucusunun yeniden adlandırmasını ya da hızlı düzeltmesini uygulamadan önce gözden geçir: auto (birkaç dosyayı değiştirdiğinde ya da dosya taşıdığında, oluşturduğunda veya sildiğinde), always (hep) veya never (hiç; dosya işlemleri her zaman gözden geçirilir)
+Apply Selected	Seçilenleri Uygula
+Changes in open files are not saved yet.	Açık dosyalardaki değişiklikler henüz kaydedilmedi.
+Could not take back the change in {}: it was edited since. Undo it in the editor.	{} içindeki değişiklik geri alınamadı: sonradan düzenlenmiş. Düzenleyicide geri alın.
+Create {}	{} oluştur
+Delete and Apply	Sil ve Uygula
+Delete {}	{} sil
+Done.	Tamam.
+Edit requested by the language server	Dil sunucusunun istediği düzenleme
+Nothing selected.	Hiçbir şey seçilmedi.
+Nothing to do: it is already so.	Yapılacak bir şey yok: zaten böyle.
+Proposed: {0} {1}, {2}.	Önerilen: {0} {1}, {2}.
+Proposed: {0} {1}.	Önerilen: {0} {1}.
+Proposed: {}.	Önerilen: {}.
+Real location: {}	Gerçek konum: {}
+Refactor Preview	Yeniden Düzenleme Önizlemesi
+Rename to “{}”	“{}” olarak yeniden adlandır
+Rename {0} to {1}	{0} adını {1} yap
+Selected: {0} {1}, {2}.	Seçilen: {0} {1}, {2}.
+Selected: {0} {1}.	Seçilen: {0} {1}.
+Selected: {}.	Seçilen: {}.
+The connection or folder changed since the preview. Nothing was changed.	Önizlemeden sonra bağlantı ya da klasör değişti. Hiçbir şey değiştirilmedi.
+The connection or folder changed while the refactoring was prepared. Nothing was changed.	Yeniden düzenleme hazırlanırken bağlantı ya da klasör değişti. Hiçbir şey değiştirilmedi.
+The language server proposed no changes.	Dil sunucusu hiçbir değişiklik önermedi.
+There is no refactoring to undo.	Geri alınacak bir yeniden düzenleme yok.
+This folder is not trusted, so a language server's edits are not applied.	Bu klasöre güvenilmiyor, bu yüzden dil sunucusunun düzenlemeleri uygulanmaz.
+Undo is not available here: the refactoring was made in another folder or connection.	Geri alma burada kullanılamaz: yeniden düzenleme başka bir klasörde ya da bağlantıda yapıldı.
+Up and Down move, Space selects, Enter opens, Left and Right fold, {}Enter applies, Escape discards. Nothing is written before Apply Selected.	Yukarı ve Aşağı gezinir, Boşluk seçer, Enter açar, Sol ve Sağ katlar, {}Enter uygular, Escape vazgeçer. Seçilenleri Uygula'ya kadar hiçbir şey yazılmaz.
+Write the selected changes; nothing else is touched ({}Enter)	Seçilen değişiklikleri yazar; başka hiçbir şeye dokunulmaz ({}Enter)
+{} file operation|{} file operations	{} dosya işlemi
+{} needs a file operation that is not selected.	{} seçilmemiş bir dosya işlemine ihtiyaç duyuyor.
+Line {0}, column {1}: “{2}” → “{3}”	{0}. satır, {1}. sütun: “{2}” → “{3}”
+The files changed since the preview. Discard this page and start the refactoring again.	Dosyalar önizlemeden sonra değişti. Bu sayfadan vazgeçip yeniden düzenlemeyi baştan başlatın.
+A .git folder is never deleted by a refactoring.	Bir .git klasörü hiçbir yeniden düzenlemeyle silinmez.
+A refactoring was interrupted; these files may be half-changed: {}	Bir yeniden düzenleme yarıda kaldı; şu dosyalar yarı değişmiş olabilir: {}
+It holds a Git repository (.git), which a refactoring never deletes.	İçinde bir Git deposu (.git) var; yeniden düzenleme bunu asla silmez.
+It holds too many files to check what would be deleted.	Neyin silineceğini denetlemek için içinde çok fazla dosya var.
+Permanently delete {0} item? It cannot be undone and is not moved to the trash: {1}|Permanently delete {0} items? They cannot be undone and are not moved to the trash: {1}	{0} öğe kalıcı olarak silinsin mi? Geri alınamaz ve çöp kutusuna taşınmaz: {1}
+Permanently deletes the file; it is not moved to the trash.	Dosyayı kalıcı olarak siler; çöp kutusuna taşınmaz.
+Permanently deletes the folder and everything in it; it is not moved to the trash.	Klasörü ve içindeki her şeyi kalıcı olarak siler; çöp kutusuna taşınmaz.
+The folder is not empty and the server did not ask to delete what is in it.	Klasör boş değil ve sunucu içindekilerin silinmesini istemedi.
+{0} and {1} more	{0} ve {1} tane daha
+{0} with {1}, {2}: {3}	{0}: {1}, {2}: {3}
+{} has unsaved changes: save or revert it first.	{} içinde kaydedilmemiş değişiklikler var: önce kaydedin ya da geri alın.

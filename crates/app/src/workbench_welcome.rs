@@ -297,6 +297,7 @@ impl Workbench {
                     Page::Merge(_) => "merge",
                     Page::Compare(_) => "compare",
                     Page::Search(_) => "search",
+                    Page::Refactor(_) => "refactor",
                     Page::ExtView(_) => "extension-view",
                     Page::Terminal(_) => "terminal",
                 },

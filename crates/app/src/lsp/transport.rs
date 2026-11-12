@@ -586,7 +586,9 @@ fn initialize_params(root: &str, init_options: Option<&Value>) -> Value {
                 "didChangeConfiguration": { "dynamicRegistration": false },
                 "fileOperations": { "willRename": true },
                 "applyEdit": true,
-                "workspaceEdit": { "documentChanges": true },
+                // Servers rename files only for clients that say they can; the Refactor Preview shows each operation and applies
+                // them all or none (`lsp::refactor`).
+                "workspaceEdit": { "documentChanges": true, "resourceOperations": ["create", "rename", "delete"], "failureHandling": "transactional" },
                 "didChangeWatchedFiles": { "dynamicRegistration": false },
                 "symbol": { "dynamicRegistration": false },
             },
