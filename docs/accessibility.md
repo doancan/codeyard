@@ -178,10 +178,18 @@ The tree, in the order a screen reader walks it:
   page or a closed or reopened page changes nothing. With no rows, a polite `Status` says why. A rejected value is
   also an assertive `Alert` ("Editor: Font Size: …"), so it is said as the field turns invalid; the keyboard stays in
   the field.
-- The Keyboard Shortcuts page in front is a `Group` with its `SearchInput` and a `List` ("{n} commands") of up to
-  2,000 rows: command as label, its key (or "No shortcut") as description, set position. `Click` runs the command as a
-  click on the row does, only while the page still lists it. The page is read-only otherwise: keys are assigned in the
-  "Preferences: Open Keyboard Shortcuts" picker, which is exposed as a picker.
+- The Keyboard Shortcuts page in front is a `Group` with its `SearchInput`, a live `Status` line and a `List`
+  ("{n} commands") of up to 2,000 rows: command as label; the key, where it comes from (Default, Extension, User), its
+  context and the commands that share the key ("Also used by …") as description; set position; `selected`. `Click`
+  selects the row, as on screen, only while the page still lists the same row at that place. A selected row has `Button`s
+  named for what they do ("Change key", "Add another key", "Remove key", "Reset to default", "Run command"), each with
+  the command and its key as description; the first three and Reset appear only when there is a settings folder to
+  write to and the command has an id. "Change key" and "Add another key" start recording: the `Status` line (polite)
+  then says which command listens and shows the chords so far, the keys pressed go to the page and nothing else acts on
+  them, Enter saves and Escape cancels. The result ("… now uses …", or a problem in `Alert` priority such as a key
+  another command also uses, or a `keybindings.jsonc` that does not parse) is announced in the same line. "Open
+  keybindings.jsonc" is a `Button` in the header. The keyboard works without the tree: Up and Down move the selection,
+  Enter records a key for the selected row, Delete removes its key.
 - While Run and Debug is visible, a `Group` "Run and Debug": the "Start Debugging (F5)" `Button` (the configuration it
   starts as description), a `RadioGroup` of the launch configurations (`Click` selects, as the selector's menu does),
   the selector itself (a `Button` with the configuration's name, "Launch configuration" as description, menu popup:

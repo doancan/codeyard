@@ -126,7 +126,6 @@ pub(super) enum OverlayKind {
         key: &'static str,
         options: &'static [&'static str],
     },
-    Shortcuts,
     /// Active editor's setting from the status bar (line ending, indentation).
     EditorOption(Vec<EditorOpt>),
     /// Git branch picker (repo root, rows).

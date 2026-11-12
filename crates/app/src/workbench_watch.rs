@@ -302,6 +302,7 @@ impl Workbench {
             self.warn_low_contrast(window, cx);
         }
         self.sync_settings_page(cx);
+        self.sync_shortcuts_page(cx);
         self.sync_extensions_view();
         self.sync_running_extensions(window, cx);
         self.sync_ext_views(cx);

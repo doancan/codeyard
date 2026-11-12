@@ -22,6 +22,7 @@ A file named “{}” is already there; a folder cannot replace it. Rename or re
 A file you opened names a schema that is hosted on {}. Downloading it sends a request to that server (your IP address and the schema's address). Only allow it if you trust the file and the host.	
 A folder named “{}” is already there; a file cannot replace it. Rename or remove it first.	
 A git dependency: not looked up on crates.io.	
+A key that types text cannot be a shortcut on its own. Add Ctrl, Alt or Cmd, or press a function key.	
 A merge commit is created unless it can fast-forward. Conflicts are resolved in Source Control.	
 A path dependency: not looked up on crates.io.	
 A pattern is one expression or statement, not several.	
@@ -69,6 +70,7 @@ Add SSH Host…
 Add SSH host…	
 Add a debug configuration	
 Add a host	
+Add another key	
 Add comment	
 Add comment…	
 Add dependency	
@@ -107,8 +109,10 @@ Already listed after an update? Remove it with − and add it again.
 Already minified	
 Also every folder inside “{}”, now and later.	
 Also get its pre-releases, at once and before others get them	
+Also used by {}	
 Always open *.{0} as {1}	
 Amended {}	
+An entry of keybindings.jsonc has no key	
 An existing file with the same name is never overwritten.	
 Anchors and aliases were expanded.	
 Another debug adapter	
@@ -240,6 +244,7 @@ Change All Occurrences
 Change Color…	
 Change Local Port…	
 Change all files in the workspace	
+Change key	
 Change overview	
 Change the URL of which remote?	
 Change {}	
@@ -359,6 +364,7 @@ Colorful Folders
 Column where lines wrap with wordWrapColumn or bounded	
 Column {0}: {1}	
 Columns	
+Command	
 Command Palette	
 Command Palette…	
 Command palette	
@@ -660,6 +666,7 @@ Debug: Toggle Breakpoint
 Debugger	
 Dec	
 Decoded here only: nothing is sent or logged	
+Default	
 Default terminal profile	
 Default: build for this machine	
 Delay for afterDelay (ms)	
@@ -922,6 +929,7 @@ Explorer
 Explorer (⇧⌘E)	
 Export as Text…	
 Exposed only; not published on the server.	
+Extension	
 Extension Inspector	
 Extension View	
 Extension id, like publisher.name or publisher.name@1.2.0	
@@ -1312,6 +1320,7 @@ Its publisher deprecated it.
 Its publisher withdrew this version, and there is no earlier one to go back to.	
 Its tasks, language servers and settings run. Nothing outside the workspace's folders is trusted.	
 Its tasks, language servers and settings run. Other folders keep asking.	
+Its “args” were removed with it.	
 JSON schema for {}	
 JSON: Minify Document	
 Jan	
@@ -1331,6 +1340,7 @@ Key login is set up for “{}” (created {}). The next connection needs no pass
 Key login is set up for “{}”. The next connection needs no password.	
 Key login was already set up for “{}” (created {}). The next connection needs no password.	
 Key login was already set up for “{}”. The next connection needs no password.	
+Keybinding	
 Keyboard Shortcuts	
 Keymap preset	
 Keymap preset from an installed extension, as publisher.name/label (empty: Codeyard's own keys)	
@@ -1690,6 +1700,7 @@ Not valid Base64: left unchanged
 Not valid URL encoding: left unchanged	
 Not valid {}: left unchanged	
 Nothing	
+Nothing changed	
 Nothing changed: every setting has its default value.	
 Nothing in this file is staged	
 Nothing is listening on the server yet.	
@@ -1800,6 +1811,7 @@ Open in Browser
 Open in Integrated Terminal	
 Open in New Window	
 Open in a Search Editor tab	
+Open keybindings.jsonc	
 Open on GitHub	
 Open on {}	
 Open recent or connect… (⌃R)	
@@ -1900,6 +1912,8 @@ Preferences: Reset Settings to Defaults…
 Preferences: Settings	
 Preserve case (⌥P)	
 Preserve case when replacing	
+Press keys…	
+Press the keys for “{}”. Escape cancels.	
 Preview	
 Preview HTML in your browser	
 Preview Replace	
@@ -2073,6 +2087,7 @@ Remove from Recent
 Remove from recent	
 Remove from the workspace file	
 Remove it from Recent?	
+Remove key	
 Remove remote {}?	
 Remove trailing spaces when saving	
 Remove which SSH host from ~/.ssh/config?	
@@ -2085,6 +2100,7 @@ Removed from favorites: {}
 Removed remote {}	
 Removed with cargo remove	
 Removed worktree {}	
+Removed {0} from “{1}”	
 Removed {} from “{}”.	
 Removed “{0}” by editing the file (cargo remove: {1}). Save the file to keep it.	
 Removed “{}” from ~/.ssh/config	
@@ -2143,6 +2159,7 @@ Reset Zoom
 Reset all settings to the defaults?	
 Reset past {0} commit that is already on {1}?|Reset past {0} commits that are already on {1}?	
 Reset the Rust setup in settings.jsonc?	
+Reset to default	
 Reset to {0} ({1}); the branch was at {2}	
 Resolve Conflicts	
 Resolve the file conflict before debugging.	
@@ -2198,6 +2215,7 @@ Run Without Debugging
 Run a command	
 Run and Debug	
 Run and Debug (⌃⇧D)	
+Run command	
 Run or debug	
 Run or debug on line {}	
 Run task	
@@ -2280,7 +2298,6 @@ Search
 Search (⇧⌘F)	
 Search Commits	
 Search commands or keys (e.g. “comment”, “⌘D”)	
-Search commands to bind a key	
 Search commits	
 Search commits (message, author, hash)	
 Search containers, images or projects…	
@@ -2436,6 +2453,7 @@ Sort: Line
 Sort: Name	
 Sort: Position	
 Sort: Severity	
+Source	
 Source Control	
 Source Control (⌃⇧G)	
 Source Control graph view: graph (branch lanes), compact (one line per commit) or dates (grouped by day)	
@@ -2713,6 +2731,7 @@ The server no longer accepts an account password: use a personal access token as
 The server protects this branch and refuses direct pushes: push to another branch and open a pull request.	
 The server refused the login: check the account and that the token may push.	
 The server wants credentials that were not given: try again and enter them when asked, or set up an SSH key.	
+The settings folder is gone. Nothing was changed.	
 The shell has exited	
 The shell may run each line as soon as it arrives.	
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
@@ -2857,7 +2876,6 @@ Type a query and press Enter to search.
 Type a query. Esc closes the bar.	
 Type into terminals	
 Type the host and the client id, separated by a space.	
-Type the shortcut for {} (e.g. cmd-shift-d), then save	
 Type {} to install it.	
 TypeScript {} · TypeScript Language Server {} · HTML/CSS {}	
 UI font of the whole window (empty: system font)	
@@ -2930,6 +2948,7 @@ Uploading is not possible in this workspace.
 Uploading needs the connection to {}, which failed: use Reconnect first.	
 Uploading works with a connected SSH host: connect first (⌃R).	
 Use the name as typed	
+User	
 User Forwarded	
 User: {}	
 Username	
@@ -3036,6 +3055,7 @@ What kind of extension?
 What opens at start: welcome (the start page), continue (where you left off, SSH hosts included) or blank (an empty window)	
 What runs after a commit: nothing, push or sync. Your own settings only; a folder cannot change it	
 What you can do	
+When	
 When a file, diff or page opens while the panel is maximized: shrink the panel to half, give it back its size, or move the terminal into a tab	
 When the close button of a tab shows	
 Where .http requests are sent from: the workspace host (the server when connected over SSH) or this computer	
@@ -3453,6 +3473,7 @@ via the GitHub API
 via the gh CLI	
 via the public GitHub API (set GITHUB_TOKEN or use gh for private repositories and check results)	
 waiting for the connection to come back	
+when {}	
 whole file	
 with subfolders	
 withdrawn	
@@ -3471,6 +3492,7 @@ your words
 {0} / {1} containers	
 {0} / {1} lines · {2} errors · {3} warnings	
 {0} Files to include is not used.	
+{0} Warning: {1} is also used by {2}.	
 {0} and {1} cannot be added	
 {0} and {1} cannot be divided	
 {0} and {1} cannot be divided because the divisor is zero	
@@ -3490,6 +3512,7 @@ your words
 {0} errors, {1} warnings, {2} information	
 {0} failed to start: {1}	
 {0} files and {1} folders go from {2} ({3}) to {4} ({5}). Files that exist there are replaced; anything that changed since the scan is left alone.	
+{0} for “{1}”: press Enter to save, or the next key of a sequence. Escape cancels.	
 {0} has no package for {1}	
 {0} is back at version {1}.	
 {0} is now published by {1}, not {2} as before; review it with Extensions: Install from Registry…	
@@ -3569,6 +3592,7 @@ your words
 {0}: {1} cannot be written in TOML	
 {0}: {1} does not fit in a TOML integer (64 bits, signed)	
 {0}: {1} to pull, {2} to push. Click to sync.	
+{0}: {1}. Fix the file, then try again.	
 {0}: {1}. Start the selected container engine and check Output.	
 {0}: “{1}” is not a name .env files can hold (letters, digits and _)	
 {0}{1} found	
@@ -3587,6 +3611,7 @@ your words
 {} (selection) ↔ Clipboard	
 {} (terminal)	
 {} (terminal, exited)	
+{} (turned off)	
 {} ({})	
 {} (“{}” failed; {} of {} items were transferred before it)	
 {} YAML documents became one list.	
@@ -3698,6 +3723,7 @@ your words
 {} result in 1 file|{} results in 1 file	
 {} result|{} results	
 {} running	
+{} shortcut shares its key with another command|{} shortcuts share their key with another command	
 {} skipped	
 {} space|{} spaces	
 {} still has merge conflict markers. Resolve them (Accept Current / Incoming / Both) and save first.	
@@ -3768,6 +3794,7 @@ your words
 “{0}” cannot be written in {1}: not changed.	
 “{0}” found more than {1} problems: only the first {1} are shown.	
 “{0}” is not a valid regular expression ({1}). Escape special characters with a backslash.	
+“{0}” now uses {1}	
 “{}” already exists. Replace it?	
 “{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	
 “{}” asks for inputs, which a compound cannot ask for: start it on its own.	
@@ -3777,12 +3804,14 @@ your words
 “{}” in Cargo.toml is not a table	
 “{}” is a built-in shortcut; an extension cannot change it	
 “{}” is already a dependency here	
+“{}” is back to its default keys	
 “{}” is called with the wrong number of arguments	
 “{}” is missing here	
 “{}” is not a branch of a known remote	
 “{}” is not a crate name	
 “{}” is not a free local port	
 “{}” is not a function this query language has	
+“{}” is not a key	
 “{}” is not a number	
 “{}” is not a port number	
 “{}” is not a usable branch or remote name	

@@ -6,7 +6,6 @@ use gpui::{AppContext as _, Context, Window};
 use serde_json::Value;
 
 use super::{InputPurpose, Notice, NoticeSource, OverlayKind, Workbench};
-use crate::commands;
 use crate::picker::{PickItem, Picker, Source as PickSource};
 use crate::settings::{self, AutoSave, Settings};
 
@@ -606,46 +605,6 @@ impl Workbench {
         }
     }
 
-    /// "Preferences: Keyboard Shortcuts": command ids and their keys; choosing one
-    /// adds an empty line for that command to `keybindings.jsonc` and opens the file.
-    pub(super) fn show_shortcuts_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.config_paths().is_none() {
-            return;
-        }
-        if self.overlay.is_some() {
-            self.close_overlay(window, cx);
-        }
-        let items = commands::COMMAND_IDS
-            .iter()
-            .map(|id| {
-                let keys = commands::action_by_id(id).and_then(|a| commands::Command { label: String::new(), run: commands::Run::Action(a) }.shortcut(cx));
-                PickItem { label: (*id).into(), detail: None, keys: keys.map(Into::into) }
-            })
-            .collect();
-        let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Search commands to bind a key"), "", None, cx));
-        self.show_overlay(picker, OverlayKind::Shortcuts, window, cx);
-    }
-
-    pub(super) fn bind_shortcut(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let (Some(id), Some((_, kpath))) = (commands::COMMAND_IDS.get(index), self.config_paths()) else { return };
-        let result = settings::ensure_file(&kpath, settings::KEYBINDINGS_TEMPLATE).and_then(|_| std::fs::read_to_string(&kpath)).and_then(|text| {
-            let (text, line) = add_binding_line(&text, id);
-            crate::fsutil::write_atomic(&kpath, text).map(|_| line)
-        });
-        match result {
-            Ok(line) => {
-                let path = kpath.to_string_lossy().into_owned();
-                let host = self.remote.local_host.clone();
-                self.open_file_on(host, path.clone(), window, cx);
-                // Cursor goes inside the quotes of the "key" value.
-                self.open_location(path, line as u32, 12, window, cx);
-                self.notify(NoticeSource::Settings, Notice::Info(crate::i18n::tf("Type the shortcut for {} (e.g. cmd-shift-d), then save", &[&id]).into()));
-            }
-            Err(e) => self.notify(NoticeSource::Settings, Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&kpath.display(), &e]).into())),
-        }
-        cx.notify();
-    }
-
     pub(super) fn apply_rust_setup(&mut self, _: &ApplyRustSetup, window: &mut Window, cx: &mut Context<Self>) {
         self.change_rust_setup(false, window, cx);
     }
@@ -757,64 +716,6 @@ pub fn rust_setup_change(text: &str, s: &Settings, reset: bool) -> (String, Stri
     (new, diff)
 }
 
-/// Whether the byte is real JSON (`false` inside comments and strings), so a `]` or `}`
-/// in a comment isn't taken as the insertion point.
-fn code_mask(text: &str) -> Vec<bool> {
-    let b = text.as_bytes();
-    let mut mask = vec![true; b.len()];
-    let mut i = 0;
-    while i < b.len() {
-        match (b[i], b.get(i + 1)) {
-            (b'/', Some(b'/')) => {
-                let end = text[i..].find('\n').map_or(b.len(), |n| i + n);
-                mask[i..end].iter_mut().for_each(|m| *m = false);
-                i = end;
-            }
-            (b'/', Some(b'*')) => {
-                let end = text[i + 2..].find("*/").map_or(b.len(), |n| i + 2 + n + 2);
-                mask[i..end].iter_mut().for_each(|m| *m = false);
-                i = end;
-            }
-            (b'"', _) => {
-                let mut j = i + 1;
-                while j < b.len() && b[j] != b'"' {
-                    j += if b[j] == b'\\' { 2 } else { 1 };
-                }
-                let end = (j + 1).min(b.len());
-                mask[i..end].iter_mut().for_each(|m| *m = false);
-                i = end;
-            }
-            _ => i += 1,
-        }
-    }
-    mask
-}
-
-/// Before the array's closing, add `{ "key": "", "command": "<id>" },`; (new text, line).
-/// If the previous item has no trailing comma, one is added (comments and other lines preserved).
-pub fn add_binding_line(text: &str, id: &str) -> (String, usize) {
-    let entry = format!("  {{ \"key\": \"\", \"command\": \"{id}\" }},");
-    let mask = code_mask(text);
-    let last_code = |ch: u8, before: usize| (0..before).rev().find(|&i| mask[i] && text.as_bytes()[i] == ch);
-    let Some(close) = last_code(b']', text.len()) else { return (format!("[\n{entry}\n]\n"), 1) };
-    let line_start = text[..close].rfind('\n').map_or(0, |n| n + 1);
-    // If `]` is on its own line, a new line before it; otherwise in between.
-    let pos = if text[line_start..close].trim().is_empty() { line_start } else { close };
-    let build = |head: &str| {
-        let sep = if head.ends_with('\n') { "" } else { "\n" };
-        format!("{head}{sep}{entry}\n{}", &text[pos..])
-    };
-    let parses = |t: &str| serde_json::from_str::<Value>(&theme::themes::strip_jsonc(t)).is_ok();
-    let mut out = build(&text[..pos]);
-    if !parses(&out)
-        && let Some(last) = last_code(b'}', pos)
-    {
-        out = build(&format!("{},{}", &text[..=last], &text[last + 1..pos]));
-    }
-    let line = out[..out.rfind(&entry).unwrap_or(0)].matches('\n').count();
-    (out, line)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -845,25 +746,6 @@ mod tests {
         assert_eq!(parse_input(n, ""), Ok(Value::Null));
         assert_eq!(parse_input(Kind::Text, " /bin/zsh "), Ok(Value::from("/bin/zsh")));
         assert!(parse_input(Kind::Choice(&["a", "b"]), "c").is_err());
-    }
-
-    #[test]
-    fn binding_line_goes_before_the_closing_bracket() {
-        let (t, line) = add_binding_line(settings::KEYBINDINGS_TEMPLATE, "git.stash");
-        let lines: Vec<&str> = t.lines().collect();
-        assert_eq!(lines[line].trim(), r#"{ "key": "", "command": "git.stash" },"#);
-        assert_eq!(lines[line + 1].trim(), "]");
-        // No comma on the previous item: it is added, the result is valid JSONC.
-        let (t, line) = add_binding_line("[ { \"key\": \"a\", \"command\": \"x\" } ]", "y");
-        assert_eq!(t.lines().nth(line).map(str::trim), Some(r#"{ "key": "", "command": "y" },"#));
-        assert!(serde_json::from_str::<Value>(&theme::themes::strip_jsonc(&t)).is_ok(), "{t}");
-        assert_eq!(add_binding_line("", "z").1, 1);
-        // Brackets/braces in a comment aren't taken for the insertion point.
-        let text = "[\n  { \"key\": \"a\", \"command\": \"x\" } // bkz. {belge}\n]\n// son not: [docs]\n";
-        let (t, line) = add_binding_line(text, "y");
-        assert_eq!(t.lines().nth(line).map(str::trim), Some(r#"{ "key": "", "command": "y" },"#), "{t}");
-        let v = serde_json::from_str::<Value>(&theme::themes::strip_jsonc(&t)).expect(&t);
-        assert_eq!(v.as_array().map(Vec::len), Some(2));
     }
 }
 

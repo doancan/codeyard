@@ -834,11 +834,6 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.write_setting(key, serde_json::Value::String(value.into()), window, cx);
             }
-            (OverlayKind::Shortcuts, PickerEvent::Confirm(Pick::Item { index, .. })) => {
-                let index = *index;
-                self.close_overlay(window, cx);
-                self.bind_shortcut(index, window, cx);
-            }
             (OverlayKind::Stashes { refs, msgs, op, repo }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let (stash, msg, op, repo) = (refs[*index].clone(), msgs.get(*index).cloned(), *op, repo.clone());
                 self.close_overlay(window, cx);
@@ -1121,8 +1116,7 @@ impl Workbench {
                 | OverlayKind::CommitFiles { .. }
                 | OverlayKind::Switcher(_)
                 | OverlayKind::LspQuestion(_)
-                | OverlayKind::SettingChoice { .. }
-                | OverlayKind::Shortcuts,
+                | OverlayKind::SettingChoice { .. },
                 PickerEvent::Dismiss,
             ) => {
                 self.close_overlay(window, cx);

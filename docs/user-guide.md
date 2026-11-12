@@ -618,11 +618,40 @@ MDX components are not executed.
 
 `⇧⌘P` → "Preferences: Settings" lists the settings with their current values: pick one to
 toggle it, choose from its options or type a value; it is written to `settings.jsonc` (your
-comments stay) and applies at once. "Preferences: Keyboard Shortcuts" lists every command with
-its keys; picking one adds a line for it to `keybindings.jsonc` and opens the file there.
-"Preferences: Open Settings" / "Open Keyboard Shortcuts" open the files themselves:
+comments stay) and applies at once. "Preferences: Open Settings" / "Open Keyboard Shortcuts" open the files themselves:
 `~/.config/codeyard/settings.jsonc` and `keybindings.jsonc` (comments and trailing commas are
 fine). Changes apply on save; mistakes show in the status bar instead of being ignored.
+### Keyboard Shortcuts page
+
+"Preferences: Keyboard Shortcuts" (also **Keyboard Shortcuts** in the Manage menu and on the Settings page) lists every
+command with its keys, one row per key. Each row shows the command, the key, the context it works in (`when`, for
+example `Editor`) and where the key comes from: **Default**, **Extension** or **User** (an entry of `keybindings.jsonc`).
+The search finds a command by its name or id, or a key: type `comment`, `workbench.quickOpen`, `⌘D` or `cmd+d`.
+
+Select a row (click, or Up and Down) to see its buttons:
+
+- **Change key** (also double-click, or Enter) records a new key in place of this one. Press the keys, for example
+  `⌘K ⌘I` for a sequence of up to three chords, then Enter to save; Escape cancels. While the page listens, no shortcut
+  acts: the key you press is recorded, even one the application uses. Keys are recorded as your keyboard produces them, so
+  `ctrl-ö` on a Turkish keyboard is written as `ctrl-ö`. Enter by itself is recorded as the key Enter; Escape cannot be
+  recorded here (write it in the file). A printable key on its own (`a`, `5`, Space, Shift+letter) is refused with a message, because a
+  shortcut without a modifier would stop you typing that key; add Ctrl, Alt or Cmd, or use a function key, an arrow or Tab. After a
+  first chord any key is fine.
+- **Add another key** gives the command one more key.
+- **Remove key** deletes every identical entry of yours (the page names the command and key; an entry that had `args` loses them,
+  and the message says so), or turns a default or extension key off (an entry with `"command": null` that comes first
+  in the file).
+- **Reset to default** removes everything `keybindings.jsonc` says about the command, including the keys it turned off.
+- **Run command** closes the page and runs the command.
+
+The change is written to `keybindings.jsonc` as one entry, with your comments, other entries and line endings left as they
+were, and applies at once. If the file does not parse, nothing is written and the page says so. When a key is also used by
+another command in an overlapping context (or is the first key of a sequence another command uses), the row shows a
+**Also used by …** badge naming it, and so does the row of the other command; the later of two bindings wins, and you can
+search for `conflict` to list them. Some of the default keys already share a key with another command in a different
+place (the terminal's `⌘K` and the `⌘K` sequences); they are real and shown. A command is bound by its id, so a command
+without an id cannot be changed on this page. **Open keybindings.jsonc** opens the file itself.
+
 A project can override settings in `.codeyard/settings.jsonc` (or `.vscode/settings.json`).
 To start over, "Preferences: Reset Settings to Defaults…" (or **Reset All Settings…** on the Settings
 page, next to **Open settings.jsonc**) replaces `settings.jsonc` with this version's default file after

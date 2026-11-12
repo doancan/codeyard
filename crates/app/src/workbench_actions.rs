@@ -228,7 +228,7 @@ impl Workbench {
             .on_action(cx.listener(|this, _: &GitFileHistory, window, cx| this.show_file_history(window, cx)))
             .on_action(cx.listener(|this, _: &GitBlameLine, _, cx| this.blame_line(cx)))
             .on_action(cx.listener(|this, _: &ShowSettings, window, cx| this.show_settings_picker(window, cx)))
-            .on_action(cx.listener(|this, _: &ShowKeyboardShortcuts, window, cx| this.show_shortcuts_picker(window, cx)))
+            .on_action(cx.listener(|this, _: &ShowKeyboardShortcuts, window, cx| this.show_shortcuts_page(&ShowShortcutsPage, window, cx)))
             .on_action(cx.listener(|this, _: &CopyFullDiagnostic, _, cx| this.copy_full_diagnostic(cx)))
             .on_action(cx.listener(Self::copy_all_problems))
             .on_action(cx.listener(Self::show_notifications))

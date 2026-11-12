@@ -72,7 +72,7 @@ pub(crate) fn desktop_menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
         I::separator(),
         I::action(tr("Exit"), wb::Quit),
     ]);
-    menus[3].items.extend([I::separator(), I::action(tr("Color Theme…"), wb::SelectTheme), I::action(tr("Keyboard Shortcuts"), wb::OpenKeybindings)]);
+    menus[3].items.extend([I::separator(), I::action(tr("Color Theme…"), wb::SelectTheme), I::action(tr("Keyboard Shortcuts"), wb::ShowKeyboardShortcuts)]);
     menus.push(Menu {
         name: tr("Help").into(),
         items: vec![
@@ -325,7 +325,7 @@ pub(crate) fn menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
                 sep(),
                 I::action(tr("Settings…"), wb::OpenSettingsPage),
                 I::action(tr("Open Settings (JSON)"), wb::OpenSettings),
-                I::action(tr("Keyboard Shortcuts"), wb::OpenKeybindings),
+                I::action(tr("Keyboard Shortcuts"), wb::ShowKeyboardShortcuts),
                 I::action(tr("Color Theme…"), wb::SelectTheme),
                 I::action(tr("Import Settings and Shortcuts from Another Editor"), wb::ImportVsCode),
                 sep(),
