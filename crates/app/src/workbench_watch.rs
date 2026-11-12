@@ -1,5 +1,6 @@
 //! Workbench: file watching, live reload of the settings file, and git polling.
 
+use super::notifications_glue::model::{NoticeAction, Notification, Severity};
 use super::*;
 
 impl Workbench {
@@ -170,9 +171,14 @@ impl Workbench {
             }
             // Half-written file: the last valid settings stay, the error is shown.
             Err(e) => {
+                let line = super::notifications_glue::errors::line_in(&e);
                 let mut warnings = vec![e];
                 warnings.extend(crate::apply_keymap(cx, kpath.as_deref()));
-                self.notify(NoticeSource::App, Notice::Error(warnings.join(" · ").into()));
+                let mut n = Notification::new(Severity::Error, NoticeSource::Settings, warnings.join(" · ")).id("settings-file-broken");
+                if let Some((spath, _)) = &paths {
+                    n = n.action(NoticeAction::OpenFile(spath.clone(), line));
+                }
+                self.notify_with(n);
                 cx.notify();
                 return;
             }

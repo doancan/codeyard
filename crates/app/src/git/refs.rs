@@ -115,7 +115,10 @@ pub fn create_branch_from(host: &dyn Host, root: &str, name: &str, start: &str) 
 pub fn split_remote_branch<'a>(remotes: &[(String, String)], full: &'a str) -> Option<(&'a str, &'a str)> {
     remotes
         .iter()
-        .filter_map(|(n, _)| full.strip_prefix(n.as_str()).and_then(|rest| rest.strip_prefix('/')).map(|b| (&full[..n.len()], b)))
+        .filter_map(|(n, _)| {
+            let branch = full.strip_prefix(n.as_str())?.strip_prefix('/')?;
+            Some((full.get(..n.len())?, branch))
+        })
         .max_by_key(|(r, _)| r.len())
         .filter(|(_, b)| !b.is_empty())
 }
@@ -190,6 +193,30 @@ mod tests {
         assert_eq!(parse_track("[behind 13]"), (0, 13, false));
         assert_eq!(parse_track("[ahead 2, behind 1]"), (2, 1, false));
         assert_eq!(parse_track("[gone]"), (0, 0, true));
+    }
+
+    #[test]
+    fn splitting_a_remote_branch_copes_with_odd_names() {
+        let remotes = |names: &[&str]| -> Vec<(String, String)> { names.iter().map(|n| (n.to_string(), String::new())).collect() };
+        let list = remotes(&["origin", "ünal", "fork/team", "\u{1f680}"]);
+        assert_eq!(split_remote_branch(&list, "origin/feature/x"), Some(("origin", "feature/x")));
+        assert_eq!(split_remote_branch(&list, "ünal/\u{c7}al\u{131}\u{15f}ma"), Some(("ünal", "\u{c7}al\u{131}\u{15f}ma")), "Turkish names");
+        assert_eq!(split_remote_branch(&list, "\u{1f680}/launch"), Some(("\u{1f680}", "launch")), "an emoji remote");
+        assert_eq!(split_remote_branch(&list, "fork/team/topic"), Some(("fork/team", "topic")), "a remote name with a slash");
+        // Nothing to split: empty input, no remotes, a remote without a branch, a prefix that ends inside a character.
+        assert_eq!(split_remote_branch(&list, ""), None);
+        assert_eq!(split_remote_branch(&[], "origin/x"), None);
+        assert_eq!(split_remote_branch(&list, "origin/"), None);
+        assert_eq!(split_remote_branch(&list, "origin"), None);
+        assert_eq!(split_remote_branch(&list, "unal/x"), None, "u without the diaeresis is not the remote");
+        assert_eq!(split_remote_branch(&remotes(&[""]), "/x"), Some(("", "x")));
+    }
+
+    #[test]
+    fn no_branch_output_gives_no_rows() {
+        assert!(parse_branch_infos("").is_empty());
+        assert!(parse_branch_infos("\n\n").is_empty());
+        assert!(parse_branch_infos("refs/heads/only-a-name").is_empty(), "a line with missing columns is skipped, not indexed");
     }
 
     #[test]

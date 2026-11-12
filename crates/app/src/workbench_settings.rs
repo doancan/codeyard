@@ -5,6 +5,7 @@
 use gpui::{AppContext as _, Context, Window};
 use serde_json::Value;
 
+use super::notifications_glue::errors::Verb;
 use super::{InputPurpose, Notice, NoticeSource, OverlayKind, Workbench};
 use crate::picker::{PickItem, Picker, Source as PickSource};
 use crate::settings::{self, AutoSave, Settings};
@@ -580,6 +581,7 @@ impl Workbench {
             .and_then(|text| crate::fsutil::write_atomic(&spath, settings::set_value_in(&text, key, &value)));
         match result {
             Ok(()) => {
+                self.settings_file_written(&spath);
                 // A stale message from the previous setting must not hide the new one; a reload warning wins.
                 self.dismiss_notice();
                 self.reload_config(window, cx);
@@ -588,7 +590,10 @@ impl Workbench {
                     self.notify(NoticeSource::Settings, Notice::Info(format!("{key}: {shown}").into()));
                 }
             }
-            Err(e) => self.notify(NoticeSource::Settings, Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
+            Err(e) => {
+                let retry = Self::write_setting_retry(&spath, key, &value);
+                self.report_settings_file_failed(&spath, &e, Verb::Write, Some(retry));
+            }
         }
         cx.notify();
     }
@@ -633,7 +638,7 @@ impl Workbench {
                         }
                         this.reload_config(window, cx);
                     }
-                    Err(e) => this.notify(NoticeSource::Settings, Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
+                    Err(e) => this.report_settings_file_failed(&spath, &e, Verb::Write, None),
                 }
                 cx.notify();
             })
@@ -648,7 +653,7 @@ impl Workbench {
         let text = match settings::ensure_file(&spath, settings::TEMPLATE).and_then(|_| std::fs::read_to_string(&spath)) {
             Ok(text) => text,
             Err(e) => {
-                self.notify(NoticeSource::Settings, Notice::Error(crate::i18n::tf("Could not read {0}: {1}", &[&spath.display(), &e]).into()));
+                self.report_settings_file_failed(&spath, &e, Verb::Read, None);
                 return cx.notify();
             }
         };
@@ -675,7 +680,7 @@ impl Workbench {
                         this.dismiss_notice();
                         this.reload_config(window, cx);
                     }
-                    Err(e) => this.notify(NoticeSource::Settings, Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
+                    Err(e) => this.report_settings_file_failed(&spath, &e, Verb::Write, None),
                 }
                 cx.notify();
             })

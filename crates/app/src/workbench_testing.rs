@@ -294,6 +294,11 @@ impl Workbench {
         self.roots.primary.update(cx, |t, cx| t.reveal_dir(path, cx));
     }
 
+    /// Switch the settings folder, as another profile does.
+    pub fn set_config_dir_for_test(&mut self, dir: std::path::PathBuf) {
+        self.cfg.dir = Some(dir);
+    }
+
     pub fn reload_config_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.reload_config(window, cx);
     }

@@ -24,6 +24,7 @@ A folder named “{}” is already there; a file cannot replace it. Rename or re
 A git dependency: not looked up on crates.io.	
 A key that types text cannot be a shortcut on its own. Add Ctrl, Alt or Cmd, or press a function key.	
 A merge commit is created unless it can fast-forward. Conflicts are resolved in Source Control.	
+A part of the path is a file, not a folder.	
 A path dependency: not looked up on crates.io.	
 A pattern is one expression or statement, not several.	
 A pattern that is only a variable would match everything.	
@@ -122,6 +123,7 @@ An existing file with the same name is never overwritten.
 Anchors and aliases were expanded.	
 Another debug adapter	
 Another git process is using this repository. If none is running, a crash left {} behind: delete it and try again.	
+Another program is using it.	
 Another publisher now: {0}. The version you have came from {1}.	
 Answer the install sheet first.	
 App: Quit	
@@ -272,6 +274,12 @@ Check out
 Check out #{} as pr-{}	
 Check out detached…	
 Check out which branch, tag or commit (detached)?	
+Check that the path is right and that the drive or network share is connected.	
+Check the connection or the disk, then try again.	
+Check the connection, then try again.	
+Check the path.	
+Check the permissions of the file and its folder, then try again.	
+Check whether the item is locked or protected, or choose another location.	
 Checked out #{} as pr-{}	
 Checked out {} (detached HEAD)	
 Checked out {} as {}	
@@ -293,10 +301,12 @@ Choose
 Choose a Docker environment	
 Choose a container (stopped containers can be started)	
 Choose a container engine	
+Choose a file instead.	
 Choose a folder on this computer…	
 Choose an action	
 Choose an answer (Esc: none)	
 Choose an extension in the Extensions view.	
+Choose another name or remove the existing one first.	
 Choose…	
 Clear	
 Clear Terminal	
@@ -325,6 +335,7 @@ Close Preview
 Close Saved	
 Close a terminal first: at most {} can be open.	
 Close details	
+Close the other program, then try again.	
 Close the terminal?	
 Close to the Right	
 Close window	
@@ -494,6 +505,7 @@ Copy branch name
 Copy code	
 Copy container ID	
 Copy fix	
+Copy it to the other disk, then delete the original.	
 Copy link	
 Copy notification	
 Copy path	
@@ -526,7 +538,9 @@ Could not connect to {}: {}
 Could not create the extension: {}	
 Could not create the scratch file: {}	
 Could not create {0}: {1}	
+Could not create {}.	
 Could not create {}: {}	
+Could not delete {}.	
 Could not download js-debug: {}	
 Could not explain {0}: {1}	
 Could not find the home folder; type an absolute path.	
@@ -538,10 +552,11 @@ Could not inspect Cargo targets: {}
 Could not install cyx: {}	
 Could not install the {0} dictionary: {1}.	
 Could not install the {0} dictionary: {1}. Check your internet connection and try again.	
-Could not keep a copy of the version that was on disk: {}	
 Could not list branches: {}	
 Could not list files: {}	
 Could not list stashes: {}	
+Could not list the WSL distributions: {}	
+Could not list the containers: {}	
 Could not list the installed targets: {}	
 Could not list the server's ports: {}	
 Could not list worktrees: {}	
@@ -550,7 +565,7 @@ Could not load: {}
 Could not look for tests: {}	
 Could not minify: {}	
 Could not open the debug session: {}	
-Could not open the state database: {}. Tabs, recent folders and backups will not be remembered this session.	
+Could not open the state database {0}: {1}. Tabs, recent folders and backups will not be remembered this session.	
 Could not paste: {}	
 Could not reach {}: check the network connection and try again	
 Could not read Docker environments: {}	
@@ -561,22 +576,33 @@ Could not read the history: {}
 Could not read the remote URL: {}	
 Could not read the saved copy: {}	
 Could not read the stash: {}	
+Could not read {0} at {1}: {2}	
 Could not read {0}: {1}	
 Could not read {}	
+Could not read {}.	
 Could not read {}: {}	
 Could not read: {}	
 Could not refresh container data: {}. Check Docker access on the SSH host and retry.	
+Could not remember your update choices; Codeyard may ask or check again.	
 Could not remove the instance: {}	
 Could not remove the server: {}	
+Could not rename {}.	
 Could not reserve a temporary Git reference.	
 Could not reserve a temporary file for comparison.	
 Could not resolve “{}”: check the spelling and the network (the request ran on {}).	
+Could not retry: {}	
 Could not run “{}”: {}	
 Could not save files before debugging: {}	
+Could not save the open folders of the Explorer; they will not be restored next time.	
 Could not save the report: {}	
 Could not save the theme: {}	
+Could not save the window position; it will not be restored next time.	
 Could not save the workspace file: {}	
+Could not save your additional folders; they will not be restored next time.	
 Could not save your dictionary: {}	
+Could not save your open tabs and layout; they will not be restored next time.	
+Could not save your terminals; they will not be restored next time.	
+Could not save {}.	
 Could not save: {}	
 Could not set up key login for {}: {}	
 Could not set {}: {}	
@@ -591,6 +617,7 @@ Could not switch profile: {}
 Could not switch to {0}: {1}	
 Could not tell whether it is merged ({}): git will refuse if commits would be lost.	
 Could not write {0}: {1}	
+Could not write {}.	
 Could not write {}: {}	
 Couldn't check for updates	
 Couldn't download the update	
@@ -608,6 +635,7 @@ Create folder
 Create profile	
 Create scratch file	
 Create tag	
+Create the folder first, or check that the path is right.	
 Created branch {0} at {1}	
 Creating {}…	
 Current	
@@ -894,6 +922,7 @@ Editor: Unfold All
 Editor: Unfold Recursively	
 Empty folder	
 Empty group: ⌘P opens a file here	
+Empty the folder first, or delete its contents too.	
 Enable	
 Enable All Breakpoints	
 Enable Breakpoint	
@@ -1084,6 +1113,7 @@ Forward a port:
 Forward ports opened on SSH hosts	
 Forwarded Address	
 Forwarded Ports	
+Free some space and try again.	
 Friday	
 From the registry “{}”: not looked up.	
 From the {0} registry, published by {1}	
@@ -1319,6 +1349,8 @@ It brings its own programs, built for each platform. They run on the computer th
 It can't be moved to the Trash ({}). Deleting it permanently can't be undone.	
 It connects only to the servers you allow here, such as the one in its “{}” setting.	
 It declares no permissions.	
+It does not exist (it may have been moved or deleted).	
+It is a folder, not a file.	
 It may send requests to {0} over HTTPS, with whatever it can read or store, such as a token you give it. Remove it on the extension's page in Extensions.	
 It may sign in to your account on {0} with the OAuth application you registered there (client id {1}, redirect URI {2}). Codeyard signs its requests to {0} with that account; the extension never sees the token. Remove it on the extension's page in Extensions.	
 It wants to read the text you copied, here or in other apps.	
@@ -1428,6 +1460,7 @@ Loading the workspace or indexing
 Loading {}…	
 Loading…	
 Local	
+Local History could not keep a copy of the file you saved. {}	
 Local changes would be overwritten: commit or stash them first.	
 Local history	
 Local port {} is busy	
@@ -1444,6 +1477,7 @@ Looking up {}…
 Lost the connection to {}: {}. Your open files stay here and unsaved changes are kept, but they cannot be saved until you reconnect (File: Save a Copy to This Computer… keeps one locally).	
 Lost the connection to {}: {}. Your open files stay here.	
 MIR of {}	
+Make the location writable, or save somewhere else.	
 Manage SSH hosts	
 Manage SSH hosts…	
 Manage: About, Settings, Color Theme…	
@@ -2429,6 +2463,7 @@ Show file icons on tabs
 Show fold arrows in the gutter	
 Show folders that only hold one folder as one row	
 Show identical	
+Show in Folder	
 Show in the Explorer	
 Show indent guides	
 Show line numbers in search results	
@@ -2470,6 +2505,7 @@ Software Update
 Solid blue folders like Finder, outline files with a language dot like GitHub	
 Solid folders colored and marked by purpose, solid files colored by language	
 Some bytes are not valid UTF-8 and are shown as replacement characters	
+Something with that name already exists.	
 Sort by {}	
 Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order)	
 Sort: File	
@@ -2674,6 +2710,7 @@ The changes are too large for one patch.
 The clipboard has no text.	
 The commit stays on {}: the next Sync brings it back. To remove it there too, push with force after undoing (Git: Push (Force)…).	
 The complete file list is available in Output.	
+The connection closed before it finished.	
 The connection dropped; trying to reconnect. Unsaved changes are kept.	
 The connection is down, so files with unsaved changes cannot be saved. Use File: Save a Copy to This Computer… to keep them, or close them, then reconnect.	
 The connection or folder changed since the preview. Rerun the search and preview again.	
@@ -2695,12 +2732,15 @@ The default profile is active.
 The default profile is already active.	
 The dependency versions are not loaded yet. Try again in a moment.	
 The destination window is no longer available.	
+The disk is full (or your quota is used up).	
+The disk or folder is read-only.	
 The download finished but js-debug was not found in it.	
 The editor could not move to a new window: {}	
 The element can't be renamed.	
 The file changed during the write ({})	
 The file changed meanwhile. Try again.	
 The file changed on disk while you were editing. Nothing was saved.	
+The file changed on disk; resolve the conflict first.	
 The file changed since this diff was shown. It has been reloaded: pick the lines again.	
 The file could not be read.	
 The file is empty.	
@@ -2711,6 +2751,8 @@ The file list could not be read: only opened folders are searched.
 The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
+The folder is not empty.	
+The folder it belongs in does not exist.	
 The folder of “{}” with its settings, keybindings and snippets is deleted. This cannot be undone.	
 The host stopped responding. Installation files were retained because a process may still be running. Reconnect and inspect the destination before retrying.	
 The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	
@@ -2721,9 +2763,13 @@ The last command exited with code {}
 The local port is busy	
 The local port was not changed: {}. Back on localhost:{}	
 The managed installation is incomplete or belongs to another catalogue. Reinstall the services to repair it.	
+The name has characters this system does not allow.	
+The name or the path is too long.	
 The new version couldn't be installed from here. You can download it from the release page instead.	
 The number {} cannot be written in JSON	
 The open folder is no longer listed in the workspace file.	
+The operation took too long and was stopped.	
+The operation was interrupted.	
 The other editor's settings.json could not be read	
 The patch is too large.	
 The patch was not applied: {}	
@@ -2762,11 +2808,16 @@ The server no longer accepts an account password: use a personal access token as
 The server protects this branch and refuses direct pushes: push to another branch and open a pull request.	
 The server refused the login: check the account and that the token may push.	
 The server wants credentials that were not given: try again and enter them when asked, or set up an SSH key.	
+The settings file is not {} any more (another profile?). Nothing was written.	
 The settings folder is gone. Nothing was changed.	
 The shell has exited	
 The shell may run each line as soon as it arrives.	
+The source and the target are on different disks.	
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
+The state database {0} is damaged ({1}) and could not be moved aside. {2} Tabs, recent folders and backups will not be remembered this session.	
 The string is not closed	
+The system does not allow this: the item may be protected, locked or sandboxed.	
+The system reported an error: {}.	
 The tag disappears from the remote repository for everyone. Your local copy is kept.	
 The task file has an invalid “{}”.	
 The task file is not valid JSON.	
@@ -2781,6 +2832,7 @@ The update couldn't be verified
 The update failed part-way and Codeyard couldn't put the previous version back. It may be at {0}. If Codeyard doesn't start, move it back to {1}.	
 The update failed. Click for details.	
 The version comes from [workspace.dependencies].	
+The version that was on disk could not be kept in Local History. {}	
 The version that was on disk has been kept in Local History.	
 The view could not move to a new window: {}	
 The workspace changed. Open the source project and review its container configuration again.	
@@ -2825,6 +2877,7 @@ This change removes the file: unstage the whole file instead
 This computer	
 This container is paused or restarting. Resume it in Docker before connecting.	
 This copy isn't installed as an app, so download the new version yourself.	
+This copy of the repository is a shallow clone and ends at this commit, so the file before it is not available.	
 This debug adapter cannot change values.	
 This debug adapter does not support data breakpoints.	
 This debug adapter has no exception breakpoints.	
@@ -2897,6 +2950,8 @@ Trust this host and connect
 Trusted “{}”	
 Try Again	
 Try again	
+Try again.	
+Try again; copy the details if it keeps happening.	
 Tuesday	
 Turn on Do Not Disturb	
 Two tasks are called “{}”.	
@@ -2982,6 +3037,8 @@ Uploading has to wait: the connection is still being set up.
 Uploading is not possible in this workspace.	
 Uploading needs the connection to {}, which failed: use Reconnect first.	
 Uploading works with a connected SSH host: connect first (⌃R).	
+Use a name without special characters.	
+Use a shorter name or a shallower folder.	
 Use the name as typed	
 User	
 User Forwarded	
@@ -3129,6 +3186,7 @@ Write to the clipboard
 YAML schema for {}	
 You are connected to “{}”. Disconnect first.	
 You can restore it from the Trash.	
+You do not have permission to do that.	
 You have unsaved changes	
 You have {}	
 You have {}, the latest version.	
@@ -3732,6 +3790,7 @@ your words
 {} is not in the registry	
 {} is not installed	
 {} is not installed. Open the setup instructions, then try again.	
+{} is not open any more; nothing to save.	
 {} is replaced by the default settings of this version. The current file is kept next to it as a backup.	
 {} is too large to be a time in seconds or milliseconds	
 {} is uninstalled.	
@@ -3773,6 +3832,7 @@ your words
 {} type definition|{} type definitions	
 {} unchanged line|{} unchanged lines	
 {} unread notification|{} unread notifications	
+{} was changed in the settings file since. Nothing was written.	
 {} was not installed from a registry	
 {} week ago|{} weeks ago	
 {} year ago|{} years ago	

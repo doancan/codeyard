@@ -114,9 +114,9 @@ impl Status {
             loop {
                 let e = out.entry(at.to_string()).or_insert(mark);
                 *e = (*e).max(mark);
-                match at.rfind('/') {
-                    Some(i) if i > root.len() => at = &at[..i],
-                    _ => break,
+                match at.rfind('/').filter(|i| *i > root.len()).and_then(|i| at.get(..i)) {
+                    Some(parent) => at = parent,
+                    None => break,
                 }
             }
         }
@@ -270,6 +270,47 @@ pub fn show(host: &dyn Host, root: &str, rev: &str, rel: &str) -> Option<String>
     out.ok().then(|| String::from_utf8_lossy(&out.stdout).trim_start_matches('\u{feff}').replace("\r\n", "\n"))
 }
 
+/// Like [`show`], but a failure of git is not the same as "not there": `Ok(None)` is a file that does not exist in that revision (it was
+/// added or deleted there, or the revision has no parent) and `Err` is why it could not be read (a damaged repository, a lock, no
+/// permission). A comparison must not show an empty side for the second kind.
+///
+/// What failed is decided by the exit codes of plumbing commands, never by git's words: they are translated, so a German or Turkish
+/// git would otherwise turn "not there" into an error.
+pub fn show_checked(host: &dyn Host, root: &str, rev: &str, rel: &str) -> Result<Option<String>, String> {
+    let spec = format!("{rev}:{rel}");
+    let out = git(host, root, &["show", "--no-textconv", &spec])?;
+    if out.ok() {
+        return Ok(Some(String::from_utf8_lossy(&out.stdout).trim_start_matches('\u{feff}').replace("\r\n", "\n")));
+    }
+    let why = || failure_text(&out).lines().next().unwrap_or_default().to_string();
+    let succeeds = |args: &[&str]| git(host, root, args).map(|o| o.ok());
+    if !succeeds(&["rev-parse", "--git-dir"])? {
+        return Err(why());
+    }
+    if !succeeds(&["rev-parse", "--verify", "--quiet", &format!("{rev}^{{commit}}")])? {
+        return Ok(None);
+    }
+    // The revision is there. Is the path in its tree? An entry whose object cannot be read is a damaged repository, not an absent file.
+    let listed = git(host, root, &["ls-tree", "-z", rev, "--", rel])?;
+    if listed.ok() && listed.stdout.is_empty() { Ok(None) } else { Err(why()) }
+}
+
+/// Whether `hash` is the oldest commit a shallow clone has: its parent exists upstream but is not here, so "the file before this
+/// commit" cannot be read and must not be shown as an empty file. A real first commit is not cut.
+pub fn parent_is_cut(host: &dyn Host, root: &str, hash: &str) -> Result<bool, String> {
+    let parents = git_ok(host, root, &["rev-list", "--parents", "-n", "1", hash])?;
+    if parents.split_whitespace().nth(1).is_some() {
+        return Ok(false);
+    }
+    let shallow = git_ok(host, root, &["rev-parse", "--is-shallow-repository"])?;
+    if shallow.trim() != "true" {
+        return Ok(false);
+    }
+    let file = git_ok(host, root, &["rev-parse", "--path-format=absolute", "--git-path", "shallow"])?;
+    let (bytes, _) = host.read(file.trim()).map_err(|e| e.to_string())?;
+    Ok(String::from_utf8_lossy(&bytes).lines().any(|line| line.trim() == hash))
+}
+
 /// File names are not patterns: without this `[ab].txt` would also match `a.txt` and `b.txt`, and `:(exclude)` or `*` in a name would be magic.
 const LITERAL_PATHSPECS: &str = "--literal-pathspecs";
 
@@ -400,6 +441,82 @@ pub fn undo_last_commit(host: &dyn Host, root: &str) -> Result<String, String> {
 mod tests {
     use super::*;
     use crate::git::repo;
+
+    /// A shallow clone ends at a commit whose parent is not here: that is not "the file was added", and a real first commit is.
+    #[cfg(unix)]
+    #[test]
+    fn the_end_of_a_shallow_clone_is_not_a_first_commit() {
+        let Some((dir, run)) = repo("shallow-origin") else { return };
+        for n in 2..=3 {
+            std::fs::write(dir.join("f.txt"), format!("version {n}\n")).unwrap();
+            run(&["commit", "-q", "-am", &format!("v{n}")]).unwrap();
+        }
+        let copy = dir.with_file_name(format!("codeyard-shallow-copy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&copy);
+        let url = format!("file://{}", dir.display());
+        let cloned = crate::test_git::git().args(["clone", "-q", "--depth", "1", &url]).arg(&copy).output().unwrap();
+        assert!(cloned.status.success(), "{}", String::from_utf8_lossy(&cloned.stderr));
+        let host = host::local();
+        let (origin, shallow) = (dir.to_string_lossy().into_owned(), copy.to_string_lossy().into_owned());
+        let head = |d: &std::path::Path| {
+            let out = crate::test_git::git().args(["rev-parse", "HEAD"]).current_dir(d).output().unwrap();
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+        let first = {
+            let out = crate::test_git::git().args(["rev-list", "--max-parents=0", "HEAD"]).current_dir(&dir).output().unwrap();
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+        assert_eq!(parent_is_cut(&host, &origin, &head(&dir)), Ok(false), "a commit with a parent");
+        assert_eq!(parent_is_cut(&host, &origin, &first), Ok(false), "the real first commit is where history starts");
+        assert_eq!(parent_is_cut(&host, &shallow, &head(&copy)), Ok(true), "the boundary of the clone");
+        let _ = std::fs::remove_dir_all(&copy);
+    }
+
+    #[test]
+    fn show_checked_tells_a_missing_file_from_a_git_failure() {
+        let Some((dir, run)) = repo("show-checked") else { return };
+        std::fs::write(dir.join("\u{c7}al\u{131}\u{15f}ma \u{1f680}.txt"), "new\n").unwrap();
+        run(&["add", "-A"]).unwrap();
+        run(&["commit", "-q", "-m", "second"]).unwrap();
+        let host = host::local();
+        let d = dir.to_string_lossy().into_owned();
+        assert_eq!(show_checked(&host, &d, "HEAD", "f.txt"), Ok(Some("base\n".into())));
+        assert_eq!(show_checked(&host, &d, "HEAD", "\u{c7}al\u{131}\u{15f}ma \u{1f680}.txt"), Ok(Some("new\n".into())), "Turkish letters and emoji in a name");
+        // The file is new in HEAD: the parent does not have it. That is "not there", not a failure.
+        assert_eq!(show_checked(&host, &d, "HEAD^", "\u{c7}al\u{131}\u{15f}ma \u{1f680}.txt"), Ok(None));
+        assert_eq!(show_checked(&host, &d, "HEAD", "never-existed.txt"), Ok(None));
+        // The first commit has no parent.
+        assert_eq!(show_checked(&host, &d, "HEAD~1^", "f.txt"), Ok(None));
+        // A folder that is not a repository is a failure with git's words, not an empty side.
+        let outside = std::env::temp_dir().join(format!("codeyard-show-checked-outside-{}", std::process::id()));
+        std::fs::create_dir_all(&outside).unwrap();
+        let err = show_checked(&host, &outside.to_string_lossy(), "HEAD", "f.txt").unwrap_err();
+        assert!(!err.is_empty(), "git's own line comes with the failure");
+        let _ = std::fs::remove_dir_all(&outside);
+        // A damaged object store is a failure too.
+        let objects = dir.join(".git/objects");
+        let blob = run(&["rev-parse", "HEAD:f.txt"]).unwrap();
+        let (fan, rest) = blob.trim().split_at(2);
+        std::fs::remove_file(objects.join(fan).join(rest)).unwrap();
+        assert!(show_checked(&host, &d, "HEAD", "f.txt").is_err(), "a missing object must not look like an absent file");
+    }
+
+    #[test]
+    fn marks_reach_every_folder_of_a_path_with_any_characters() {
+        let change = |path: &str| Change { path: path.into(), orig: None, staged: None, unstaged: Some(Mark::Modified) };
+        let status = |root: &str, paths: &[&str]| Status { root: root.into(), changes: paths.iter().map(|p| change(p)).collect(), ..Default::default() };
+        let st = status("/ev/Çalışma", &["src/ü/\u{1f680} roket.rs", "kök.txt"]);
+        let marks = st.marks();
+        for key in ["/ev/Çalışma/src/ü/\u{1f680} roket.rs", "/ev/Çalışma/src/ü", "/ev/Çalışma/src", "/ev/Çalışma/kök.txt"] {
+            assert_eq!(marks.get(key), Some(&Mark::Modified), "{key}: {marks:?}");
+        }
+        // The root is where the climb stops: nothing above it, and no panic for an empty or trailing-slash root or an empty path.
+        assert!(!marks.contains_key("/ev"));
+        for (root, path) in [("", "a/b.rs"), ("/", "a/b.rs"), ("/r/", "a/b.rs"), ("/r", ""), ("/r", "/")] {
+            let _ = status(root, &[path]).marks();
+        }
+        assert!(Status::default().marks().is_empty());
+    }
 
     #[test]
     fn show_ref_gives_head_and_a_fingerprint_that_follows_every_ref() {

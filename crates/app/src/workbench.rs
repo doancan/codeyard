@@ -141,6 +141,8 @@ pub(crate) mod panels_glue;
 pub(crate) use notifications_glue::Notice;
 pub(crate) use notifications_glue::model::NoticeSource;
 #[cfg(test)]
+pub(crate) use notifications_glue::model::{NoticeAction, RetryKind, Severity};
+#[cfg(test)]
 pub use panels_glue::ProblemRow;
 #[cfg(test)]
 pub(crate) use panels_glue::interface_scale_notice;
@@ -2428,10 +2430,12 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                     server.changed(&ed.read(cx).path);
                 }
                 this.reload_snippets_if_edited(ed, cx);
+                this.save_failure_resolved(ed, cx);
                 this.refresh_git(200, cx);
                 this.record_history(ed, cx);
             }
             EditorEvent::Overwrote(text) => return this.keep_overwritten(ed, text, cx),
+            EditorEvent::SaveFailed(error) => return this.report_save_failed(ed, error, cx),
             EditorEvent::OpenLocation { path, line, col } => {
                 // From an editor's own window: the same file moves there; another file opens in this window, in front.
                 if this.reveal_in_editor_window(ed, path, *line, *col, cx) {

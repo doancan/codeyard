@@ -424,8 +424,10 @@ impl Workbench {
         if self.roots.workspace.is_some() {
             return;
         }
-        if let (Some(ws), Some(s)) = (self.persist.workspace_id, &self.persist.state) {
-            let _ = s.set(&format!("folders:{ws}"), &self.roots.extra_roots.join("\n"));
+        if let (Some(ws), Some(s)) = (self.persist.workspace_id, &self.persist.state)
+            && let Err(e) = s.set(&format!("folders:{ws}"), &self.roots.extra_roots.join("\n"))
+        {
+            self.persist_failed(super::notifications_glue::failures::Area::ExtraFolders, &e);
         }
     }
 

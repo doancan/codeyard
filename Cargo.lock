@@ -220,6 +220,7 @@ dependencies = [
  "raw-window-handle",
  "regex",
  "ring",
+ "rusqlite",
  "schema",
  "semver",
  "serde",

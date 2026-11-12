@@ -38,6 +38,35 @@ fn focusable(d: gpui::Stateful<gpui::Div>, handle: &FocusHandle, p: &Palette, ke
 }
 
 impl Workbench {
+    /// The button of the error card (Retry, Show in Folder), when the notification on the card has an action.
+    pub(in crate::workbench) fn toast_action_button(&self, p: &Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let (serial, action) = self.toast_action()?;
+        let label = crate::i18n::t(action.label()).to_string();
+        Some(
+            div()
+                .id("error-toast-action")
+                .relative()
+                .child(control(
+                    Control::button(crate::i18n::t("Error"), "toast-action", label.clone(), |_, _| {})
+                        .on_entity(cx.entity().downgrade(), move |this, w, cx| this.run_notification_action(serial, w, cx)),
+                ))
+                .flex_none()
+                .h(px(22.))
+                .px(px(theme::SPACE[4]))
+                .flex()
+                .items_center()
+                .rounded(px(theme::radius::SM))
+                .bg(c(p.accent))
+                .text_color(c(p.on_accent))
+                .text_size(px(text::XS.0))
+                .cursor_pointer()
+                .hover(|d| d.opacity(0.9))
+                .child(label)
+                .on_click(cx.listener(move |this, _, window, cx| this.run_notification_action(serial, window, cx)))
+                .into_any_element(),
+        )
+    }
+
     /// The status bar's bell: how many warnings and errors were not looked at yet, and Do Not Disturb.
     pub(in crate::workbench) fn notifications_bell(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let (unread, errors) = self.unread_notifications();
@@ -234,8 +263,8 @@ impl Workbench {
                 .tooltip(move |_, cx| cx.new(|_| Tooltip(label.clone().into())).into())
                 .on_click(cx.listener(move |this, _, w, cx| f(this, serial, w, cx)))
         };
-        let action = e.action.map(|a| {
-            let label = crate::i18n::t(a.label).to_string();
+        let action = e.action.as_ref().map(|a| {
+            let label = crate::i18n::t(a.label()).to_string();
             let handle = self.notices.handle(serial, "action");
             focusable(div().id(SharedString::from(format!("notification-action-{serial}"))), &handle, p, keyboard)
                 .relative()

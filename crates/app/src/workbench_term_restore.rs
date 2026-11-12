@@ -5,6 +5,7 @@
 //! of the old session is run again: no command, no input. The saved value is versioned and bounded; a damaged one
 //! restores nothing and never blocks startup.
 
+use super::notifications_glue::failures::Area;
 use super::*;
 use gpui::{Bounds, Pixels};
 
@@ -135,8 +136,13 @@ impl Workbench {
             entry(&d.term, Place::Window(at), cx);
         }
         terminals.truncate(MAX_TERMINALS);
-        if let Ok(json) = serde_json::to_string(&SavedTerminals { version: VERSION, terminals }) {
-            let _ = s.set(&format!("{SAVED_KEY}:{ws}"), &json);
+        match serde_json::to_string(&SavedTerminals { version: VERSION, terminals }) {
+            Ok(json) => {
+                if let Err(e) = s.set(&format!("{SAVED_KEY}:{ws}"), &json) {
+                    self.persist_failed(Area::Terminals, &e);
+                }
+            }
+            Err(e) => self.persist_failed(Area::Terminals, &e),
         }
     }
 

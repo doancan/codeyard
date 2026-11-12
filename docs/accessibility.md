@@ -317,7 +317,9 @@ The tree, in the order a screen reader walks it:
   Delete, Ctrl/Cmd+C and Escape work on the list when it has the keyboard; Escape returns the focus to where it was (the
   editor when that element is gone). Tab and Shift+Tab walk the buttons of the header and of each row, Enter or Space press
   the focused one, and keys the list does not use (letters, function keys) pass on. The list closes when the focus leaves
-  it. Do Not Disturb hides information and warning toasts only: an error card still appears and its live region is
+  it. A row's action button is named by its action ("Retry", "Show in Folder", "Open File" or the command's name); the error
+  card has the same button (a `Button` in the "Error" surface) next to Close, and the same action is reachable from the list
+  with the keyboard (Enter on the row, or Tab to the button and Enter or Space). Do Not Disturb hides information and warning toasts only: an error card still appears and its live region is
   still announced.
   A repeated message does not change the text of the live region below, so it is not spoken again.
 - Settings profiles: while a profile other than the default is active, the status bar has a painted `Button` "Profile: {name}" (its description says that a click switches profiles); with the default profile nothing is added. The five *Profiles:* commands are pickers and prompts, so the usual list and field semantics apply; a refused name is the notice below, said as an error, with the reason ("… is a reserved name on Windows").

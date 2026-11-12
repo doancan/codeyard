@@ -1,5 +1,6 @@
 //! Workbench: Session: saving tabs, backups and restoring.
 
+use super::notifications_glue::failures::Area;
 use super::*;
 
 /// Layout and view metadata share the tab transaction; document contents remain in backups.
@@ -116,8 +117,10 @@ impl Workbench {
 
     /// Tabs and views (when the folder changes, when a tab is opened or closed, on exit).
     pub(super) fn persist_session(&self, cx: &mut App) {
-        if let (Some(b), Some(s)) = (self.chrome.window_bounds, &self.persist.state) {
-            s.set(WINDOW_BOUNDS_KEY, &format_bounds(b)).ok();
+        if let (Some(b), Some(s)) = (self.chrome.window_bounds, &self.persist.state)
+            && let Err(e) = s.set(WINDOW_BOUNDS_KEY, &format_bounds(b))
+        {
+            self.persist_failed(Area::WindowPosition, &e);
         }
         let (Some(ws), Some(s)) = (self.persist.workspace_id, &self.persist.state) else { return };
         let mut tabs = Vec::new();
@@ -132,15 +135,22 @@ impl Workbench {
                 let Some(path) = self.rel(&e.path, cx) else { continue };
                 let pinned = e.pinned;
                 let view = ed.update(cx, |e, _| e.view_for_slot(usize::from(id)));
-                let _ = s.save_view(ws, &path, view);
+                if let Err(e) = s.save_view(ws, &path, view) {
+                    self.persist_failed(Area::Tabs, &e);
+                }
                 self.save_bookmarks(ed, cx);
                 views.push(SavedGroupView { group: id, path: path.clone(), line: view.line, column: view.column, scroll_line: view.scroll_line });
                 tabs.push(state::Tab { rel_path: path, active: group.active == Some(index), pinned, group: id });
             }
         }
         let session = SavedEditorSession { version: 1, grid: self.tabs.layout.clone(), views };
-        if let Ok(json) = serde_json::to_string(&session) {
-            let _ = s.save_tabs_with_layout(ws, &tabs, Some(&json));
+        match serde_json::to_string(&session) {
+            Ok(json) => {
+                if let Err(e) = s.save_tabs_with_layout(ws, &tabs, Some(&json)) {
+                    self.persist_failed(Area::Tabs, &e);
+                }
+            }
+            Err(e) => self.persist_failed(Area::Tabs, &e),
         }
         self.persist_moved_terminals(cx);
         self.persist_editor_windows(cx);

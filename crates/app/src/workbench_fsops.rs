@@ -1,5 +1,7 @@
 //! Workbench: Explorer file operations: create, rename, move, paste, delete; ssh prompts.
 
+use super::notifications_glue::errors::{self, Verb};
+use super::notifications_glue::model::{NoticeAction, Notification, Severity};
 use super::*;
 
 #[cfg(test)]
@@ -160,6 +162,19 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.fs_op_on(None, op, then, window, cx);
+    }
+
+    /// Like `fs_op`, for an operation on a known path: a failure names the path, the cause and a next step, and (on this computer)
+    /// offers to show the folder.
+    pub(super) fn fs_op_on(
+        &mut self,
+        subject: Option<(String, Verb)>,
+        op: impl FnOnce(&dyn Host) -> host::Result<()> + Send + 'static,
+        then: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let host = self.remote.host.clone();
         let root = self.root(cx);
         let operation_host = host.clone();
@@ -173,7 +188,7 @@ impl Workbench {
                 match result {
                     Ok(()) => then(this, window, cx),
                     Err(e) => {
-                        this.notify(NoticeSource::Files, Notice::Error(e.to_string().into()));
+                        this.report_file_failure(subject, &e);
                         cx.notify();
                     }
                 }
@@ -181,6 +196,18 @@ impl Workbench {
             .ok();
         })
         .detach();
+    }
+
+    fn report_file_failure(&mut self, subject: Option<(String, Verb)>, error: &host::HostError) {
+        let Some((path, verb)) = subject else {
+            return self.notify(NoticeSource::Files, Notice::Error(error.to_string().into()));
+        };
+        let text = errors::describe_host(error, std::path::Path::new(&path), verb);
+        let mut n = Notification::new(Severity::Error, NoticeSource::Files, text.full()).detail(text.detail);
+        if !self.remote.host.is_remote() {
+            n = n.action(NoticeAction::Reveal(std::path::PathBuf::from(&path)));
+        }
+        self.notify_with(n);
     }
 
     pub(super) fn finish_input(&mut self, purpose: InputPurpose, name: String, window: &mut Window, cx: &mut Context<Self>) {
@@ -203,7 +230,8 @@ impl Workbench {
             InputPurpose::NewFile { base } => {
                 let target = if name.starts_with('/') { name.clone() } else { ui::join(&base, &name) };
                 let (t, parent) = (target.clone(), parent_of(&target));
-                self.fs_op(
+                self.fs_op_on(
+                    Some((target.clone(), Verb::Create)),
                     move |h| h.create_file(&t),
                     move |this, window, cx| {
                         this.roots.primary.update(cx, |t, cx| t.reload(&parent, cx));
@@ -291,7 +319,8 @@ impl Workbench {
             InputPurpose::Create { dir, is_dir } => {
                 let target = ui::join(&dir, &name);
                 let t = target.clone();
-                self.fs_op(
+                self.fs_op_on(
+                    Some((target.clone(), Verb::Create)),
                     move |h| if is_dir { h.create_dir(&t) } else { h.create_file(&t) },
                     move |this, window, cx| {
                         this.roots.primary.update(cx, |t, cx| t.reload(&dir, cx));
@@ -507,7 +536,13 @@ impl Workbench {
                 }
                 let p = path.clone();
                 if !trash {
-                    this.fs_op(move |h| h.delete(&p), move |this, window, cx| this.after_delete(path, window, cx), window, cx);
+                    this.fs_op_on(
+                        Some((path.clone(), Verb::Delete)),
+                        move |h| h.delete(&p),
+                        move |this, window, cx| this.after_delete(path, window, cx),
+                        window,
+                        cx,
+                    );
                     return;
                 }
                 let task = cx.background_executor().spawn(async move { crate::trash::move_to_trash(std::path::Path::new(&p)) });
@@ -520,7 +555,11 @@ impl Workbench {
                         match result {
                             Ok(_) => this.after_delete(path, window, cx),
                             // E.g. a file on another disk can't go to the trash; ask explicitly about permanent deletion.
-                            Err(e) => this.confirm_permanent_delete(path, e.to_string(), window, cx),
+                            Err(e) => {
+                                // The question names the file; the cause is a plain sentence, not the operating system's text.
+                                let cause = errors::describe_io(&e, std::path::Path::new(&path), Verb::Delete).cause;
+                                this.confirm_permanent_delete(path, cause.trim_end_matches('.').to_string(), window, cx)
+                            }
                         }
                     })
                     .ok();
@@ -545,7 +584,13 @@ impl Workbench {
                     return;
                 }
                 let p = path.clone();
-                this.fs_op(move |h| h.delete(&p), move |this, window, cx| this.after_delete(path, window, cx), window, cx);
+                this.fs_op_on(
+                    Some((path.clone(), Verb::Delete)),
+                    move |h| h.delete(&p),
+                    move |this, window, cx| this.after_delete(path, window, cx),
+                    window,
+                    cx,
+                );
             })
             .ok();
         })

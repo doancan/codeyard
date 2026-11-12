@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use gpui::{AnyElement, Context, MouseButton, SharedString, Window, div, px};
 
+use super::notifications_glue::model::{Notification, Severity};
 use super::projects::ConnSummary;
 use super::*;
 
@@ -112,8 +113,22 @@ impl Workbench {
             }
         });
         cx.spawn(async move |this, cx| {
-            let listed: Targets = task.await.map_err(|e| e.lines().next().unwrap_or_default().to_string());
+            let outcome = task.await;
             this.update(cx, |this, cx| {
+                // The row shows the first line; the whole text (an engine's or wsl.exe's own words) goes to the notification.
+                let listed: Targets = match outcome {
+                    Ok(targets) => Ok(targets),
+                    Err(full) => {
+                        let first = full.lines().next().unwrap_or_default().to_string();
+                        let message = if wsl {
+                            crate::i18n::tf("Could not list the WSL distributions: {}", &[&first])
+                        } else {
+                            crate::i18n::tf("Could not list the containers: {}", &[&first])
+                        };
+                        this.notify_with(Notification::new(Severity::Warning, NoticeSource::Remote, message).id(format!("remote-list:{wsl}")).detail(full));
+                        Err(first)
+                    }
+                };
                 if wsl {
                     this.remote.view.wsl = Some(listed);
                 } else if cx.global::<Settings>().docker_enabled {
@@ -621,5 +636,10 @@ impl Workbench {
     #[cfg(test)]
     pub fn toggle_remote_for_test(&mut self, key: &str, cx: &mut Context<Self>) {
         self.toggle_remote(key.into(), cx);
+    }
+
+    #[cfg(test)]
+    pub fn list_wsl_for_test(&mut self, cx: &mut Context<Self>) {
+        self.list_targets(Group::Wsl, cx);
     }
 }
