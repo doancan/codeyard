@@ -1463,7 +1463,10 @@ arrows, notes and the suggested fix included.
 `#[tokio::main]`) expands to, in a scratch tab with Rust highlighting (`vec!.expansion.rs`). *Rust: Locate Parent Module*
 jumps to the `mod` line that includes the current file, and *Rust: Open Cargo.toml* opens the manifest of the crate the
 file belongs to, a member's own in a workspace. They have no default keys; bind `rust.expandMacro`, `rust.parentModule`
-and `rust.openCargoToml` in `keybindings.jsonc` if you use them often.
+and `rust.openCargoToml` in `keybindings.jsonc` if you use them often. The commands below have no
+default keys either; their ids are `rust.runRunnable`, `rust.showStatus`, `rust.reloadWorkspace`, `rust.rebuildProcMacros`,
+`rust.runFlycheck`, `rust.cancelFlycheck`, `rust.clearFlycheck`, `rust.restartAnalyzer`, `rust.explainError`,
+`rust.selectTarget`, `rust.openDocs`, `rust.viewHir`, `rust.viewMir` and `rust.viewSyntaxTree`.
 
 Opening the manifest also works while the Rust server is off or starting: Codeyard looks from the file's folder up to
 its workspace boundary and opens the nearest manifest. The other Rust commands explain whether language features are
@@ -1563,6 +1566,54 @@ Add Dependency…* (the search), *Cargo: Check Dependency Updates* or an update 
 crates), and the hover or completion of a file you asked about. Turn the setting on and they happen as described above for
 every `Cargo.toml` you open; turn it off again to stop them. Memory is bounded: a registry keeps at most 256 crates and 64
 searches, and closing the last `Cargo.toml` drops them. The setting is in the [settings reference](settings.md).
+**Run and debug from the gutter.** In a Rust file a green triangle in the gutter marks every `fn main`, every `#[test]`
+function and every `mod tests` that rust-analyzer can run. Click it to choose *Run* or *Debug* for that item: *Run*
+types the Cargo command into the task terminal (so *Tasks: Rerun Last Task* repeats it and compiler errors land in Problems),
+*Debug* builds the target with Cargo and starts the executable it reports under the debugger. *Rust: Run Runnable at Cursor*
+does the same for the code under the cursor: the one test or program runs at once, and when the cursor is inside a
+test and its module you get the list (innermost first). The list is rust-analyzer's own (`experimental/runnables`), so it follows
+its idea of the project, including a Cargo workspace in a subfolder (the command then names its `--manifest-path`).
+Without a running server the marks and commands come from reading the file: `fn main` of a binary or example and the
+tests the Testing view finds. Documentation tests can be run but not debugged. On Windows the command goes to cmd or PowerShell: a name with spaces
+is double-quoted, and one with characters the two read differently (`"`, `%`, `&`, `$`…) is not run from the gutter. A
+debugged test runs in its package's folder, as `cargo test` runs it.
+
+**Is rust-analyzer well?** The status bar shows the server's own opinion: a check mark when it is ready, a spinner while it
+loads the workspace or runs `cargo check` / Clippy (the target being compiled is in the tooltip), a warning or an error
+sign when it reports a problem (a proc macro that did not load, a workspace that failed). Click it for a page with the
+state, the message, the commands below and the server's own report (`analyzerStatus`). The item stays hidden for servers that
+do not report. *Rust: Show rust-analyzer Status* opens the same page.
+
+**Control the server.** *Rust: Reload Workspace* (after changing `Cargo.toml` outside the editor), *Rust: Rebuild Proc Macros*,
+*Rust: Run Flycheck*, *Rust: Cancel Flycheck*, *Rust: Clear Flycheck* (removes the check's diagnostics until the next
+save) and *Rust: Restart rust-analyzer*, which restarts only the Rust server and leaves the other languages' servers alone.
+They tell you when the server is off, untrusted or too old for a command.
+
+**Explain an error.** A problem with a rustc error code (`E0382`) has a book button in Problems, and *Rust: Explain Error at
+Cursor* does the same for the error under the cursor. When the server linked the code to a page the page opens in the
+browser; otherwise `rustc --explain E0382` runs in the background and its text opens as a read-only page.
+
+**Look at what the compiler sees.** *Rust: Open Documentation* opens docs.rs (or your local `cargo doc` copy when it exists on
+this machine) for the item at the cursor. *Rust: View HIR*, *Rust: View MIR* and *Rust: View Syntax Tree* show rust-analyzer's
+view of the function under the cursor, or of the whole file, as read-only pages.
+
+**Cross-compiling.** `rust.target` adds `--target <triple>` to Run, Debug, tests and the runnables. *Rust: Select Target…*
+lists the targets `rustup target list --installed` reports (or this machine's own when rustup is not installed) and writes
+the choice; *Default* clears it. *Preferences: Apply Rust Setup…* also points rust-analyzer's `cargo.target` at it, so analysis
+and checks match what you build. Project settings (`.codeyard/settings.jsonc`) can pin a target for one repository.
+
+**cargo-nextest.** Tests run with `cargo test` unless you ask for more: with `rust.testRunner` set to `auto` or `nextest`, and
+`cargo nextest` installed, the Testing view, *Test: Run Test at Cursor* and the runnables use it (`cargo nextest run
+--no-fail-fast …`), and the results, times and failure messages appear in Test Results exactly as with `cargo test`. The
+output says when nextest runs the tests. `nextest` tells you when it is missing and runs `cargo test`. Codeyard looks for
+nextest only in a folder you have trusted, since Cargo reads the folder's configuration, gives the question five seconds, and
+remembers a missing nextest for five minutes. nextest does not run documentation tests, and debugging a test always starts the
+test executable itself.
+
+**Hints and modifiers.** `rust.inlayHints.types`, `.parameters` and `.chaining` switch the three kinds of rust-analyzer's inlay
+hints off one by one (they are handed to the server as its own settings, so nothing is requested and thrown away).
+`rust.semanticModifiers` chooses which of the server's token modifiers are drawn over the colors: `unsafe` (underlined in
+the warning color, on by default), `mutable` (underlined) and `consumed` (italics: a value moved out by that use).
 
 ## JSON and YAML schemas
 

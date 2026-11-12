@@ -287,6 +287,12 @@ The tree, in the order a screen reader walks it:
 - `Status` "Status bar": one item per entry; every entry that opens something on a click is a `Button` with the same
   action (Remote, Branch, Problems, position, indentation, line ending, language, update), the encoding a label;
   then the painted controls of the status bar (above).
+- Rust files (the gutter and the status bar): each run mark of the gutter is a painted `Button` named "Run or debug on line N"
+  that opens the list of Run and Debug rows (a picker, so the usual list semantics apply); the status bar's rust-analyzer item is a
+  `Button` named by the server's state ("rust-analyzer: checking. cargo check: demo (lib)") described as opening the status
+  page, and Problems rows with a rustc error code hold a `Button` "Explain error E0308". The status page and the other Rust views
+  (HIR, MIR, syntax tree, error explanations) are Markdown pages, so they are read as documents. The token modifiers
+  (underline, italics) are visual extras: nothing depends on seeing them.
 - The notice in the status bar is a live region of its own: an error (including a file that could not be opened) is an
   `Alert` with `Live::Assertive`, so it interrupts speech; an information notice is a `Status` with `Live::Polite`.
 - While a picker is open (command palette, go to file, go to symbol, themes, branches and every other list that opens

@@ -90,6 +90,12 @@ is at its size limit). The core (manifest parsing with `toml_edit`, version logi
 cache, text edits) knows nothing of GPUI; the network is one trait, `Fetch`, with the system `curl` behind it and a fake in
 the tests. `editor_cargo.rs` binds a registry to a manifest's editor (hints, completion, hover); `workbench_cargo.rs`
 (a child of `workbench_rust.rs`) refreshes it, runs Quick Fix, the palette commands and `cargo add` / `cargo remove`.
+The Rust toolchain integration is split the same way: plain logic in `rust_toolchain.rs` and its children (`rust_runnables`,
+`rust_status`, `rust_target`, `rust_nextest`, `rust_explain`, `rust_hints`, `rust_views`; no GPUI) and `lsp/rust.rs` (rust-analyzer's
+protocol extensions as data); the workbench side is `workbench_rust.rs` with `workbench_rust_*.rs` sub-topics (status, server
+controls, runnables, explain, views, target, nextest). The gutter marks are drawn by `editor_runnables.rs`, the token
+modifiers by `editor_semantic.rs` and `editor_overlay::modifier_runs`. Tests use real rust-analyzer and cargo-nextest output
+kept in `crates/app/testdata/rust-analyzer` and `crates/app/testdata/nextest`.
 
 ## Stack
 
