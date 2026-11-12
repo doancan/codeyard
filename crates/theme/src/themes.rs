@@ -406,11 +406,14 @@ pub fn strip_jsonc(src: &str) -> String {
                 }
             }
             (b'/', Some(b'*')) => {
+                // The comment becomes blanks (newlines stay), so a parse error is reported at the line and column of the file.
+                let start = i;
                 i += 2;
                 while i + 1 < b.len() && !(b[i] == b'*' && b[i + 1] == b'/') {
                     i += 1;
                 }
-                i += 2;
+                i = (i + 2).min(b.len());
+                out.extend(b[start..i].iter().map(|&byte| if byte == b'\n' { '\n' } else { ' ' }));
             }
             (b',', _) => {
                 comma = Some(out.len());
@@ -604,6 +607,18 @@ mod tests {
         // A comment after a trailing comma: the comma is still dropped.
         let s = strip_jsonc("{\n  \"a\": [1, 2, // son\n  ],\n  // \"b\": 3,\n}\n");
         assert_eq!(serde_json::from_str::<Value>(&s).unwrap()["a"], serde_json::json!([1, 2]));
+    }
+
+    /// A parse error is reported at a line and column; comments must not move them, or the user looks at the wrong line.
+    #[test]
+    fn comments_do_not_move_the_position_of_a_later_error() {
+        let text = "{\n  /* a note\n     over three\n     lines */\n  \"a\": 1,\n  \"b\": /* inline */ oops\n}\n";
+        let err = serde_json::from_str::<Value>(&strip_jsonc(text)).unwrap_err();
+        assert_eq!((err.line(), err.column()), (6, 21), "the `oops` of line 6 in the file the user sees: {err}");
+        let text = "{ \"é\": 1, /* ç */ \"b\": oops }";
+        let err = serde_json::from_str::<Value>(&strip_jsonc(text)).unwrap_err();
+        assert_eq!(err.line(), 1);
+        assert_eq!(err.column(), text.find("oops").unwrap() + 1, "columns are counted as in the original text (bytes)");
     }
 
     fn raw(id: &str) -> Palette {
