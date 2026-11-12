@@ -45,6 +45,20 @@ fn theme_of(cx: &mut VisualTestContext, id: &str) -> bool {
     cx.update(|_, cx| cx.global::<crate::ui::ActiveTheme>().0) == want
 }
 
+/// Lets the profile watcher notice a change made on disk. The OS delivers file events on its own
+/// schedule (slowest on Windows), so wait until `done` holds instead of assuming one fixed delay.
+fn settle(cx: &mut VisualTestContext, done: impl Fn(&mut VisualTestContext) -> bool) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        cx.executor().advance_clock(std::time::Duration::from_secs(2));
+        cx.run_until_parked();
+        if done(cx) || std::time::Instant::now() > deadline {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
 fn write(path: &Path, text: &str) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(path, text).unwrap();
@@ -104,8 +118,7 @@ fn creating_a_profile_switches_to_its_own_settings_keybindings_and_snippets_at_o
     write(&cfg.join("profiles/Work/settings.jsonc"), "{ \"theme\": \"ember\" }");
     write(&cfg.join("profiles/Work/keybindings.jsonc"), "[ { \"key\": \"ctrl-alt-shift-2\", \"command\": \"workbench.commandPalette\" } ]");
     write(&cfg.join("profiles/Work/snippets/rust.json"), "{ \"w\": { \"prefix\": \"zzwork\", \"body\": \"y\" } }");
-    cx.executor().advance_clock(std::time::Duration::from_secs(2));
-    cx.run_until_parked();
+    settle(cx, |cx| theme_of(cx, "ember"));
     assert!(theme_of(cx, "ember"));
     cx.simulate_keystrokes("ctrl-alt-shift-2");
     assert!(wb.read_with(cx, |wb, _| wb.palette_open()));
@@ -149,13 +162,11 @@ fn the_watcher_follows_a_switch_made_by_another_window_or_by_hand(cx: &mut TestA
     store::create(&cfg, "Other").unwrap();
     write(&cfg.join("profiles/Other/settings.jsonc"), "{ \"theme\": \"ember\" }");
     store::set_active(&cfg, Some("Other")).unwrap();
-    cx.executor().advance_clock(std::time::Duration::from_secs(2));
-    cx.run_until_parked();
+    settle(cx, |cx| theme_of(cx, "ember"));
     assert_eq!(profile(&wb, cx).as_deref(), Some("Other"));
     assert!(theme_of(cx, "ember"));
     store::set_active(&cfg, None).unwrap();
-    cx.executor().advance_clock(std::time::Duration::from_secs(2));
-    cx.run_until_parked();
+    settle(cx, |cx| profile(&wb, cx).is_none());
     assert_eq!(profile(&wb, cx), None);
 }
 
@@ -177,8 +188,7 @@ fn a_profile_whose_folder_goes_missing_while_active_falls_back(cx: &mut TestAppC
     let (wb, cx) = setup(cx, &cfg);
     create(&wb, "Work", cx);
     std::fs::remove_dir_all(cfg.join("profiles/Work")).unwrap();
-    cx.executor().advance_clock(std::time::Duration::from_secs(2));
-    cx.run_until_parked();
+    settle(cx, |cx| profile(&wb, cx).is_none());
     assert_eq!(profile(&wb, cx), None);
     assert!(notice(&wb, cx).contains("Work"), "{}", notice(&wb, cx));
 }
@@ -273,8 +283,7 @@ fn the_shortcuts_page_follows_a_profile_switch(cx: &mut TestAppContext) {
     assert!(mine(cx));
     store::create(&cfg, "Work").unwrap();
     store::set_active(&cfg, Some("Work")).unwrap();
-    cx.executor().advance_clock(std::time::Duration::from_secs(2));
-    cx.run_until_parked();
+    settle(cx, |cx| profile(&wb, cx).as_deref() == Some("Work"));
     assert_eq!(profile(&wb, cx).as_deref(), Some("Work"));
     assert!(!mine(cx), "the other profile's keybindings show");
 }
@@ -297,7 +306,6 @@ fn a_profile_folder_that_cannot_be_read_keeps_the_pointer_and_comes_back(cx: &mu
     assert!(cfg.join("active-profile").exists(), "a folder that cannot be read now is not forgotten");
     assert!(notice(&wb, cx).contains("cannot be read"), "{}", notice(&wb, cx));
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
-    cx.executor().advance_clock(std::time::Duration::from_secs(2));
-    cx.run_until_parked();
+    settle(cx, |cx| profile(&wb, cx).as_deref() == Some("Work"));
     assert_eq!(profile(&wb, cx).as_deref(), Some("Work"), "it is back when the folder can be read");
 }
