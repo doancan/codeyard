@@ -40,7 +40,7 @@ The tree, in the order a screen reader walks it:
   Containers, the Inspector, Language Services…) as tabs of the "Editor tabs" list with their Close buttons; and
   every other editor group's tabs in a group "Editor group 2", whose `Click` brings that group forward with the tab.
 - The side views' drawn controls, declared the same way: the Explorer's empty-state buttons (Open Folder, Open
-  recent), header buttons (New File, New Folder, Refresh, Expand and Collapse Folders), each section's header (a
+  recent), header buttons (New File, New Folder, Filter Files…, Refresh, Expand and Collapse Folders), the filter box (a `SearchInput` named "Filter files by name" with its text as value and a Clear filter button; a status line says how many names match), each section's header (a
   `Button` with its count, expanded while open; `Click` folds it), the open editors (a `ListItem` each, selected while
   in front, with Close), favorites, the outline (a "Filter symbols" `TextInput`, a "Sort: Position / Name / Kind" `Button` that changes the order, a "Follow Cursor" toggle `Button`, and `TreeItem`s with their kind and line as description, selected at the caret) and the timeline
   (saved copies and commits), and its notes as labels; Source Control's Refresh and More Actions…, the Stashes header
@@ -98,7 +98,7 @@ The tree, in the order a screen reader walks it:
 - One `Tree` per folder of the workspace: "Explorer", or "Explorer: name" when there are several. One `TreeItem` per
   row in a range of 1,000 rows: name, level, selected, expanded, set position in the whole tree. The range is centred
   on the selection while it is on screen, otherwise on the visible rows; the tree reports its scroll position in rows
-  and supports scroll up/down by a page, which moves the range. These trees are in the tree only while a side bar (or a window of its own) shows the Explorer: another view, a hidden side bar or zen mode takes them out, and focus, scroll and row actions from an older tree then do nothing. Row actions resolve the current path rather than reusing an old row index.
+  and supports scroll up/down by a page, which moves the range. These trees are in the tree only while a side bar (or a window of its own) shows the Explorer: another view, a hidden side bar or zen mode takes them out, and focus, scroll and row actions from an older tree then do nothing. Row actions resolve the current path rather than reusing an old row index. A file that holds nested files (`explorer.fileNesting.*`) is a `TreeItem` with the expanded state and the description "N nested files"; Right and Left on it open and close them, and its nested files are items one level deeper.
 - While Source Control is visible, a `Group` with the branch, a writable `MultilineTextInput` for the commit message
   and the commit button, labeled with what it commits ("Commit (2)", "Commit All (3)") and disabled with "Nothing to
   commit" as its description when there is nothing. Then a `List` "Changed files" of the change groups: each group a

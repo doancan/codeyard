@@ -117,6 +117,7 @@ impl Workbench {
             }))
             .on_action(cx.listener(|this, _: &NewFolder, window, cx| this.new_folder(window, cx)))
             .on_action(cx.listener(|this, _: &RefreshExplorer, _, cx| this.refresh_explorer(cx)))
+            .on_action(cx.listener(|this, _: &crate::tree::ToggleFilter, w, cx| this.roots.primary.update(cx, |t, cx| t.toggle_filter(w, cx))))
             .on_action(cx.listener(|this, _: &OpenWorkspaceSettings, window, cx| this.open_workspace_settings(window, cx)))
             .on_action(cx.listener(|this, _: &SwitchProject, window, cx| this.show_project_switcher(window, cx)))
             .on_action(cx.listener(|this, _: &SaveProject, window, cx| this.start_save_project(window, cx)))

@@ -312,7 +312,7 @@ impl Workbench {
         let host = self.remote.host.clone();
         let tree = cx.new(|cx| crate::tree::FileTree::new(host.clone(), cx));
         let settings = cx.global::<crate::settings::Settings>();
-        let view = crate::tree::ViewOptions { compact: settings.compact_folders, sort: crate::tree::SortOrder::from_setting(&settings.sort_order) };
+        let view = crate::tree::ViewOptions::from_settings(settings);
         tree.update(cx, |t, cx| {
             t.set_options(view, cx);
             t.set_root(host, Some(path.clone()), cx);

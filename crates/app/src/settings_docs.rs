@@ -9,6 +9,12 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
     ("theme", "theme id or `auto`", "`auto`", "Colour theme; `auto` follows the system light/dark setting. Picked with the theme picker (⌘K ⌘T)."),
     ("editor.rulers", "list of columns", "`[]`", "Draw vertical rulers at these columns, e.g. `[80, 120]`."),
     ("files.exclude", "list of globs", "`[]`", "Hide matching paths from the explorer and from file lists, e.g. `[\"**/node_modules\"]`."),
+    (
+        "explorer.fileNesting.patterns",
+        "object of pattern → file names",
+        "built-in rules (see the user guide)",
+        "Which files the explorer lists under another file when `explorer.fileNesting.enabled` is on, added to the built-in rules. The key is a file name or a pattern with one `*`; the value is a comma-separated list of names (or a list of texts) in the same folder, where `${capture}` stands for the text the `*` matched, e.g. `{ \"*.c\": \"${capture}.h\" }`. An entry replaces the built-in rule with the same key; `false` removes it. A file is nested under one parent only (the first matching rule wins). Names are case-sensitive.",
+    ),
     ("search.exclude", "list of globs", "`[]`", "Skip matching paths in Find in Files."),
     (
         "compare.folders.ignore",
@@ -228,7 +234,7 @@ mod tests {
         let src =
             concat!(include_str!("settings.rs"), include_str!("settings_terminal.rs"), include_str!("settings_rust.rs"), include_str!("settings_workbench.rs"));
         let mut parsed = std::collections::BTreeSet::new();
-        for m in ["bool", "bool_or", "quick_suggestions", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale"] {
+        for m in ["bool", "bool_or", "quick_suggestions", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale", "get"] {
             let needle = format!("r.{m}(\"");
             let mut rest = src;
             while let Some(i) = rest.find(&needle) {
@@ -239,7 +245,7 @@ mod tests {
             }
         }
         // A new reader method (`r.something("key")`) that is not in the list above would hide its keys from this test: fail instead.
-        let known = ["bool", "bool_or", "quick_suggestions", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale"];
+        let known = ["bool", "bool_or", "quick_suggestions", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale", "get"];
         let mut unknown_methods = std::collections::BTreeSet::new();
         for (at, _) in src.match_indices("r.") {
             if src[..at].chars().next_back().is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.') {

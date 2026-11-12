@@ -290,6 +290,7 @@ Choose an extension in the Extensions view.
 Choose…	
 Clear	
 Clear Terminal	
+Clear filter	
 Clear filters	
 Clear the picked lines (Escape)	
 Clear the search	
@@ -1006,11 +1007,14 @@ Files to include / exclude
 Files were changed by a replacement since this search ran. Rerun to refresh.	
 Files with the same name are overwritten; other files in the folder are kept.	
 Files: Collapse Folders in Explorer	
+Files: Filter Files in Explorer	
 Files: Open Folder…	
 Files: {0}/{1}	
 Files: {}	
 Filter	
 Filter (e.g. text, path)	
+Filter Files…	
+Filter files by name	
 Filter problems	
 Filter symbols	
 Filtering needs sh, tail, grep and cut on the host (on Windows: Git Bash or WSL). {}	
@@ -1721,6 +1725,7 @@ Only on the right
 Only right	
 Only send it if you trust this file.	
 Only the connection is removed; the remote repository itself is untouched.	
+Only the first {} files are searched.	
 Only the local tag is removed. A copy on a remote stays until you delete it there (Git: Delete Remote Tag…).	
 Only the {} changed file.|Only the {} changed files.	
 Only the {} open file.|Only the {} open files.	
@@ -2371,6 +2376,7 @@ Show in the Explorer
 Show indent guides	
 Show line numbers in search results	
 Show lines matching (regular expression, case-insensitive), e.g. {}	
+Show related files under the file they belong to (Cargo.lock under Cargo.toml)	
 Show spaces and tabs as marks	
 Show the Markdown source	
 Show the Open Editors list in the explorer	
@@ -2638,6 +2644,7 @@ The file is empty.
 The file is not open any more.	
 The file is not tracked by Git.	
 The file is too large for an outline.	
+The file list could not be read: only opened folders are searched.	
 The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
@@ -3147,6 +3154,7 @@ env.{} is not used: a name of letters, digits and _ with a text value
 event	
 exception	
 expected a list [ … ]	
+expected an object of patterns	
 expected an object with path, args, env or color	
 expected an object { … }	
 expected an object { … } (previous settings kept)	
@@ -3649,6 +3657,7 @@ your words
 {} month ago|{} months ago	
 {} more entry that the comparison hides (ignored by .gitignore or the compare settings) goes too.|{} more entries that the comparison hides (ignored by .gitignore or the compare settings) go too.	
 {} more ports are not listed here	
+{} nested file|{} nested files	
 {} no longer exists, so it was not reopened.	
 {} of them is on no other branch, tag or remote: after the reset only Git's reflog still finds it.|{} of them are on no other branch, tag or remote: after the reset only Git's reflog still finds them.	
 {} of {}	
@@ -3684,6 +3693,7 @@ your words
 {}: .env has no null; give it a value or remove it	
 {}: .env holds only text; nested values need the “joined with __” choice	
 {}: TOML has no null; give it a value or remove it	
+{}: a pattern may hold one *	
 {}: connection failed	
 {}: crates.io could not be reached	
 {}: expected a file pattern or a list of patterns	
@@ -3695,6 +3705,7 @@ your words
 {}: expected an object	
 {}: expected an object { … }	
 {}: expected text	
+{}: expected text or a list of text	
 {}: expected true or false	
 {}: invalid color {}	
 {}: no answer from the debug adapter	

@@ -25,6 +25,7 @@ fn snap() -> Snapshot {
                     depth: 0,
                     is_dir: true,
                     expanded: true,
+                    nested: 0,
                     selected: false,
                     frame: None,
                 },
@@ -35,6 +36,7 @@ fn snap() -> Snapshot {
                     depth: 1,
                     is_dir: false,
                     expanded: false,
+                    nested: 0,
                     selected: true,
                     frame: None,
                 },
@@ -226,8 +228,17 @@ fn terminal_rows_are_text_with_the_cursor_as_caret() {
 #[test]
 fn every_folder_of_the_workspace_has_its_own_tree() {
     let mut s = snap();
-    let row =
-        RowSnap { id: row_id("/e/x.rs").0, path: "/e/x.rs".into(), name: "x.rs".into(), depth: 0, is_dir: false, expanded: false, selected: true, frame: None };
+    let row = RowSnap {
+        id: row_id("/e/x.rs").0,
+        path: "/e/x.rs".into(),
+        name: "x.rs".into(),
+        depth: 0,
+        is_dir: false,
+        expanded: false,
+        nested: 0,
+        selected: true,
+        frame: None,
+    };
     s.explorers.push(ExplorerSnap { name: "e".into(), focused: Some(row.id), rows: vec![row], rows_total: 1, first: 0 });
     s.focus = FocusSnap::Explorer(1);
     let tree = accesskit_consumer::Tree::new(s.to_tree(), true);

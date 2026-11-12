@@ -76,6 +76,7 @@ status bar reports it.
 | `explorer.compactFolders` | `true` / `false` | `true` | Show folders that only hold one folder as one row |
 | `explorer.confirmDelete` | `true` / `false` | `true` | Ask before moving a file to the Trash |
 | `explorer.confirmDragAndDrop` | `true` / `false` | `true` | Ask before moving a file or folder by dragging it in the explorer |
+| `explorer.fileNesting.enabled` | `true` / `false` | `true` | Show related files under the file they belong to (Cargo.lock under Cargo.toml) |
 | `explorer.openEditors` | `true` / `false` | `true` | Show the Open Editors list in the explorer |
 | `explorer.sortOrder` | `default`, `filesFirst`, `mixed`, `type` | `default` | Order of files and folders in the explorer |
 
@@ -261,6 +262,7 @@ status bar reports it.
 | `theme` | theme id or `auto` | `auto` | Colour theme; `auto` follows the system light/dark setting. Picked with the theme picker (⌘K ⌘T). |
 | `editor.rulers` | list of columns | `[]` | Draw vertical rulers at these columns, e.g. `[80, 120]`. |
 | `files.exclude` | list of globs | `[]` | Hide matching paths from the explorer and from file lists, e.g. `["**/node_modules"]`. |
+| `explorer.fileNesting.patterns` | object of pattern → file names | built-in rules (see the user guide) | Which files the explorer lists under another file when `explorer.fileNesting.enabled` is on, added to the built-in rules. The key is a file name or a pattern with one `*`; the value is a comma-separated list of names (or a list of texts) in the same folder, where `${capture}` stands for the text the `*` matched, e.g. `{ "*.c": "${capture}.h" }`. An entry replaces the built-in rule with the same key; `false` removes it. A file is nested under one parent only (the first matching rule wins). Names are case-sensitive. |
 | `search.exclude` | list of globs | `[]` | Skip matching paths in Find in Files. |
 | `compare.folders.ignore` | list of globs | `[".git", "node_modules", "target"]` | Names and paths *Compare: Folders…* leaves out on both sides (gitignore syntax). |
 | `compare.folders.maxFiles` | number 100–5000000 | `50000` | Entries per side *Compare: Folders…* reads before it stops and reports that the result is partial. |

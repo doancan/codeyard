@@ -258,6 +258,7 @@ impl Workbench {
             Command::action("Bookmarks: Clear in File", editor::ClearBookmarks),
             Command::action("Preferences: Open Workspace Settings", OpenWorkspaceSettings),
             Command::action("File: Refresh Explorer", RefreshExplorer),
+            Command::action("Files: Filter Files in Explorer", crate::tree::ToggleFilter),
             Command::action("File: Cancel File Operation", CancelFileOperation),
             Command::action("File: Copy Path of Active File", CopyActivePath),
             Command::action("File: Copy Relative Path of Active File", CopyActiveRelativePath),

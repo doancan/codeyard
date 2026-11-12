@@ -203,6 +203,7 @@ pub struct Settings {
     pub compact_folders: bool,
     /// "default" (folders first), "filesFirst", "mixed", "type".
     pub sort_order: String,
+    pub explorer_nesting: crate::tree::nesting::Nesting,
     /// "Open Editors" section above the explorer.
     pub open_editors: bool,
     /// Vertical rulers (column numbers).
@@ -418,6 +419,7 @@ impl Default for Settings {
             fallback_encoding: crate::encoding::Encoding::Windows1254,
             compact_folders: true,
             sort_order: "default".into(),
+            explorer_nesting: Default::default(),
             open_editors: true,
             rulers: Vec::new(),
             render_whitespace: "none".into(),
@@ -1321,7 +1323,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "editor.matchBrackets",
         "editor.folding",
     ];
-    for k in obj.keys().filter(|k| !KNOWN.contains(&k.as_str()) && !rust::KEYS.contains(&k.as_str()) && !quiet.contains(k)) {
+    for k in obj.keys().filter(|k| !KNOWN.iter().chain(&rust::KEYS).chain(workbench::KEYS).any(|n| *n == k.as_str()) && !quiet.contains(k)) {
         // A setting an installed extension declares: kept when its value has the declared type.
         if k.starts_with("ext.") {
             match crate::ext::check_setting(k, &obj[k]) {

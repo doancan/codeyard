@@ -298,6 +298,11 @@ impl Workbench {
             TreeEvent::Move { from, to_dir } => this.confirm_drop(from.clone(), to_dir.clone(), window, cx),
             TreeEvent::DropFiles { paths, to_dir } => this.drop_external(paths.clone(), to_dir.clone(), window, cx),
             TreeEvent::ExpandedChanged => this.persist_tree(cx),
+            TreeEvent::FilterChanged(text) => {
+                for tree in this.all_trees() {
+                    tree.update(cx, |t, cx| t.set_filter_text(text, cx));
+                }
+            }
         }
     }
 
@@ -580,6 +585,14 @@ impl Workbench {
                             .on_click(cx.listener(|this, _, window, cx| this.new_folder(window, cx))),
                     )
                     .child(
+                        ui::icon_button("exp-filter", "list-filter", crate::i18n::t("Filter Files…"), p)
+                            .relative()
+                            .child(self.ctl(crate::i18n::t("Explorer"), "exp-filter", crate::i18n::t("Filter Files…"), cx, |this, w, cx| {
+                                this.roots.primary.update(cx, |t, cx| t.toggle_filter(w, cx))
+                            }))
+                            .on_click(cx.listener(|this, _, window, cx| this.roots.primary.update(cx, |t, cx| t.toggle_filter(window, cx)))),
+                    )
+                    .child(
                         ui::icon_button("exp-refresh", "refresh-cw", crate::i18n::t("Refresh Explorer"), p)
                             .relative()
                             .child(self.ctl(crate::i18n::t("Explorer"), "exp-refresh", crate::i18n::t("Refresh Explorer"), cx, |this, _, cx| {
@@ -820,11 +833,17 @@ impl Workbench {
         let prefix = format!("{}/", root.trim_end_matches('/'));
         let rels: Vec<String> = self.roots.primary.read(cx).open_dirs().iter().filter_map(|d| d.strip_prefix(&prefix).map(str::to_string)).take(300).collect();
         let _ = s.set(&format!("tree:{ws}"), &rels.join("\n"));
+        let nests: Vec<String> =
+            self.roots.primary.read(cx).open_nests().iter().filter_map(|d| d.strip_prefix(&prefix).map(str::to_string)).take(300).collect();
+        let _ = s.set(&format!("nests:{ws}"), &nests.join("\n"));
     }
 
     /// Restore the open folders from the previous session.
     pub(super) fn restore_tree(&mut self, cx: &mut Context<Self>) {
         let (Some(ws), Some(s), Some(root)) = (self.persist.workspace_id, &self.persist.state, self.root(cx)) else { return };
+        let nests: Vec<String> =
+            s.get(&format!("nests:{ws}")).iter().flat_map(|t| t.lines()).filter(|l| !l.is_empty()).map(|rel| ui::join(&root, rel)).collect();
+        self.roots.primary.update(cx, |t, cx| t.restore_nests(nests, cx));
         let Some(text) = s.get(&format!("tree:{ws}")) else { return };
         let dirs: Vec<String> = text.lines().filter(|l| !l.is_empty()).map(|rel| ui::join(&root, rel)).collect();
         self.roots.primary.update(cx, |t, cx| t.restore_expanded(dirs, cx));

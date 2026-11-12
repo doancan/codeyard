@@ -285,9 +285,9 @@ impl Workbench {
                 t.update(cx, |t, cx| t.reload_all(cx));
             }
         }
-        let view = crate::tree::ViewOptions { compact: new.compact_folders, sort: crate::tree::SortOrder::from_setting(&new.sort_order) };
+        let view = crate::tree::ViewOptions::from_settings(&new);
         for t in self.all_trees() {
-            t.update(cx, |t, cx| t.set_options(view, cx));
+            t.update(cx, |t, cx| t.set_options(view.clone(), cx));
         }
         self.notice = warnings.first().map(|w| {
             let more = if warnings.len() > 1 { format!(" {}", crate::i18n::tf("(+{} more)", &[&(warnings.len() - 1)])) } else { String::new() };

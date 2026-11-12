@@ -286,3 +286,24 @@ fn explorer_paste_with_nothing_to_paste_changes_nothing(cx: &mut TestAppContext)
     paste_into(&wb, &dir, cx);
     assert_eq!(names(&dir), ["a.txt"], "a file that no longer exists is not pasted");
 }
+
+#[gpui::test]
+fn explorer_filter_and_nesting_work_through_the_workbench(cx: &mut TestAppContext) {
+    let dir = fresh("explorer-filter-nesting");
+    for name in ["Cargo.toml", "Cargo.lock", "a.txt", "b.rs"] {
+        std::fs::write(dir.join(name), name).unwrap();
+    }
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    let names = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, cx| wb.tree_names(cx));
+    crate::qa_integration_tests::wait_ticking(cx, "the nested listing", |cx| names(cx) == ["a.txt", "b.rs", "Cargo.toml"]);
+
+    // The palette command opens the box, typing filters (also through folders not opened), Esc clears and then closes it.
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Files: Filter Files in Explorer", window, cx));
+    cx.simulate_input("lock");
+    crate::qa_integration_tests::wait_ticking(cx, "the filtered list", |cx| names(cx) == ["Cargo.lock"]);
+    cx.simulate_keystrokes("escape");
+    crate::qa_integration_tests::wait_ticking(cx, "the box emptied", |cx| names(cx).len() == 3);
+    cx.simulate_keystrokes("escape");
+    crate::qa_integration_tests::wait_ticking(cx, "the whole tree", |cx| names(cx) == ["a.txt", "b.rs", "Cargo.toml"]);
+}
