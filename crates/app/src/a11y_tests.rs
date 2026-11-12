@@ -8,6 +8,7 @@ fn snap() -> Snapshot {
     Snapshot {
         generation: 0,
         services: None,
+        refactor: None,
         exts: None,
         ext_page: None,
         inspector: None,

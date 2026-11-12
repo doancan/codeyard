@@ -347,3 +347,27 @@ fn random_texts_keep_every_untouched_byte() {
         assert_eq!(endings(&got), endings(&bytes));
     }
 }
+
+#[test]
+fn neighbour_lines_are_the_unchanged_lines_around_a_change() {
+    let f = disk(b"one\ntwo\nthree\nfour\n", &pat("three", false, "3"));
+    assert_eq!(f.neighbour_line(0, -1), Some((2, "two".into())));
+    assert_eq!(f.neighbour_line(0, -2), Some((1, "one".into())));
+    assert_eq!(f.neighbour_line(0, -3), None, "the file starts there");
+    assert_eq!(f.neighbour_line(0, 1), Some((4, "four".into())));
+    assert_eq!(f.neighbour_line(0, 2), None, "the empty line after the last line break is not a line");
+    assert_eq!(f.neighbour_line(0, 0), None);
+    assert_eq!(f.neighbour_line(5, 1), None, "no such change");
+    // CRLF is not part of the line; a change over several lines is followed by the line after its last.
+    let f = disk("ça\r\nşb\r\nc\r\nd".as_bytes(), &pat("b", false, "B"));
+    assert_eq!(f.neighbour_line(0, -1), Some((1, "ça".into())));
+    assert_eq!(f.neighbour_line(0, 2), Some((4, "d".into())));
+    let f = disk(b"a\nb\nc\nd\n", &pat("b\\nc", true, "X"));
+    assert_eq!(f.changes.len(), 0, "the search is line by line, so a multi-line pattern finds nothing");
+    // A long line is cut.
+    let long = format!("{}\nx\n", "é".repeat(500));
+    let f = disk(long.as_bytes(), &pat("x", false, "y"));
+    let (n, text) = f.neighbour_line(0, -1).unwrap();
+    assert_eq!(n, 1);
+    assert!(text.ends_with('…') && text.len() < long.len());
+}

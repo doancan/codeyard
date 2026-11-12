@@ -6,3 +6,11 @@ pub mod apply;
 pub mod edit;
 pub mod env;
 pub mod plan;
+pub mod preview;
+#[cfg(test)]
+mod workbench_tests;
+
+/// The keys of the review page (see `preview`).
+pub fn key_bindings() -> [gpui::KeyBinding; 8] {
+    preview::key_bindings()
+}

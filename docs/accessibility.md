@@ -284,6 +284,16 @@ The tree, in the order a screen reader walks it:
   and position give the full count; Click opens a match or toggles a file, Focus moves the keyboard row), and the
   "Apply N changes in M files" and "Undo Replace" buttons. Apply is disabled while the results are incomplete; row and
   Apply actions are refused if the row's label or the Apply label changed since the tree was read.
+- The Refactor Preview in front is a `Group` with the refactoring's title (its summary is the description): a live `Status`
+  with what is chosen ("Selected: 3 changes in 2 files."; an `Alert` while a chosen edit needs a file operation that is
+  not chosen, or at the question before a delete), a polite `Status` with the report after Apply, a `Tree` "Refactor
+  Preview" and the buttons "Apply Selected" (disabled with nothing chosen), "Discard" ("Back" at the question, "Stop"
+  while writing, "Close" when done) and "Undo". The tree's items are a window of at most 200 rows around the keyboard row
+  (set size and position give the full count): a file or file operation at level 1 with a checked state (true, mixed,
+  false) and, for a file, expanded or collapsed, and each change at level 2 as "Line 5, column 9: “old” → “new”" with its
+  line as the description and a checked state; the line after the change and the lines around it are plain items. Click
+  on a row with a check box chooses or clears it, Expand and Collapse fold a file, Focus moves the keyboard row. Actions
+  are refused if the row's label, or the label of Apply or Discard, changed since the tree was read.
 - While the find bar is open, a `Group` "Find": a `SearchInput` with the query, a `TextInput` "Replace" while the replace
   row shows, a `Status` with "3 of 12" (a polite live region, so it is spoken while typing and moving between matches),
   then the options as `CheckBox` (with their state) and the buttons, in the order they are drawn. Labels are the tooltips,
@@ -348,7 +358,7 @@ The tree, in the order a screen reader walks it:
   categories, a choice's options, a changed setting's Reset button and the page's three buttons, the Extensions view's
   Installed and Market rows, the picker (its dialog, query box, list and each row it draws), the suggestion list and each
   suggestion, the bottom panel's tabs, the Search Editor (the page, its query, status, list, each row it draws, Apply
-  and Undo Replace) and the Search Editor and terminal tabs of the focused group, and the update dialog (or the
+  and Undo Replace), the Refactor Preview (the page, status, list, each row it draws and its buttons) and the Search Editor and terminal tabs of the focused group, and the update dialog (or the
   first-run question) drawn in the window with each of its buttons. A row scrolled out of its list (a picker or the
   suggestion list draws only what fits), and an item the status bar leaves out at the current width, has none. The
   picker reports its frames only to the window it is drawn in, and suggestions only while their editor was drawn in

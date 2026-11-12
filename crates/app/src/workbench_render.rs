@@ -271,6 +271,7 @@ impl Render for Workbench {
                 Page::Merge(view) => view.into_any_element(),
                 Page::Compare(view) => view.into_any_element(),
                 Page::Search(view) => view.into_any_element(),
+                Page::Refactor(view) => view.into_any_element(),
                 Page::ExtView(id) => self.ext_view_frame(&id, &p, cx),
                 Page::Terminal(view) => self.editor_terminal_view(view, &p),
             },

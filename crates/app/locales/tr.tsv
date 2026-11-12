@@ -4162,3 +4162,37 @@ The server's edit is for version {0} of this file, the editor has version {1}.	S
 Unknown file operation “{}”	Bilinmeyen dosya işlemi “{}”
 {} file|{} files	{} dosya
 Review a language server's rename or quick fix before it is applied: auto (when it changes several files or moves, creates or deletes files), always or never (file operations are always reviewed)	Dil sunucusunun yeniden adlandırmasını ya da hızlı düzeltmesini uygulamadan önce gözden geçir: auto (birkaç dosyayı değiştirdiğinde ya da dosya taşıdığında, oluşturduğunda veya sildiğinde), always (hep) veya never (hiç; dosya işlemleri her zaman gözden geçirilir)
+Apply Selected	Seçilenleri Uygula
+Changes in open files are not saved yet.	Açık dosyalardaki değişiklikler henüz kaydedilmedi.
+Could not take back the change in {}: it was edited since. Undo it in the editor.	{} içindeki değişiklik geri alınamadı: sonradan düzenlenmiş. Düzenleyicide geri alın.
+Create {}	{} oluştur
+Delete and Apply	Sil ve Uygula
+Delete {}	{} sil
+Delete {} item for good? It is not moved to the trash.|Delete {} items for good? They are not moved to the trash.	{} öğe kalıcı olarak silinsin mi? Çöp kutusuna taşınmaz.
+Deletes the file for good; it is not moved to the trash.	Dosyayı kalıcı olarak siler; çöp kutusuna taşınmaz.
+Deletes the folder and everything in it for good; it is not moved to the trash.	Klasörü ve içindeki her şeyi kalıcı olarak siler; çöp kutusuna taşınmaz.
+Done.	Tamam.
+Edit requested by the language server	Dil sunucusunun istediği düzenleme
+Nothing selected.	Hiçbir şey seçilmedi.
+Nothing to do: it is already so.	Yapılacak bir şey yok: zaten böyle.
+Proposed: {0} {1}, {2}.	Önerilen: {0} {1}, {2}.
+Proposed: {0} {1}.	Önerilen: {0} {1}.
+Proposed: {}.	Önerilen: {}.
+Real location: {}	Gerçek konum: {}
+Refactor Preview	Yeniden Düzenleme Önizlemesi
+Rename to “{}”	“{}” olarak yeniden adlandır
+Rename {0} to {1}	{0} adını {1} yap
+Selected: {0} {1}, {2}.	Seçilen: {0} {1}, {2}.
+Selected: {0} {1}.	Seçilen: {0} {1}.
+Selected: {}.	Seçilen: {}.
+The connection or folder changed since the preview. Nothing was changed.	Önizlemeden sonra bağlantı ya da klasör değişti. Hiçbir şey değiştirilmedi.
+The connection or folder changed while the refactoring was prepared. Nothing was changed.	Yeniden düzenleme hazırlanırken bağlantı ya da klasör değişti. Hiçbir şey değiştirilmedi.
+The language server proposed no changes.	Dil sunucusu hiçbir değişiklik önermedi.
+There is no refactoring to undo.	Geri alınacak bir yeniden düzenleme yok.
+This folder is not trusted, so a language server's edits are not applied.	Bu klasöre güvenilmiyor, bu yüzden dil sunucusunun düzenlemeleri uygulanmaz.
+Undo is not available here: the refactoring was made in another folder or connection.	Geri alma burada kullanılamaz: yeniden düzenleme başka bir klasörde ya da bağlantıda yapıldı.
+Up and Down move, Space selects, Enter opens, Left and Right fold, {}Enter applies, Escape discards. Nothing is written before Apply Selected.	Yukarı ve Aşağı gezinir, Boşluk seçer, Enter açar, Sol ve Sağ katlar, {}Enter uygular, Escape vazgeçer. Seçilenleri Uygula'ya kadar hiçbir şey yazılmaz.
+Write the selected changes; nothing else is touched ({}Enter)	Seçilen değişiklikleri yazar; başka hiçbir şeye dokunulmaz ({}Enter)
+{} file operation|{} file operations	{} dosya işlemi
+{} needs a file operation that is not selected.	{} seçilmemiş bir dosya işlemine ihtiyaç duyuyor.
+Line {0}, column {1}: “{2}” → “{3}”	{0}. satır, {1}. sütun: “{2}” → “{3}”

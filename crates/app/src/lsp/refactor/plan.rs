@@ -97,29 +97,11 @@ pub enum Item {
 }
 
 impl Item {
-    pub fn path(&self) -> &str {
-        match self {
-            Item::File(f) => &f.file.path,
-            Item::Resource(r) => match &r.op {
-                Resource::Create { path } | Resource::Delete { path, .. } => path,
-                Resource::Rename { from, .. } => from,
-            },
-        }
-    }
-
     /// Whether anything can be selected in this item.
     pub fn usable(&self) -> bool {
         match self {
             Item::File(f) => f.file.problem.is_none() && !f.file.changes.is_empty(),
             Item::Resource(r) => r.problem.is_none(),
-        }
-    }
-
-    /// Number of selectable parts: a file's changes, or the one operation.
-    pub fn parts(&self) -> usize {
-        match self {
-            Item::File(f) => f.file.changes.len(),
-            Item::Resource(_) => 1,
         }
     }
 }

@@ -178,7 +178,7 @@ fn a_real_module_rename_is_a_row_of_its_own_and_starts_unselected() {
     assert_eq!(chosen.item(rename_at), [false], "a file operation is chosen on purpose");
     assert!(p.files().all(|f| f.needs.is_none()));
     assert_eq!(chosen.counts().0, p.change_count());
-    assert_eq!(needs_review(&p, ReviewMode::Never), true, "file operations are always reviewed");
+    assert!(needs_review(&p, ReviewMode::Never), "file operations are always reviewed");
 }
 
 // --- Positions ---
@@ -523,24 +523,24 @@ fn the_review_is_decided_by_the_setting_and_what_the_edit_touches() {
     let one_open_file = ops(json!([text_edit("/ws/demo/src/util.rs", Value::Null, json!([replace(0, 7, 0, 14, "topla"), replace(5, 4, 5, 11, "topla")]))]));
     env.open.insert("/ws/demo/src/util.rs".into(), doc(UTIL_RS));
     let p = plan(&one_open_file, &env);
-    assert_eq!(needs_review(&p, ReviewMode::Auto), false, "a rename inside one open file needs no extra click");
-    assert_eq!(needs_review(&p, ReviewMode::Never), false);
-    assert_eq!(needs_review(&p, ReviewMode::Always), true);
+    assert!(!needs_review(&p, ReviewMode::Auto), "a rename inside one open file needs no extra click");
+    assert!(!needs_review(&p, ReviewMode::Never));
+    assert!(needs_review(&p, ReviewMode::Always));
     // One file that is not open has no editor undo.
     env.open.clear();
-    assert_eq!(needs_review(&plan(&one_open_file, &env), ReviewMode::Auto), true);
+    assert!(needs_review(&plan(&one_open_file, &env), ReviewMode::Auto));
     // Several files.
     let many = plan(&serde_json::from_str(RENAME_FN).unwrap(), &env);
-    assert_eq!(needs_review(&many, ReviewMode::Auto), true);
-    assert_eq!(needs_review(&many, ReviewMode::Never), false);
+    assert!(needs_review(&many, ReviewMode::Auto));
+    assert!(!needs_review(&many, ReviewMode::Never));
     // A refused file is shown whatever the setting says: nothing is dropped silently.
     let mut refused_env = FakeEnv::demo();
     refused_env.put("/etc/hosts", "x\n");
     let refused = plan(&ops(json!([text_edit("/etc/hosts", Value::Null, json!([replace(0, 0, 0, 1, "y")]))])), &refused_env);
-    assert_eq!(needs_review(&refused, ReviewMode::Never), true);
+    assert!(needs_review(&refused, ReviewMode::Never));
     // Nothing to change.
     let nothing = plan(&ops(json!([])), &env);
-    assert_eq!(needs_review(&nothing, ReviewMode::Auto), false);
+    assert!(!needs_review(&nothing, ReviewMode::Auto));
     assert_eq!(nothing.change_count(), 0);
 }
 

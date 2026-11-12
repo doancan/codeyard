@@ -137,6 +137,7 @@ Applied {}
 Apply	
 Apply (keep the stash)	
 Apply .editorconfig files (indent, line endings, final newline…)	
+Apply Selected	
 Apply Stash…	
 Apply a file operation to {} entry?|Apply a file operation to {} entries?	
 Apply the Rust setup to settings.jsonc?	
@@ -267,6 +268,7 @@ Changed {0} file ({1} file operations skipped)|Changed {0} files ({1} file opera
 Changed {0} in {1}	
 Changed {} file|Changed {} files	
 Changes	
+Changes in open files are not saved yet.	
 Changes the order of the problems	
 Changes the order of the symbols	
 Check Daily	
@@ -621,6 +623,7 @@ Could not start the debug session: {}
 Could not start the test runner: {}	
 Could not switch profile: {}	
 Could not switch to {0}: {1}	
+Could not take back the change in {}: it was edited since. Undo it in the editor.	
 Could not take back {0}: {1}. Check it before going on.	
 Could not tell whether it is merged ({}): git will refuse if commits would be lost.	
 Could not write {0}: {1}	
@@ -643,6 +646,7 @@ Create profile
 Create scratch file	
 Create tag	
 Create the folder first, or check that the path is right.	
+Create {}	
 Created branch {0} at {1}	
 Created {}	
 Creating {}…	
@@ -717,6 +721,7 @@ Delete
 Delete Permanently	
 Delete Tag…	
 Delete a profile	
+Delete and Apply	
 Delete branch {} on the remote?	
 Delete branch {}?	
 Delete from the left	
@@ -728,6 +733,8 @@ Delete which branch on the remote?
 Delete which branch?	
 Delete which tag on the remote?	
 Delete which tag?	
+Delete {}	
+Delete {} item for good? It is not moved to the trash.|Delete {} items for good? They are not moved to the trash.	
 Delete “{0}” from {1}?	
 Delete “{}” permanently?	
 Deleted	
@@ -735,6 +742,8 @@ Deleted tag {0} on {1}
 Deleted tag {}	
 Deleted {}	
 Deleted “{0}” from {1}	
+Deletes the file for good; it is not moved to the trash.	
+Deletes the folder and everything in it for good; it is not moved to the trash.	
 Deleting {}…	
 Deleting…	
 Denials	
@@ -798,6 +807,7 @@ Don't Save
 Don't Trust	
 Don't Trust This Folder	
 Done	
+Done.	
 Don’t ask again	
 Download	
 Download Here	
@@ -831,6 +841,7 @@ Edit
 Edit Condition…	
 Edit Host…	
 Edit a host	
+Edit requested by the language server	
 Edit which SSH host?	
 Edit {} of the language server is malformed.	
 Edit “{}”: which setting?	
@@ -1450,6 +1461,7 @@ Line height in pixels
 Line numbers in the gutter	
 Line {0} does not exist (the file has {1} lines).	
 Line {0}, column {1} is inside a character.	
+Line {0}, column {1}: “{2}” → “{3}”	
 Line {0}: {1}	
 Line {0}: {1} → {2}	
 Line {} added	
@@ -1773,8 +1785,10 @@ Nothing is listening on the server yet.
 Nothing is listening on {0}:{1} (start the program with its debug server first, e.g. `python -m debugpy --listen {1} --wait-for-client app.py`).	
 Nothing is staged: stage the changes to commit first (or turn on git.enableSmartCommit)	
 Nothing left to resolve	
+Nothing selected.	
 Nothing to choose from.	
 Nothing to commit	
+Nothing to do: it is already so.	
 Nothing to rename here	
 Nothing to replace: the files no longer contain matches.	
 Nothing to run at the cursor: put it inside a test or main.	
@@ -2026,6 +2040,9 @@ Projects: Add Folder to Projects…
 Projects: Edit Projects	
 Projects: Remove from Recent…	
 Projects: Switch Project… (Open Recent)	
+Proposed: {0} {1}, {2}.	
+Proposed: {0} {1}.	
+Proposed: {}.	
 Protocol: HTTP	
 Protocol: HTTPS	
 Protocol: TCP	
@@ -2088,6 +2105,7 @@ Read {}
 Reading folders… {0} and {1} entries	
 Reading the file…	
 Reading the registries…	
+Real location: {}	
 Rebase	
 Rebase aborted	
 Rebase finished	
@@ -2111,6 +2129,7 @@ Reconnected. Terminals kept running.
 Reconnecting to {0} (attempt {1})	
 Reconnecting to {}… (attempt {})	
 Redo	
+Refactor Preview	
 Refresh	
 Refresh Explorer	
 Refresh Tests	
@@ -2192,8 +2211,10 @@ Rename profile
 Rename remote	
 Rename the matching HTML/XML tag while you edit one	
 Rename to	
+Rename to “{}”	
 Rename which branch?	
 Rename which remote?	
+Rename {0} to {1}	
 Renamed	
 Renamed remote {0} to {1}	
 Renamed {0} to {1}	
@@ -2431,6 +2452,9 @@ Select the active file in the explorer
 Selected container	
 Selected {} for compare. Right-click another file and choose Compare.	
 Selected {} for compare. Right-click another folder and choose Compare Folder with Selected.	
+Selected: {0} {1}, {2}.	
+Selected: {0} {1}.	
+Selected: {}.	
 Selection	
 Send	
 Send Request	
@@ -2735,7 +2759,9 @@ The complete file list is available in Output.
 The connection closed before it finished.	
 The connection dropped; trying to reconnect. Unsaved changes are kept.	
 The connection is down, so files with unsaved changes cannot be saved. Use File: Save a Copy to This Computer… to keep them, or close them, then reconnect.	
+The connection or folder changed since the preview. Nothing was changed.	
 The connection or folder changed since the preview. Rerun the search and preview again.	
+The connection or folder changed while the refactoring was prepared. Nothing was changed.	
 The connection to the debug adapter was lost	
 The connection to the language server was lost	
 The connection to {} dropped while the data was being exchanged.	
@@ -2786,6 +2812,7 @@ The full report is in the crash reports folder and stays on this computer. Help:
 The host stopped responding. Installation files were retained because a process may still be running. Reconnect and inspect the destination before retrying.	
 The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	
 The input “{}” would run an editor command; use promptString or pickString.	
+The language server proposed no changes.	
 The language server sent a documentation link that is not a web page or a local HTML file, so it was not opened	
 The language server's refactoring is too large to review ({0} files, {1} changes; the limit is {2} files and {3} changes). Nothing was changed.	
 The last background fetch failed: {}	
@@ -2896,6 +2923,7 @@ There is no breakpoint on this line (F9 adds one).
 There is no commit to undo	
 There is no log file yet.	
 There is no profile named “{}”.	
+There is no refactoring to undo.	
 There is no replacement to undo.	
 There is no request here. Write METHOD URL on a line, separate requests with ###.	
 There is no task called “{}”.	
@@ -2936,6 +2964,7 @@ This file was deleted on disk. Save it explicitly before debugging.
 This file was deleted on disk. Saving will create it again.	
 This folder is already a git repository.	
 This folder is not a git repository.	
+This folder is not trusted, so a language server's edits are not applied.	
 This frame cannot be restarted.	
 This image is {0} × {1} pixels, too large to preview.	
 This is a development build and can't update itself. Download the new version yourself.	
@@ -3016,6 +3045,7 @@ Undo Last Commit
 Undo Replace	
 Undo a commit that is already on {}?	
 Undo conflict: {} changed after the replacement and was left as it is.	
+Undo is not available here: the refactoring was made in another folder or connection.	
 Undo is not available here: the replacement was made in another folder or connection.	
 Unexpected text after the closing quote	
 Unexpected “{}”	
@@ -3044,6 +3074,7 @@ Unsupported encoding: the file would not be written back exactly, so it is not c
 Unterminated quote in the Cargo test command	
 Untracked files will be deleted. This can't be undone.	
 Unwrapped lines	
+Up and Down move, Space selects, Enter opens, Left and Right fold, {}Enter applies, Escape discards. Nothing is written before Apply Selected.	
 Up to date: the latest release is {}	
 Up to {} editors can be in windows of their own.	
 Update	
@@ -3220,6 +3251,7 @@ Worktree locked: {}
 Worktrees	
 Wrap long lines: at the window edge (on), at a column (wordWrapColumn) or at whichever comes first (bounded)	
 Wrapped lines	
+Write the selected changes; nothing else is touched ({}Enter)	
 Write to the clipboard	
 YAML schema for {}	
 You are connected to “{}”. Disconnect first.	
@@ -3788,6 +3820,7 @@ your words
 {} exited with {}	
 {} extension|{} extensions	
 {} failed	
+{} file operation|{} file operations	
 {} file skipped, binary or too large|{} files skipped, binary or too large	
 {} file skipped, parse errors|{} files skipped, parse errors	
 {} file still has conflicts: resolve it and stage it first|{} files still have conflicts: resolve them and stage them first	
@@ -3847,6 +3880,7 @@ your words
 {} month ago|{} months ago	
 {} more entry that the comparison hides (ignored by .gitignore or the compare settings) goes too.|{} more entries that the comparison hides (ignored by .gitignore or the compare settings) go too.	
 {} more ports are not listed here	
+{} needs a file operation that is not selected.	
 {} nested file|{} nested files	
 {} no longer exists, so it was not reopened.	
 {} of them is on no other branch, tag or remote: after the reset only Git's reflog still finds it.|{} of them are on no other branch, tag or remote: after the reset only Git's reflog still finds them.	

@@ -276,6 +276,45 @@ impl FilePlan {
         out
     }
 
+    /// The line `n` lines before (`n < 0`) or after (`n > 0`) the lines a change covers, as it is in the file: its 1-based number
+    /// and its text without the line break, cut to about `DIFF_WINDOW` bytes like `line_diff`. `None` past either end of the file.
+    pub fn neighbour_line(&self, change: usize, n: isize) -> Option<(u32, String)> {
+        let c = self.changes.get(change)?;
+        let text = &self.text;
+        let line_start = |at: usize| text[..at].rfind('\n').map_or(0, |i| i + 1);
+        let line_end = |at: usize| text[at..].find('\n').map_or(text.len(), |i| at + i);
+        let (mut start, mut number) =
+            if n < 0 { (line_start(c.start), c.line) } else { (line_start(c.end), c.line + text[c.start..c.end].matches('\n').count() as u32) };
+        let mut end = line_end(start);
+        for _ in 0..n.unsigned_abs() {
+            if n < 0 {
+                if start == 0 {
+                    return None;
+                }
+                start = line_start(start - 1);
+                end = line_end(start);
+                number -= 1;
+            } else {
+                if end >= text.len() {
+                    return None;
+                }
+                start = end + 1;
+                if start >= text.len() {
+                    return None;
+                }
+                end = line_end(start);
+                number += 1;
+            }
+        }
+        if n == 0 {
+            return None;
+        }
+        let line = text[start..end].strip_suffix('\r').unwrap_or(&text[start..end]);
+        let cut = text.floor_char_boundary(start + DIFF_WINDOW.min(line.len())) - start;
+        let more = if cut < line.len() { "…" } else { "" };
+        Some((number, format!("{}{more}", &line[..cut])))
+    }
+
     /// The line a change is on, before and after the selected changes on that line: (old line, new line, the change's
     /// byte range in the old line, its range in the new line). Exactly the bytes that will be written, minus line breaks.
     /// A long line is cut to about `DIFF_WINDOW` bytes on each side of the change (marked with "…"), so the work per

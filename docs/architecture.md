@@ -110,6 +110,11 @@ is at its size limit). The core (manifest parsing with `toml_edit`, version logi
 cache, text edits) knows nothing of GPUI; the network is one trait, `Fetch`, with the system `curl` behind it and a fake in
 the tests. `editor_cargo.rs` binds a registry to a manifest's editor (hints, completion, hover); `workbench_cargo.rs`
 (a child of `workbench_rust.rs`) refreshes it, runs Quick Fix, the palette commands and `cargo add` / `cargo remove`.
+A language server's multi-file edit (rename, quick fix) is reviewed before it is written: `lsp/refactor/` holds the pure parts
+(`edit` reads the `WorkspaceEdit`, `plan` makes the checked plan on top of `replace_plan`'s file plans, `apply` runs it as a
+transaction with rollback, `env` is the plan's view of a host) and the review page (`preview`, with `a11y_refactor.rs`);
+`workbench_refactor.rs` reads the open editors, applies, undoes and answers the server. Tests use a real rust-analyzer answer
+kept in `crates/app/testdata/refactor`.
 The Rust toolchain integration is split the same way: plain logic in `rust_toolchain.rs` and its children (`rust_runnables`,
 `rust_status`, `rust_target`, `rust_nextest`, `rust_explain`, `rust_hints`, `rust_views`; no GPUI) and `lsp/rust.rs` (rust-analyzer's
 protocol extensions as data); the workbench side is `workbench_rust.rs` with `workbench_rust_*.rs` sub-topics (status, server

@@ -75,10 +75,6 @@ impl Faulty {
     }
 }
 
-fn refused(path: &str) -> Option<HostError> {
-    Some(HostError::Op(proto::Error::PermissionDenied(path.into())))
-}
-
 impl Store for Faulty {
     fn read(&self, path: &str) -> Result<(Vec<u8>, u64), HostError> {
         self.inner.read(path)

@@ -136,6 +136,8 @@ pub(in crate::workbench) use chrome_access::view_part;
 mod popups_access;
 #[path = "a11y_problems.rs"]
 mod problems_access;
+#[path = "a11y_refactor.rs"]
+mod refactor_access;
 #[path = "a11y_scm.rs"]
 mod scm_access;
 #[path = "a11y_search_editor.rs"]
@@ -191,6 +193,8 @@ pub struct Snapshot {
     /// The Search Editor in front, and every Search Editor tab of the focused group.
     pub(crate) search_editor: Option<SearchEdSnap>,
     pub(crate) search_tabs: Vec<SearchTabSnap>,
+    /// The Refactor Preview in front.
+    pub(crate) refactor: Option<refactor_access::RefactorSnap>,
     /// The terminal tabs of the focused group.
     pub(crate) term_tabs: Vec<TermTabSnap>,
     pub picker: Option<PickerSnap>,
@@ -466,6 +470,10 @@ impl Snapshot {
             se.append_tree(&mut nodes);
             kids.push(SearchEdSnap::id());
         }
+        if let Some(r) = &self.refactor {
+            r.append_tree(&mut nodes);
+            kids.push(refactor_access::REFACTOR);
+        }
 
         // Editor
         if let Some(e) = &self.editor {
@@ -681,6 +689,9 @@ impl Snapshot {
             _ if self.services.as_ref().is_some_and(|view| view.focused) => services_access::focus_node(self.services.as_ref().expect("focused page")),
             _ if self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).is_some() => {
                 self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).expect("focused search editor")
+            }
+            _ if self.refactor.as_ref().and_then(refactor_access::RefactorSnap::focus_node).is_some() => {
+                self.refactor.as_ref().and_then(refactor_access::RefactorSnap::focus_node).expect("focused refactor preview")
             }
             _ if self.views.focus_node().is_some() => self.views.focus_node().expect("focused view"),
             _ if crate::a11y_controls::focus_node(&self.controls).is_some() => crate::a11y_controls::focus_node(&self.controls).expect("focused control"),
@@ -902,6 +913,7 @@ impl Workbench {
             ext_views: self.a11y_ext_views(window),
             search_editor,
             search_tabs,
+            refactor: self.a11y_refactor_snap(window, cx),
             term_tabs: self.a11y_term_tabs(cx),
             picker,
             notice,
@@ -940,7 +952,11 @@ impl Workbench {
             cx.notify();
             return;
         }
-        if self.a11y_search_action(req, last, window, cx) || self.a11y_term_tab_action(req, last, window, cx) || self.a11y_popup_action(req, last, window, cx) {
+        if self.a11y_refactor_action(req, last, window, cx)
+            || self.a11y_search_action(req, last, window, cx)
+            || self.a11y_term_tab_action(req, last, window, cx)
+            || self.a11y_popup_action(req, last, window, cx)
+        {
             return;
         }
         match (req.action, req.target_node) {
