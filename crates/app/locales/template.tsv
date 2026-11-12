@@ -290,6 +290,7 @@ Choose an extension in the Extensions view.
 Choose…	
 Clear	
 Clear Terminal	
+Clear all notifications	
 Clear filter	
 Clear filters	
 Clear the picked lines (Escape)	
@@ -453,6 +454,7 @@ Convert indentation to tabs
 Convert to…	
 Converted to {}	
 Copied	
+Copied the notification	
 Copied {}	
 Copied {} item ({}) to {}|Copied {} items ({}) to {}	
 Copied {} item.|Copied {} items.	
@@ -482,6 +484,7 @@ Copy code
 Copy container ID	
 Copy fix	
 Copy link	
+Copy notification	
 Copy path	
 Copy text selected with the mouse: while Claude Code or Codex runs, always, or never	
 Copy the files again on the current host before pasting.	
@@ -723,7 +726,9 @@ Disk read / write rate
 Disk size	
 Disk size includes the writable layer and virtual image size; volumes are excluded. Disk and network I/O are cumulative totals.	
 Disk write	
+Dismiss notification	
 Dismiss this file from the results	
+Do Not Disturb is on: information and warning toasts are hidden. Click to turn it off	
 Do you trust the authors of this folder?	
 Do you trust the authors of this workspace?	
 Do you want to save the changes you made to {}?	
@@ -1606,6 +1611,7 @@ No merge conflicts in this file.
 No merges	
 No misspelled word at the cursor.	
 No mounted storage	
+No notifications	
 No open pull requests.	
 No outgoing calls found	
 No outline for this file type.	
@@ -1706,6 +1712,11 @@ Nothing was installed. This release isn't signed, so Codeyard can't verify it.
 Nothing was installed. What the update server sent didn't match the signed checksums, so Codeyard discarded it.	
 Nothing yet.	
 Nothing yet: open a folder to see it here.	
+Notifications	
+Notifications, Do Not Disturb is on	
+Notifications: Clear	
+Notifications: Show	
+Notifications: Toggle Do Not Disturb	
 Nov	
 Now	
 Numbers and booleans were written as text.	
@@ -2025,6 +2036,7 @@ Release Notes
 Release Page	
 Reload history	
 Reloading the Rust workspace…	
+Remote	
 Remote & Languages	
 Remote Docker environments currently support attaching to existing containers. Create Dev Containers with a local Docker engine.	
 Remote Explorer	
@@ -2543,6 +2555,7 @@ Task “{}” has a variable that cannot be expanded.
 Task “{}” has no command.	
 Task “{}” needs an open file.	
 Task “{}” runs in the background but its problem matcher has no endsPattern, so nothing can wait for it.	
+Tasks	
 Tasks, tests and debugging	
 Tasks: Configure Tasks	
 Tasks: Rerun Last Task	
@@ -2831,6 +2844,7 @@ Trusted “{}”
 Try Again	
 Try again	
 Tuesday	
+Turn on Do Not Disturb	
 Two tasks are called “{}”.	
 Type > for commands	
 Type a commit message first	
@@ -3039,6 +3053,7 @@ Without one, F5 finds a configuration from the project (Cargo, Go, or the open P
 Word Wrap	
 Workbench	
 Workspace	
+Workspace Trust	
 Workspace Trust is off (security.workspaceTrust.enabled).	
 Workspace Trust: Restricted Mode, this folder is not trusted. Select a folder to stop trusting it	
 Workspace Trust: select a trusted folder to stop trusting it	
@@ -3303,6 +3318,7 @@ remote
 renamed	
 renamed from {}	
 render must answer with response.view	
+repeated {} times	
 request failed	
 review needed	
 revoked: {}	
@@ -3691,6 +3707,7 @@ your words
 {} test|{} tests	
 {} type definition|{} type definitions	
 {} unchanged line|{} unchanged lines	
+{} unread notification|{} unread notifications	
 {} was not installed from a registry	
 {} week ago|{} weeks ago	
 {} year ago|{} years ago	

@@ -51,7 +51,7 @@ pub(super) enum PullRow {
 impl Workbench {
     pub(super) fn show_pull_requests(&mut self, _: &ShowPullRequests, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
-        self.notice = Some(Notice::Info(crate::i18n::t("Loading pull requests…").into()));
+        self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Loading pull requests…").into()));
         cx.notify();
         let host = self.remote.host.clone();
         let source_host = host.clone();
@@ -83,7 +83,7 @@ impl Workbench {
         let remotes = match remotes {
             Ok(r) => r,
             Err(e) => {
-                self.notice = Some(Notice::Error(e.lines().next().unwrap_or(crate::i18n::t("could not load pull requests")).to_string().into()));
+                self.notify(NoticeSource::App, Notice::Error(e.lines().next().unwrap_or(crate::i18n::t("could not load pull requests")).to_string().into()));
                 cx.notify();
                 return;
             }
@@ -140,7 +140,7 @@ impl Workbench {
             } else {
                 crate::i18n::tf("None of this repository's remotes is on github.com or on a host of {}.", &[&others.join(", ")])
             };
-            self.notice = Some(Notice::Error(msg.into()));
+            self.notify(NoticeSource::App, Notice::Error(msg.into()));
             cx.notify();
             return;
         }
@@ -181,15 +181,18 @@ impl Workbench {
         if rows.is_empty() {
             // Nothing open anywhere is news, not an error; a failure is.
             let said = notes.failed.iter().chain(&notes.empty).cloned().collect::<Vec<_>>().join(" · ");
-            self.notice = Some(match (notes.failed.is_empty(), said.is_empty()) {
-                (true, true) => Notice::Info(crate::i18n::t("No open pull requests.").into()),
-                (true, false) => Notice::Info(said.into()),
-                (false, _) => Notice::Error(said.into()),
-            });
+            self.notify(
+                NoticeSource::App,
+                match (notes.failed.is_empty(), said.is_empty()) {
+                    (true, true) => Notice::Info(crate::i18n::t("No open pull requests.").into()),
+                    (true, false) => Notice::Info(said.into()),
+                    (false, _) => Notice::Error(said.into()),
+                },
+            );
             cx.notify();
             return;
         }
-        self.notice = None;
+        self.dismiss_notice();
         let title = notes.lines.into_iter().chain(notes.empty).chain(notes.failed).collect::<Vec<_>>().join(" — ");
         let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Pull requests"), "", None, cx).with_message(title));
         self.show_overlay(picker, OverlayKind::PullRequests { host, root, rows }, window, cx);
@@ -221,12 +224,12 @@ impl Workbench {
             PullAction::Open => cx.open_url(&pull.url),
             PullAction::CopyLink => {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(pull.url.clone()));
-                self.notice = Some(Notice::Info(crate::i18n::t("Link copied.").into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Link copied.").into()));
                 cx.notify();
             }
             PullAction::CopyBranch => {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(pull.head.clone()));
-                self.notice = Some(Notice::Info(crate::i18n::tf("Copied {}.", &[&pull.head]).into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("Copied {}.", &[&pull.head]).into()));
                 cx.notify();
             }
             PullAction::Checkout => {

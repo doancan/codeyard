@@ -112,7 +112,7 @@ impl Workbench {
     /// "View: Move View to Secondary Side Bar": the view of the primary side bar moves to the right of the editor.
     pub(super) fn move_view_to_secondary(&mut self, cx: &mut Context<Self>) {
         let Some(view) = self.chrome.panel else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a view in the side bar first.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a view in the side bar first.").into()));
             return cx.notify();
         };
         if !self.chrome.in_secondary.contains(&view) {
@@ -128,7 +128,7 @@ impl Workbench {
     /// "View: Move View to Primary Side Bar": the view of the secondary side bar goes back to the left.
     pub(super) fn move_view_to_primary(&mut self, cx: &mut Context<Self>) {
         let Some(view) = self.chrome.secondary else {
-            self.notice = Some(Notice::Info(crate::i18n::t("The secondary side bar shows no view.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("The secondary side bar shows no view.").into()));
             return cx.notify();
         };
         self.chrome.in_secondary.retain(|v| *v != view);
@@ -145,7 +145,10 @@ impl Workbench {
             None => self.chrome.secondary_last.or_else(|| self.chrome.in_secondary.first().copied()),
         };
         if self.chrome.secondary.is_none() && self.chrome.in_secondary.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No view is in the secondary side bar. Use View: Move View to Secondary Side Bar.").into()));
+            self.notify(
+                NoticeSource::App,
+                Notice::Info(crate::i18n::t("No view is in the secondary side bar. Use View: Move View to Secondary Side Bar.").into()),
+            );
         }
         if let Some(v) = self.chrome.secondary {
             self.chrome.secondary_last = Some(v);
@@ -157,7 +160,7 @@ impl Workbench {
     /// "Terminal: Move Terminal into New Window": the active terminal leaves the panel for a window of its own.
     pub(super) fn detach_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(term) = self.terminals.get(self.active_terminal).cloned() else {
-            self.notice = Some(Notice::Info(crate::i18n::t("There is no terminal to move.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("There is no terminal to move.").into()));
             return cx.notify();
         };
         let at = window.bounds();
@@ -169,7 +172,7 @@ impl Workbench {
                 self.chrome.detached.push(Detached { term, window: handle });
                 self.persist_session(cx);
             }
-            Err(e) => self.notice = Some(Notice::Error(crate::i18n::tf("The terminal could not move to a new window: {}", &[&e]).into())),
+            Err(e) => self.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("The terminal could not move to a new window: {}", &[&e]).into())),
         }
         cx.notify();
     }

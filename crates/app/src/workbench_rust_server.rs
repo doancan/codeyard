@@ -94,7 +94,7 @@ impl Workbench {
                 Some(path) => self.rust_unavailable_message(&path, cx),
                 None => t("Open a Rust file first").to_string(),
             };
-            self.notice = Some(Notice::Info(message.into()));
+            self.notify(NoticeSource::Language, Notice::Info(message.into()));
             cx.notify();
             return;
         };
@@ -105,7 +105,7 @@ impl Workbench {
             }
             _ => Value::Null,
         };
-        self.notice = Some(Notice::Info(control.started().into()));
+        self.notify(NoticeSource::Language, Notice::Info(control.started().into()));
         cx.notify();
         if !control.is_request() {
             client.notify(control.method(), params);
@@ -124,7 +124,7 @@ impl Workbench {
                     Err(e) if e.code == Some(METHOD_NOT_FOUND) => t("The Rust language server does not support this command").to_string(),
                     Err(e) => e.message,
                 };
-                this.notice = Some(Notice::Info(message.into()));
+                this.notify(NoticeSource::Language, Notice::Info(message.into()));
                 cx.notify();
             })
             .ok();
@@ -171,7 +171,7 @@ impl Workbench {
                 self.attach_lsp(&ed, cx);
             }
         }
-        self.notice = Some(Notice::Info(t("Restarting rust-analyzer…").into()));
+        self.notify(NoticeSource::Language, Notice::Info(t("Restarting rust-analyzer…").into()));
         cx.notify();
     }
 }

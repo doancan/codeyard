@@ -3968,3 +3968,20 @@ Zoom level	Yakınlaştırma düzeyi
 {0} × {1} pixels, {2}, {3}	{0} × {1} piksel, {2}, {3}
 animated, {} frame|animated, {} frames	animasyonlu, {} kare
 animated PNG, first frame shown	animasyonlu PNG, ilk kare gösteriliyor
+Clear all notifications	Tüm bildirimleri temizle
+Copied the notification	Bildirim kopyalandı
+Copy notification	Bildirimi kopyala
+Dismiss notification	Bildirimi kapat
+Do Not Disturb is on: information and warning toasts are hidden. Click to turn it off	Rahatsız Etme açık: bilgi ve uyarı bildirimleri gizlenir. Kapatmak için tıklayın
+No notifications	Bildirim yok
+Notifications	Bildirimler
+Notifications, Do Not Disturb is on	Bildirimler, Rahatsız Etme açık
+Remote	Uzak
+Tasks	Görevler
+Turn on Do Not Disturb	Rahatsız Etme'yi aç
+Workspace Trust	Çalışma Alanı Güveni
+repeated {} times	{} kez tekrarlandı
+{} unread notification|{} unread notifications	{} okunmamış bildirim
+Notifications: Show	Bildirimler: Göster
+Notifications: Clear	Bildirimler: Temizle
+Notifications: Toggle Do Not Disturb	Bildirimler: Rahatsız Etme'yi Aç/Kapat

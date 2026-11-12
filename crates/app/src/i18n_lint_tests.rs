@@ -125,8 +125,8 @@ fn the_scanner_flags_bare_text_and_accepts_the_documented_exceptions() {
     let flagged = |s: &str| !violations(s).is_empty();
     // bare text
     assert!(flagged(r#"d.child("Reconnect")"#));
-    assert!(flagged(r#"self.notice = Some(Notice::Info("Saved.".into()));"#));
-    assert!(flagged(r#"self.notice = Some(Notice::Error(format!("Could not save {name}").into()));"#));
+    assert!(flagged(r#"self.notify(NoticeSource::App, Notice::Info("Saved.".into()));"#));
+    assert!(flagged(r#"self.notify(NoticeSource::App, Notice::Error(format!("Could not save {name}").into()));"#));
     assert!(flagged(r#".tooltip(|_, cx| cx.new(|_| Tooltip("Toggle it".into())).into())"#));
     assert!(flagged(r#".placeholder("Search")"#));
     assert!(flagged(r#"self.confirm(window, "Delete it?", "Cannot be undone.", "Delete", cx, f);"#));

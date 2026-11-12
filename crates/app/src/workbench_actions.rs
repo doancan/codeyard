@@ -231,6 +231,9 @@ impl Workbench {
             .on_action(cx.listener(|this, _: &ShowKeyboardShortcuts, window, cx| this.show_shortcuts_picker(window, cx)))
             .on_action(cx.listener(|this, _: &CopyFullDiagnostic, _, cx| this.copy_full_diagnostic(cx)))
             .on_action(cx.listener(Self::copy_all_problems))
+            .on_action(cx.listener(Self::show_notifications))
+            .on_action(cx.listener(Self::clear_notifications))
+            .on_action(cx.listener(Self::toggle_do_not_disturb))
             .on_action(cx.listener(Self::breadcrumb_symbols))
             .on_action(cx.listener(Self::search_in_workspace))
             .on_action(cx.listener(Self::search_in_open_editors))
@@ -262,7 +265,7 @@ impl Workbench {
             .on_action(cx.listener(Self::rust_show_status))
             .on_action(cx.listener(|this, _: &RestartLanguageServers, _, cx| {
                 this.restart_lsp(cx);
-                this.notice = Some(Notice::Info(crate::i18n::t("Restarting language servers…").into()));
+                this.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Restarting language servers…").into()));
                 cx.notify();
             }))
             .on_action(cx.listener(Self::manage_language_services))

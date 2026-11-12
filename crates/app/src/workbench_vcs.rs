@@ -118,7 +118,7 @@ impl Workbench {
                         // The picked repository was deleted (or is now part of the enclosing one): Source Control does
                         // not silently show another repository in its place.
                         this.vcs.scm_root = None;
-                        this.notice = Some(Notice::Error(crate::i18n::tf("Repository is no longer available: {}", &[&dir]).into()));
+                        this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Repository is no longer available: {}", &[&dir]).into()));
                         // Nothing of it stays on screen; the search that follows picks what to show.
                         this.apply_git(None, cx);
                         this.discover_repos(cx);
@@ -145,7 +145,7 @@ impl Workbench {
                     Err(e) => {
                         // Say it only the first time (polling retries every 4 s).
                         if this.vcs.error.is_none() {
-                            this.notice = Some(Notice::Error(format!("Git: {e}").into())); // i18n-keep: "Git: {}" would read the same in every language; {e} is git's own text
+                            this.notify(NoticeSource::App, Notice::Error(format!("Git: {e}").into())); // i18n-keep: "Git: {}" would read the same in every language; {e} is git's own text
                         }
                         this.vcs.error = Some(e.into());
                     }

@@ -83,7 +83,7 @@ impl Workbench {
         let (source, host) = match checked {
             Ok(x) => x,
             Err(e) => {
-                self.notice = Some(Notice::Error(e.into()));
+                self.notify(NoticeSource::Extensions, Notice::Error(e.into()));
                 cx.notify();
                 return;
             }
@@ -102,13 +102,16 @@ impl Workbench {
             }
             let _ = this.update(cx, |this, cx| {
                 let (Some(dir), Ok(id)) = (this.cfg.dir.clone(), ext_manifest::ExtId::parse(&extension)) else { return };
-                this.notice = Some(match crate::ext::store(&dir).add_user_host(&id, &source, &host) {
-                    Ok(()) => {
-                        *this.cfg.exts.hosts.hosts.borrow_mut() = None;
-                        Notice::Info(crate::i18n::tf("{0} may now connect to {1}.", &[&extension, &host]).into())
-                    }
-                    Err(e) => Notice::Error(crate::i18n::tf("Could not allow the server: {}", &[&e]).into()),
-                });
+                this.notify(
+                    NoticeSource::Extensions,
+                    match crate::ext::store(&dir).add_user_host(&id, &source, &host) {
+                        Ok(()) => {
+                            *this.cfg.exts.hosts.hosts.borrow_mut() = None;
+                            Notice::Info(crate::i18n::tf("{0} may now connect to {1}.", &[&extension, &host]).into())
+                        }
+                        Err(e) => Notice::Error(crate::i18n::tf("Could not allow the server: {}", &[&e]).into()),
+                    },
+                );
                 cx.notify();
             });
         })
@@ -119,7 +122,7 @@ impl Workbench {
     pub(super) fn remove_extension_user_host(&mut self, extension: String, host: String, cx: &mut Context<Self>) {
         let (Some(dir), Ok(id)) = (self.cfg.dir.clone(), ext_manifest::ExtId::parse(&extension)) else { return };
         if let Err(e) = crate::ext::store(&dir).remove_user_host(&id, &host) {
-            self.notice = Some(Notice::Error(crate::i18n::tf("Could not remove the server: {}", &[&e]).into()));
+            self.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("Could not remove the server: {}", &[&e]).into()));
         }
         *self.cfg.exts.hosts.hosts.borrow_mut() = None;
         cx.notify();

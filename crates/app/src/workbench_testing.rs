@@ -110,7 +110,7 @@ impl Workbench {
     }
 
     pub fn set_notice_for_test(&mut self, text: &str, error: bool, cx: &mut Context<Self>) {
-        self.notice = Some(if error { Notice::Error(text.to_string().into()) } else { Notice::Info(text.to_string().into()) });
+        self.notify(NoticeSource::App, if error { Notice::Error(text.to_string().into()) } else { Notice::Info(text.to_string().into()) });
         cx.notify();
     }
 
@@ -734,12 +734,12 @@ impl Workbench {
     }
 
     pub fn clear_notice_for_test(&mut self) {
-        self.notice = None;
+        self.dismiss_notice();
     }
 
     pub fn notice_for_test(&self) -> Option<(bool, String)> {
-        match &self.notice {
-            Some(Notice::Info(m)) => Some((false, m.to_string())),
+        match &self.notice() {
+            Some(Notice::Info(m) | Notice::Warning(m)) => Some((false, m.to_string())),
             Some(Notice::Error(m)) => Some((true, m.to_string())),
             None => None,
         }

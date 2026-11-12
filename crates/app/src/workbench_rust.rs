@@ -207,6 +207,6 @@ impl Workbench {
 }
 
 fn show_info(wb: &mut Workbench, text: String, cx: &mut Context<Workbench>) {
-    wb.notice = Some(Notice::Info(text.into()));
+    wb.notify(NoticeSource::Language, Notice::Info(text.into()));
     cx.notify();
 }

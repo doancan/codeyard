@@ -92,7 +92,7 @@ impl Workbench {
     /// *Rust: Show rust-analyzer Status*: the state, the server's message and its own report, as a read-only page.
     pub(in super::super) fn show_rust_status(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some((key, client)) = self.rust_server(cx) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("rust-analyzer is not running for this file").into()));
+            self.notify(NoticeSource::Language, Notice::Info(crate::i18n::t("rust-analyzer is not running for this file").into()));
             cx.notify();
             return;
         };

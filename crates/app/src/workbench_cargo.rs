@@ -660,7 +660,7 @@ impl Workbench {
 mod tests;
 
 fn notify(wb: &mut Workbench, text: impl Into<String>, cx: &mut Context<Workbench>) {
-    wb.notice = Some(Notice::Info(SharedString::from(text.into())));
+    wb.notify(NoticeSource::Language, Notice::Info(SharedString::from(text.into())));
     cx.notify();
 }
 

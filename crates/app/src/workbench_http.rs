@@ -45,7 +45,7 @@ impl Workbench {
         let Some(ed) = self.active_editor().cloned() else { return };
         let path = ed.read(cx).path.clone();
         if !http::is_http_file(&path) {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a .http or .rest file to send requests.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a .http or .rest file to send requests.").into()));
             cx.notify();
             return;
         }
@@ -53,7 +53,10 @@ impl Workbench {
         let line = line.unwrap_or_else(|| ed.read(cx).cursor_position().0.saturating_sub(1));
         let parsed = http::parse(&text);
         let Some(ix) = http::request_at(&parsed, line) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("There is no request here. Write METHOD URL on a line, separate requests with ###.").into()));
+            self.notify(
+                NoticeSource::App,
+                Notice::Info(crate::i18n::t("There is no request here. Write METHOD URL on a line, separate requests with ###.").into()),
+            );
             cx.notify();
             return;
         };
@@ -118,7 +121,7 @@ impl Workbench {
     /// After confirmation (if needed), prepare the request and send it with `curl`.
     pub(super) fn dispatch_request(&mut self, request: http::Request, vars: Vec<(String, String)>, path: String, window: &mut Window, cx: &mut Context<Self>) {
         if self.lsp.http_busy {
-            self.notice = Some(Notice::Info(crate::i18n::t("A request is still being sent; wait for its answer first.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("A request is still being sent; wait for its answer first.").into()));
             cx.notify();
             return;
         }
@@ -128,7 +131,7 @@ impl Workbench {
         let file_host = self.active_editor().map_or_else(|| self.remote.host.clone(), |e| e.read(cx).host_arc());
         let exec_host = if local { self.remote.local_host.clone() } else { self.remote.host.clone() };
         let dir = path.rsplit_once('/').map_or(String::new(), |(d, _)| d.to_string());
-        self.notice = Some(Notice::Info(crate::i18n::tf("Sending {} {}…", &[&request.method, &short_url(&request.url)]).into()));
+        self.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("Sending {} {}…", &[&request.method, &short_url(&request.url)]).into()));
         cx.notify();
         let name = request.name.clone();
         let task = cx.background_executor().spawn(async move {
@@ -166,7 +169,7 @@ impl Workbench {
                 match result {
                     Ok((prepared, response)) => this.show_response(name, &prepared, response, window, cx),
                     Err(e) => {
-                        this.notice = Some(Notice::Error(e.into()));
+                        this.notify(NoticeSource::App, Notice::Error(e.into()));
                         cx.notify();
                     }
                 }
@@ -221,14 +224,17 @@ impl Workbench {
         // The file just written, not the active editor: the tab opens asynchronously, so that would still be the `.http` file
         // and the next request (or quitting) would delete the user's request file.
         self.lsp.http_tab = self.create_scratch_with(name, &content, window, cx);
-        self.notice = Some(Notice::Info(
-            match note {
-                Some(n) => format!("{summary} · {n}"),
-                None if r_empty => format!("{summary} · {}", crate::i18n::t("empty body")),
-                None => summary,
-            }
-            .into(),
-        ));
+        self.notify(
+            NoticeSource::App,
+            Notice::Info(
+                match note {
+                    Some(n) => format!("{summary} · {n}"),
+                    None if r_empty => format!("{summary} · {}", crate::i18n::t("empty body")),
+                    None => summary,
+                }
+                .into(),
+            ),
+        );
         cx.notify();
     }
 
@@ -250,7 +256,7 @@ impl Workbench {
     /// "HTTP: Show Last Response Headers"
     pub(super) fn show_response_headers(&mut self, _: &ShowResponseHeaders, window: &mut Window, cx: &mut Context<Self>) {
         let Some(r) = self.lsp.http_last.clone() else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Send a request first.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Send a request first.").into()));
             cx.notify();
             return;
         };

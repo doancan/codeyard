@@ -350,6 +350,9 @@ impl Workbench {
             Command::action("View: Problems", ShowProblems),
             Command::action("Problems: Copy Full Diagnostic", CopyFullDiagnostic),
             Command::action("Problems: Copy All", panels_glue::CopyAllProblems),
+            Command::action("Notifications: Show", panels_glue::ShowNotifications),
+            Command::action("Notifications: Clear", panels_glue::ClearNotifications),
+            Command::action("Notifications: Toggle Do Not Disturb", panels_glue::ToggleDoNotDisturb),
             Command::action("Go: Pick Symbol at the Cursor's Level", outline_glue::BreadcrumbSymbols),
             Command::action("Problems: Toggle Active File Only", panels_glue::ToggleProblemsActiveFile),
             Command::action("Rust: Expand Macro Recursively", RustExpandMacro),
@@ -629,7 +632,7 @@ impl Workbench {
                                 .ok();
                         }
                         Err(e) => {
-                            this.notice = Some(Notice::Error(crate::i18n::tf("Could not list files: {}", &[&e]).into()));
+                            this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not list files: {}", &[&e]).into()));
                             weak_picker.update(cx, |p, cx| p.set_paths(0, Vec::new(), false, cx)).ok();
                             cx.notify();
                         }

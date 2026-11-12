@@ -80,7 +80,7 @@ impl Workbench {
     /// "Terminal: Move Terminal into Editor Area": the active terminal of the panel becomes a tab of the focused group.
     pub(super) fn move_terminal_into_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(term) = self.terminals.get(self.active_terminal).cloned() else {
-            self.notice = Some(Notice::Info(crate::i18n::t("There is no terminal to move.").into()));
+            self.notify(NoticeSource::Terminal, Notice::Info(crate::i18n::t("There is no terminal to move.").into()));
             return cx.notify();
         };
         // One owner: the group holds the terminal before the panel lets go of it.
@@ -107,7 +107,7 @@ impl Workbench {
     /// "Terminal: Move Terminal Back to Panel": the terminal in front of the focused group returns to the panel.
     pub(super) fn move_terminal_back_to_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(term) = self.front_editor_terminal() else {
-            self.notice = Some(Notice::Info(crate::i18n::t("No terminal is in front in the editor area.").into()));
+            self.notify(NoticeSource::Terminal, Notice::Info(crate::i18n::t("No terminal is in front in the editor area.").into()));
             return cx.notify();
         };
         self.return_editor_terminal(&term, window, cx);

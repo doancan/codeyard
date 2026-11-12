@@ -36,7 +36,7 @@ impl Workbench {
 
     fn git_file_link(&mut self, how: Use, window: &mut Window, cx: &mut Context<Self>) {
         let tell = |this: &mut Self, text: String, cx: &mut Context<Self>| {
-            this.notice = Some(Notice::Info(text.into()));
+            this.notify(NoticeSource::App, Notice::Info(text.into()));
             cx.notify();
         };
         let (Some(status), Some(ed)) = (self.git_status(), self.active_editor().cloned()) else {
@@ -85,10 +85,10 @@ impl Workbench {
                         } else {
                             crate::i18n::t("Permalink copied.")
                         };
-                        this.notice = Some(Notice::Info(note.into()));
+                        this.notify(NoticeSource::App, Notice::Info(note.into()));
                     }
                     (Ok(link), Use::Open) => cx.open_url(&link),
-                    (Err(e), _) => this.notice = Some(Notice::Info(e.into())),
+                    (Err(e), _) => this.notify(NoticeSource::App, Notice::Info(e.into())),
                 }
                 cx.notify();
             })

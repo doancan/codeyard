@@ -300,7 +300,7 @@ impl Workbench {
     /// Store changes refuse to run with `--no-extensions` or without a settings folder; the reason is shown.
     fn extension_store(&mut self, cx: &mut Context<Self>) -> Option<ext_core::Store> {
         if crate::ext::turned_off() {
-            self.notice = Some(Notice::Error(crate::i18n::t("Extensions are turned off for this session (--no-extensions).").into()));
+            self.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::t("Extensions are turned off for this session (--no-extensions).").into()));
             cx.notify();
             return None;
         }
@@ -339,7 +339,7 @@ impl Workbench {
             registries.retain(|r| r.name == only);
         }
         let spec = spec.trim().to_string();
-        self.notice = Some(Notice::Info(crate::i18n::tf("Looking for {} in your registries…", &[&spec]).into()));
+        self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::tf("Looking for {} in your registries…", &[&spec]).into()));
         cx.notify();
         // Native programs run on the workspace's host: its platform's package is the one to install.
         let target = crate::ext_programs::host_target(self.remote.host.as_ref()).or(ext_manifest::this_target()).unwrap_or("unknown");
@@ -349,10 +349,10 @@ impl Workbench {
         cx.spawn_in(window, async move |this, cx| {
             let found = task.await;
             this.update_in(cx, |this, window, cx| {
-                this.notice = None;
+                this.dismiss_notice();
                 match found {
                     Ok(p) => this.show_consent(p, window, cx),
-                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Cannot install the extension: {}", &[&e]).into())),
+                    Err(e) => this.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("Cannot install the extension: {}", &[&e]).into())),
                 }
                 cx.notify();
             })
@@ -392,7 +392,7 @@ impl Workbench {
             this.update_in(cx, |this, window, cx| match read {
                 Ok(p) => this.show_consent(p, window, cx),
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Cannot install the extension: {}", &[&e]).into()));
+                    this.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("Cannot install the extension: {}", &[&e]).into()));
                     cx.notify();
                 }
             })
@@ -456,7 +456,7 @@ impl Workbench {
         let Some(store) = self.extension_store(cx) else { return };
         if !self.consent_typed_ok(cx) {
             if let Some(p) = &self.cfg.exts.pending {
-                self.notice = Some(Notice::Error(crate::i18n::tf("Type {} to install it.", &[&p.manifest.id]).into()));
+                self.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("Type {} to install it.", &[&p.manifest.id]).into()));
             }
             if let Some(f) = &self.cfg.exts.consent_typed {
                 window.focus(&f.focus_handle(cx));
@@ -478,7 +478,7 @@ impl Workbench {
                 self.after_extension_change(done, window, cx);
             }
             Err(e) => {
-                self.notice = Some(Notice::Error(crate::i18n::tf("Cannot install {0}: {1}", &[&p.manifest.name, &e]).into()));
+                self.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("Cannot install {0}: {1}", &[&p.manifest.name, &e]).into()));
                 cx.notify();
             }
         }
@@ -488,14 +488,14 @@ impl Workbench {
     pub(super) fn after_extension_change(&mut self, done: String, window: &mut Window, cx: &mut Context<Self>) {
         self.reload_config(window, cx);
         self.refresh_extension_list();
-        if self.notice.is_none() {
-            self.notice = Some(Notice::Info(done.into()));
+        if self.toast_is_none() {
+            self.notify(NoticeSource::Extensions, Notice::Info(done.into()));
         }
         cx.notify();
     }
 
     fn report_store_error(&mut self, e: ext_core::Error, cx: &mut Context<Self>) {
-        self.notice = Some(Notice::Error(e.to_string().into()));
+        self.notify(NoticeSource::Extensions, Notice::Error(e.to_string().into()));
         cx.notify();
     }
 
@@ -549,11 +549,14 @@ impl Workbench {
     pub(super) fn verify_extension(&mut self, id: &str, cx: &mut Context<Self>) {
         let Some(store) = self.extension_store(cx) else { return };
         let Some(e) = self.cfg.exts.list.iter().find(|e| e.manifest.id.as_str() == id) else { return };
-        self.notice = Some(match store.verify(&e.digest) {
-            Ok(bad) if bad.is_empty() => Notice::Info(crate::i18n::tf("Every file of {} matches its package.", &[&id]).into()),
-            Ok(bad) => Notice::Error(crate::i18n::tf("Files of {0} that are missing or changed: {1}. Reinstall it.", &[&id, &bad.join(", ")]).into()),
-            Err(e) => Notice::Error(e.to_string().into()),
-        });
+        self.notify(
+            NoticeSource::Extensions,
+            match store.verify(&e.digest) {
+                Ok(bad) if bad.is_empty() => Notice::Info(crate::i18n::tf("Every file of {} matches its package.", &[&id]).into()),
+                Ok(bad) => Notice::Error(crate::i18n::tf("Files of {0} that are missing or changed: {1}. Reinstall it.", &[&id, &bad.join(", ")]).into()),
+                Err(e) => Notice::Error(e.to_string().into()),
+            },
+        );
         cx.notify();
     }
 }

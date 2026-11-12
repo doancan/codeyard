@@ -123,7 +123,7 @@ fn copying_all_or_one_row_puts_lines_with_place_and_origin_on_the_clipboard(cx: 
     wb.update(cx, |wb, cx| wb.copy_problem_row(2, cx));
     let text = cx.read_from_clipboard().and_then(|c| c.text()).unwrap();
     assert_eq!(text.lines().count(), 2, "{text}");
-    assert!(wb.read_with(cx, |wb, _| matches!(wb.notice, Some(Notice::Info(_)))));
+    assert!(wb.read_with(cx, |wb, _| matches!(wb.notice(), Some(Notice::Info(_)))));
 }
 
 #[gpui::test]

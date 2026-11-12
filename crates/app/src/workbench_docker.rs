@@ -67,7 +67,7 @@ impl Workbench {
     }
     fn show_container_setup(&mut self, name: &str, url: &'static str, window: &mut Window, cx: &mut Context<Self>) {
         let detail = crate::i18n::tf("{} is not installed. Open the setup instructions, then try again.", &[&name]);
-        self.notice = Some(Notice::Info(detail.clone().into()));
+        self.notify(NoticeSource::App, Notice::Info(detail.clone().into()));
         let answer = crate::questions::container_setup(name).ask(window, cx);
         cx.spawn(async move |_, cx| {
             if answer.await == Some(0) {
@@ -128,7 +128,7 @@ impl Workbench {
         if cx.global::<Settings>().docker_enabled {
             return true;
         }
-        self.notice = Some(Notice::Info(crate::i18n::t("Container module is off. Enable modules.containers.enabled in Settings.").into()));
+        self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Container module is off. Enable modules.containers.enabled in Settings.").into()));
         cx.notify();
         false
     }
@@ -138,7 +138,7 @@ impl Workbench {
             return;
         }
         self.remote.docker.cancel();
-        self.notice = Some(Notice::Info(crate::i18n::t("Container operation cancelled. Existing containers and volumes are kept.").into()));
+        self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Container operation cancelled. Existing containers and volumes are kept.").into()));
         cx.notify();
     }
 
@@ -153,7 +153,10 @@ impl Workbench {
             return;
         }
         if self.remote.docker.cancel.is_some() {
-            self.notice = Some(Notice::Info(crate::i18n::t("A container operation is running. Use Docker: Cancel Operation before starting another.").into()));
+            self.notify(
+                NoticeSource::App,
+                Notice::Info(crate::i18n::t("A container operation is running. Use Docker: Cancel Operation before starting another.").into()),
+            );
             cx.notify();
             return;
         }
@@ -176,7 +179,10 @@ impl Workbench {
             command.program,
             command.args.join(" ")
         ));
-        self.notice = Some(Notice::Info(crate::i18n::t("Container operation running. See Output for progress; Docker: Cancel Operation stops it.").into()));
+        self.notify(
+            NoticeSource::App,
+            Notice::Info(crate::i18n::t("Container operation running. See Output for progress; Docker: Cancel Operation stops it.").into()),
+        );
         let (tx, rx) = std::sync::mpsc::sync_channel(64);
         let source =
             if command.program == "docker" && command.ssh == self.remote.docker.monitor.host { self.remote.docker.monitor.source.clone() } else { None };
@@ -215,7 +221,7 @@ impl Workbench {
                 this.remote.docker.cancel = None;
                 match result {
                     Ok(text) => {
-                        this.notice = None;
+                        this.dismiss_notice();
                         then(this, text, window, cx);
                     }
                     Err(error) => {
@@ -231,7 +237,7 @@ impl Workbench {
                         } else {
                             crate::i18n::tf("{0}: {1}. Start the selected container engine and check Output.", &[&runtime, &error])
                         };
-                        this.notice = Some(Notice::Error(message.into()));
+                        this.notify(NoticeSource::App, Notice::Error(message.into()));
                         this.chrome.panel_open = true;
                         this.chrome.bottom = Bottom::Output;
                     }
@@ -322,8 +328,8 @@ impl Workbench {
                     cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Choose a Docker environment"), "", None, cx));
                 this.show_overlay(picker, OverlayKind::DockerContexts { contexts, action }, window, cx);
             }
-            Ok(_) => this.notice = Some(Notice::Info(crate::i18n::t("No Docker contexts found. Install Docker and start its engine.").into())),
-            Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not read Docker environments: {}", &[&e]).into())),
+            Ok(_) => this.notify(NoticeSource::App, Notice::Info(crate::i18n::t("No Docker contexts found. Install Docker and start its engine.").into())),
+            Err(e) => this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not read Docker environments: {}", &[&e]).into())),
         });
     }
 
@@ -337,7 +343,7 @@ impl Workbench {
         }
         self.docker_run(context.route(DockerCommand::docker(Some(&context.name), &["info", "--format", "{{.OSType}}"])), window, cx, move |this, text, window, cx| {
             if text.trim() != "linux" {
-                this.notice = Some(Notice::Info(crate::i18n::t("This engine runs Windows containers. Editing requires a Linux container; Windows container editing needs a separate Windows agent. Container logs remain available.").into()));
+                this.notify(NoticeSource::App, Notice::Info(crate::i18n::t("This engine runs Windows containers. Editing requires a Linux container; Windows container editing needs a separate Windows agent. Container logs remain available.").into()));
             } else {
                 this.docker_context_ready(context, action, window, cx);
             }
@@ -370,40 +376,47 @@ impl Workbench {
                             });
                             this.show_overlay(picker, OverlayKind::DockerContainers { context, containers, services }, window, cx);
                         }
-                        Ok(_) => {
-                            this.notice = Some(Notice::Info(
+                        Ok(_) => this.notify(
+                            NoticeSource::App,
+                            Notice::Info(
                                 if context.engine == Engine::Docker {
                                     crate::i18n::t("No containers in this Docker environment.")
                                 } else {
                                     crate::i18n::t("No containers in this environment.")
                                 }
                                 .into(),
-                            ))
-                        }
-                        Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not read containers: {}", &[&e]).into())),
+                            ),
+                        ),
+                        Err(e) => this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not read containers: {}", &[&e]).into())),
                     }
                 });
             }
             Action::Open(project, rebuild) => {
                 if context.engine == Engine::Apple {
-                    self.notice = Some(Notice::Info(crate::i18n::t("Apple Container supports connecting, starting containers and viewing logs. Dev Container project creation is not supported by this adapter yet; connect to an existing Apple container.").into()));
+                    self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Apple Container supports connecting, starting containers and viewing logs. Dev Container project creation is not supported by this adapter yet; connect to an existing Apple container.").into()));
                     cx.notify();
                     return;
                 }
                 if project.compose && context.engine == Engine::Wslc {
-                    self.notice = Some(Notice::Info(
-                        crate::i18n::t("WSL Containers does not support Compose in this workflow. Choose Docker or Podman for a Compose project.").into(),
-                    ));
+                    self.notify(
+                        NoticeSource::App,
+                        Notice::Info(
+                            crate::i18n::t("WSL Containers does not support Compose in this workflow. Choose Docker or Podman for a Compose project.").into(),
+                        ),
+                    );
                     cx.notify();
                     return;
                 }
                 if project.compose && context.engine == Engine::Podman && host::find_program("podman-compose").is_none() {
-                    self.notice = Some(Notice::Info(crate::i18n::t("Install podman-compose to open a Compose project with Podman, then try again.").into()));
+                    self.notify(
+                        NoticeSource::App,
+                        Notice::Info(crate::i18n::t("Install podman-compose to open a Compose project with Podman, then try again.").into()),
+                    );
                     cx.notify();
                     return;
                 }
                 if context.endpoint.starts_with("ssh:") || context.endpoint.starts_with("tcp:") {
-                    self.notice = Some(Notice::Info(
+                    self.notify(NoticeSource::App, Notice::Info(
                         crate::i18n::t(
                             "Remote Docker environments currently support attaching to existing containers. Create Dev Containers with a local Docker engine.",
                         )
@@ -457,7 +470,7 @@ impl Workbench {
         let alias = match context.container_alias(&container.id) {
             Ok(alias) => alias,
             Err(e) => {
-                self.notice = Some(Notice::Error(crate::i18n::tf("Docker: {}", &[&e]).into()));
+                self.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Docker: {}", &[&e]).into()));
                 return;
             }
         };
@@ -478,7 +491,10 @@ impl Workbench {
             })
             .detach();
         } else {
-            self.notice = Some(Notice::Info(crate::i18n::t("This container is paused or restarting. Resume it in Docker before connecting.").into()));
+            self.notify(
+                NoticeSource::App,
+                Notice::Info(crate::i18n::t("This container is paused or restarting. Resume it in Docker before connecting.").into()),
+            );
         }
         cx.notify();
     }
@@ -489,14 +505,14 @@ impl Workbench {
         }
         if rebuild {
             let Some((project, context)) = self.remote.docker.project.clone() else {
-                self.notice = Some(Notice::Info(crate::i18n::t("Open this project with Docker: Open Project in Dev Container first.").into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open this project with Docker: Open Project in Dev Container first.").into()));
                 cx.notify();
                 return;
             };
             let project = match docker::Project::discover(&project.root) {
                 Ok(p) => p,
                 Err(e) => {
-                    self.notice = Some(Notice::Error(crate::i18n::tf("Dev Container configuration: {}", &[&e]).into()));
+                    self.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Dev Container configuration: {}", &[&e]).into()));
                     cx.notify();
                     return;
                 }
@@ -505,24 +521,27 @@ impl Workbench {
             return;
         }
         if self.remote.host.is_remote() {
-            self.notice = Some(Notice::Info(
-                crate::i18n::t(
-                    "Open the source folder on this computer to create a Dev Container. Remote Docker contexts support attaching to existing containers.",
-                )
-                .into(),
-            ));
+            self.notify(
+                NoticeSource::App,
+                Notice::Info(
+                    crate::i18n::t(
+                        "Open the source folder on this computer to create a Dev Container. Remote Docker contexts support attaching to existing containers.",
+                    )
+                    .into(),
+                ),
+            );
             cx.notify();
             return;
         }
         let Some(root) = self.active_root(cx) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a folder first.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a folder first.").into()));
             cx.notify();
             return;
         };
         match docker::Project::discover(std::path::Path::new(&root)) {
             Ok(project) => self.docker_contexts(Action::Open(project, false), window, cx),
             Err(e) => {
-                self.notice = Some(Notice::Error(crate::i18n::tf("Dev Container configuration: {}", &[&e]).into()));
+                self.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Dev Container configuration: {}", &[&e]).into()));
                 cx.notify();
             }
         }
@@ -548,7 +567,7 @@ impl Workbench {
                 .and_then(|r| std::fs::canonicalize(r).ok()).is_some_and(|r| ui::local_path(&r) == ui::local_path(&project.root));
             let current_container = rebuild && matches!(&this.remote.conn, Conn::Connected { alias } if *alias == project.runtime_alias(&context));
             if !current_source && !current_container {
-                this.notice = Some(Notice::Info(crate::i18n::t("The workspace changed. Open the source project and review its container configuration again.").into()));
+                this.notify(NoticeSource::App, Notice::Info(crate::i18n::t("The workspace changed. Open the source project and review its container configuration again.").into()));
                 cx.notify();
                 return;
             }
@@ -560,13 +579,13 @@ impl Workbench {
                         let alias = project.runtime_alias(&context);
                         this.remote.docker.project = Some((project, context));
                         if this.workspace_key(cx) != before || this.any_dirty(cx) {
-                            this.notice = Some(Notice::Info(crate::i18n::t("Dev Container is ready. The current workspace or unsaved files changed, so it was not switched automatically. Connect through the Docker picker.").into()));
+                            this.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Dev Container is ready. The current workspace or unsaved files changed, so it was not switched automatically. Connect through the Docker picker.").into()));
                         } else {
                             this.remote.pending_path = Some(opened.folder);
                             this.connect(alias, window, cx);
                         }
                     }
-                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Dev Container result: {}", &[&e]).into())),
+                    Err(e) => this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Dev Container result: {}", &[&e]).into())),
                 }
             });
         });

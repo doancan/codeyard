@@ -28,7 +28,7 @@ fn a_pull_checkout_cannot_follow_a_remote_repointed_while_its_menu_is_open(cx: &
     assert!(git_in(&root, &["branch", "--list", "pr-42"]).is_empty());
     assert!(!root.join("different-repository.txt").exists());
     assert!(
-        wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Error(message)) if message.contains("changed"))),
+        wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Error(message)) if message.contains("changed"))),
         "explain why the old selection was refused"
     );
 }
@@ -79,7 +79,7 @@ fn a_pull_list_keeps_its_resolved_url_when_an_instead_of_rule_changes(cx: &mut T
     assert_eq!(git_in(&root, &["config", "remote.origin.url"]).trim(), "cy-pr-test:repo", "the alias itself never changed");
     assert!(git_in(&root, &["branch", "--list", "pr-42"]).is_empty(), "the second menu must keep the first list's resolved URL");
     assert!(!root.join(".git/FETCH_HEAD").exists(), "refuse before fetching any PR");
-    assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Error(message)) if message.contains("changed"))));
+    assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Error(message)) if message.contains("changed"))));
 }
 
 #[gpui::test]
@@ -142,7 +142,7 @@ fn current_sync_target_pickers_still_run_pull_and_push(cx: &mut TestAppContext) 
         });
         cx.run_until_parked();
         assert!(!wb.read_with(cx, |wb, _| wb.sync_running_for_test()));
-        assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.contains(if pull { "Pulled" } else { "Pushed" }))));
+        assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.contains(if pull { "Pulled" } else { "Pushed" }))));
         assert!(wb.read_with(cx, |wb, _| wb.overlay.is_none()));
     }
 }
@@ -163,11 +163,11 @@ fn pending_sync_target_lists_cannot_open_after_their_context_changes(cx: &mut Te
                     } else {
                         wb.vcs.status = None;
                     }
-                    wb.notice = Some(Notice::Info("new context".into()));
+                    wb.notify(NoticeSource::Git, Notice::Info("new context".into()));
                 });
                 cx.run_until_parked();
                 assert!(wb.read_with(cx, |wb, _| wb.overlay.is_none()), "a stale sync target list cannot open a picker");
-                assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.as_ref() == "new context")));
+                assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.as_ref() == "new context")));
             }
         }
     }
@@ -192,13 +192,13 @@ fn visible_sync_targets_cannot_start_an_operation_after_their_context_changes(cx
                 } else {
                     wb.vcs.status = Some(Arc::new(git::Status { root: crate::ui::local_path(&other), ..Default::default() }));
                 }
-                wb.notice = Some(Notice::Info("new context".into()));
+                wb.notify(NoticeSource::Git, Notice::Info("new context".into()));
                 wb.on_overlay_event(&PickerEvent::Confirm(Pick::Item { source: 0, index: 0 }), window, cx);
                 assert!(!wb.sync_running_for_test(), "an old target must not start Git on the new context");
             });
             cx.run_until_parked();
             assert!(wb.read_with(cx, |wb, _| wb.overlay.is_none()));
-            assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.as_ref() == "new context")));
+            assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.as_ref() == "new context")));
         }
     }
 }
@@ -234,13 +234,13 @@ fn check_old_sync_result(cx: &mut TestAppContext, background: bool) {
                 } else {
                     wb.vcs.status = None;
                 }
-                wb.notice = Some(Notice::Info("new context".into()));
+                wb.notify(NoticeSource::Git, Notice::Info("new context".into()));
             });
             cx.run_until_parked();
             assert!(!wb.read_with(cx, |wb, _| wb.sync_running_for_test()), "the old operation must release the window's guard");
             assert!(wb.read_with(cx, |wb, _| wb.autofetch_error_for_test()).is_none(), "old fetch errors must not attach to the new context");
             assert!(
-                wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.as_ref() == "new context")),
+                wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.as_ref() == "new context")),
                 "old sync results must not replace the new context's notice"
             );
             if !fail {
@@ -320,10 +320,10 @@ fn an_old_pull_request_load_error_cannot_replace_the_new_context_notice(cx: &mut
             } else {
                 wb.vcs.status = None;
             }
-            wb.notice = Some(Notice::Info("new context".into()));
+            wb.notify(NoticeSource::Git, Notice::Info("new context".into()));
         });
         cx.run_until_parked();
-        assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.as_ref() == "new context")));
+        assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.as_ref() == "new context")));
         assert!(wb.read_with(cx, |wb, _| wb.overlay.is_none()));
     }
 }
@@ -424,11 +424,11 @@ fn a_remote_url_read_cannot_open_an_editor_after_its_context_changes(cx: &mut Te
             } else {
                 wb.vcs.status = None;
             }
-            wb.notice = None;
+            wb.dismiss_notice();
         });
         cx.run_until_parked();
         assert!(wb.read_with(cx, |wb, _| wb.overlay.is_none()), "the old URL must not become a form bound to the new context");
-        assert!(wb.read_with(cx, |wb, _| wb.notice.is_none()));
+        assert!(wb.read_with(cx, |wb, _| wb.notice().is_none()));
     }
 }
 
@@ -445,7 +445,7 @@ fn a_failed_remote_url_read_is_an_error_instead_of_an_empty_editor(cx: &mut Test
     });
     cx.run_until_parked();
     assert!(wb.read_with(cx, |wb, _| wb.overlay.is_none()), "a failed metadata read must not offer a blank replacement URL");
-    assert!(wb.read_with(cx, |wb, _| matches!(wb.notice, Some(Notice::Error(_)))));
+    assert!(wb.read_with(cx, |wb, _| matches!(wb.notice(), Some(Notice::Error(_)))));
     std::fs::rename(moved, root).unwrap();
 }
 
@@ -462,7 +462,7 @@ fn a_removed_remote_cannot_open_an_empty_url_editor(cx: &mut TestAppContext) {
     });
     cx.run_until_parked();
     assert!(wb.read_with(cx, |wb, _| wb.overlay.is_none()));
-    assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Error(message)) if message.contains("origin"))));
+    assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Error(message)) if message.contains("origin"))));
 }
 
 #[gpui::test]
@@ -585,7 +585,7 @@ fn generic_git_task_results_and_callbacks_cannot_cross_contexts(cx: &mut TestApp
                 } else {
                     wb.vcs.status = None;
                 }
-                wb.notice = Some(Notice::Info("new context".into()));
+                wb.notify(NoticeSource::Git, Notice::Info("new context".into()));
             });
             cx.run_until_parked();
             assert!(ran.load(std::sync::atomic::Ordering::Relaxed), "the already started operation still runs on its original host");
@@ -593,7 +593,7 @@ fn generic_git_task_results_and_callbacks_cannot_cross_contexts(cx: &mut TestApp
                 assert!(git_in(&root, &["branch", "--list", "completed-old-task"]).contains("completed-old-task"));
             }
             assert!(!refreshed.load(std::sync::atomic::Ordering::Relaxed), "a stale completion cannot refresh the new context");
-            assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.as_ref() == "new context")));
+            assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.as_ref() == "new context")));
         }
     }
 }
@@ -619,7 +619,7 @@ fn generic_git_task_in_the_current_context_keeps_its_result_and_callback(cx: &mu
             });
             cx.run_until_parked();
             assert!(refreshed.load(std::sync::atomic::Ordering::Relaxed));
-            assert!(wb.read_with(cx, |wb, _| match &wb.notice {
+            assert!(wb.read_with(cx, |wb, _| match &wb.notice() {
                 Some(Notice::Info(message)) if !failed => message.as_ref() == "current success",
                 Some(Notice::Error(message)) if failed => message.as_ref() == "current error",
                 _ => false,
@@ -779,7 +779,7 @@ fn an_old_checkout_result_cannot_replace_the_new_context_notice(cx: &mut TestApp
                 } else {
                     wb.vcs.status = None;
                 }
-                wb.notice = Some(Notice::Info("new context".into()));
+                wb.notify(NoticeSource::Git, Notice::Info("new context".into()));
             });
             cx.run_until_parked();
             assert_eq!(
@@ -788,7 +788,7 @@ fn an_old_checkout_result_cannot_replace_the_new_context_notice(cx: &mut TestApp
                 "the already started operation finishes on its original host"
             );
             assert!(
-                wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.as_ref() == "new context")),
+                wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.as_ref() == "new context")),
                 "a late result cannot overwrite the new context's message"
             );
         }
@@ -814,7 +814,7 @@ fn a_current_checkout_picker_switches_the_branch_and_reports_success(cx: &mut Te
     cx.run_until_parked();
     assert_eq!(git_in(&root, &["branch", "--show-current"]).trim(), "feature/context");
     assert!(wb.read_with(cx, |wb, _| Arc::ptr_eq(&wb.remote.host, &original_host)));
-    assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.contains("feature/context"))));
+    assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.contains("feature/context"))));
 }
 
 #[gpui::test]
@@ -826,7 +826,7 @@ fn pending_worktree_picker_is_discarded_when_its_host_or_repository_changes(cx: 
         for failed_list in [false, true] {
             wb.update_in(cx, |wb, window, cx| {
                 wb.vcs.status = Some(Arc::new(git::Status { root: if failed_list { format!("{path}/missing") } else { path.clone() }, ..Default::default() }));
-                wb.notice = None;
+                wb.dismiss_notice();
                 wb.show_branch_op_picker(BranchOp::OpenWorktree, window, cx);
                 if change_host {
                     wb.remote.host = Arc::new(host::local());
@@ -836,7 +836,7 @@ fn pending_worktree_picker_is_discarded_when_its_host_or_repository_changes(cx: 
             });
             cx.run_until_parked();
             assert!(wb.read_with(cx, |wb, _| wb.overlay.is_none()), "a stale listing cannot open a picker in the new context");
-            assert!(wb.read_with(cx, |wb, _| wb.notice.is_none()), "a stale listing cannot report errors in the new context");
+            assert!(wb.read_with(cx, |wb, _| wb.notice().is_none()), "a stale listing cannot report errors in the new context");
         }
     }
 }

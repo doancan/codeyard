@@ -403,7 +403,7 @@ impl Workbench {
             None if std::path::Path::new(&path).is_dir() => self.set_root(path, cx),
             // Folder deleted or moved: stay on the welcome screen and say why.
             None => {
-                self.notice = Some(Notice::Info(crate::i18n::tf("{} no longer exists, so it was not reopened.", &[&tilde(&path)]).into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("{} no longer exists, so it was not reopened.", &[&tilde(&path)]).into()));
                 cx.notify();
             }
             Some(alias) => {

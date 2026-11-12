@@ -5,7 +5,7 @@
 use gpui::{AppContext as _, Context, Window};
 
 use super::git_glue::{BranchOp, first_line};
-use super::{InputPurpose, Notice, OverlayKind, Workbench};
+use super::{InputPurpose, Notice, NoticeSource, OverlayKind, Workbench};
 use crate::git::{self, BranchInfo};
 use crate::picker::{PickItem, Picker, Source as PickSource};
 
@@ -105,7 +105,7 @@ impl Workbench {
         match path.strip_prefix(&format!("{}/", root.trim_end_matches('/'))) {
             Some(rel) => Some((root, rel.to_string())),
             None => {
-                self.notice = Some(Notice::Info(crate::i18n::t("This file is not in the repository.").into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("This file is not in the repository.").into()));
                 cx.notify();
                 None
             }
@@ -115,7 +115,7 @@ impl Workbench {
     fn active_file_path(&mut self, cx: &mut Context<Self>) -> Option<String> {
         let path = self.active_editor().map(|e| e.read(cx).path.clone());
         if path.is_none() {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a file first.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a file first.").into()));
             cx.notify();
         }
         path
@@ -212,13 +212,16 @@ impl Workbench {
                         let list = match result {
                             Ok(list) => list,
                             Err(error) => {
-                                this.notice = Some(Notice::Error(crate::i18n::tf("Could not read the remote URL: {}", &[&first_line(&error)]).into()));
+                                this.notify(
+                                    NoticeSource::App,
+                                    Notice::Error(crate::i18n::tf("Could not read the remote URL: {}", &[&first_line(&error)]).into()),
+                                );
                                 cx.notify();
                                 return;
                             }
                         };
                         let Some((_, url)) = list.into_iter().find(|(name, _)| *name == n) else {
-                            this.notice = Some(Notice::Error(crate::i18n::tf("Remote {} no longer exists.", &[&n]).into()));
+                            this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Remote {} no longer exists.", &[&n]).into()));
                             cx.notify();
                             return;
                         };
@@ -346,7 +349,7 @@ impl Workbench {
             let result = task.await;
             this.update_in(cx, |this, window, cx| match result {
                 Ok(((_, files), _)) if files.is_empty() => {
-                    this.notice = Some(Notice::Info(crate::i18n::tf("{} holds no changes to tracked files.", &[&stash]).into()));
+                    this.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("{} holds no changes to tracked files.", &[&stash]).into()));
                     cx.notify();
                 }
                 Ok(((hash, files), subject)) => {
@@ -354,7 +357,7 @@ impl Workbench {
                     this.show_changed_files(root, commit, files, window, cx);
                 }
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not read the stash: {}", &[&first_line(&e)]).into()));
+                    this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not read the stash: {}", &[&first_line(&e)]).into()));
                     cx.notify();
                 }
             })
@@ -381,7 +384,7 @@ impl Workbench {
         match change {
             Some(c) => self.open_diff(rel, c.unstaged.is_none() && c.staged.is_some(), window, cx),
             None => {
-                self.notice = Some(Notice::Info(crate::i18n::tf("{} has no changes.", &[&crate::ui::file_name(&rel)]).into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("{} has no changes.", &[&crate::ui::file_name(&rel)]).into()));
                 cx.notify();
             }
         }
@@ -400,7 +403,7 @@ impl Workbench {
                     this.create_scratch_with(head_copy_name(crate::ui::file_name(&rel)), &text, window, cx);
                 }
                 None => {
-                    this.notice = Some(Notice::Info(crate::i18n::tf("{} is not in HEAD yet.", &[&crate::ui::file_name(&rel)]).into()));
+                    this.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("{} is not in HEAD yet.", &[&crate::ui::file_name(&rel)]).into()));
                     cx.notify();
                 }
             })
@@ -444,7 +447,7 @@ impl Workbench {
                 }
                 match result {
                     Ok(log) if log.is_empty() => {
-                        this.notice = Some(Notice::Info(crate::i18n::tf("{} has no commits yet.", &[&crate::ui::file_name(&rel)]).into()));
+                        this.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("{} has no commits yet.", &[&crate::ui::file_name(&rel)]).into()));
                         cx.notify();
                     }
                     Ok(log) => {
@@ -462,7 +465,7 @@ impl Workbench {
                         this.show_overlay(picker, OverlayKind::BranchOp { host: source_host, root, op: BranchOp::CompareCommit, names }, window, cx);
                     }
                     Err(e) => {
-                        this.notice = Some(Notice::Error(crate::i18n::tf("Could not read the history: {}", &[&first_line(&e)]).into()));
+                        this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not read the history: {}", &[&first_line(&e)]).into()));
                         cx.notify();
                     }
                 }

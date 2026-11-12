@@ -72,7 +72,7 @@ fn connection_attempt_late_failure_does_not_overwrite_a_new_attempt(cx: &mut gpu
     assert!(first.send(Err(host::HostError::Disconnected("obsolete failure".into()))).is_ok());
     settle(cx);
     assert!(wb.read_with(cx, |wb, _| matches!(&wb.remote.conn, Conn::Connecting { alias, .. } if alias == "fixture")));
-    assert!(wb.read_with(cx, |wb, _| wb.notice.is_none()));
+    assert!(wb.read_with(cx, |wb, _| wb.notice().is_none()));
     assert!(second.send(Err(host::HostError::Disconnected("current failure".into()))).is_ok());
     settle(cx);
     assert!(wb.read_with(cx, |wb, _| matches!(&wb.remote.conn, Conn::Failed { message, .. } if message.contains("current failure"))));
@@ -110,7 +110,7 @@ fn connection_attempt_container_failure_or_disable_keeps_ssh(cx: &mut gpui::Test
         assert!(Arc::ptr_eq(&wb.remote.host, &source));
         assert_eq!(wb.root(cx).as_deref(), Some(root.as_str()));
         assert!(wb.remote.docker.monitor.return_workspace.is_none());
-        assert!(wb.notice.is_some());
+        assert!(wb.notice().is_some());
     });
     let tx = wb.update_in(cx, |wb, window, cx| pending(wb, &alias, window, cx));
     cx.update(|_, cx| cx.global_mut::<Settings>().docker_enabled = false);

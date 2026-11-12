@@ -64,7 +64,7 @@ impl Workbench {
                     .and_then(|_| std::fs::read_to_string(&spath))
                     .and_then(|text| crate::fsutil::write_atomic(&spath, settings::set_string_in(&text, "theme", id)));
                 if let Err(e) = result {
-                    self.notice = Some(Notice::Error(crate::i18n::tf("Could not save the theme: {}", &[&e]).into()));
+                    self.notify(NoticeSource::Settings, Notice::Error(crate::i18n::tf("Could not save the theme: {}", &[&e]).into()));
                 }
             }
             None => {
@@ -127,7 +127,7 @@ impl Workbench {
             failures.len(),
             &[&name, fg, bg, &format!("{ratio:.1}"), &format!("{min:.1}")],
         );
-        self.notice = Some(Notice::Info(msg.into()));
+        self.notify(NoticeSource::Settings, Notice::Info(msg.into()));
     }
 
     /// `--theme`: for this session only, without writing to the saved preference.
@@ -139,7 +139,7 @@ impl Workbench {
             self.warn_low_contrast(window, cx);
         } else {
             let known: Vec<&str> = self.themes.iter().map(|t| t.id.as_str()).collect();
-            self.notice = Some(Notice::Error(crate::i18n::tf("Unknown theme '{0}'. Available: {1}", &[&id, &known.join(", ")]).into()));
+            self.notify(NoticeSource::Settings, Notice::Error(crate::i18n::tf("Unknown theme '{0}'. Available: {1}", &[&id, &known.join(", ")]).into()));
         }
     }
 

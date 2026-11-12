@@ -173,7 +173,7 @@ impl Workbench {
                 match result {
                     Ok(()) => then(this, window, cx),
                     Err(e) => {
-                        this.notice = Some(Notice::Error(e.to_string().into()));
+                        this.notify(NoticeSource::Files, Notice::Error(e.to_string().into()));
                         cx.notify();
                     }
                 }
@@ -232,7 +232,7 @@ impl Workbench {
                     });
                 }
                 _ => {
-                    self.notice = Some(Notice::Error(crate::i18n::t("Enter: path branch").into()));
+                    self.notify(NoticeSource::Files, Notice::Error(crate::i18n::t("Enter: path branch").into()));
                     cx.notify();
                 }
             },
@@ -244,7 +244,7 @@ impl Workbench {
                     });
                 }
                 _ => {
-                    self.notice = Some(Notice::Error(crate::i18n::t("Enter the remote as: name url").into()));
+                    self.notify(NoticeSource::Files, Notice::Error(crate::i18n::t("Enter the remote as: name url").into()));
                     cx.notify();
                 }
             },
@@ -578,7 +578,7 @@ impl Workbench {
                                 this.open_location(abs, l, c, window, cx);
                             }
                             None => {
-                                this.notice = Some(Notice::Info(crate::i18n::tf("No file “{}” in this project", &[&path]).into()));
+                                this.notify(NoticeSource::Files, Notice::Info(crate::i18n::tf("No file “{}” in this project", &[&path]).into()));
                                 cx.notify();
                             }
                         }

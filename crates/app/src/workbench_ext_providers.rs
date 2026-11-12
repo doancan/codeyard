@@ -314,7 +314,7 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let result = answer.await.unwrap_or(Err(v::Error::Cancelled));
             this.update(cx, |this, cx| {
-                this.notice = match result {
+                let outcome = match result {
                     Ok(Response::Edits(edits)) => {
                         let applied = ed.update(cx, |e, cx| e.apply_lsp_edits_if_unchanged(version, &to_edits(&edits), cx)).unwrap_or(false);
                         applied.then(|| Notice::Info(crate::i18n::tf("Formatted by {}", &[&ext]).into()))
@@ -324,6 +324,10 @@ impl Workbench {
                     Ok(_) => Some(Notice::Error(crate::i18n::tf("{}: the formatter returned no edits", &[&ext]).into())),
                     Err(e) => Some(Notice::Error(format!("{ext}: {}", super::code_glue::explain(&e)).into())),
                 };
+                match outcome {
+                    Some(n) => this.notify(NoticeSource::Extensions, n),
+                    None => this.dismiss_notice(),
+                }
                 cx.notify();
             })
             .ok();
@@ -359,8 +363,10 @@ impl Workbench {
                 Ok(_) | Err(v::Error::Cancelled) => {}
                 Err(e) => {
                     this.update(cx, |this, cx| {
-                        this.notice =
-                            Some(Notice::Error(crate::i18n::tf("Saved without formatting: {0}: {1}", &[&ext, &super::code_glue::explain(&e)]).into()));
+                        this.notify(
+                            NoticeSource::Extensions,
+                            Notice::Error(crate::i18n::tf("Saved without formatting: {0}: {1}", &[&ext, &super::code_glue::explain(&e)]).into()),
+                        );
                         cx.notify();
                     })
                     .ok();
@@ -434,7 +440,7 @@ impl Workbench {
 
     pub(super) fn show_quick_fixes(&mut self, fixes: Vec<QuickFix>, window: &mut Window, cx: &mut Context<Self>) {
         if fixes.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No quick fixes here").into()));
+            self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::t("No quick fixes here").into()));
             cx.notify();
             return;
         }
@@ -477,7 +483,7 @@ impl Workbench {
                     Err(e) => {
                         let why = super::code_glue::explain(&e);
                         self.log_extension(&extension, LogLevel::Warn, format!("code action \"{}\": edit to {uri} refused: {why}", action.title));
-                        self.notice = Some(Notice::Error(format!("{extension}: {why}").into()));
+                        self.notify(NoticeSource::Extensions, Notice::Error(format!("{extension}: {why}").into()));
                         cx.notify();
                         return;
                     }
@@ -531,7 +537,10 @@ impl Workbench {
         let reg = crate::ext::current();
         let Some(active) = reg.active.iter().find(|e| e.id() == extension).cloned() else { return };
         if self.cfg.exts.code.disabled.contains(extension) {
-            self.notice = Some(Notice::Error(crate::i18n::tf("{} crashed three times and is turned off until Codeyard restarts.", &[&extension]).into()));
+            self.notify(
+                NoticeSource::Extensions,
+                Notice::Error(crate::i18n::tf("{} crashed three times and is turned off until Codeyard restarts.", &[&extension]).into()),
+            );
             cx.notify();
             return;
         }
@@ -550,7 +559,7 @@ impl Workbench {
                     this.cfg.exts.code.last_answer.insert(ext.clone(), j.clone());
                 }
                 if let Some(Err(e)) = result.filter(|_| !this.cfg.exts.code.disabled.contains(&ext)) {
-                    this.notice = Some(Notice::Error(format!("{ext}: {}", super::code_glue::explain(&e)).into()));
+                    this.notify(NoticeSource::Extensions, Notice::Error(format!("{ext}: {}", super::code_glue::explain(&e)).into()));
                     cx.notify();
                 }
             })

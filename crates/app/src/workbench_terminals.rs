@@ -278,7 +278,7 @@ impl Workbench {
     pub(super) fn spawn_terminal(&mut self, cwd: Option<String>, launch: Launch, window: &mut Window, cx: &mut Context<Self>) -> Option<Entity<TerminalView>> {
         // The number of processes is limited: after eight terminals (wherever they are shown) no new one is opened.
         if self.terminals.len() + self.chrome.detached.len() + self.editor_terminal_count() >= MAX_TERMINALS {
-            self.notice = Some(Notice::Info(crate::i18n::tf("Close a terminal first: at most {} can be open.", &[&MAX_TERMINALS]).into()));
+            self.notify(NoticeSource::Terminal, Notice::Info(crate::i18n::tf("Close a terminal first: at most {} can be open.", &[&MAX_TERMINALS]).into()));
             cx.notify();
             return None;
         }
@@ -315,7 +315,7 @@ impl Workbench {
                     this.persist_moved_terminals(cx);
                 }
                 TerminalEvent::ImagePasteFailed(error) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not paste: {}", &[error]).into()));
+                    this.notify(NoticeSource::Terminal, Notice::Error(crate::i18n::tf("Could not paste: {}", &[error]).into()));
                     cx.notify();
                 }
                 TerminalEvent::ConfirmPaste { data, lines } => {
@@ -440,7 +440,7 @@ impl Workbench {
                     launches.push(Launch { shell: Some(sh), ..Launch::default() });
                 }
                 if launches.is_empty() {
-                    this.notice = Some(Notice::Info(crate::i18n::t("No profiles or shells were found on this machine.").into()));
+                    this.notify(NoticeSource::Terminal, Notice::Info(crate::i18n::t("No profiles or shells were found on this machine.").into()));
                     return cx.notify();
                 }
                 if this.overlay.is_some() {
@@ -458,7 +458,10 @@ impl Workbench {
     pub(super) fn select_default_terminal_profile(&mut self, _: &SelectDefaultTerminalProfile, window: &mut Window, cx: &mut Context<Self>) {
         let names: Vec<String> = self.terminal_profiles(cx).into_iter().map(|p| p.name).collect();
         if names.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No terminal profiles yet: add them under terminal.profiles in settings.jsonc.").into()));
+            self.notify(
+                NoticeSource::Terminal,
+                Notice::Info(crate::i18n::t("No terminal profiles yet: add them under terminal.profiles in settings.jsonc.").into()),
+            );
             return cx.notify();
         }
         if self.overlay.is_some() {
@@ -896,7 +899,7 @@ impl Workbench {
                 _ => crate::i18n::tf("Finished: {}", &[&command]),
             };
             let title = t.read(cx).title.to_string();
-            self.notice = Some(Notice::Info(crate::i18n::tf("{}: {}", &[&title, &what]).into()));
+            self.notify(NoticeSource::Terminal, Notice::Info(crate::i18n::tf("{}: {}", &[&title, &what]).into()));
         }
         if !active {
             request_attention(window);
@@ -915,7 +918,7 @@ impl Workbench {
         }
         if let Some(message) = message.filter(|_| !self.terminal_on_screen(t)) {
             let title = t.read(cx).title.to_string();
-            self.notice = Some(Notice::Info(crate::i18n::tf("{}: {}", &[&title, &message]).into()));
+            self.notify(NoticeSource::Terminal, Notice::Info(crate::i18n::tf("{}: {}", &[&title, &message]).into()));
         }
         if !active {
             request_attention(window);

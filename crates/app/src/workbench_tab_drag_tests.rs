@@ -88,7 +88,7 @@ fn a_tab_dropped_on_another_window_opens_there(cx: &mut gpui::TestAppContext) {
     wb.update_in(vcx, |wb, window, cx| wb.move_tab_to_window(b.clone(), from, target, window, cx));
     vcx.run_until_parked();
     assert_eq!(wb.read_with(vcx, |wb, _| wb.tabs.editors.len()), 2, "a tab with unsaved changes stays");
-    assert!(wb.read_with(vcx, |wb, _| wb.notice.is_some()));
+    assert!(wb.read_with(vcx, |wb, _| wb.notice().is_some()));
     wb.update_in(vcx, |wb, window, cx| wb.move_tab_to_window(a.clone(), from, target, window, cx));
     vcx.run_until_parked();
     let ocx = VisualTestContext::from_window(target.into(), vcx);

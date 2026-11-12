@@ -11,7 +11,7 @@ use std::time::Duration;
 use gpui::{App, Context, SharedString, Window};
 use host::forward::{LocalBind, RemoteTarget};
 
-use super::{Conn, InputPurpose, LOCAL_AGENT_ALIAS, Notice, Workbench};
+use super::{Conn, InputPurpose, LOCAL_AGENT_ALIAS, Notice, NoticeSource, Workbench};
 use crate::port_forwards::{Effect, ForwardRequest, ForwardSet, ForwardState, OnForward, Origin, Protocol, failure_text, rule_for};
 use crate::ports::{self, ListeningPort, ScanMethod};
 
@@ -106,7 +106,10 @@ impl Workbench {
                     if let Some(e) = this.ports.set.take_reverted(id) {
                         let why = failure_text(&e, None);
                         let old = this.ports.set.get(id).and_then(|f| f.wanted_local).unwrap_or_default();
-                        this.notice = Some(Notice::Error(crate::i18n::tf("The local port was not changed: {}. Back on localhost:{}", &[&why, &old]).into()));
+                        this.notify(
+                            NoticeSource::Remote,
+                            Notice::Error(crate::i18n::tf("The local port was not changed: {}. Back on localhost:{}", &[&why, &old]).into()),
+                        );
                         continue;
                     }
                     let Some(f) = this.ports.set.get(id) else { continue };
@@ -128,7 +131,7 @@ impl Workbench {
                         }
                         (ForwardState::Failed(_), Some(e)) => {
                             let why = failure_text(&e, f.wanted_local);
-                            this.notice = Some(Notice::Error(crate::i18n::tf("Could not forward port {}: {}", &[&f.remote, &why]).into()));
+                            this.notify(NoticeSource::Remote, Notice::Error(crate::i18n::tf("Could not forward port {}: {}", &[&f.remote, &why]).into()));
                             // No browser tab for a forward that never opened.
                             this.ports.open_when_ready.remove(&remote);
                         }
@@ -142,13 +145,13 @@ impl Workbench {
                     match opened.as_slice() {
                         [] => {}
                         [(remote, local)] if remote == local => {
-                            this.notice = Some(Notice::Info(crate::i18n::tf("Port {} is forwarded: localhost:{}", &[remote, local]).into()))
+                            this.notify(NoticeSource::Remote, Notice::Info(crate::i18n::tf("Port {} is forwarded: localhost:{}", &[remote, local]).into()))
                         }
-                        [(remote, local)] => {
-                            this.notice =
-                                Some(Notice::Info(crate::i18n::tf("Port {} is forwarded to localhost:{} ({} was busy here)", &[remote, local, remote]).into()))
-                        }
-                        many => this.notice = Some(Notice::Info(crate::i18n::tf("{} ports are forwarded", &[&many.len()]).into())),
+                        [(remote, local)] => this.notify(
+                            NoticeSource::Remote,
+                            Notice::Info(crate::i18n::tf("Port {} is forwarded to localhost:{} ({} was busy here)", &[remote, local, remote]).into()),
+                        ),
+                        many => this.notify(NoticeSource::Remote, Notice::Info(crate::i18n::tf("{} ports are forwarded", &[&many.len()]).into())),
                     }
                 }
                 this.run_port_effects(more, true, cx);
@@ -348,7 +351,7 @@ impl Workbench {
         // A port that is forwarded already: asking for another local port moves it, asking for the same one says so.
         if let (Some(local), Some(f)) = (local, self.ports.set.by_remote(&alias, remote)) {
             if f.is_active() && f.local == Some(local) {
-                self.notice = Some(Notice::Info(crate::i18n::tf("Port {} is forwarded already: localhost:{}", &[&remote, &local]).into()));
+                self.notify(NoticeSource::Remote, Notice::Info(crate::i18n::tf("Port {} is forwarded already: localhost:{}", &[&remote, &local]).into()));
                 cx.notify();
             } else {
                 self.finish_port_local(remote, local.to_string(), cx);
@@ -470,7 +473,7 @@ impl Workbench {
                 true
             }
             Err(()) => {
-                self.notice = Some(Notice::Error(crate::i18n::tf("“{}” is not a port number", &[&text.trim()]).into()));
+                self.notify(NoticeSource::Remote, Notice::Error(crate::i18n::tf("“{}” is not a port number", &[&text.trim()]).into()));
                 cx.notify();
                 false
             }
@@ -539,7 +542,7 @@ impl Workbench {
                 let effects = self.ports.set.change_local(id, local);
                 self.run_port_effects(effects, false, cx);
             }
-            _ => self.notice = Some(Notice::Error(crate::i18n::tf("“{}” is not a free local port", &[&text.trim()]).into())),
+            _ => self.notify(NoticeSource::Remote, Notice::Error(crate::i18n::tf("“{}” is not a free local port", &[&text.trim()]).into())),
         }
         cx.notify();
     }

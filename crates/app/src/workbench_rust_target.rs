@@ -43,7 +43,7 @@ fn list_installed(host: Arc<dyn Host>, root: &str) -> Listing {
 impl Workbench {
     pub(in super::super) fn rust_select_target(&mut self, _: &RustSelectTarget, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.active_root(cx) else {
-            self.notice = Some(Notice::Info(t("Open a folder first").into()));
+            self.notify(NoticeSource::Language, Notice::Info(t("Open a folder first").into()));
             cx.notify();
             return;
         };
@@ -52,7 +52,7 @@ impl Workbench {
     }
 
     fn list_rust_targets(&mut self, root: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.notice = Some(Notice::Info(t("Looking for installed targets…").into()));
+        self.notify(NoticeSource::Language, Notice::Info(t("Looking for installed targets…").into()));
         cx.notify();
         let host = self.remote.host.clone();
         let generation = self.lsp.generation;
@@ -65,11 +65,11 @@ impl Workbench {
                 }
                 match listing {
                     Listing::Failed(why) => {
-                        this.notice = Some(Notice::Error(tf("Could not list the installed targets: {}", &[&why]).into()));
+                        this.notify(NoticeSource::Language, Notice::Error(tf("Could not list the installed targets: {}", &[&why]).into()));
                         cx.notify();
                     }
                     Listing::Installed(installed) => {
-                        this.notice = None;
+                        this.dismiss_notice();
                         this.show_rust_targets(installed, window, cx);
                     }
                 }

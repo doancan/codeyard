@@ -28,12 +28,14 @@ impl Workbench {
                     this.show_overlay(picker, OverlayKind::RemoteTargets(aliases), window, cx);
                 }
                 Ok(_) => {
-                    this.notice =
-                        Some(Notice::Info(if wsl { crate::i18n::t("No WSL distributions found.") } else { crate::i18n::t("No running containers.") }.into()));
+                    this.notify(
+                        NoticeSource::Remote,
+                        Notice::Info(if wsl { crate::i18n::t("No WSL distributions found.") } else { crate::i18n::t("No running containers.") }.into()),
+                    );
                     cx.notify();
                 }
                 Err(e) => {
-                    this.notice = Some(Notice::Error(e.lines().next().unwrap_or(crate::i18n::t("could not list")).to_string().into()));
+                    this.notify(NoticeSource::Remote, Notice::Error(e.lines().next().unwrap_or(crate::i18n::t("could not list")).to_string().into()));
                     cx.notify();
                 }
             })
@@ -90,7 +92,7 @@ impl Workbench {
         let terminal_target = self.remote.docker.monitor.browser.terminal_target.take();
         let step = Arc::new(AtomicU8::new(Step::Probing as u8));
         self.remote.connection_origin = Some(std::mem::replace(&mut self.remote.conn, Conn::Connecting { alias: alias.clone(), step: step.clone() }));
-        self.notice = None;
+        self.dismiss_notice();
         let task = cx.background_executor().spawn(connector(step.clone()));
         // Refresh the step indicator (while connecting).
         let progress = step.clone();
@@ -148,7 +150,7 @@ impl Workbench {
                         this.remote.pending_path = None;
                         // Reason and "Reconnect" button are in the toast; the red indicator also stays in the status bar.
                         let why = crate::i18n::tf("Could not connect to {}: {}", &[&alias, &message]);
-                        this.notice = Some(Notice::Error(why.clone().into()));
+                        this.notify(NoticeSource::Remote, Notice::Error(why.clone().into()));
                         // Connection started from a recent: if it can't be reached anymore, ask whether to remove it from the list.
                         if let Some(r) = opening_recent {
                             this.ask_forget_unreachable(r, why, window, cx);
@@ -273,7 +275,7 @@ impl Workbench {
                         match status {
                             host::ConnStatus::Reconnecting { attempt, .. } => {
                                 if attempt == 1 {
-                                    this.notice = Some(Notice::Info(crate::i18n::tf("The connection to {} dropped. Reconnecting…", &[&alias]).into()));
+                                    this.notify(NoticeSource::Remote, Notice::Info(crate::i18n::tf("The connection to {} dropped. Reconnecting…", &[&alias]).into()));
                                 }
                                 this.remote.conn = Conn::Reconnecting { alias, attempt };
                                 this.ports_interrupted();
@@ -286,7 +288,7 @@ impl Workbench {
                                 this.remote.conn = Conn::Connected { alias };
                                 this.ports_reconnected(cx);
                                 this.reattach_lsp(cx);
-                                this.notice = Some(if resumed {
+                                this.notify(NoticeSource::Remote, if resumed {
                                     Notice::Info(crate::i18n::t("Reconnected. Terminals kept running.").into())
                                 } else {
                                     Notice::Error(crate::i18n::t("Reconnected, but the server session had expired: terminals were closed.").into())
@@ -300,7 +302,7 @@ impl Workbench {
                                 } else {
                                     crate::i18n::tf("Lost the connection to {}: {}. Your open files stay here.", &[&alias, &e])
                                 };
-                                this.notice = Some(Notice::Error(lost.into()));
+                                this.notify(NoticeSource::Remote, Notice::Error(lost.into()));
                                 this.remote.conn = Conn::Failed { alias, message: crate::i18n::tf("Connection lost: {}", &[&e]).into() };
                                 // Forwards wait: "Reconnect" brings them back on the same local ports.
                                 this.ports_interrupted();
@@ -521,7 +523,7 @@ impl Workbench {
         match self.active_root(cx) {
             Some(root) => self.trust_root(&root, window, cx),
             None => {
-                self.notice = Some(Notice::Info(crate::i18n::t("Open a folder first.").into()));
+                self.notify(NoticeSource::Remote, Notice::Info(crate::i18n::t("Open a folder first.").into()));
                 cx.notify();
             }
         }

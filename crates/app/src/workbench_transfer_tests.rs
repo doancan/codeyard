@@ -35,7 +35,7 @@ fn a_filename_containing_cancelled_cannot_hide_a_transfer_error(cx: &mut TestApp
     assert!(error.partial.is_some(), "an ordinary failure must retain the completed item count");
     let (wb, cx) = setup(cx);
     wb.update(cx, |wb, cx| wb.finish_transfer(&job, Err(error), cx));
-    assert!(wb.read_with(cx, |wb, _| matches!(wb.notice, Some(Notice::Error(_)))), "a filename is not evidence of cancellation");
+    assert!(wb.read_with(cx, |wb, _| matches!(wb.notice(), Some(Notice::Error(_)))), "a filename is not evidence of cancellation");
     assert_eq!(std::fs::read_to_string(root.join("target/source.txt")).unwrap(), "source data");
 }
 
@@ -47,7 +47,7 @@ fn a_user_cancelled_transfer_still_reports_cancellation(cx: &mut TestAppContext)
     let result = execute(&job, Arc::new(host::local()), &run);
     let (wb, cx) = setup(cx);
     wb.update(cx, |wb, cx| wb.finish_transfer(&job, result, cx));
-    assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.as_ref() == "Transfer cancelled.")));
+    assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.as_ref() == "Transfer cancelled.")));
     assert!(!root.join("target/source.txt").exists());
 }
 
@@ -61,7 +61,7 @@ fn a_failed_destination_probe_cannot_start_a_transfer(cx: &mut TestAppContext) {
     wb.update_in(cx, |wb, window, cx| wb.begin(job, window, cx));
     cx.run_until_parked();
     assert!(wb.read_with(cx, |wb, _| wb.remote.transfer.is_none()), "a failed conflict check must stop before starting the worker");
-    assert!(wb.read_with(cx, |wb, _| matches!(wb.notice, Some(Notice::Error(_)))));
+    assert!(wb.read_with(cx, |wb, _| matches!(wb.notice(), Some(Notice::Error(_)))));
     assert!(!root.join("target/source.txt").exists());
 }
 
@@ -91,9 +91,9 @@ fn a_remote_permission_error_cannot_bypass_the_conflict_check(cx: &mut TestAppCo
         // Invalid alias makes the old code's upload worker fail locally, without a network connection.
         wb.begin(Job::Upload { alias: "-invalid-fixture".into(), items: vec![root.join("source.txt")], remote_dir: "/target".into() }, window, cx);
     });
-    crate::qa_integration_tests::wait_secs(cx, 5, "probe completion", |cx| wb.read_with(cx, |wb, _| wb.notice.is_some() || wb.remote.transfer.is_some()));
+    crate::qa_integration_tests::wait_secs(cx, 5, "probe completion", |cx| wb.read_with(cx, |wb, _| wb.notice().is_some() || wb.remote.transfer.is_some()));
     assert!(wb.read_with(cx, |wb, _| wb.remote.transfer.is_none()));
-    assert!(wb.read_with(cx, |wb, _| matches!(wb.notice, Some(Notice::Error(_)))));
+    assert!(wb.read_with(cx, |wb, _| matches!(wb.notice(), Some(Notice::Error(_)))));
 }
 
 #[gpui::test]
@@ -109,12 +109,12 @@ fn obsolete_transfer_completion_cannot_clear_a_newer_transfer(cx: &mut TestAppCo
     let current = TransferRun::new("new transfer".into(), true);
     wb.update(cx, |wb, _| {
         wb.remote.transfer = Some(current.clone());
-        wb.notice = None;
+        wb.dismiss_notice();
     });
     cx.executor().advance_clock(Duration::from_millis(300));
     cx.run_until_parked();
     assert!(wb.read_with(cx, |wb, _| wb.remote.transfer.as_ref().is_some_and(|run| Arc::ptr_eq(run, &current))));
-    assert!(wb.read_with(cx, |wb, _| wb.notice.is_none()));
+    assert!(wb.read_with(cx, |wb, _| wb.notice().is_none()));
     assert!(old.cancel.load(Ordering::Relaxed));
 }
 
@@ -130,11 +130,11 @@ fn transfer_completion_from_an_old_host_cannot_change_the_new_workspace(cx: &mut
     crate::qa_integration_tests::wait_secs(cx, 5, "copy worker completion", |_| old.result.lock().unwrap().is_some());
     wb.update(cx, |wb, _| {
         wb.remote.host = Arc::new(host::local());
-        wb.notice = None;
+        wb.dismiss_notice();
     });
     cx.executor().advance_clock(Duration::from_millis(300));
     cx.run_until_parked();
-    assert!(wb.read_with(cx, |wb, _| wb.notice.is_none()));
+    assert!(wb.read_with(cx, |wb, _| wb.notice().is_none()));
     assert!(wb.read_with(cx, |wb, _| wb.remote.transfer.is_none()));
     assert!(old.cancel.load(Ordering::Relaxed));
 }

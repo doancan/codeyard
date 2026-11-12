@@ -5,7 +5,7 @@ use gpui::{AppContext as _, Context, SharedString, Window};
 use std::sync::Arc;
 
 use super::git_glue::first_line;
-use super::{Notice, OverlayKind, Workbench};
+use super::{Notice, NoticeSource, OverlayKind, Workbench};
 use crate::git::{self, PostCommit, SyncOp, SyncOptions, SyncStep};
 use crate::picker::{PickItem, Picker, Source as PickSource};
 use crate::settings::Settings;
@@ -96,13 +96,13 @@ impl Workbench {
         let target = root.clone();
         match self.vcs.sync.running {
             Some(Running::Sync) => {
-                self.notice = Some(Notice::Info(crate::i18n::t("A sync is already running.").into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("A sync is already running.").into()));
                 cx.notify();
                 return;
             }
             Some(Running::Autofetch) => {
                 self.vcs.sync.queued = Some(ops);
-                self.notice = Some(Notice::Info(crate::i18n::t("Fetching in the background: the sync starts when it is done.").into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Fetching in the background: the sync starts when it is done.").into()));
                 cx.notify();
                 return;
             }
@@ -110,7 +110,7 @@ impl Workbench {
         }
         self.vcs.sync.running = Some(Running::Sync);
         self.set_scm_syncing(true, cx);
-        self.notice = Some(Notice::Info(working_text(&ops).into()));
+        self.notify(NoticeSource::App, Notice::Info(working_text(&ops).into()));
         cx.notify();
         let host = self.remote.host.clone();
         let source_host = host.clone();
@@ -141,7 +141,7 @@ impl Workbench {
                 }
                 if picked && this.vcs.repos.inventory.by_worktree(&target).is_none() && !this.all_roots(cx).contains(&target) {
                     // The repository left the workspace while its sync ran: its result says nothing about what is shown.
-                    this.notice = Some(Notice::Error(crate::i18n::t("Repository changed while the operation was pending.").into()));
+                    this.notify(NoticeSource::App, Notice::Error(crate::i18n::t("Repository changed while the operation was pending.").into()));
                     this.refresh_git(0, cx);
                     cx.notify();
                     return;
@@ -151,7 +151,9 @@ impl Workbench {
                     cx.notify();
                     return;
                 }
-                this.notice = Some(match result {
+                // A failure keeps the command's whole output as its details.
+                let detail = result.as_ref().err().map(|(_, e)| e.clone());
+                let notice = match result {
                     Ok(steps) if steps.last() == Some(&SyncStep::Conflicts) => {
                         // The conflicted pull is the last step that ran.
                         let rebasing = ops.get(steps.len() - 1).is_some_and(|op| match op {
@@ -173,7 +175,11 @@ impl Workbench {
                         Notice::Info(done_text(&ops, &steps).into())
                     }
                     Err((op, e)) => Notice::Error(failed_text(&op, &e).into()),
-                });
+                };
+                match detail {
+                    Some(detail) => this.notify_detailed(NoticeSource::Git, notice, detail),
+                    None => this.notify(NoticeSource::Git, notice),
+                }
                 this.refresh_git(0, cx);
                 cx.notify();
             })
@@ -219,7 +225,7 @@ impl Workbench {
                 return;
             }
             if this.git_status().map(|s| s.root.clone()) != Some(root.clone()) {
-                this.notice = Some(Notice::Error(crate::i18n::t("Repository changed while the operation was pending.").into()));
+                this.notify(NoticeSource::App, Notice::Error(crate::i18n::t("Repository changed while the operation was pending.").into()));
                 cx.notify();
                 return;
             }
@@ -236,7 +242,7 @@ impl Workbench {
             return;
         };
         let (Some(branch), Some(upstream)) = (st.branch.clone(), st.upstream.clone()) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Only a published branch can be force-pushed: use Publish Branch first.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Only a published branch can be force-pushed: use Publish Branch first.").into()));
             cx.notify();
             return;
         };
@@ -257,7 +263,7 @@ impl Workbench {
                 let target = match target {
                     Ok(target) => target,
                     Err(e) => {
-                        this.notice = Some(Notice::Error(crate::i18n::tf("Push failed: {}", &[&first_line(&e)]).into()));
+                        this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Push failed: {}", &[&first_line(&e)]).into()));
                         cx.notify();
                         return;
                     }
@@ -317,7 +323,7 @@ impl Workbench {
                 let (remotes, branches) = match result {
                     Ok(r) => r,
                     Err(e) => {
-                        this.notice = Some(Notice::Error(crate::i18n::tf("Could not list: {}", &[&first_line(&e)]).into()));
+                        this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not list: {}", &[&first_line(&e)]).into()));
                         cx.notify();
                         return;
                     }
@@ -340,7 +346,7 @@ impl Workbench {
                     }
                 }
                 if ops.is_empty() {
-                    this.notice = Some(Notice::Info(crate::i18n::t("Nothing to choose from.").into()));
+                    this.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Nothing to choose from.").into()));
                     cx.notify();
                     return;
                 }

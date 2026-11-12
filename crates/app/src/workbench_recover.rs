@@ -8,7 +8,9 @@ impl Workbench {
         let (state, problem) = path.as_deref().map_or((None, None), open_state_recovering);
         let mut wb = Self::with_state(state, config_dir, window, cx);
         wb.persist.data_dir = path.and_then(|p| p.parent().map(|d| d.to_path_buf()));
-        wb.notice = problem.map(|m| Notice::Error(m.into()));
+        if let Some(m) = problem {
+            wb.notify(NoticeSource::App, Notice::Error(m.into()));
+        }
         wb
     }
 
@@ -21,10 +23,10 @@ impl Workbench {
         match crate::history::record(&dir, text) {
             Ok(true) => {
                 self.timeline.rev += 1;
-                self.notice = Some(Notice::Info(crate::i18n::t("The version that was on disk has been kept in Local History.").into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("The version that was on disk has been kept in Local History.").into()));
             }
             Ok(false) => {}
-            Err(e) => self.notice = Some(Notice::Error(crate::i18n::tf("Could not keep a copy of the version that was on disk: {}", &[&e]).into())),
+            Err(e) => self.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not keep a copy of the version that was on disk: {}", &[&e]).into())),
         }
         cx.notify();
     }

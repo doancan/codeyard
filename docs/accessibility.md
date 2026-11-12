@@ -302,6 +302,16 @@ The tree, in the order a screen reader walks it:
   page, and Problems rows with a rustc error code hold a `Button` "Explain error E0308". The status page and the other Rust views
   (HIR, MIR, syntax tree, error explanations) are Markdown pages, so they are read as documents. The token modifiers
   (underline, italics) are visual extras: nothing depends on seeing them.
+- The notification bell is a status bar `Button` named "N unread notifications" (or "Notifications"; "Notifications, Do
+  Not Disturb is on") with an expanded state. The open list is a surface of painted controls: a `Heading`, the header
+  buttons (Do Not Disturb as a toggle, Clear all, Close) and one `ListItem` per notification named "severity, source,
+  age, repeated N times: message", with `Button`s to run its action, copy and dismiss it. Up, Down, Home, End, Enter,
+  Delete, Ctrl/Cmd+C and Escape work on the list when it has the keyboard; Escape returns the focus to where it was (the
+  editor when that element is gone). Tab and Shift+Tab walk the buttons of the header and of each row, Enter or Space press
+  the focused one, and keys the list does not use (letters, function keys) pass on. The list closes when the focus leaves
+  it. Do Not Disturb hides information and warning toasts only: an error card still appears and its live region is
+  still announced.
+  A repeated message does not change the text of the live region below, so it is not spoken again.
 - The notice in the status bar is a live region of its own: an error (including a file that could not be opened) is an
   `Alert` with `Live::Assertive`, so it interrupts speech; an information notice is a `Status` with `Live::Polite`.
 - While a picker is open (command palette, go to file, go to symbol, themes, branches and every other list that opens

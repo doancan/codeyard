@@ -11,7 +11,7 @@ use task_engine::model::Input;
 use task_engine::schedule::State;
 
 use super::tasks::Task;
-use super::{Notice, OverlayKind, Workbench};
+use super::{Notice, NoticeSource, OverlayKind, Workbench};
 use crate::picker::{PickItem, Picker, Source as PickSource};
 use crate::task_run::{self, Effects, Prepared, Run};
 use crate::terminal::{TerminalEvent, TerminalView};
@@ -170,7 +170,7 @@ impl Workbench {
     }
 
     fn task_failed_to_start(&mut self, label: &str, message: String, cx: &mut Context<Self>) {
-        self.notice = Some(Notice::Error(crate::i18n::tf("Task could not start: {}", &[&format!("{label}: {message}")]).into()));
+        self.notify(NoticeSource::Tasks, Notice::Error(crate::i18n::tf("Task could not start: {}", &[&format!("{label}: {message}")]).into()));
         cx.notify();
     }
 
@@ -220,7 +220,7 @@ impl Workbench {
         // A confirmed answer arrives right after the overlay closes; only a question still open after that was cancelled.
         cx.defer_in(window, move |this, _, cx| {
             if this.jobs.asking == asked && this.jobs.pending.take().is_some() {
-                this.notice = Some(Notice::Info(crate::i18n::t("Task input cancelled").into()));
+                this.notify(NoticeSource::Tasks, Notice::Info(crate::i18n::t("Task input cancelled").into()));
                 cx.notify();
             }
         });
@@ -420,7 +420,7 @@ impl Workbench {
     pub(super) fn terminate_tasks(&mut self, cx: &mut Context<Self>) {
         let live: Vec<u64> = self.jobs.runs.iter().filter(|r| !r.run.finished()).map(|r| r.run.token).collect();
         if live.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No task is running.").into()));
+            self.notify(NoticeSource::Tasks, Notice::Info(crate::i18n::t("No task is running.").into()));
             return cx.notify();
         }
         for token in live {
@@ -468,7 +468,10 @@ impl Workbench {
         }
         // The old host cannot confirm the stops any more: say so instead of reporting the runs as stopped.
         if self.jobs.runs.iter().any(|r| r.run.unconfirmed() > 0) {
-            self.notice = Some(Notice::Error(crate::i18n::t("Task cancellation could not be confirmed. Reconnect and inspect the process.").into()));
+            self.notify(
+                NoticeSource::Tasks,
+                Notice::Error(crate::i18n::t("Task cancellation could not be confirmed. Reconnect and inspect the process.").into()),
+            );
         }
         self.jobs.runs.clear();
     }
@@ -491,7 +494,7 @@ impl Workbench {
             let text = crate::i18n::tf("Task “{0}”: {1}", &[&label, &status]);
             // A run the user stopped is no failure: it is reported as information, like a success.
             let fine = outcome.satisfied() || outcome == State::Cancelled;
-            self.notice = Some(if fine { Notice::Info(text.into()) } else { Notice::Error(text.into()) });
+            self.notify(NoticeSource::Tasks, if fine { Notice::Info(text.into()) } else { Notice::Error(text.into()) });
         }
         match after {
             Some(After::Debug(config)) if outcome.satisfied() => self.start_debug(*config, cx),
@@ -501,7 +504,7 @@ impl Workbench {
                     "The preLaunchTask “{0}” did not succeed ({1}), so debugging was not started. Check its terminal, then start debugging again.",
                     &[&label, &status],
                 );
-                self.notice = Some(Notice::Error(text.into()));
+                self.notify(NoticeSource::Tasks, Notice::Error(text.into()));
             }
             Some(After::Nothing) | None => {}
         }

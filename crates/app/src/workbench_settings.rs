@@ -5,7 +5,7 @@
 use gpui::{AppContext as _, Context, Window};
 use serde_json::Value;
 
-use super::{InputPurpose, Notice, OverlayKind, Workbench};
+use super::{InputPurpose, Notice, NoticeSource, OverlayKind, Workbench};
 use crate::commands;
 use crate::picker::{PickItem, Picker, Source as PickSource};
 use crate::settings::{self, AutoSave, Settings};
@@ -509,7 +509,7 @@ impl Workbench {
     /// "Preferences: Settings": the settings list (key, value, description).
     pub(super) fn show_settings_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.config_paths().is_none() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No settings folder on this machine.").to_string().into()));
+            self.notify(NoticeSource::Settings, Notice::Info(crate::i18n::t("No settings folder on this machine.").to_string().into()));
             cx.notify();
             return;
         }
@@ -568,8 +568,10 @@ impl Workbench {
     /// Write to the settings file (comments preserved) and apply immediately. `null`: back to default.
     pub(super) fn write_setting(&mut self, key: &str, value: Value, window: &mut Window, cx: &mut Context<Self>) {
         if key == "modules.containers.enabled" && value != Value::Bool(true) && self.any_container_connected(cx) {
-            self.notice =
-                Some(Notice::Info(crate::i18n::t("Disconnect the container before disabling the container module. Your open files are kept.").into()));
+            self.notify(
+                NoticeSource::Settings,
+                Notice::Info(crate::i18n::t("Disconnect the container before disabling the container module. Your open files are kept.").into()),
+            );
             cx.notify();
             return;
         }
@@ -580,14 +582,14 @@ impl Workbench {
         match result {
             Ok(()) => {
                 // A stale message from the previous setting must not hide the new one; a reload warning wins.
-                self.notice = None;
+                self.dismiss_notice();
                 self.reload_config(window, cx);
-                if self.notice.is_none() {
+                if self.toast_is_none() {
                     let shown = if value.is_null() { crate::i18n::t("default").into() } else { show(&value) };
-                    self.notice = Some(Notice::Info(format!("{key}: {shown}").into()));
+                    self.notify(NoticeSource::Settings, Notice::Info(format!("{key}: {shown}").into()));
                 }
             }
-            Err(e) => self.notice = Some(Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
+            Err(e) => self.notify(NoticeSource::Settings, Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
         }
         cx.notify();
     }
@@ -598,7 +600,7 @@ impl Workbench {
         match parse_setting_input(key, entry.kind, &text) {
             Ok(v) => self.write_setting(key, v, window, cx),
             Err(e) => {
-                self.notice = Some(Notice::Error(format!("{key}: {e}").into()));
+                self.notify(NoticeSource::Settings, Notice::Error(format!("{key}: {e}").into()));
                 cx.notify();
             }
         }
@@ -637,9 +639,9 @@ impl Workbench {
                 self.open_file_on(host, path.clone(), window, cx);
                 // Cursor goes inside the quotes of the "key" value.
                 self.open_location(path, line as u32, 12, window, cx);
-                self.notice = Some(Notice::Info(crate::i18n::tf("Type the shortcut for {} (e.g. cmd-shift-d), then save", &[&id]).into()));
+                self.notify(NoticeSource::Settings, Notice::Info(crate::i18n::tf("Type the shortcut for {} (e.g. cmd-shift-d), then save", &[&id]).into()));
             }
-            Err(e) => self.notice = Some(Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&kpath.display(), &e]).into())),
+            Err(e) => self.notify(NoticeSource::Settings, Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&kpath.display(), &e]).into())),
         }
         cx.notify();
     }
@@ -663,10 +665,16 @@ impl Workbench {
             this.update_in(cx, |this, window, cx| {
                 match write_default_settings(&spath) {
                     Ok(backup) => {
-                        this.notice = backup.map(|b| Notice::Info(crate::i18n::tf("Settings reset. The old file is kept as {}", &[&b.display()]).into()));
+                        match backup {
+                            Some(b) => this.notify(
+                                NoticeSource::Settings,
+                                Notice::Info(crate::i18n::tf("Settings reset. The old file is kept as {}", &[&b.display()]).into()),
+                            ),
+                            None => this.dismiss_notice(),
+                        }
                         this.reload_config(window, cx);
                     }
-                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
+                    Err(e) => this.notify(NoticeSource::Settings, Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
                 }
                 cx.notify();
             })
@@ -681,7 +689,7 @@ impl Workbench {
         let text = match settings::ensure_file(&spath, settings::TEMPLATE).and_then(|_| std::fs::read_to_string(&spath)) {
             Ok(text) => text,
             Err(e) => {
-                self.notice = Some(Notice::Error(crate::i18n::tf("Could not read {0}: {1}", &[&spath.display(), &e]).into()));
+                self.notify(NoticeSource::Settings, Notice::Error(crate::i18n::tf("Could not read {0}: {1}", &[&spath.display(), &e]).into()));
                 return cx.notify();
             }
         };
@@ -689,7 +697,7 @@ impl Workbench {
         if diff.is_empty() {
             let done =
                 if reset { crate::i18n::t("settings.jsonc has no Rust setup to reset.") } else { crate::i18n::t("settings.jsonc already has the Rust setup.") };
-            self.notice = Some(Notice::Info(done.into()));
+            self.notify(NoticeSource::Settings, Notice::Info(done.into()));
             return cx.notify();
         }
         let answer = crate::questions::rust_setup(reset, &diff).ask(window, cx);
@@ -705,10 +713,10 @@ impl Workbench {
                     Err(std::io::Error::other(crate::i18n::t("the file changed; try again")))
                 } {
                     Ok(()) => {
-                        this.notice = None;
+                        this.dismiss_notice();
                         this.reload_config(window, cx);
                     }
-                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
+                    Err(e) => this.notify(NoticeSource::Settings, Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
                 }
                 cx.notify();
             })

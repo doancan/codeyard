@@ -11,6 +11,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Settings and keyboard shortcuts](#settings-and-keyboard-shortcuts)
 - [Interface scale](#interface-scale)
 - [Interface language](#interface-language)
+- [Notifications](#notifications)
 - [Updates](#updates)
 - [Themes](#themes)
 - [Extensions](#extensions)
@@ -734,6 +735,33 @@ text arrives translated (see [translating.md](translating.md)).
 **Adding or improving a language.** Translations are plain text files compiled into the binary (`crates/app/locales/<code>.tsv`, no new
 dependency). The format, plurals, quality bar, the template file and the commands that show coverage are in
 [translating.md](translating.md). A missing entry is never an error at run time: that string simply stays English.
+
+## Notifications
+
+Messages from the app (a language server that did not start, a failed update, a Git error, a file that could not be
+saved) used to replace each other and vanish. Now every one is kept.
+
+- **Toasts.** An information message or a warning shows in the status bar for a few seconds; an error shows as a card at
+  the bottom right until you close it.
+- **The bell** at the right end of the status bar counts the warnings and errors you have not looked at yet, in red when
+  one of them is an error. Information messages ("Copied", "Pushed") are kept in the list but never counted. Click the
+  bell, or run *Notifications: Show*, to open the list.
+- **The list** shows the newest first: an icon for the severity, where it came from (Git, Tasks, Language, Update…),
+  how long ago, the message, and a button when there is something to do about it. A message that repeats is one row with
+  a counter (`×3`) that moves to the top. Each row has **Copy** (the message and its details, such as a command's error
+  output) and **Dismiss**; the header has **Do Not Disturb**, **Clear all** and **Close**. The list keeps the last 200
+  messages and is empty again when you restart: nothing is saved to disk.
+- **Keyboard.** In the open list, Up, Down, Home and End move between rows, Enter runs the row's button, Delete
+  dismisses the row, ⌘C (Ctrl+C) copies it and Escape closes the list and puts the focus back where it was (or on the
+  editor when that is gone). Tab and Shift+Tab walk the buttons (each row's action, Copy and Dismiss, then Do Not
+  Disturb, Clear all and Close); Enter or Space presses the one that has the keyboard. The list closes when the
+  focus moves elsewhere, for example when you click in the editor. It counts what it shows as seen only while it has the
+  keyboard, so a failure that arrives after you left stays on the bell.
+- **Do Not Disturb** hides information and warning toasts. **Errors still show their card** and are still announced to a
+  screen reader, as in VS Code, so a failure is never missed. Everything is still recorded, and warnings and errors
+  still count on the bell (shown with a crossed bell). It lasts until you turn it off or close the window. Messages that
+  only report progress (an extension's "Indexing… 40%") are shown as they tick but are not kept in the list. The
+  palette has *Notifications: Show*, *Notifications: Clear* and *Notifications: Toggle Do Not Disturb*.
 
 ## Updates
 

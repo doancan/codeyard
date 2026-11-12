@@ -4,9 +4,9 @@
 use gpui::{AnyElement, AppContext as _, Context, Focusable as _, IntoElement as _, ParentElement as _, SharedString, Window, div, prelude::*, px};
 
 use super::{
-    CloneRepository, CommandPalette, FindInFiles, InputPurpose, NewFile, Notice, OpenFolder, OpenKeybindings, OpenMarkdownPreview, OpenMergeEditor,
-    OpenSettingsPage, Page, QuickOpen, SelectIconTheme, SelectTheme, ShowAbout, ShowDiskAccess, ShowRemote, ShowScm, ShowShortcutsPage, ShowWelcome,
-    ToggleTerminal, Tooltip, Workbench, kbd, tilde,
+    CloneRepository, CommandPalette, FindInFiles, InputPurpose, NewFile, Notice, NoticeSource, OpenFolder, OpenKeybindings, OpenMarkdownPreview,
+    OpenMergeEditor, OpenSettingsPage, Page, QuickOpen, SelectIconTheme, SelectTheme, ShowAbout, ShowDiskAccess, ShowRemote, ShowScm, ShowShortcutsPage,
+    ShowWelcome, ToggleTerminal, Tooltip, Workbench, kbd, tilde,
 };
 use crate::commands::{Command, Run};
 use crate::settings_page::{SettingsEvent, SettingsPage};
@@ -127,7 +127,7 @@ impl Workbench {
     /// Palette: show the full disk access dialog on demand.
     pub(super) fn show_disk_access(&mut self, _: &ShowDiskAccess, window: &mut Window, cx: &mut Context<Self>) {
         if dirs::home_dir().and_then(|h| crate::access::full_disk_access(&h)) == Some(true) {
-            self.notice = Some(Notice::Info(crate::i18n::t("Codeyard already has Full Disk Access.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Codeyard already has Full Disk Access.").into()));
             cx.notify();
             return;
         }
@@ -205,7 +205,7 @@ impl Workbench {
         let Some(ed) = self.active_editor().cloned() else { return };
         let ext = ed.read(cx).path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
         if !matches!(ext.as_str(), "md" | "markdown" | "mdx") {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a Markdown file (.md) to preview it.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a Markdown file (.md) to preview it.").into()));
             cx.notify();
             return;
         }
@@ -235,12 +235,12 @@ impl Workbench {
     /// "Merge Conflict: Open Merge Editor": conflicts in the open file card by card (Current | Incoming | Result).
     pub(super) fn open_merge_editor(&mut self, _: &OpenMergeEditor, window: &mut Window, cx: &mut Context<Self>) {
         let Some(ed) = self.active_editor().cloned() else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a file with merge conflicts first.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a file with merge conflicts first.").into()));
             cx.notify();
             return;
         };
         if crate::conflict::find(&ed.read(cx).rope_snapshot()).is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No merge conflicts in this file.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("No merge conflicts in this file.").into()));
             cx.notify();
             return;
         }
@@ -725,7 +725,7 @@ impl Workbench {
         }
         let name = repo_name(&url);
         if name.is_empty() {
-            self.notice = Some(Notice::Error(crate::i18n::t("That does not look like a repository address.").into()));
+            self.notify(NoticeSource::App, Notice::Error(crate::i18n::t("That does not look like a repository address.").into()));
             cx.notify();
             return;
         }
@@ -735,7 +735,7 @@ impl Workbench {
 
     pub(super) fn run_clone(&mut self, url: String, target: String, cx: &mut Context<Self>) {
         let host = self.remote.host.clone();
-        self.notice = Some(Notice::Info(crate::i18n::tf("Cloning {}…", &[&url]).into()));
+        self.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("Cloning {}…", &[&url]).into()));
         cx.notify();
         let task = cx.background_executor().spawn(async move {
             // No shell here, so expand "~" to the home folder ourselves.
@@ -760,12 +760,12 @@ impl Workbench {
             let result = task.await;
             this.update(cx, |this, cx| match result {
                 Ok(path) => {
-                    this.notice = Some(Notice::Info(crate::i18n::t("Cloned. Opening the folder…").into()));
+                    this.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Cloned. Opening the folder…").into()));
                     this.set_root(path, cx);
                     cx.notify();
                 }
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Clone failed: {}", &[&e]).into()));
+                    this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Clone failed: {}", &[&e]).into()));
                     cx.notify();
                 }
             })

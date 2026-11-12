@@ -100,5 +100,5 @@ fn another_fetch_cannot_change_which_commit_a_pull_request_checkout_opens(cx: &m
     assert_eq!(git_in(&root, &["branch", "--show-current"]).trim(), "pr-42");
     assert!(!root.join("interloper.txt").exists());
     assert!(git_in(&root, &["for-each-ref", "refs/codeyard/pull"]).is_empty(), "the completed operation removes its private ref");
-    assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.contains("Checked out #42"))));
+    assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.contains("Checked out #42"))));
 }

@@ -8,7 +8,7 @@
 use gpui::{AppContext as _, Context, Window};
 use serde_json::{Value, json};
 
-use super::{InputPurpose, Notice, OverlayKind, Workbench};
+use super::{InputPurpose, Notice, NoticeSource, OverlayKind, Workbench};
 use crate::i18n::{t, tf};
 use crate::picker::{PickItem, Picker, Source as PickSource};
 use crate::ui;
@@ -262,7 +262,7 @@ impl Workbench {
     /// "Projects: Add Folder to Projects…": save the open folder under a name.
     pub(super) fn start_save_project(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.root(cx) else {
-            self.notice = Some(Notice::Info(t("Open a folder first, then save it as a project.").into()));
+            self.notify(NoticeSource::App, Notice::Info(t("Open a folder first, then save it as a project.").into()));
             cx.notify();
             return;
         };
@@ -280,10 +280,13 @@ impl Workbench {
         projects.retain(|p| !(p.path == path && p.host == host));
         projects.push(Project { name: name.clone(), path, host, tags: Vec::new() });
         let result = std::fs::create_dir_all(file.parent().unwrap_or(&file)).and_then(|_| crate::fsutil::write_atomic(&file, write_projects(&projects)));
-        self.notice = Some(match result {
-            Ok(()) => Notice::Info(tf("Saved project “{}” (⌃R to switch)", &[&name]).into()),
-            Err(e) => Notice::Error(tf("Could not write {0}: {1}", &[&file.display(), &e]).into()),
-        });
+        self.notify(
+            NoticeSource::App,
+            match result {
+                Ok(()) => Notice::Info(tf("Saved project “{}” (⌃R to switch)", &[&name]).into()),
+                Err(e) => Notice::Error(tf("Could not write {0}: {1}", &[&file.display(), &e]).into()),
+            },
+        );
         cx.notify();
     }
 
@@ -365,7 +368,10 @@ impl Workbench {
         let Some(rel) = self.rel(path, cx) else { return };
         let added = s.toggle_favorite(ws, &rel).unwrap_or(false);
         self.load_favorites();
-        self.notice = Some(Notice::Info(if added { tf("★ Added to favorites: {}", &[&rel]) } else { tf("Removed from favorites: {}", &[&rel]) }.into()));
+        self.notify(
+            NoticeSource::App,
+            Notice::Info(if added { tf("★ Added to favorites: {}", &[&rel]) } else { tf("Removed from favorites: {}", &[&rel]) }.into()),
+        );
         cx.notify();
     }
 
@@ -396,7 +402,10 @@ impl Workbench {
 
     pub(super) fn show_favorites(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.roots.favorites.is_empty() {
-            self.notice = Some(Notice::Info(t("No favorites yet: right-click a file → Add to Favorites, or “Favorites: Toggle Active File”.").into()));
+            self.notify(
+                NoticeSource::App,
+                Notice::Info(t("No favorites yet: right-click a file → Add to Favorites, or “Favorites: Toggle Active File”.").into()),
+            );
             cx.notify();
             return;
         }
@@ -427,7 +436,7 @@ impl Workbench {
                 }
                 Ok(false) => this.open_file(path, window, cx),
                 Err(e) => {
-                    this.notice = Some(Notice::Error(format!("{rel}: {e}").into()));
+                    this.notify(NoticeSource::App, Notice::Error(format!("{rel}: {e}").into()));
                     cx.notify();
                 }
             })
@@ -467,7 +476,7 @@ impl Workbench {
         }
         let marks = s.bookmarks(ws).unwrap_or_default();
         if marks.is_empty() {
-            self.notice = Some(Notice::Info(t("No bookmarks yet: ⌥⌘K toggles one on the cursor's line.").into()));
+            self.notify(NoticeSource::App, Notice::Info(t("No bookmarks yet: ⌥⌘K toggles one on the cursor's line.").into()));
             cx.notify();
             return;
         }

@@ -139,7 +139,7 @@ impl Workbench {
         };
         self.sync_breakpoints_from(&ed, cx);
         let Some(on) = self.dbg.bps.file(&path).iter().find(|(l, _)| *l == line).map(|(_, m)| m.disabled) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("There is no breakpoint on this line (F9 adds one).").into()));
+            self.notify(NoticeSource::Debug, Notice::Info(crate::i18n::t("There is no breakpoint on this line (F9 adds one).").into()));
             cx.notify();
             return;
         };
@@ -179,11 +179,14 @@ impl Workbench {
         self.push_function_breakpoints();
         self.push_data_breakpoints();
         self.save_breakpoint_settings();
-        self.notice = Some(Notice::Info(if self.dbg.bps.active {
-            crate::i18n::t("Breakpoints are active.").into()
-        } else {
-            crate::i18n::t("Breakpoints are deactivated: the program runs past them.").into()
-        }));
+        self.notify(
+            NoticeSource::Debug,
+            Notice::Info(if self.dbg.bps.active {
+                crate::i18n::t("Breakpoints are active.").into()
+            } else {
+                crate::i18n::t("Breakpoints are deactivated: the program runs past them.").into()
+            }),
+        );
         cx.notify();
     }
 
@@ -262,11 +265,11 @@ impl Workbench {
     /// "Debug: Install JavaScript Debugger": downloads Microsoft's js-debug adapter (MIT) into the settings folder.
     pub(in crate::workbench) fn install_js_debug(&mut self, _: &super::super::InstallJsDebug, _: &mut Window, cx: &mut Context<Self>) {
         if debug_config::find_js_debug().is_some() {
-            self.notice = Some(Notice::Info(crate::i18n::t("The JavaScript debugger is already installed.").into()));
+            self.notify(NoticeSource::Debug, Notice::Info(crate::i18n::t("The JavaScript debugger is already installed.").into()));
             cx.notify();
             return;
         }
-        self.notice = Some(Notice::Info(crate::i18n::t("Downloading Microsoft's js-debug (about 1.2 MB)…").into()));
+        self.notify(NoticeSource::Debug, Notice::Info(crate::i18n::t("Downloading Microsoft's js-debug (about 1.2 MB)…").into()));
         cx.notify();
         let dir = debug_config::adapters_dir();
         let task = cx.background_executor().spawn(async move {
@@ -291,13 +294,16 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
-                this.notice = Some(match result {
-                    Ok(()) if debug_config::find_js_debug().is_some() => {
-                        Notice::Info(crate::i18n::t("JavaScript debugger installed: F5 now works for Node.").into())
-                    }
-                    Ok(()) => Notice::Error(crate::i18n::t("The download finished but js-debug was not found in it.").into()),
-                    Err(e) => Notice::Error(crate::i18n::tf("Could not download js-debug: {}", &[&e]).into()),
-                });
+                this.notify(
+                    NoticeSource::Debug,
+                    match result {
+                        Ok(()) if debug_config::find_js_debug().is_some() => {
+                            Notice::Info(crate::i18n::t("JavaScript debugger installed: F5 now works for Node.").into())
+                        }
+                        Ok(()) => Notice::Error(crate::i18n::t("The download finished but js-debug was not found in it.").into()),
+                        Err(e) => Notice::Error(crate::i18n::tf("Could not download js-debug: {}", &[&e]).into()),
+                    },
+                );
                 cx.notify();
             })
             .ok();
@@ -308,13 +314,16 @@ impl Workbench {
     /// "Debug: Break on Exceptions…": filters offered by the adapter (while a session is open), toggled on selection.
     pub(in crate::workbench) fn break_on_exceptions(&mut self, _: &super::super::BreakOnExceptions, window: &mut Window, cx: &mut Context<Self>) {
         let Some(session) = self.dbg.cur().and_then(|d| d.session.clone()) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Start a debug session first (F5): the adapter says which exceptions it can break on.").into()));
+            self.notify(
+                NoticeSource::Debug,
+                Notice::Info(crate::i18n::t("Start a debug session first (F5): the adapter says which exceptions it can break on.").into()),
+            );
             cx.notify();
             return;
         };
         let available = session.exception_filters();
         if available.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("This debug adapter has no exception breakpoints.").into()));
+            self.notify(NoticeSource::Debug, Notice::Info(crate::i18n::t("This debug adapter has no exception breakpoints.").into()));
             cx.notify();
             return;
         }
@@ -358,11 +367,14 @@ impl Workbench {
             let _ = s.set(&format!("exfilters:{ws}"), &selected.join("\n"));
             let _ = s.set(&format!("exfilters-set:{ws}"), "1");
         }
-        self.notice = Some(Notice::Info(if selected.is_empty() {
-            crate::i18n::t("Not breaking on exceptions.").into()
-        } else {
-            crate::i18n::tf("Breaking on: {}", &[&selected.join(", ")]).into()
-        }));
+        self.notify(
+            NoticeSource::Debug,
+            Notice::Info(if selected.is_empty() {
+                crate::i18n::t("Not breaking on exceptions.").into()
+            } else {
+                crate::i18n::tf("Breaking on: {}", &[&selected.join(", ")]).into()
+            }),
+        );
         cx.notify();
     }
 
@@ -379,7 +391,10 @@ impl Workbench {
     pub(in crate::workbench) fn add_data_breakpoint(&mut self, _: &super::super::AddDataBreakpoint, window: &mut Window, cx: &mut Context<Self>) {
         let ready = self.dbg.cur().is_some_and(|d| matches!(d.status, DebugStatus::Stopped(_)));
         if !ready {
-            self.notice = Some(Notice::Info(crate::i18n::t("Pause the program first (a breakpoint or ⏸): the variable has to be in scope.").into()));
+            self.notify(
+                NoticeSource::Debug,
+                Notice::Info(crate::i18n::t("Pause the program first (a breakpoint or ⏸): the variable has to be in scope.").into()),
+            );
             cx.notify();
             return;
         }
@@ -410,7 +425,7 @@ impl Workbench {
             return;
         }
         if !session.supports_data_breakpoints() {
-            self.notice = Some(Notice::Info(crate::i18n::t("This debug adapter does not support data breakpoints.").into()));
+            self.notify(NoticeSource::Debug, Notice::Info(crate::i18n::t("This debug adapter does not support data breakpoints.").into()));
             cx.notify();
             return;
         }
@@ -450,7 +465,7 @@ impl Workbench {
                             d.push_console("console", crate::i18n::tf("Data breakpoint set: the program stops when {} is written.", &[&desc]));
                         }
                     }
-                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Data breakpoint: {}", &[&e]).into())),
+                    Err(e) => this.notify(NoticeSource::Debug, Notice::Error(crate::i18n::tf("Data breakpoint: {}", &[&e]).into())),
                 }
                 cx.notify();
             })

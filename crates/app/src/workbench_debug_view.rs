@@ -228,7 +228,7 @@ impl Workbench {
             this.update_in(cx, |this, window, cx| match result {
                 Ok(path) => this.open_file(path, window, cx),
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not create {0}: {1}", &[&LAUNCH_FILE, &e]).into()));
+                    this.notify(NoticeSource::Debug, Notice::Error(crate::i18n::tf("Could not create {0}: {1}", &[&LAUNCH_FILE, &e]).into()));
                     cx.notify();
                 }
             })
