@@ -323,6 +323,23 @@ while switching focus; session restoration currently saves text-document tabs an
 this file" on a result) does not write anything: it opens a Search Editor with a replacement
 preview, described below.
 
+**Scopes.** Under the file filter, *Search in:* chooses what Find in files looks in: **Workspace** (the default),
+**Open Editors** (the files that are open now), **Changed Files** (what Git reports as changed: staged, unstaged and
+untracked) or **Current Folder** (the folder of the file in front, and below it). A line under the chips says what the
+choice means ("Only the 3 open files."); the lists follow the editors and the changes as they move on. While a scope
+limits the search, it replaces "Files to include": the include field is dimmed and the line under the chips says "Files to
+include is not used." (choose Workspace to use it again). Only the files the scope names are listed, a file of the same name
+in another folder is not (a root `README.md` does not bring in `docs/README.md`). Replace All, "replace in this file" and
+*Open in a Search Editor tab* use the same files, so the review shows exactly what the scope covers; a file whose name has
+a comma cannot be written in the Search Editor's include list, so it is left out of that review (the panel lists it). With
+a scope that names no file they do nothing. The palette has *Search: Find in Workspace*, *… in Open Editors*, *… in Changed Files* and *… in
+Current Folder*. The scope looks at what the app already knows (the open tabs and the last Git status), so it runs nothing
+by itself and works the same over SSH.
+
+**History.** ↑ and ↓ in the search field step through the searches you ran with ↵ (the last 30). Each one brings back
+the text, the Match case / Whole word / Regular expression / Preserve case options, the include and exclude filters and the
+scope it was run with, not just the text.
+
 ### Search Editors and replacement review
 
 "Search: Open Search Editor" (or the page icon in the Search panel's results bar) keeps the current

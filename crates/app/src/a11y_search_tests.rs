@@ -110,6 +110,28 @@ fn the_search_view_is_driven_from_the_tree(cx: &mut TestAppContext) {
     assert_eq!(alert(cx).unwrap().1.live(), Some(Live::Assertive));
 }
 
+/// The scope chips are buttons that say which one is on; choosing one from the tree limits the search, and the line that
+/// says what the scope means is in the tree.
+#[gpui::test]
+fn the_scope_is_chosen_and_described_through_the_tree(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let dir = crate::qa_workbench_tests::project("a11y-search-scope");
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    crate::qa_workbench_tests::open(&wb, &dir, cx);
+    run(&wb, cx, "Search: Find in Files");
+    let snap = snapshot(&wb, cx);
+    for label in ["Workspace", "Open Editors", "Changed Files", "Current Folder"] {
+        assert!(find(&snap, Role::Button, label).is_some(), "the {label} chip is a button");
+    }
+    assert_eq!(node(&snap, Role::Button, "Workspace").1.toggled(), Some(Toggled::True));
+    assert_eq!(node(&snap, Role::Button, "Open Editors").1.toggled(), Some(Toggled::False));
+    act(&wb, cx, &snap, node(&snap, Role::Button, "Open Editors").0, Action::Click, None);
+    let snap = snapshot(&wb, cx);
+    assert_eq!(node(&snap, Role::Button, "Open Editors").1.toggled(), Some(Toggled::True));
+    assert_eq!(node(&snap, Role::Button, "Workspace").1.toggled(), Some(Toggled::False));
+    assert!(find(&snap, Role::Label, "No file is open in this folder.").is_some(), "what the scope means is read");
+}
+
 /// The path a screen reader user takes: search for the code, open the result, find its diagnostic in Problems, ask for
 /// its fixes and apply one, all through the tree; the fixed file has no problem left, which is announced.
 #[gpui::test]

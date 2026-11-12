@@ -3913,3 +3913,21 @@ Sort: Line	Sıra: Satır
 Sort: Severity	Sıra: Önem
 {0} errors, {1} warnings, {2} information	{0} hata, {1} uyarı, {2} bilgi
 {} problems	{} sorun
+
+# ---- Search: scopes ----
+Workspace	Çalışma Alanı
+Changed Files	Değişen Dosyalar
+Current Folder	Geçerli Klasör
+Search in:	Arama yeri:
+No file is open in this folder.	Bu klasörde açık dosya yok.
+Only the {} open file.|Only the {} open files.	Yalnızca açık {} dosya.
+No changed files.	Değişen dosya yok.
+Only the {} changed file.|Only the {} changed files.	Yalnızca değişen {} dosya.
+The current folder is not inside this folder.	Geçerli klasör bu klasörün içinde değil.
+Only in the folder {}.	Yalnızca {} klasöründe.
+The current folder is the workspace.	Geçerli klasör çalışma alanının kendisi.
+Search: Find in Workspace	Arama: Çalışma Alanında Bul
+Search: Find in Open Editors	Arama: Açık Düzenleyicilerde Bul
+Search: Find in Changed Files	Arama: Değişen Dosyalarda Bul
+Search: Find in Current Folder	Arama: Geçerli Klasörde Bul
+{0} Files to include is not used.	{0} “Dahil edilecek dosyalar” kullanılmıyor.

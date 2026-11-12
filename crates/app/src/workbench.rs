@@ -169,7 +169,7 @@ mod replace_glue;
 #[path = "workbench_schema.rs"]
 mod schema_glue;
 #[path = "workbench_search_editor.rs"]
-mod search_editor_glue;
+pub(crate) mod search_editor_glue;
 #[path = "workbench_session.rs"]
 mod session_glue;
 #[path = "workbench_settings.rs"]
@@ -1085,9 +1085,8 @@ impl Workbench {
                     this.tabs.pending_reveal = Some((path.clone(), *line, *column, *len));
                     this.open_file(path.clone(), window, cx);
                 }
-                SearchEvent::OpenInEditor(spec) => {
-                    this.open_search_editor(spec.clone(), None, window, cx);
-                }
+                SearchEvent::OpenInEditor(spec) => drop(this.open_search_editor(spec.clone(), None, window, cx)),
+                SearchEvent::ScopeChanged => this.sync_search_scope(cx),
                 SearchEvent::ReviewReplace { spec, only } => {
                     let review = match only {
                         Some(path) => crate::search_editor::Review::Only(path.clone()),

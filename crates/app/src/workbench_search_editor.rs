@@ -16,6 +16,9 @@ use crate::search_editor::{Busy, Review, SearchEditor, SearchEditorEvent};
 /// Saved Search Editors of a workspace (state database key prefix).
 const SAVED_KEY: &str = "search_editors";
 
+#[path = "workbench_search_scope.rs"]
+pub(crate) mod scope_files;
+
 /// An open editor changed by a replacement: undo takes back that one step, only if nothing was typed since.
 struct UndoBuffer {
     path: String,

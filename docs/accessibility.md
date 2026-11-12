@@ -153,7 +153,9 @@ The tree, in the order a screen reader walks it:
   options as `CheckBox`es (Match case, Whole word, Regular expression, Preserve case when replacing, Structural search;
   `Click` toggles from the state the tree showed), the replacement (`TextInput`), Replace All (disabled until there are
   results; it opens the review as the button does), the "Files to include / exclude" disclosure `Button` (expanded
-  while the two fields show) and those fields, the status line as a polite `Status` and a search or pattern error as an
+  while the two fields show) and those fields, the scope chips "Workspace", "Open Editors", "Changed Files" and "Current
+  Folder" (toggle `Button`s of the surface "Search"; pressing one limits the search and searches again) with a `Label`
+  that says what the scope means ("Only the 3 open files."), the status line as a polite `Status` and a search or pattern error as an
   assertive `Alert`, then a `Tree` "Search results" of up to 500 rows around the current match (or the rows on screen;
   scroll up/down by 100 rows moves the range): a file per level-1 `TreeItem` (folder as description, match count as
   value, `Expand`/`Collapse`/`Click`, with "Replace in this file" and "Dismiss this file from the results") and its

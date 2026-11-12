@@ -20,13 +20,14 @@ gpui::actions!(search, [StructuralSearch, StructuralReplace]);
 
 #[path = "search_access.rs"]
 mod access;
+#[path = "search_scope.rs"]
+pub(crate) mod scope;
+#[path = "search_scope_view.rs"]
+mod scope_view;
 #[path = "search_structural.rs"]
 mod structural_mode;
 pub(crate) use access::{AccessField, AccessFrame, AccessKey, AccessView, DISMISS_FILE, REPLACE_IN_FILE, SearchOption};
 pub(crate) use structural_mode::describe as describe_pattern_error;
-
-/// Number of remembered queries.
-const HISTORY_MAX: usize = 30;
 
 /// Delay before searching once typing stops.
 const DEBOUNCE: Duration = Duration::from_millis(250);
@@ -38,6 +39,8 @@ pub enum SearchEvent {
     OpenInEditor(crate::search_doc::SearchSpec),
     /// Replace: review the changes in a Search Editor before anything is written. `only`: just this file (absolute path).
     ReviewReplace { spec: crate::search_doc::SearchSpec, only: Option<String> },
+    /// The scope changed: the workbench names the files it means (`SearchPanel::set_scope_paths`).
+    ScopeChanged,
     // --- structural ---
     /// A structural search wants the unsaved text of the open files of this language; answered with `run_structural`.
     StructuralBuffers { generation: u32, family: &'static str },
@@ -87,9 +90,11 @@ pub struct SearchPanel {
     debounce: Option<Task<()>>,
     scroll: UniformListScrollHandle,
     focus_handle: FocusHandle,
-    /// Previous queries (newest last) and the position being browsed with ↑/↓.
-    history: Vec<String>,
-    history_ix: Option<usize>,
+    /// Previous searches with their options and filters, and the position being browsed with ↑/↓.
+    history: scope::History,
+    /// What the search is limited to, and the files the workbench named for it (absolute; see `scope::limit_for`).
+    scope: scope::Scope,
+    scope_paths: Vec<String>,
     /// Last visited match: (file, match). F4 / ⇧F4 continue from here.
     current: Option<(usize, usize)>,
     // --- structural ---
@@ -156,8 +161,9 @@ impl SearchPanel {
             debounce: None,
             scroll: UniformListScrollHandle::new(),
             focus_handle: cx.focus_handle(),
-            history: Vec::new(),
-            history_ix: None,
+            history: Default::default(),
+            scope: Default::default(),
+            scope_paths: Vec::new(),
             current: None,
             st,
             painted: Default::default(),
@@ -237,34 +243,41 @@ impl SearchPanel {
         (self.query.read(cx).text().to_string(), self.regex, self.case_sensitive)
     }
 
-    /// Add the query run with Enter to the history (duplicates move to the end).
+    /// Add the search run with Enter to the history, with its options and filters (the same search moves to the end).
     fn remember_query(&mut self, cx: &mut Context<Self>) {
-        let q = self.query.read(cx).text().to_string();
-        if q.trim().is_empty() {
-            return;
-        }
-        self.history.retain(|h| *h != q);
-        self.history.push(q);
-        if self.history.len() > HISTORY_MAX {
-            self.history.remove(0);
-        }
-        self.history_ix = None;
+        let globs = |f: &Entity<TextField>| if self.show_globs { f.read(cx).text().to_string() } else { String::new() };
+        self.history.push(scope::HistoryEntry {
+            query: self.query.read(cx).text().to_string(),
+            include: globs(&self.include),
+            exclude: globs(&self.exclude),
+            case_sensitive: self.case_sensitive,
+            whole_word: self.whole_word,
+            regex: self.regex,
+            preserve_case: self.preserve_case,
+            scope: self.scope,
+        });
     }
 
-    /// ↑ (`older`): previous query; ↓: next, empty at the end.
+    /// ↑ (`older`): the previous search, with the options and filters it was run with; ↓: the next, empty at the end.
     fn step_history(&mut self, older: bool, cx: &mut Context<Self>) {
-        if self.history.is_empty() || self.st.on {
+        if self.st.on {
             return;
         }
-        let next = match (self.history_ix, older) {
-            (None, true) => Some(self.history.len() - 1),
-            (Some(i), true) => Some(i.saturating_sub(1)),
-            (Some(i), false) if i + 1 < self.history.len() => Some(i + 1),
-            (Some(_), false) | (None, false) => None,
+        let entry = match self.history.step(older) {
+            scope::Step::Stay => return,
+            scope::Step::Cleared => None,
+            scope::Step::Entry(e) => Some(e.clone()),
         };
-        self.history_ix = next;
-        let text = next.map_or(String::new(), |i| self.history[i].clone());
-        self.query.update(cx, |q, cx| q.set_text(&text, cx));
+        let Some(e) = entry else {
+            self.query.update(cx, |q, cx| q.set_text("", cx));
+            return;
+        };
+        (self.case_sensitive, self.whole_word, self.regex, self.preserve_case) = (e.case_sensitive, e.whole_word, e.regex, e.preserve_case);
+        self.show_globs |= !e.include.is_empty() || !e.exclude.is_empty();
+        self.include.update(cx, |f, cx| f.set_text(&e.include, cx));
+        self.exclude.update(cx, |f, cx| f.set_text(&e.exclude, cx));
+        self.set_scope(e.scope, cx);
+        self.query.update(cx, |q, cx| q.set_text(&e.query, cx));
     }
 
     /// Move `delta` steps through the flat order of found matches and go there (F4 / ⇧F4).
@@ -319,7 +332,7 @@ impl SearchPanel {
             return self.request_structural_replace(Some(fi), cx);
         }
         let Some(f) = self.results.get(fi) else { return };
-        if self.query.read(cx).text().is_empty() {
+        if self.query.read(cx).text().is_empty() || self.scope_is_empty(cx) {
             return;
         }
         let only = Some(self.abs(&f.path));
@@ -334,7 +347,7 @@ impl SearchPanel {
             case_sensitive: self.case_sensitive,
             whole_word: self.whole_word,
             preserve_case: self.preserve_case,
-            include: if self.show_globs { self.include.read(cx).text().to_string() } else { String::new() },
+            include: self.root.as_deref().map(|root| self.include_exact_for(root, cx).unwrap_or_default().join(", ")).unwrap_or_default(),
             exclude: if self.show_globs { self.exclude.read(cx).text().to_string() } else { String::new() },
             context: 1,
             replacement: self.replace.read(cx).text().to_string(),
@@ -361,7 +374,12 @@ impl SearchPanel {
 
     #[cfg(test)]
     pub fn history_for_test(&self) -> Vec<String> {
-        self.history.clone()
+        self.history.queries()
+    }
+
+    #[cfg(test)]
+    pub fn history_entries_for_test(&self) -> Vec<scope::HistoryEntry> {
+        self.history.entries().to_vec()
     }
 
     #[cfg(test)]
@@ -410,7 +428,7 @@ impl SearchPanel {
         if self.st.on {
             return self.request_structural_replace(None, cx);
         }
-        if self.root.is_none() || self.query.read(cx).text().is_empty() {
+        if self.root.is_none() || self.query.read(cx).text().is_empty() || self.scope_is_empty(cx) {
             return;
         }
         cx.emit(SearchEvent::ReviewReplace { spec: self.spec(cx), only: None });
@@ -444,13 +462,15 @@ impl SearchPanel {
         }
         let pattern_has_upper = pattern.chars().any(char::is_uppercase);
         let globs = |f: &Entity<TextField>| -> Vec<String> { f.read(cx).text().split(',').map(|g| g.trim().to_string()).filter(|g| !g.is_empty()).collect() };
+        // A scope that names no file in this folder leaves nothing to search there.
+        let include = self.include_for(&root, cx)?;
         Some(SearchQuery {
             root,
             pattern,
             regex: self.regex,
             case_sensitive: self.case_sensitive || (settings.search_smart_case && pattern_has_upper),
             whole_word: self.whole_word,
-            include: if self.show_globs { globs(&self.include) } else { Vec::new() },
+            include,
             exclude: {
                 let mut ex = if self.show_globs { globs(&self.exclude) } else { Vec::new() };
                 ex.extend(settings.files_exclude.iter().cloned());
@@ -470,17 +490,22 @@ impl SearchPanel {
         self.results.clear();
         self.current = None;
         self.rebuild_rows();
-        let Some(query) = self.query(cx) else {
-            self.status = Status::Idle;
-            cx.notify();
-            return;
-        };
         // The first root and extra folders are searched concurrently; results merge into one list.
-        let mut roots: Vec<(Option<String>, SearchQuery)> = vec![(None, query)];
+        let mut roots: Vec<(Option<String>, SearchQuery)> = self.query(cx).map(|q| (None, q)).into_iter().collect();
         for e in self.extra_roots.clone() {
             if let Some(q) = self.query_in(e.clone(), cx) {
                 roots.push((Some(ui::file_name(&e).to_string()), q));
             }
+        }
+        if roots.is_empty() {
+            // No text (or no folder): nothing to say. A scope with no files in it: nothing found, and the scope line says why.
+            self.status = if self.root.is_none() || self.query.read(cx).text().is_empty() {
+                Status::Idle
+            } else {
+                Status::Done { files: 0, matches: 0, truncated: false }
+            };
+            cx.notify();
+            return;
         }
         let (mut streams, mut ids) = (Vec::new(), Vec::new());
         for (label, q) in roots {
@@ -520,6 +545,10 @@ impl SearchPanel {
                                         if let Some(l) = &label {
                                             f.path = format!("{l}{}{}", crate::workbench::ROOT_SEP, f.path);
                                         }
+                                        // A glob matched it; the scope decides whether it is one of its files.
+                                        if !this.scope_admits(&this.abs(&f.path)) {
+                                            continue;
+                                        }
                                         this.add(f, &mode);
                                     }
                                 }
@@ -527,6 +556,11 @@ impl SearchPanel {
                                     pending -= 1;
                                     (files_sum, matches_sum, truncated_any) = (files_sum + files, matches_sum + matches, truncated_any | truncated);
                                     if pending == 0 {
+                                        if this.scope.needs_paths() {
+                                            // The agent counted what its globs matched; the list holds what the scope names.
+                                            files_sum = this.results.len() as u32;
+                                            matches_sum = this.results.iter().map(|f| f.matches.len() as u32).sum();
+                                        }
                                         this.status = Status::Done { files: files_sum, matches: matches_sum, truncated: truncated_any };
                                         this.running = None;
                                         more = false;
@@ -596,6 +630,9 @@ impl SearchPanel {
 
     /// Keep this search in a Search Editor tab (it runs there again, in the first folder).
     pub fn open_in_editor(&mut self, cx: &mut Context<Self>) {
+        if self.scope_is_empty(cx) {
+            return;
+        }
         cx.emit(SearchEvent::OpenInEditor(self.spec(cx)));
     }
 
@@ -762,9 +799,14 @@ impl Render for SearchPanel {
                         this.start(cx);
                     })),
             )
+            .child(self.scope_row(&p, cx))
             .when(self.show_globs, |d| {
-                d.child(field_box("search-include-box", i_focus, self.include.clone().into_any_element()).child(field(AccessField::Include)))
-                    .child(field_box("search-exclude-box", e_focus, self.exclude.clone().into_any_element()).child(field(AccessField::Exclude)))
+                d.child(
+                    field_box("search-include-box", i_focus, self.include.clone().into_any_element())
+                        .child(field(AccessField::Include))
+                        .when(self.scope_replaces_include(), |d| d.opacity(0.5)),
+                )
+                .child(field_box("search-exclude-box", e_focus, self.exclude.clone().into_any_element()).child(field(AccessField::Exclude)))
             })
             .when_some(status, |d, (s, color)| {
                 let any = !self.results.is_empty();

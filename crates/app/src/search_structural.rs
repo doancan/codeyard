@@ -165,7 +165,6 @@ impl SearchPanel {
         let settings = cx.global::<crate::settings::Settings>();
         let max_files = settings.search_structural_max_files;
         let globs = |f: &Entity<TextField>| -> Vec<String> { f.read(cx).text().split(',').map(|g| g.trim().to_string()).filter(|g| !g.is_empty()).collect() };
-        let include = if self.show_globs { globs(&self.include) } else { Vec::new() };
         let mut exclude = if self.show_globs { globs(&self.exclude) } else { Vec::new() };
         exclude.extend(settings.files_exclude.iter().cloned());
         exclude.extend(settings.search_exclude.iter().cloned());
@@ -174,7 +173,9 @@ impl SearchPanel {
         dirs.extend(self.extra_roots.iter().map(|e| (Some(ui::file_name(e).to_string()), e.clone())));
         let (mut roots, mut ids) = (Vec::new(), Vec::new());
         for (label, dir) in dirs {
-            let q = engine::narrowing_query(&dir, &pattern, self.st.family, include.clone(), exclude.clone());
+            // A scope that names no file in this folder leaves nothing to search there.
+            let Some(include) = self.include_for(&dir, cx) else { continue };
+            let q = engine::narrowing_query(&dir, &pattern, self.st.family, include, exclude.clone());
             match self.host.search(q) {
                 Ok(stream) => {
                     ids.push(stream.id);

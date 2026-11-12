@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Problems panel: a filter bar with switches for errors, warnings and information (each with its count), a text filter (path, message, code, source), **Active File Only**, a sort button (file, severity, line), fold and unfold of each file, and **Copy All Problems** / **Copy Problem**. Rows show the code and the source in columns of their own, the list can be used from the keyboard, and the filtered count is announced to screen readers. The filter is remembered for each workspace. New palette commands: *Problems: Copy All* and *Problems: Toggle Active File Only*.
 
+- Search: scopes under the file filter (Workspace, Open Editors, Changed Files from Git, Current Folder) with a line that says what the scope covers, and palette commands *Search: Find in Workspace / Open Editors / Changed Files / Current Folder*. Replace All and the Search Editor use the scope's files. The search history (↑ / ↓) now brings back the options, the include and exclude filters and the scope of each search, not just its text.
+
 ### Fixed
 
 - SSH config: two saves at the same moment (two windows adding hosts) no longer fail on Windows with "The process cannot access the file"; they take turns.

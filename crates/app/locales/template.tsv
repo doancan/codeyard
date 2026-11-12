@@ -245,6 +245,7 @@ Change the URL of which remote?
 Change {}	
 Change {} of {}	
 Changed	
+Changed Files	
 Changed files	
 Changed {0} file ({1} file operations skipped)|Changed {0} files ({1} file operations skipped)	
 Changed {0} in {1}	
@@ -592,6 +593,7 @@ Create tag
 Created branch {0} at {1}	
 Creating {}…	
 Current	
+Current Folder	
 Current branch	
 Current parameter: {}	
 Cursor animation	
@@ -1534,6 +1536,7 @@ No bookmarks yet: ⌥⌘K toggles one on the cursor's line.
 No breakpoints: F9 or a click in the gutter adds one.	
 No change here to revert	
 No change here to stage	
+No changed files.	
 No changes	
 No changes in this file	
 No changes to discard	
@@ -1567,6 +1570,7 @@ No extension registry is set up yet. Add one to extensions.registries in your se
 No extension registry is set up yet. Add one to extensions.registries in your settings.	
 No extensions installed. Install one from a .cyx file or a folder.	
 No favorites yet: right-click a file → Add to Favorites, or “Favorites: Toggle Active File”.	
+No file is open in this folder.	
 No file is open.	
 No file “{}” in this project	
 No files in this folder	
@@ -1704,6 +1708,7 @@ One quiet color, outline glyphs
 Only My Commits	
 Only When I Ask	
 Only a published branch can be force-pushed: use Publish Branch first.	
+Only in the folder {}.	
 Only left	
 Only on the left	
 Only on the right	
@@ -1711,6 +1716,8 @@ Only right
 Only send it if you trust this file.	
 Only the connection is removed; the remote repository itself is untouched.	
 Only the local tag is removed. A copy on a remote stays until you delete it there (Git: Delete Remote Tag…).	
+Only the {} changed file.|Only the {} changed files.	
+Only the {} open file.|Only the {} open files.	
 Only this host's entry is removed. The previous file is kept as config.codeyard-bak.	
 Only trust folders from people you know: what you trust can run programs on the computer that holds it, with your rights.	
 Opacity	
@@ -2254,6 +2261,7 @@ Search containers, images or projects…
 Search failed: {}	
 Search files by name	
 Search files by name (> commands, : line, # symbols, ? help)	
+Search in:	
 Search installed extensions	
 Search is not available for this project's registry	
 Search log messages or timestamps…	
@@ -2263,7 +2271,11 @@ Search settings
 Search the Market	
 Search {}	
 Search: Find TODO Comments	
+Search: Find in Changed Files	
+Search: Find in Current Folder	
 Search: Find in Files	
+Search: Find in Open Editors	
+Search: Find in Workspace	
 Search: Open Search Editor	
 Search: Structural Replace…	
 Search: Structural Search…	
@@ -2594,6 +2606,8 @@ The connection to {} dropped. Reconnecting…
 The connection to {} was lost during the scan, so the result is partial. Scan again once it is back.	
 The connection was lost; the results are incomplete.	
 The crash report is on the clipboard. Nothing was sent.	
+The current folder is not inside this folder.	
+The current folder is the workspace.	
 The debug adapter did not accept a connection	
 The debug adapter did not start listening	
 The debug adapter exited before connecting	
@@ -3002,6 +3016,7 @@ Without Full Disk Access, Desktop, Documents or external drives may look empty.
 Without one, F5 finds a configuration from the project (Cargo, Go, or the open Python or JavaScript file).	
 Word Wrap	
 Workbench	
+Workspace	
 Workspace Trust is off (security.workspaceTrust.enabled).	
 Workspace Trust: Restricted Mode, this folder is not trusted. Select a folder to stop trusting it	
 Workspace Trust: select a trusted folder to stop trusting it	
@@ -3407,6 +3422,7 @@ your words
 {0} ({1}) is published by {2}.	
 {0} / {1} containers	
 {0} / {1} lines · {2} errors · {3} warnings	
+{0} Files to include is not used.	
 {0} and {1} cannot be added	
 {0} and {1} cannot be divided	
 {0} and {1} cannot be divided because the divisor is zero	

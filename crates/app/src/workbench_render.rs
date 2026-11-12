@@ -219,6 +219,7 @@ impl Render for Workbench {
         self.sync_slots(cx);
         self.sync_timeline(cx);
         self.sync_outline(cx);
+        self.sync_search_scope(cx);
         self.sync_ext_views_frame(cx);
         self.sync_update_window(window, cx);
         let remote = self.remote.host.is_remote();
