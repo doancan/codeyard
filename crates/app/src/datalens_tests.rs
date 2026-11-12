@@ -310,6 +310,16 @@ fn check(doc: &str, q: &str, want: &[&str]) {
     assert_eq!(query(doc, q), Ok(want), "{q} on {doc}");
 }
 
+/// A chain of pipes reads left to right however long it is, and a pipe with nothing after it is a syntax error, not a panic.
+#[test]
+fn pipe_chains_fold_in_order_and_dangling_pipes_are_errors() {
+    check(r#"{"a":{"b":[1,2,3]}}"#, ".a | .b | length", &["3"]);
+    check("1", &[".+1"; 40].join(" | "), &["41"]);
+    for broken in ["|", ". |", "| .", ".a | | .b", "(. |)", "[.|]"] {
+        assert!(query("1", broken).is_err(), "{broken:?}");
+    }
+}
+
 /// Each row is what jq 1.7 prints for the same program and input (jq manual, "Builtin operators and functions").
 #[test]
 fn query_conformance_with_jq() {

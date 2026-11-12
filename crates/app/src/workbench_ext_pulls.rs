@@ -143,7 +143,7 @@ impl Workbench {
     ) -> Option<oneshot::Receiver<Result<Response, v::Error>>> {
         let active = self.pull_providers().into_iter().map(|(a, _)| a).find(|a| a.id() == pull.extension);
         let Some(active) = active else {
-            self.notice = Some(Notice::Error(crate::i18n::tf("{} is no longer active.", &[&pull.extension]).into()));
+            self.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("{} is no longer active.", &[&pull.extension]).into()));
             cx.notify();
             return None;
         };
@@ -157,7 +157,7 @@ impl Workbench {
         }
         let why = super::code_glue::explain(e);
         self.log_extension(extension, LogLevel::Warn, format!("pull requests: {what}: {why}"));
-        self.notice = Some(Notice::Error(format!("{extension}: {why}").into()));
+        self.notify(NoticeSource::Extensions, Notice::Error(format!("{extension}: {why}").into()));
         cx.notify();
     }
 
@@ -238,13 +238,13 @@ impl Workbench {
             ExtPullAction::CopyLink => {
                 if let Some(url) = &pull.pull.url {
                     cx.write_to_clipboard(gpui::ClipboardItem::new_string(url.clone()));
-                    self.notice = Some(Notice::Info(crate::i18n::t("Link copied.").into()));
+                    self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::t("Link copied.").into()));
                     cx.notify();
                 }
             }
             ExtPullAction::CopyBranch => {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(pull.pull.source_branch.clone()));
-                self.notice = Some(Notice::Info(crate::i18n::tf("Copied {}.", &[&pull.pull.source_branch]).into()));
+                self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::tf("Copied {}.", &[&pull.pull.source_branch]).into()));
                 cx.notify();
             }
         }
@@ -255,7 +255,7 @@ impl Workbench {
         let (remote, id) = (pull.remote.clone(), pull.pull.id.clone());
         let Some(details) = self.ask_about(&pull, PullQuery::Details { remote: remote.clone(), id: id.clone() }, window, cx) else { return };
         let Some(comments) = self.ask_about(&pull, PullQuery::Comments { remote, id }, window, cx) else { return };
-        self.notice = Some(Notice::Info(crate::i18n::tf("Loading {}…", &[&pull.title()]).into()));
+        self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::tf("Loading {}…", &[&pull.title()]).into()));
         cx.notify();
         cx.spawn_in(window, async move |this, cx| {
             let details = details.await.unwrap_or(Err(v::Error::Cancelled));
@@ -283,7 +283,7 @@ impl Workbench {
                     }
                 };
                 let page = ext_pulls::details_markdown(&details, &comments, &pull.label, now_secs());
-                this.notice = None;
+                this.dismiss_notice();
                 let name = format!("{}.md", ext_pulls::shown(&pull.title(), 60).replace(['/', '\\', ':'], "-"));
                 this.show_pull_page(name, &page, window, cx);
             })
@@ -293,7 +293,7 @@ impl Workbench {
     }
 
     /// A Markdown page in a scratch file, opened at once (it is small and local) and shown as its preview.
-    fn show_pull_page(&mut self, name: String, page: &str, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn show_pull_page(&mut self, name: String, page: &str, window: &mut Window, cx: &mut Context<Self>) {
         let Some(path) = self.write_scratch(name, page, cx) else { return };
         let host = self.remote.local_host.clone();
         match crate::editor::load(host.as_ref(), &path, cx.global::<Settings>().fallback_encoding) {
@@ -320,7 +320,7 @@ impl Workbench {
                 };
                 files.truncate(ext_pulls::MAX_FILES);
                 if files.is_empty() {
-                    this.notice = Some(Notice::Info(crate::i18n::tf("{}: no changed files.", &[&pull.title()]).into()));
+                    this.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::tf("{}: no changed files.", &[&pull.title()]).into()));
                     cx.notify();
                     return;
                 }
@@ -365,13 +365,13 @@ impl Workbench {
         }
         let query = PullQuery::AddComment { remote: pull.remote.clone(), id: pull.pull.id.clone(), body };
         let Some(answer) = self.ask_about(&pull, query, window, cx) else { return };
-        self.notice = Some(Notice::Info(crate::i18n::t("Adding comment…").into()));
+        self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::t("Adding comment…").into()));
         cx.notify();
         cx.spawn_in(window, async move |this, cx| {
             let answer = answer.await.unwrap_or(Err(v::Error::Cancelled));
             this.update(cx, |this, cx| match answer {
                 Ok(Response::PullRequests(PullAnswer::Done)) => {
-                    this.notice = Some(Notice::Info(crate::i18n::tf("Comment added to {}.", &[&pull.title()]).into()));
+                    this.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::tf("Comment added to {}.", &[&pull.title()]).into()));
                     cx.notify();
                 }
                 Ok(other) => this.pull_failed(&pull.extension, "add comment", &unexpected(&other), cx),

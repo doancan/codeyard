@@ -26,9 +26,9 @@ impl Workbench {
     pub(in crate::workbench) fn cancel_pending_debug_start(&mut self, cx: &mut Context<Self>) {
         self.dbg.prepare_epoch = self.dbg.prepare_epoch.wrapping_add(1);
         self.dbg.save_task = None;
-        if matches!(&self.notice, Some(Notice::Info(message)) if [crate::i18n::t("Saving files before debugging…"), crate::i18n::t("Building the tests…")].contains(&message.as_ref()))
+        if self.notice_text().is_some_and(|m| [crate::i18n::t("Saving files before debugging…"), crate::i18n::t("Building the tests…")].contains(&m.as_str()))
         {
-            self.notice = None;
+            self.dismiss_notice();
         }
         cx.notify();
     }
@@ -37,14 +37,14 @@ impl Workbench {
         let editors = self.debug_unsaved_editors(&root, cx);
         for editor in &editors {
             if let Err(error) = editor.update(cx, |e, cx| e.save_for_build(cx)) {
-                self.notice = Some(Notice::Error(crate::i18n::tf("Could not save files before debugging: {}", &[&error]).into()));
+                self.notify(NoticeSource::Debug, Notice::Error(crate::i18n::tf("Could not save files before debugging: {}", &[&error]).into()));
                 cx.notify();
                 return;
             }
         }
         let generation = self.lsp.generation;
         let asked = self.active_root(cx);
-        self.notice = Some(Notice::Info(crate::i18n::t("Saving files before debugging…").into()));
+        self.notify(NoticeSource::Debug, Notice::Info(crate::i18n::t("Saving files before debugging…").into()));
         self.dbg.save_task = Some(cx.spawn(async move |this, cx| {
             let started = Instant::now();
             loop {
@@ -71,7 +71,7 @@ impl Workbench {
                     Ok(Progress::Ready) => {
                         with_window(&this, cx, move |this, window, cx| {
                             this.dbg.save_task = None;
-                            this.notice = None;
+                            this.dismiss_notice();
                             resume(this, window, cx);
                         });
                         break;
@@ -79,7 +79,7 @@ impl Workbench {
                     Ok(Progress::Failed(error)) => {
                         this.update(cx, |this, cx| {
                             this.dbg.save_task = None;
-                            this.notice = Some(Notice::Error(crate::i18n::tf("Could not save files before debugging: {}", &[&error]).into()));
+                            this.notify(NoticeSource::Debug, Notice::Error(crate::i18n::tf("Could not save files before debugging: {}", &[&error]).into()));
                             cx.notify();
                         })
                         .ok();

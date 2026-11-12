@@ -92,11 +92,11 @@ fn a_pending_terminal_profile_list_cannot_open_in_another_context(cx: &mut TestA
             } else {
                 wb.replace_root(crate::ui::local_path(&other), cx);
             }
-            wb.notice = Some(Notice::Info("new context".into()));
+            wb.notify(NoticeSource::Terminal, Notice::Info("new context".into()));
         });
         cx.run_until_parked();
         assert!(wb.read_with(cx, |wb, _| wb.overlay.is_none()), "an old shell listing must not open a menu in the new context");
-        assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.as_ref() == "new context")));
+        assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.as_ref() == "new context")));
     }
 }
 

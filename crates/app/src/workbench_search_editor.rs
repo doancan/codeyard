@@ -16,6 +16,9 @@ use crate::search_editor::{Busy, Review, SearchEditor, SearchEditorEvent};
 /// Saved Search Editors of a workspace (state database key prefix).
 const SAVED_KEY: &str = "search_editors";
 
+#[path = "workbench_search_scope.rs"]
+pub(crate) mod scope_files;
+
 /// An open editor changed by a replacement: undo takes back that one step, only if nothing was typed since.
 struct UndoBuffer {
     path: String,
@@ -90,7 +93,7 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) -> Option<Entity<SearchEditor>> {
         let Some(provenance) = self.provenance(cx) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a folder to search in it.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a folder to search in it.").into()));
             cx.notify();
             return None;
         };
@@ -426,7 +429,7 @@ impl Workbench {
                 let summary = report_notice(&report);
                 match weak.upgrade() {
                     Some(ed) => ed.update(cx, |e, cx| e.set_report(report, can_undo, cx)),
-                    None => this.notice = Some(summary),
+                    None => this.notify(NoticeSource::App, summary),
                 }
                 cx.notify();
             })
@@ -450,7 +453,7 @@ impl Workbench {
     /// replacement wrote. Anything else is reported as an undo conflict and left alone.
     pub(super) fn undo_replace(&mut self, cx: &mut Context<Self>) {
         let Some(batch) = self.searches.batch.take() else {
-            self.notice = Some(Notice::Info(crate::i18n::t("There is no replacement to undo.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("There is no replacement to undo.").into()));
             cx.notify();
             return;
         };
@@ -461,7 +464,7 @@ impl Workbench {
             let msg = crate::i18n::t("Undo is not available here: the replacement was made in another folder or connection.");
             match target {
                 Some(ed) => ed.update(cx, |e, cx| e.set_message(msg, true, cx)),
-                None => self.notice = Some(Notice::Error(msg.into())),
+                None => self.notify(NoticeSource::App, Notice::Error(msg.into())),
             }
             cx.notify();
             return;
@@ -501,7 +504,7 @@ impl Workbench {
                 let summary = report_notice(&report);
                 match weak.upgrade() {
                     Some(ed) => ed.update(cx, |e, cx| e.set_report(report, false, cx)),
-                    None => this.notice = Some(summary),
+                    None => this.notify(NoticeSource::App, summary),
                 }
                 cx.notify();
             })

@@ -110,7 +110,7 @@ impl Workbench {
     }
 
     pub fn set_notice_for_test(&mut self, text: &str, error: bool, cx: &mut Context<Self>) {
-        self.notice = Some(if error { Notice::Error(text.to_string().into()) } else { Notice::Info(text.to_string().into()) });
+        self.notify(NoticeSource::App, if error { Notice::Error(text.to_string().into()) } else { Notice::Info(text.to_string().into()) });
         cx.notify();
     }
 
@@ -294,6 +294,11 @@ impl Workbench {
         self.roots.primary.update(cx, |t, cx| t.reveal_dir(path, cx));
     }
 
+    /// Switch the settings folder, as another profile does.
+    pub fn set_config_dir_for_test(&mut self, dir: std::path::PathBuf) {
+        self.cfg.dir = Some(dir);
+    }
+
     pub fn reload_config_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.reload_config(window, cx);
     }
@@ -327,7 +332,7 @@ impl Workbench {
     }
 
     pub fn tree_options_for_test(&mut self, compact: bool, sort: &str, cx: &mut Context<Self>) {
-        let opts = crate::tree::ViewOptions { compact, sort: crate::tree::SortOrder::from_setting(sort) };
+        let opts = crate::tree::ViewOptions { compact, sort: crate::tree::SortOrder::from_setting(sort), nesting: crate::tree::nesting::Nesting::off() };
         self.roots.primary.update(cx, |t, cx| t.set_options(opts, cx));
     }
 
@@ -734,12 +739,12 @@ impl Workbench {
     }
 
     pub fn clear_notice_for_test(&mut self) {
-        self.notice = None;
+        self.dismiss_notice();
     }
 
     pub fn notice_for_test(&self) -> Option<(bool, String)> {
-        match &self.notice {
-            Some(Notice::Info(m)) => Some((false, m.to_string())),
+        match &self.notice() {
+            Some(Notice::Info(m) | Notice::Warning(m)) => Some((false, m.to_string())),
             Some(Notice::Error(m)) => Some((true, m.to_string())),
             None => None,
         }

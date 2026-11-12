@@ -128,7 +128,7 @@ impl Workbench {
             && self.vcs.repos.inventory.by_worktree(&dir).is_none()
         {
             self.vcs.scm_root = None;
-            self.notice = Some(Notice::Error(crate::i18n::tf("Repository is no longer available: {}", &[&dir]).into()));
+            self.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Repository is no longer available: {}", &[&dir]).into()));
             self.refresh_git(0, cx);
         }
         self.push_repos(cx);
@@ -241,7 +241,7 @@ impl Workbench {
     /// nothing falls back to another one).
     pub fn select_repository(&mut self, key: RepoKey, cx: &mut Context<Self>) -> bool {
         let Some(repo) = self.vcs.repos.inventory.get(key).cloned() else {
-            self.notice = Some(Notice::Error(crate::i18n::t("Repository changed while the operation was pending.").into()));
+            self.notify(NoticeSource::App, Notice::Error(crate::i18n::t("Repository changed while the operation was pending.").into()));
             cx.notify();
             return false;
         };

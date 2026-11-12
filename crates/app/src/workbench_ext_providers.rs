@@ -65,6 +65,8 @@ pub(super) struct ProviderState {
 #[derive(Clone)]
 pub(super) enum QuickFix {
     Lsp(Arc<crate::lsp::Client>, crate::lsp::CodeAction),
+    /// A `Cargo.toml` dependency fix (workbench_cargo.rs).
+    Cargo(super::rust_glue::cargo::CargoFix),
     /// `document`: the path the actions were asked for, the one file its edits may change without `write`.
     Extension {
         extension: String,
@@ -99,6 +101,7 @@ fn to_lsp_diagnostic(extension: &str, d: &v::Diagnostic) -> Option<crate::lsp::D
         message,
         source: Some(extension.to_string()),
         code: d.code.as_deref().and_then(|c| shown_text(c, limits::ITEM_LEN)),
+        code_href: None,
         related: Vec::new(),
         more_related: 0,
         rendered: None,
@@ -311,7 +314,7 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let result = answer.await.unwrap_or(Err(v::Error::Cancelled));
             this.update(cx, |this, cx| {
-                this.notice = match result {
+                let outcome = match result {
                     Ok(Response::Edits(edits)) => {
                         let applied = ed.update(cx, |e, cx| e.apply_lsp_edits_if_unchanged(version, &to_edits(&edits), cx)).unwrap_or(false);
                         applied.then(|| Notice::Info(crate::i18n::tf("Formatted by {}", &[&ext]).into()))
@@ -321,6 +324,10 @@ impl Workbench {
                     Ok(_) => Some(Notice::Error(crate::i18n::tf("{}: the formatter returned no edits", &[&ext]).into())),
                     Err(e) => Some(Notice::Error(format!("{ext}: {}", super::code_glue::explain(&e)).into())),
                 };
+                match outcome {
+                    Some(n) => this.notify(NoticeSource::Extensions, n),
+                    None => this.dismiss_notice(),
+                }
                 cx.notify();
             })
             .ok();
@@ -356,8 +363,10 @@ impl Workbench {
                 Ok(_) | Err(v::Error::Cancelled) => {}
                 Err(e) => {
                     this.update(cx, |this, cx| {
-                        this.notice =
-                            Some(Notice::Error(crate::i18n::tf("Saved without formatting: {0}: {1}", &[&ext, &super::code_glue::explain(&e)]).into()));
+                        this.notify(
+                            NoticeSource::Extensions,
+                            Notice::Error(crate::i18n::tf("Saved without formatting: {0}: {1}", &[&ext, &super::code_glue::explain(&e)]).into()),
+                        );
                         cx.notify();
                     })
                     .ok();
@@ -394,6 +403,9 @@ impl Workbench {
             let c = client.clone();
             (client, cx.background_executor().spawn(async move { c.request("textDocument/codeAction", params, Duration::from_secs(15)) }))
         });
+        if let Some((client, _)) = &lsp {
+            self.lsp.refactor.listed = self.refactor_snapshot(client, cx);
+        }
         let document = v::Document { uri: ext_broker::uri(&path), language: language.clone(), version: job.version as u32, text: job.text };
         let pos = |(line, character): (u32, u32)| v::Position { line, character };
         let request = Request::CodeActions {
@@ -420,6 +432,7 @@ impl Workbench {
             // Preferred first, the rest in the order they came.
             fixes.sort_by_key(|f| match f {
                 QuickFix::Lsp(_, a) => !a.preferred,
+                QuickFix::Cargo(_) => false,
                 QuickFix::Extension { action, .. } => !action.preferred,
             });
             this.update_in(cx, |this, window, cx| this.show_quick_fixes(fixes, window, cx)).ok();
@@ -428,9 +441,9 @@ impl Workbench {
         true
     }
 
-    fn show_quick_fixes(&mut self, fixes: Vec<QuickFix>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn show_quick_fixes(&mut self, fixes: Vec<QuickFix>, window: &mut Window, cx: &mut Context<Self>) {
         if fixes.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No quick fixes here").into()));
+            self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::t("No quick fixes here").into()));
             cx.notify();
             return;
         }
@@ -438,6 +451,7 @@ impl Workbench {
             .iter()
             .map(|f| match f {
                 QuickFix::Lsp(_, a) => PickItem { label: a.title.clone().into(), detail: (!a.kind.is_empty()).then(|| a.kind.clone().into()), keys: None },
+                QuickFix::Cargo(fix) => PickItem { label: fix.title.clone().into(), detail: Some(crate::i18n::t("Cargo dependency").into()), keys: None },
                 // Every extension surface names the extension.
                 QuickFix::Extension { extension, action, .. } => {
                     PickItem { label: action.title.clone().into(), detail: Some(extension.clone().into()), keys: None }
@@ -453,6 +467,7 @@ impl Workbench {
     pub(super) fn run_quick_fix(&mut self, fix: QuickFix, window: &mut Window, cx: &mut Context<Self>) {
         let (extension, document, action) = match fix {
             QuickFix::Lsp(client, action) => return self.run_code_action(client, action, cx),
+            QuickFix::Cargo(fix) => return self.run_cargo_fix(fix, window, cx),
             QuickFix::Extension { extension, document, action } => (extension, document, action),
         };
         if !action.edits.is_empty() {
@@ -471,7 +486,7 @@ impl Workbench {
                     Err(e) => {
                         let why = super::code_glue::explain(&e);
                         self.log_extension(&extension, LogLevel::Warn, format!("code action \"{}\": edit to {uri} refused: {why}", action.title));
-                        self.notice = Some(Notice::Error(format!("{extension}: {why}").into()));
+                        self.notify(NoticeSource::Extensions, Notice::Error(format!("{extension}: {why}").into()));
                         cx.notify();
                         return;
                     }
@@ -488,7 +503,8 @@ impl Workbench {
                     .collect();
                 changes.insert(crate::lsp::path_to_uri(&path), serde_json::Value::Array(list));
             }
-            self.apply_workspace_edit(&serde_json::json!({ "changes": changes }), cx);
+            let source = super::refactor_glue::EditSource { title: action.title.clone(), client: None, snapshot: Default::default() };
+            self.review_workspace_edit(source, &serde_json::json!({ "changes": changes }), None, cx);
         }
         match action.command {
             Some(command) => self.run_extension_command_id(&extension, &command, "null".into(), window, cx),
@@ -525,7 +541,10 @@ impl Workbench {
         let reg = crate::ext::current();
         let Some(active) = reg.active.iter().find(|e| e.id() == extension).cloned() else { return };
         if self.cfg.exts.code.disabled.contains(extension) {
-            self.notice = Some(Notice::Error(crate::i18n::tf("{} crashed three times and is turned off until Codeyard restarts.", &[&extension]).into()));
+            self.notify(
+                NoticeSource::Extensions,
+                Notice::Error(crate::i18n::tf("{} crashed three times and is turned off until Codeyard restarts.", &[&extension]).into()),
+            );
             cx.notify();
             return;
         }
@@ -544,7 +563,7 @@ impl Workbench {
                     this.cfg.exts.code.last_answer.insert(ext.clone(), j.clone());
                 }
                 if let Some(Err(e)) = result.filter(|_| !this.cfg.exts.code.disabled.contains(&ext)) {
-                    this.notice = Some(Notice::Error(format!("{ext}: {}", super::code_glue::explain(&e)).into()));
+                    this.notify(NoticeSource::Extensions, Notice::Error(format!("{ext}: {}", super::code_glue::explain(&e)).into()));
                     cx.notify();
                 }
             })
@@ -1141,6 +1160,7 @@ impl Workbench {
                     .iter()
                     .map(|f| match f {
                         QuickFix::Lsp(_, a) => a.title.clone(),
+                        QuickFix::Cargo(fix) => fix.title.clone(),
                         QuickFix::Extension { action, .. } => action.title.clone(),
                     })
                     .collect(),
@@ -1158,6 +1178,7 @@ impl Workbench {
             .iter()
             .find(|f| match f {
                 QuickFix::Lsp(_, a) => a.title == title,
+                QuickFix::Cargo(fix) => fix.title == title,
                 QuickFix::Extension { action, .. } => action.title == title,
             })
             .cloned()

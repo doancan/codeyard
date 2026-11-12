@@ -145,7 +145,10 @@ impl EditorView {
 
     /// Text after the end of `line`: the first `after` decoration ending there, with its tone and hover text.
     pub(super) fn ext_after(&self, line: usize) -> Option<(String, Tone, Option<String>)> {
-        let d = self.ext.decorations.iter().find(|d| d.place == DecorationPlace::After && d.last == line && d.text.is_some())?;
+        let Some(d) = self.ext.decorations.iter().find(|d| d.place == DecorationPlace::After && d.last == line && d.text.is_some()) else {
+            // A manifest's dependency hint (editor_cargo.rs) takes the place when no extension has text here.
+            return self.cargo_after(line);
+        };
         Some((d.text.clone().unwrap_or_default(), d.tone, d.hover.clone()))
     }
 

@@ -32,6 +32,8 @@ impl Workbench {
 
     /// Schedule a (re)validation for the editor; `delay`: wait after an edit.
     pub(super) fn schedule_schema(&mut self, ed: &Entity<EditorView>, delay: Duration, cx: &mut Context<Self>) {
+        // A `Cargo.toml` has no schema; its dependency hints follow the same triggers (workbench_cargo.rs).
+        self.schedule_cargo(ed, delay, cx);
         let path = ed.read(cx).path.clone();
         let Some(format) = schema::ide::format_of(&path) else { return };
         let settings = cx.global::<Settings>();
@@ -151,7 +153,7 @@ impl Workbench {
         for ed in self.all_editors() {
             self.schedule_schema(&ed, Duration::ZERO, cx);
         }
-        self.notice = Some(Notice::Info(crate::i18n::t("Schema cache cleared. Schemas are downloaded again when needed.").into()));
+        self.notify(NoticeSource::Language, Notice::Info(crate::i18n::t("Schema cache cleared. Schemas are downloaded again when needed.").into()));
         cx.notify();
     }
 }

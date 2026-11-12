@@ -14,9 +14,9 @@ mod access;
 mod bundled_agents;
 mod cargo_args;
 mod cargo_project;
+mod cli_extensions;
 mod color;
 mod commands;
-// --- compare ---
 mod compare_folders;
 mod compare_logic;
 #[cfg(test)]
@@ -29,6 +29,7 @@ mod container_monitor;
 mod crash;
 mod dap;
 mod debug_model;
+mod diagnostics;
 // --- data ---
 mod a11y_controls;
 #[cfg(test)]
@@ -205,6 +206,7 @@ mod resource_monitor;
 mod resources;
 #[cfg(test)]
 mod rust_hardening_tests;
+mod rust_toolchain;
 mod scm;
 mod search;
 mod search_doc;
@@ -293,7 +295,7 @@ fn bind_keys(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("f11", ToggleFullScreen, None), KeyBinding::new("ctrl-f11", DebugStepInto, None)]);
     #[cfg(target_os = "macos")]
     cx.bind_keys([KeyBinding::new("f11", DebugStepInto, None)]);
-    cx.bind_keys(diff::key_bindings());
+    cx.bind_keys(diff::key_bindings().into_iter().chain(t::filter_key_bindings()).chain(large::image_key_bindings()).chain(lsp::refactor::key_bindings()));
     cx.bind_keys([
         KeyBinding::new("secondary-o", OpenFolder, None),
         KeyBinding::new("secondary-b", ToggleSidebar, None),
@@ -818,93 +820,6 @@ struct Args {
     accept_permissions: bool,
 }
 
-/// `--install-extension`: install each package into the user's store with the checks of the Extensions view, and report
-/// one line per package. A package that asks for permissions prints its consent sheet and installs only with
-/// `--accept-permissions`. Exit status 1 when any failed; the others are still installed.
-fn install_extensions(files: &[String], accept_permissions: bool) -> i32 {
-    let Some(cfg) = settings::config_dir() else {
-        eprintln!("codeyard: no settings folder");
-        return 1;
-    };
-    let store = ext::store(&cfg);
-    let settings =
-        std::fs::read_to_string(cfg.join("settings.jsonc")).ok().and_then(|t| settings::parse_layers(&t, &[]).ok()).map(|(s, _)| s).unwrap_or_default();
-    let registries = ext_registry::registries(&settings);
-    let mut status = 0;
-    for f in files {
-        let path = std::fs::canonicalize(f).unwrap_or_else(|_| f.into());
-        // A file (or anything that looks like one) is a package; `publisher.name[@version]` comes from a registry.
-        let from_file = path.exists() || f.ends_with(".cyx") || f.contains(['/', '\\']);
-        let result = if from_file {
-            ext::install_file(&store, &path, accept_permissions)
-        } else {
-            ext_registry::install_from_command_line(&cfg, &registries, f, accept_permissions)
-        };
-        match result {
-            Ok(m) => {
-                // What was granted, as the sheet put it.
-                let source = store.locked().ok().and_then(|l| l.get(&m.id).map(|l| l.source.clone()));
-                if let Some(sheet) = source.and_then(|s| ext::permission_sheet(&m, &s)) {
-                    println!("{sheet}");
-                }
-                println!("installed {} {}", m.id, m.version)
-            }
-            Err(e) => {
-                eprintln!("{f}: {e}");
-                status = 1;
-            }
-        }
-    }
-    status
-}
-
-/// `--update-extensions`: what the daily update check does for extensions installed from a registry (update, roll
-/// back a yanked version, stop a revoked one), asking those registries now, without a window. One line per change;
-/// exit status 1 when a registry could not be read.
-fn update_extensions() -> i32 {
-    let Some(cfg) = settings::config_dir() else {
-        eprintln!("codeyard: no settings folder");
-        return 1;
-    };
-    let settings =
-        std::fs::read_to_string(cfg.join("settings.jsonc")).ok().and_then(|t| settings::parse_layers(&t, &[]).ok()).map(|(s, _)| s).unwrap_or_default();
-    let registries = ext_registry::registries(&settings);
-    let report = ext_updates::check_now(&cfg, &registries, settings.extension_auto_update, ext_registry::now());
-    for line in report.done.iter().chain(&report.stopped) {
-        println!("{line}");
-    }
-    for (id, s) in &report.status {
-        if let (ext_core::update::Standing::Revoked { reason }, None) = (&s.standing, &s.offer) {
-            println!("{}", i18n::tf("{0} stays stopped: the registry revoked the installed version ({1}) and has no other version to install", &[id, reason]));
-        }
-        let Some(offer) = &s.offer else { continue };
-        let v = offer.version();
-        match offer {
-            ext_updates::Offer::Waiting { .. } => println!("{id} {v} runs code: it installs by itself 48 h after it was published"),
-            ext_updates::Offer::Available { .. } => println!("{id} {v} is available"),
-            ext_updates::Offer::Failed { error, .. } => println!("{id} {v} could not be installed: {error}"),
-            _ => println!("{id} {v} needs your review in the Extensions view"),
-        }
-    }
-    for e in &report.errors {
-        eprintln!("{e}");
-    }
-    i32::from(!report.errors.is_empty())
-}
-
-/// The windows an update restart left for this process; the file is consumed here. Anything wrong with it is logged and means
-/// an ordinary start.
-fn update_handover() -> Option<update_restart::Handover> {
-    let dir = workbench::state_path()?.parent()?.to_path_buf();
-    match update_restart::take(&dir, env!("CARGO_PKG_VERSION"), std::time::SystemTime::now()) {
-        Ok(h) => h,
-        Err(e) => {
-            eprintln!("not reopening the windows from before the update: {e}");
-            None
-        }
-    }
-}
-
 /// The first-run question and the daily check belong to a real session: not to debug builds (unless a developer asked for a
 /// scripted update with `CODEYARD_DEV_UPDATE`), and not to a window that a script drives (`--do`, `--panel`).
 fn update_checks_enabled(args: &Args) -> bool {
@@ -1092,7 +1007,7 @@ fn install_askpass(cx: &mut App) {
         answer.recv_timeout(std::time::Duration::from_secs(300)).ok().flatten()
     });
     if let Err(e) = host::askpass::install(handler) {
-        eprintln!("askpass unavailable, ssh will not prompt: {e}");
+        diagnostics::log::warn("ssh", format_args!("askpass unavailable, ssh will not prompt: {e}"));
         return;
     }
     let mut requests = ui::bridge(rx);
@@ -1237,8 +1152,10 @@ fn main() {
     #[cfg(any(unix, windows))]
     if std::env::args_os().nth(1).is_some_and(|arg| arg == "--daemon") {
         let Some(socket) = std::env::args_os().nth(2) else { std::process::exit(2) };
+        diagnostics::log::init(diagnostics::log::log_dir(), diagnostics::log::DAEMON_FILE_NAME);
         if let Err(e) = agent::daemon::run(std::path::Path::new(&socket)) {
-            eprintln!("codeyard: terminal daemon: {e}");
+            diagnostics::log::error("terminal", format_args!("terminal daemon exited: {e}"));
+            diagnostics::log::flush();
             std::process::exit(1);
         }
         return;
@@ -1261,6 +1178,8 @@ fn main() {
     // SAFETY: first thing in `main` after the askpass early exit; no parser has been created yet.
     unsafe { syntax::use_mimalloc() };
     workbench::migrate_legacy_dirs();
+    diagnostics::log::init(diagnostics::log::log_dir(), diagnostics::log::FILE_NAME);
+    diagnostics::log::info("app", format_args!("Codeyard {} starting ({} {})", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH));
     crash::install(workbench::crash_dir());
     let args = parse_args();
     // Windows and Linux start Codeyard with an extension's sign-in address: hand it to the running one.
@@ -1274,10 +1193,10 @@ fn main() {
     if !args.install.is_empty() || args.update_extensions {
         let mut status = 0;
         if !args.install.is_empty() {
-            status = install_extensions(&args.install, args.accept_permissions);
+            status = cli_extensions::install_extensions(&args.install, args.accept_permissions);
         }
         if args.update_extensions {
-            status = status.max(update_extensions());
+            status = status.max(cli_extensions::update_extensions());
         }
         std::process::exit(status);
     }
@@ -1288,7 +1207,7 @@ fn main() {
         ext::set_dev(Some(std::fs::canonicalize(dir).unwrap_or_else(|_| dir.into())));
     }
     // A folder or host on the command line wins; the file is consumed either way.
-    let reopen = args.after_update.then(update_handover).flatten().filter(|_| args.path.is_none() && args.connect.is_none());
+    let reopen = args.after_update.then(cli_extensions::update_handover).flatten().filter(|_| args.path.is_none() && args.connect.is_none());
     // Before anything can start a task or a terminal: if the app dies by a signal or a crash, the guard ends them.
     #[cfg(any(unix, windows))]
     if let Some(socket) = workbench::terminal_daemon_socket() {
@@ -1299,6 +1218,10 @@ fn main() {
     // Finder's "Open With", dropping on the Dock icon and `open -a Codeyard x` addresses are forwarded to the window through this channel
     // (the handler must be set up before the app opens; a request that arrives on first launch isn't lost either).
     let (open_tx, mut open_rx) = futures::channel::mpsc::unbounded::<Vec<String>>();
+    // Only a window run is marked as running: every command-line exit above leaves the markers of earlier runs alone.
+    if let Some(dir) = workbench::crash_dir() {
+        crash::session::begin(&dir);
+    }
     let app = Application::new().with_assets(Assets);
     app.on_open_urls(move |urls| {
         open_tx.unbounded_send(urls).ok();
@@ -1350,6 +1273,7 @@ fn main() {
                     wb.search_for(&q, window, cx);
                 }
                 wb.sync_dock_menu(cx);
+                wb.announce_previous_crash(cx);
                 if let Some(name) = args.panel.clone() {
                     wb.show_panel_named(&name, window, cx);
                 }
@@ -1468,6 +1392,9 @@ fn main() {
         // All ssh ControlMasters are closed on every exit, including ⌘Q and the last window closing.
         cx.on_app_quit(|cx| {
             host::ssh::close_all_masters();
+            if let Some(dir) = workbench::crash_dir() {
+                crash::session::end(&dir);
+            }
             // Quitting is not closing: every window's terminals stay with the terminal daemon for the next start.
             for window in cx.windows() {
                 if let Some(wb) = window.downcast::<Workbench>() {

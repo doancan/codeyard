@@ -103,5 +103,5 @@ fn check_save_race(cx: &mut TestAppContext, local_copy: bool) {
     assert_eq!(std::fs::read_to_string(&target).unwrap(), "created by another process\n", "saving must never overwrite a newly occupied destination");
     assert_eq!(std::fs::read_to_string(&from).unwrap(), "document being saved\n");
     assert!(wb.read_with(cx, |wb, cx| wb.tabs.editors.iter().any(|editor| editor.read(cx).path == from)));
-    assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Error(message)) if message.contains("already exists"))));
+    assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Error(message)) if message.contains("already exists"))));
 }

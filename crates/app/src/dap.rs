@@ -5,6 +5,7 @@
 //! Flow: `initialize` → `launch` (its response arrives after `configurationDone`, so don't wait for it) →
 //! `initialized` event → breakpoints → `configurationDone` → `launch` response.
 
+use crate::diagnostics::LockExt as _;
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -39,6 +40,8 @@ pub enum DapEvent {
     Exited(i32),
     /// The adapter process died.
     AdapterExited(Option<i32>),
+    /// The thread reading the adapter's messages died by a panic: nothing more will arrive.
+    ConnectionLost,
     /// Answer to `setBreakpoints` for `path`: the 1-based lines in the order sent and the result for each.
     BreakpointsSet {
         path: String,
@@ -175,6 +178,14 @@ pub struct Variable {
 
 type Pending = Arc<Mutex<HashMap<i64, mpsc::Sender<Result<Value, String>>>>>;
 
+/// Run a reader thread's body; if it panics, the session is not left waiting for answers that can no longer come.
+fn guard_reader(body: impl FnOnce(), lost: impl FnOnce()) {
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)).is_err() {
+        crate::diagnostics::log::error("debug", format_args!("the debug adapter reader stopped after a panic"));
+        lost();
+    }
+}
+
 /// Where messages go: the adapter process's stdin or a TCP connection.
 enum Writer {
     Proc { host: Arc<dyn Host>, id: u32 },
@@ -190,7 +201,7 @@ impl Writer {
         match self {
             Writer::Proc { host, id } => host.proc_input(*id, bytes),
             Writer::Tcp(s) => {
-                let _ = s.lock().unwrap().write_all(&bytes);
+                let _ = s.lock_recover().write_all(&bytes);
             }
         }
     }
@@ -381,30 +392,36 @@ impl Session {
             std::thread::Builder::new()
                 .name("dap-proc".into())
                 .spawn(move || {
-                    while let Ok(ev) = proc.events.recv() {
-                        match ev {
-                            ProcEvent::Output(data) => {
-                                if transport == Transport::Stdio {
-                                    let msgs = dec.lock().unwrap().push(&data);
-                                    if let Some(s) = slot.lock().unwrap().upgrade() {
-                                        for m in msgs {
-                                            s.route(m);
+                    let lost_slot = slot.clone();
+                    guard_reader(
+                        move || {
+                            while let Ok(ev) = proc.events.recv() {
+                                match ev {
+                                    ProcEvent::Output(data) => {
+                                        if transport == Transport::Stdio {
+                                            let msgs = dec.lock_recover().push(&data);
+                                            if let Some(s) = slot.lock_recover().upgrade() {
+                                                for m in msgs {
+                                                    s.route(m);
+                                                }
+                                            }
+                                        } else {
+                                            // Output of the TCP adapter itself (build error, crash): keep the tail for the error message.
+                                            push_output_tail(&mut tail.lock_recover(), &data);
                                         }
                                     }
-                                } else {
-                                    // Output of the TCP adapter itself (build error, crash): keep the tail for the error message.
-                                    push_output_tail(&mut tail.lock().unwrap(), &data);
+                                    ProcEvent::Exit(code) => {
+                                        exited.store(true, Ordering::Relaxed);
+                                        if let Some(s) = slot.lock_recover().upgrade() {
+                                            s.on_exit(code);
+                                        }
+                                        break;
+                                    }
                                 }
                             }
-                            ProcEvent::Exit(code) => {
-                                exited.store(true, Ordering::Relaxed);
-                                if let Some(s) = slot.lock().unwrap().upgrade() {
-                                    s.on_exit(code);
-                                }
-                                break;
-                            }
-                        }
-                    }
+                        },
+                        move || lost_slot.lock_recover().upgrade().iter().for_each(|s| s.connection_lost()),
+                    );
                 })
                 .map_err(|e| {
                     host.proc_kill(id);
@@ -418,7 +435,7 @@ impl Session {
                 let fail = |why: &str| {
                     host.proc_kill(id);
                     release_forward(&forward);
-                    let out = tail.lock().unwrap().trim().to_string();
+                    let out = tail.lock_recover().trim().to_string();
                     Err(if out.is_empty() { why.to_string() } else { format!("{why}: {out}") })
                 };
                 let stream = loop {
@@ -455,13 +472,13 @@ impl Session {
                 };
                 let s =
                     Session::build(Writer::Tcp(Mutex::new(stream)), Some((host.clone(), id)), Some(SocketAddr::from(([127, 0, 0, 1], port))), events, false);
-                *s.forward.lock().unwrap() = forward;
-                *slot.lock().unwrap() = Arc::downgrade(&s);
+                *s.forward.lock_recover() = forward;
+                *slot.lock_recover() = Arc::downgrade(&s);
                 s.spawn_tcp_reader(reader);
                 return Ok(s);
             }
         };
-        *slot.lock().unwrap() = Arc::downgrade(&session);
+        *slot.lock_recover() = Arc::downgrade(&session);
         Ok(session)
     }
 
@@ -507,7 +524,7 @@ impl Session {
         let _ = stream.set_nodelay(true);
         let reader = stream.try_clone().map_err(|e| e.to_string())?;
         let s = Session::build(Writer::Tcp(Mutex::new(stream)), None, Some(target), events, true);
-        *s.forward.lock().unwrap() = remote.then_some((alias, Transport::Connect, port, local));
+        *s.forward.lock_recover() = remote.then_some((alias, Transport::Connect, port, local));
         s.spawn_tcp_reader(reader);
         Ok(s)
     }
@@ -526,35 +543,49 @@ impl Session {
     fn spawn_tcp_reader(&self, mut stream: TcpStream) {
         let me = self.me.clone();
         let _ = std::thread::Builder::new().name("dap-tcp".into()).spawn(move || {
-            let (mut dec, mut buf) = (Decoder::default(), [0u8; 16 * 1024]);
-            loop {
-                match stream.read(&mut buf) {
-                    Ok(n) if n > 0 => {
-                        let Some(s) = me.upgrade() else { break };
-                        for m in dec.push(&buf[..n]) {
-                            s.route(m);
+            let lost = me.clone();
+            guard_reader(
+                move || {
+                    let (mut dec, mut buf) = (Decoder::default(), [0u8; 16 * 1024]);
+                    loop {
+                        match stream.read(&mut buf) {
+                            Ok(n) if n > 0 => {
+                                let Some(s) = me.upgrade() else { break };
+                                for m in dec.push(&buf[..n]) {
+                                    s.route(m);
+                                }
+                            }
+                            _ => {
+                                if let Some(s) = me.upgrade() {
+                                    s.on_exit(None);
+                                }
+                                break;
+                            }
                         }
                     }
-                    _ => {
-                        if let Some(s) = me.upgrade() {
-                            s.on_exit(None);
-                        }
-                        break;
-                    }
-                }
-            }
+                },
+                move || lost.upgrade().iter().for_each(|s| s.connection_lost()),
+            );
         });
+    }
+
+    /// The reader thread died by a panic: end the session the way a closed connection does and tell the workbench once.
+    fn connection_lost(&self) {
+        if self.alive.load(Ordering::Relaxed) {
+            self.on_exit(None);
+            let _ = self.events.send(DapEvent::ConnectionLost);
+        }
     }
 
     fn on_exit(&self, code: Option<i32>) {
         if !self.alive.swap(false, Ordering::Relaxed) {
             return;
         }
-        for (_, tx) in self.pending.lock().unwrap().drain() {
+        for (_, tx) in self.pending.lock_recover().drain() {
             let _ = tx.send(Err(crate::i18n::t("the debug adapter stopped").into()));
         }
         // Wake any pending `wait_initialized`.
-        *self.initialized.0.lock().unwrap() = true;
+        *self.initialized.0.lock_recover() = true;
         self.initialized.1.notify_all();
         // A child session's connection closing isn't the end of the whole session; the parent reports that.
         if self.proc.is_some() || self.direct {
@@ -567,7 +598,7 @@ impl Session {
     }
 
     fn child(&self) -> Option<Arc<Session>> {
-        self.child.lock().unwrap().clone().filter(|c| c.is_alive())
+        self.child.lock_recover().clone().filter(|c| c.is_alive())
     }
 
     /// Send on this connection without routing to the child session (for the handshake).
@@ -578,7 +609,7 @@ impl Session {
             return rx;
         }
         let seq = self.next_seq.fetch_add(1, Ordering::Relaxed);
-        self.pending.lock().unwrap().insert(seq, tx);
+        self.pending.lock_recover().insert(seq, tx);
         self.writer.send(&json!({ "seq": seq, "type": "request", "command": command, "arguments": arguments }));
         rx
     }
@@ -603,7 +634,7 @@ impl Session {
 
     fn wait_initialized(&self, timeout: Duration) -> Result<(), String> {
         let (lock, cv) = &*self.initialized;
-        let guard = lock.lock().unwrap();
+        let guard = lock.lock_recover();
         let (guard, res) = cv.wait_timeout_while(guard, timeout, |ready| !*ready).unwrap();
         if res.timed_out() || !*guard {
             return Err(crate::i18n::t("the debug adapter did not report that it is ready").into());
@@ -624,9 +655,9 @@ impl Session {
         breakpoints: &BTreeMap<String, Vec<Breakpoint>>,
         functions: &[FunctionBreakpoint],
     ) -> Result<(), String> {
-        *self.adapter_id.lock().unwrap() = adapter_id.to_string();
-        *self.breakpoints.lock().unwrap() = breakpoints.clone();
-        *self.functions.lock().unwrap() = functions.to_vec();
+        *self.adapter_id.lock_recover() = adapter_id.to_string();
+        *self.breakpoints.lock_recover() = breakpoints.clone();
+        *self.functions.lock_recover() = functions.to_vec();
         self.attached.store(request == "attach", Ordering::Relaxed);
         // Only a configuration that asks for a terminal gets one: some adapters change how they start the program
         // as soon as the client says it can.
@@ -642,7 +673,7 @@ impl Session {
             }),
             Duration::from_secs(30),
         )?;
-        *self.capabilities.lock().unwrap() = init;
+        *self.capabilities.lock_recover() = init;
         // The `launch` / `attach` response comes after `configurationDone`: carry on without waiting.
         let launched = self.raw_async(request, launch_args);
         self.wait_initialized(Duration::from_secs(60))?;
@@ -663,14 +694,14 @@ impl Session {
         // Exception breakpoints: the preference (else the adapter's default), intersected with what the adapter offers.
         let available = self.exception_filters();
         if !available.is_empty() {
-            let pref = self.exception_pref.lock().unwrap().clone();
+            let pref = self.exception_pref.lock_recover().clone();
             let chosen: Vec<String> = match pref {
                 Some(p) => p.into_iter().filter(|f| available.iter().any(|(id, ..)| id == f)).collect(),
                 None => available.iter().filter(|(.., d)| *d).map(|(id, ..)| id.clone()).collect(),
             };
             self.raw_request("setExceptionBreakpoints", json!({ "filters": chosen }), Duration::from_secs(15))?;
         }
-        let supports_done = self.capabilities.lock().unwrap()["supportsConfigurationDoneRequest"].as_bool().unwrap_or(true);
+        let supports_done = self.capabilities.lock_recover()["supportsConfigurationDoneRequest"].as_bool().unwrap_or(true);
         if supports_done {
             self.raw_request("configurationDone", json!({}), Duration::from_secs(30))?;
         }
@@ -680,7 +711,7 @@ impl Session {
 
     /// Exception filters the adapter offers: (id, name, enabled by default).
     pub fn exception_filters(&self) -> Vec<(String, String, bool)> {
-        self.capabilities.lock().unwrap()["exceptionBreakpointFilters"]
+        self.capabilities.lock_recover()["exceptionBreakpointFilters"]
             .as_array()
             .map(|a| {
                 a.iter()
@@ -698,24 +729,24 @@ impl Session {
 
     /// The user's preference before start (`begin` intersects it with what the adapter has and sends it).
     pub fn set_exception_pref(&self, pref: Option<Vec<String>>) {
-        *self.exception_pref.lock().unwrap() = pref;
+        *self.exception_pref.lock_recover() = pref;
     }
 
     /// Change while running: no response awaited (reaches the adapter before the next `continue`).
     pub fn set_exception_filters(&self, filters: &[String]) {
-        *self.exception_pref.lock().unwrap() = Some(filters.to_vec());
+        *self.exception_pref.lock_recover() = Some(filters.to_vec());
         let _ = self.request_async("setExceptionBreakpoints", json!({ "filters": filters }));
     }
 
     pub fn set_root(&self, root: &str) {
-        *self.root.lock().unwrap() = Some(root.trim_end_matches('/').to_string());
+        *self.root.lock_recover() = Some(root.trim_end_matches('/').to_string());
     }
 
     /// `setBreakpoints` requests for a file: the absolute path, plus the root-relative path for lldb.
     fn breakpoint_requests(&self, path: &str, bps: &[Breakpoint]) -> Vec<Value> {
         let mut out = vec![Self::breakpoints_args(path, bps)];
-        let lldb = self.adapter_id.lock().unwrap().as_str() == "lldb-dap";
-        let rel = self.root.lock().unwrap().as_deref().and_then(|r| path.strip_prefix(&format!("{r}/")).map(str::to_string));
+        let lldb = self.adapter_id.lock_recover().as_str() == "lldb-dap";
+        let rel = self.root.lock_recover().as_deref().and_then(|r| path.strip_prefix(&format!("{r}/")).map(str::to_string));
         if let (true, Some(rel)) = (lldb, rel) {
             out.push(Self::breakpoints_args(&rel, bps));
         }
@@ -735,8 +766,8 @@ impl Session {
                 return;
             }
         };
-        *self.child.lock().unwrap() = Some(child.clone());
-        let (id, bps, functions) = (self.adapter_id.lock().unwrap().clone(), self.breakpoints.lock().unwrap().clone(), self.functions.lock().unwrap().clone());
+        *self.child.lock_recover() = Some(child.clone());
+        let (id, bps, functions) = (self.adapter_id.lock_recover().clone(), self.breakpoints.lock_recover().clone(), self.functions.lock_recover().clone());
         if let Err(e) = child.begin(&id, &request, configuration, &bps, &functions) {
             let _ = self
                 .events
@@ -765,7 +796,7 @@ impl Session {
 
     /// Replace the function breakpoints while running (answer reported as `FunctionBreakpointsSet`).
     pub fn set_function_breakpoints_async(&self, functions: &[FunctionBreakpoint]) {
-        *self.functions.lock().unwrap() = functions.to_vec();
+        *self.functions.lock_recover() = functions.to_vec();
         if !self.supports("supportsFunctionBreakpoints") {
             return;
         }
@@ -786,12 +817,12 @@ impl Session {
     pub fn supports(&self, flag: &str) -> bool {
         match self.child() {
             Some(c) => c.supports(flag),
-            None => self.capabilities.lock().unwrap()[flag].as_bool().unwrap_or(false),
+            None => self.capabilities.lock_recover()[flag].as_bool().unwrap_or(false),
         }
     }
 
     fn remember(&self, path: &str, bps: &[Breakpoint]) {
-        let mut all = self.breakpoints.lock().unwrap();
+        let mut all = self.breakpoints.lock_recover();
         if bps.is_empty() {
             all.remove(path);
         } else {
@@ -840,7 +871,7 @@ impl Session {
     }
 
     pub fn supports_data_breakpoints(&self) -> bool {
-        self.capabilities.lock().unwrap()["supportsDataBreakpoints"].as_bool().unwrap_or(false)
+        self.capabilities.lock_recover()["supportsDataBreakpoints"].as_bool().unwrap_or(false)
     }
 
     #[cfg(test)]
@@ -924,7 +955,7 @@ impl Session {
 
     /// Close the session: the program ends too; the adapter is killed if it doesn't exit shortly.
     pub fn stop(&self) {
-        if let Some(c) = self.child.lock().unwrap().take() {
+        if let Some(c) = self.child.lock_recover().take() {
             c.stop();
         }
         if self.is_alive() {
@@ -932,12 +963,12 @@ impl Session {
             let _ = self.raw_request("disconnect", json!({ "terminateDebuggee": !self.attached.load(Ordering::Relaxed) }), Duration::from_secs(2));
         }
         if let Writer::Tcp(s) = &*self.writer {
-            let _ = s.lock().unwrap().shutdown(std::net::Shutdown::Both);
+            let _ = s.lock_recover().shutdown(std::net::Shutdown::Both);
         }
         if let Some((host, id)) = &self.proc {
             host.proc_kill(*id);
         }
-        release_forward(&self.forward.lock().unwrap().take());
+        release_forward(&self.forward.lock_recover().take());
     }
 
     fn route(&self, msg: Value) {
@@ -947,7 +978,7 @@ impl Session {
         match msg["type"].as_str() {
             Some("response") => {
                 let Some(seq) = msg["request_seq"].as_i64() else { return };
-                if let Some(tx) = self.pending.lock().unwrap().remove(&seq) {
+                if let Some(tx) = self.pending.lock_recover().remove(&seq) {
                     let result = if msg["success"].as_bool().unwrap_or(false) {
                         Ok(msg.get("body").cloned().unwrap_or(Value::Null))
                     } else {
@@ -960,7 +991,7 @@ impl Session {
                 let b = &msg["body"];
                 let ev = match msg["event"].as_str() {
                     Some("initialized") => {
-                        *self.initialized.0.lock().unwrap() = true;
+                        *self.initialized.0.lock_recover() = true;
                         self.initialized.1.notify_all();
                         DapEvent::Initialized
                     }
@@ -979,7 +1010,7 @@ impl Session {
                     Some("breakpoint") => DapEvent::BreakpointChanged(parse_bp_result(&b["breakpoint"])),
                     Some("thread") => DapEvent::Thread { thread_id: b["threadId"].as_i64().unwrap_or(0), started: b["reason"].as_str() == Some("started") },
                     Some("capabilities") => {
-                        if let (Some(new), Value::Object(caps)) = (b["capabilities"].as_object(), &mut *self.capabilities.lock().unwrap()) {
+                        if let (Some(new), Value::Object(caps)) = (b["capabilities"].as_object(), &mut *self.capabilities.lock_recover()) {
                             caps.extend(new.clone());
                         }
                         DapEvent::Capabilities
@@ -1073,6 +1104,43 @@ pub fn parse_variables(body: &Value) -> Vec<Variable> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    #[test]
+    fn a_reader_that_panics_ends_the_session_and_says_so_once() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let stream = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (events, inbox) = mpsc::channel();
+        let session = Session::build(Writer::Tcp(Mutex::new(stream)), None, None, events, true);
+        let (answer, waiting) = mpsc::channel();
+        session.pending.lock_recover().insert(1, answer);
+        guard_reader(|| panic!("the reader exploded on purpose"), || session.connection_lost());
+        assert!(!session.is_alive());
+        assert!(waiting.try_recv().unwrap().is_err(), "a request that waits for an answer is released with an error");
+        assert_eq!(inbox.try_recv(), Ok(DapEvent::AdapterExited(None)));
+        assert_eq!(inbox.try_recv(), Ok(DapEvent::ConnectionLost));
+        session.connection_lost();
+        assert!(inbox.try_recv().is_err(), "the loss is reported once");
+    }
+
+    #[test]
+    fn a_normal_adapter_exit_is_not_a_lost_connection() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let stream = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (events, inbox) = mpsc::channel();
+        let session = Session::build(Writer::Tcp(Mutex::new(stream)), None, None, events, true);
+        session.on_exit(Some(0));
+        assert_eq!(inbox.try_recv(), Ok(DapEvent::AdapterExited(Some(0))));
+        assert!(inbox.try_recv().is_err(), "no lost-connection notice for a normal exit");
+        session.connection_lost();
+        assert!(inbox.try_recv().is_err(), "and a session that already ended cannot be lost again");
+    }
+
+    #[test]
+    fn a_reader_that_ends_normally_reports_nothing() {
+        let mut lost = false;
+        guard_reader(|| {}, || lost = true);
+        assert!(!lost);
+    }
 
     #[test]
     fn parses_stack_scopes_and_variables() {

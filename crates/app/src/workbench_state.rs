@@ -55,10 +55,14 @@ pub(super) struct TaskState {
 
 /// Language servers, diagnostics, progress and log (see workbench_lsp.rs).
 pub(super) struct LspState {
+    /// `Cargo.toml` dependency lookups, hints and problems (see workbench_cargo.rs).
+    pub(super) cargo: super::rust_glue::cargo::CargoState,
     /// Language servers (language key -> state), diagnostics (path -> list) and progress.
     pub(super) servers: std::collections::HashMap<String, lsp_glue::ServerSlot>,
     /// Folders for which the user was told the language server is off because the folder is untrusted (notified once per folder).
     pub(super) restricted_notified: std::collections::HashSet<String>,
+    /// A refactoring under review, and the last one applied (see workbench_refactor.rs).
+    pub(super) refactor: super::refactor_glue::RefactorState,
     pub(super) diagnostics: std::collections::BTreeMap<String, Vec<crate::lsp::Diagnostic>>,
     /// Output panel: language server logs (most recent 5,000 lines).
     pub(super) output: std::collections::VecDeque<String>,
@@ -93,6 +97,22 @@ pub(super) struct LspState {
     pub(super) http_trusted: std::collections::HashSet<String>, // `trust_key` of the file: same path, other host, asks again
     /// Hosts for which a schema-download approval question is open right now (so one host is asked about once).
     pub(super) schema_asking: std::collections::HashSet<String>,
+    /// rust-analyzer's health, checks and the like (see workbench_rust.rs).
+    pub(super) rust: RustState,
+}
+
+/// What the workbench knows about rust-analyzer beyond what any language server has.
+#[derive(Default)]
+pub(super) struct RustState {
+    /// Per server slot: its health and the check it is running.
+    pub(super) servers: std::collections::HashMap<String, crate::rust_toolchain::status::ServerInfo>,
+    /// Which start of each language server is the current one (for every language: events of an older start are dropped).
+    pub(super) starts: crate::rust_toolchain::status::Starts,
+    /// Whether `cargo nextest` was found in each folder.
+    pub(super) nextest: crate::rust_toolchain::nextest::ProbeMemory,
+    /// Tests: the commands that would have run (label, command line) instead of running Cargo.
+    #[cfg(test)]
+    pub(super) ran: Vec<(String, String)>,
 }
 
 /// Git state of the open folder and refresh flags (see workbench_git.rs).
@@ -130,6 +150,8 @@ pub(super) struct ChromeLayout {
     pub(super) panel: Option<Panel>,
     /// The bottom panel shows the Problems list instead of the terminal.
     pub(super) bottom: Bottom,
+    /// The Problems panel's filter and its text field (workbench_problems.rs).
+    pub(super) problems: super::panels_glue::ProblemsView,
     pub(super) sidebar_w: f32,
     pub(super) resizing_sidebar: bool,
     pub(super) panel_open: bool,
@@ -191,7 +213,12 @@ pub(super) struct NavState {
 }
 
 /// Settings files, project settings and workspace trust (see workbench_settings.rs).
+#[derive(Default)]
 pub(super) struct ConfigState {
+    /// The active settings profile (`None`: the default one, the config folder itself); see workbench_profiles.rs.
+    pub(super) profile: Option<String>,
+    /// The profile whose temporary fall back was already reported (once per name, until it can be used again).
+    pub(super) profile_warned: Option<String>,
     /// Settings folder (`None` in tests: the user's files are left alone).
     pub(super) dir: Option<std::path::PathBuf>,
     /// Last modification times of (settings, keybindings, extensions lock) and the fingerprint of an extension in

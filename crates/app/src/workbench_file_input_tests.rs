@@ -50,12 +50,12 @@ fn check_pending_file_link(cx: &mut TestAppContext, exists: bool) {
                 } else {
                     wb.replace_root(crate::ui::local_path(&other), cx);
                 }
-                wb.notice = Some(Notice::Info("new context".into()));
+                wb.notify(NoticeSource::App, Notice::Info("new context".into()));
             });
             cx.run_until_parked();
             assert!(wb.read_with(cx, |wb, _| wb.tabs.editors.is_empty()), "an old file lookup cannot open a location in the new context");
             assert!(
-                wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.as_ref() == "new context")),
+                wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.as_ref() == "new context")),
                 "old file lookups cannot replace the new context's notice"
             );
         }
@@ -82,7 +82,7 @@ fn current_terminal_file_links_reveal_positions_and_report_missing_files(cx: &mu
         assert_eq!(wb.read_with(cx, |wb, cx| wb.active_cursor(cx)), Some((2, 4)));
         wb.update_in(cx, |wb, window, cx| wb.open_link(crate::links::Link::File { path: "missing.txt".into(), line: None, col: None }, window, cx));
         cx.run_until_parked();
-        assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.contains("missing.txt"))));
+        assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.contains("missing.txt"))));
         assert_eq!(wb.read_with(cx, |wb, _| wb.tabs.editors.len()), 1);
     }
 }
@@ -117,7 +117,7 @@ fn check_explorer_menu(cx: &mut TestAppContext, stale: bool) {
                     } else {
                         wb.replace_root(crate::ui::local_path(&other), cx);
                     }
-                    wb.notice = Some(Notice::Info("new context".into()));
+                    wb.notify(NoticeSource::App, Notice::Info("new context".into()));
                 }
                 wb.select_menu_for_test(label, cx);
             });
@@ -127,7 +127,7 @@ fn check_explorer_menu(cx: &mut TestAppContext, stale: bool) {
                 assert!(!root.join("victim copy.txt").exists(), "an old menu cannot duplicate through the new context");
                 assert!(wb.read_with(cx, |wb, _| wb.overlay.is_none()), "an old menu cannot open a rename form in the new context");
                 assert!(wb.read_with(cx, |wb, _| wb.roots.file_clip.is_none()), "an old menu cannot replace the new workspace's file clipboard");
-                assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.as_ref() == "new context")));
+                assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.as_ref() == "new context")));
                 assert_eq!(std::fs::read_to_string(&victim).unwrap(), "original\n");
             } else {
                 match action {
@@ -174,13 +174,13 @@ fn an_old_permanent_delete_fallback_cannot_delete_after_its_context_changes(cx: 
                 } else {
                     wb.replace_root(crate::ui::local_path(&other), cx);
                 }
-                wb.notice = Some(Notice::Info("new context".into()));
+                wb.notify(NoticeSource::App, Notice::Info("new context".into()));
             });
             cx.simulate_prompt_answer("Delete Permanently");
             cx.run_until_parked();
             assert!(victim.exists(), "an old trash fallback must not delete through a new context");
             assert_eq!(std::fs::read_to_string(if directory { victim.join("keep.txt") } else { victim }).unwrap(), "keep\n");
-            assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.as_ref() == "new context")));
+            assert!(wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.as_ref() == "new context")));
         }
     }
 }
@@ -245,7 +245,7 @@ fn check_late_save_results(cx: &mut TestAppContext, local_copy: bool) {
                 } else {
                     wb.replace_root(crate::ui::local_path(&other), cx);
                 }
-                wb.notice = Some(Notice::Info("new context".into()));
+                wb.notify(NoticeSource::App, Notice::Info("new context".into()));
             });
             cx.run_until_parked();
             assert_eq!(
@@ -258,7 +258,7 @@ fn check_late_save_results(cx: &mut TestAppContext, local_copy: bool) {
                 "an old save must not open its target on the new connection"
             );
             assert!(
-                wb.read_with(cx, |wb, _| matches!(&wb.notice, Some(Notice::Info(message)) if message.as_ref() == "new context")),
+                wb.read_with(cx, |wb, _| matches!(&wb.notice(), Some(Notice::Info(message)) if message.as_ref() == "new context")),
                 "old save results must not replace the new context's notice"
             );
             if change_host {

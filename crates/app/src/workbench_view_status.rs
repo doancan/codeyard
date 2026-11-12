@@ -6,6 +6,10 @@ use super::*;
 const SB_ICON: f32 = 16.;
 const SB_GAP: f32 = 5.;
 const SB_PAD: f32 = 8.;
+/// Room the notification bell takes: its icon, padding and a count of up to "99+".
+const BELL_RESERVE: f32 = 64.;
+/// The notice never gets less than this, so a short word still shows; the ellipsis does the rest.
+const NOTICE_MIN: f32 = 48.;
 
 impl Workbench {
     pub(super) fn status_bar(&self, p: &Palette, width: f32, cx: &mut Context<Self>) -> impl IntoElement {
@@ -56,12 +60,14 @@ impl Workbench {
         let labels = width >= 1100.;
         // What the notice can have: the bar without the items beside it (left ones, the resources button, and the editor's details
         // that show from these widths on).
-        let notice_max = (width - 400. - if detail_width >= 720. { 120. } else { 0. } - if detail_width >= 1100. { 200. } else { 0. }).max(140.);
+        let notice_max =
+            (width - 400. - BELL_RESERVE - if detail_width >= 720. { 120. } else { 0. } - if detail_width >= 1100. { 200. } else { 0. }).max(NOTICE_MIN);
         let branch = self.vcs.branch.clone();
         let restricted = self.restricted_root(cx).is_some();
         // Errors go in the card at bottom right (error_toast); only info here.
-        let notice = match &self.notice {
+        let notice = match &self.notice() {
             Some(Notice::Info(m)) => Some((m.clone(), p.text_muted)),
+            Some(Notice::Warning(m)) => Some((m.clone(), p.warning)),
             _ => None,
         };
 
@@ -249,6 +255,25 @@ impl Workbench {
                         .on_click(cx.listener(|this, _, w, cx| this.show_ports(&ShowPorts, w, cx))),
                 )
             })
+            // The active settings profile; nothing is shown while the default profile is in use.
+            .when_some(self.cfg.profile.clone().filter(|_| width >= 700.), |d, name| {
+                let label = crate::i18n::tf("Profile: {}", &[&name]);
+                let tip = crate::i18n::tf("Settings profile “{}”. Click to switch profiles.", &[&name]);
+                let switch = |this: &mut Workbench, w: &mut Window, cx: &mut Context<Workbench>| {
+                    this.switch_profile(&super::settings_ui::profiles_glue::SwitchProfile, w, cx)
+                };
+                d.child(
+                    item()
+                        .id("sb-profile")
+                        .child(ctl("sb-profile", format!("{label}. {tip}"), switch))
+                        .cursor_pointer()
+                        .hover(|d| d.bg(c(p.surface_hover)))
+                        .child(icon("sliders", SB_ICON, p.text_muted))
+                        .child(div().max_w(px(140.)).truncate().child(name))
+                        .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone().into())).into())
+                        .on_click(cx.listener(move |this, _, w, cx| switch(this, w, cx))),
+                )
+            })
             // `--no-extensions`: always said, so a missing theme or language is never a mystery.
             .when(crate::ext::turned_off(), |d| {
                 d.child(
@@ -290,18 +315,21 @@ impl Workbench {
                         .child(div().min_w_0().max_w(px(180.)).truncate().child(t)),
                 )
             })
+            .children(self.rust_status_item(p, width, cx))
             .child(
                 div()
+                    .debug_selector(|| "status-notice-area".into())
                     .flex_1()
                     .min_w_0()
                     .overflow_hidden()
                     .whitespace_nowrap()
                     // `w`, not `max_w`: the text is cut with an ellipsis only when its width is known as it is measured; a maximum is applied
                     // after the text was measured as wide as it is, and the box would just cut it off at its edge.
-                    .when_some(notice, |d, (m, color)| d.child(div().w(px(notice_max)).px(px(SB_PAD)).text_color(c(color)).truncate().child(m))),
+                    .when_some(notice, |d, (m, color)| d.child(div().debug_selector(|| "status-notice".into()).w(px(notice_max)).px(px(SB_PAD)).text_color(c(color)).truncate().child(m))),
             )
             .children(self.web_preview_status(p, cx))
             .children(self.extension_status_items(p, cx))
+            .child(self.notifications_bell(p, cx))
             .child(self.chrome.resources.clone())
             // macOS has the switches in its title bar; Windows and Linux have none there, so the panel's own button stays here.
             .when(!cfg!(target_os = "macos"), |d| {

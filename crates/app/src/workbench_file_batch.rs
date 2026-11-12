@@ -56,7 +56,7 @@ impl Workbench {
         }
         let Some(clip) = own else { return };
         if !Arc::ptr_eq(&clip.host, &self.remote.host) {
-            self.notice = Some(Notice::Error(crate::i18n::t("Copy the files again on the current host before pasting.").into()));
+            self.notify(NoticeSource::Files, Notice::Error(crate::i18n::t("Copy the files again on the current host before pasting.").into()));
             cx.notify();
             return;
         }
@@ -97,7 +97,7 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) {
         if self.roots.file_operation.is_some() {
-            self.notice = Some(Notice::Info(crate::i18n::t("Wait for the file operation to finish, or cancel it from the status bar.").into()));
+            self.notify(NoticeSource::Files, Notice::Info(crate::i18n::t("Wait for the file operation to finish, or cancel it from the status bar.").into()));
             cx.notify();
             return;
         }
@@ -213,11 +213,14 @@ impl Workbench {
                             "File operation: {0} completed, {1} failed, {2} not processed.",
                             &[&result.completed.len(), &result.failed.len(), &result.remaining.len()],
                         );
-                        this.notice = Some(if let Some((path, error)) = result.failed.first() {
-                            Notice::Error(format!("{summary}\n{path}: {error}").into())
-                        } else {
-                            Notice::Info(summary.into())
-                        });
+                        this.notify(
+                            NoticeSource::Files,
+                            if let Some((path, error)) = result.failed.first() {
+                                Notice::Error(format!("{summary}\n{path}: {error}").into())
+                            } else {
+                                Notice::Info(summary.into())
+                            },
+                        );
                         this.schedule_backup(cx);
                         this.persist_session(cx);
                         cx.notify();

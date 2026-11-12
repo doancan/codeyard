@@ -1,5 +1,6 @@
 //! Workbench: file watching, live reload of the settings file, and git polling.
 
+use super::notifications_glue::model::{NoticeAction, Notification, Severity};
 use super::*;
 
 impl Workbench {
@@ -107,7 +108,11 @@ impl Workbench {
     // --- Settings ---
 
     pub(super) fn config_paths(&self) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
-        let dir = self.cfg.dir.as_ref()?;
+        // A window still showing a profile whose folder was deleted writes nothing (it would bring the folder back).
+        if self.profile_folder_missing() {
+            return None;
+        }
+        let dir = super::settings_ui::profiles_glue::store::files_dir(self.cfg.dir.as_ref()?, self.cfg.profile.as_deref());
         Some((dir.join("settings.jsonc"), dir.join("keybindings.jsonc")))
     }
 
@@ -115,6 +120,7 @@ impl Workbench {
     pub(super) fn reload_config(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // If there is no settings folder (tests) only project layers are applied; if there are none either,
         // don't touch anything (don't overwrite externally supplied settings with defaults).
+        let profile_warning = self.sync_profile();
         let paths = self.config_paths();
         let workspace = self.workspace_settings();
         if paths.is_none() && self.cfg.project.is_empty() && workspace.is_none() {
@@ -123,8 +129,9 @@ impl Workbench {
         }
         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
         if let Some((spath, kpath)) = &paths {
-            self.cfg.stamp =
-                (mtime(spath), mtime(kpath), mtime(&spath.with_file_name(crate::ext::LOCK_FILE)), crate::ext::watch_stamp(spath.parent().unwrap_or(spath)));
+            // Extensions are not part of a profile: their lock file and folder stay in the config folder.
+            let root = self.cfg.dir.clone().unwrap_or_else(|| spath.parent().unwrap_or(spath).to_path_buf());
+            self.cfg.stamp = (mtime(spath), mtime(kpath), mtime(&root.join(crate::ext::LOCK_FILE)), crate::ext::watch_stamp(&root));
         }
         let kpath = paths.as_ref().map(|(_, k)| k.clone());
         let file = paths.as_ref().and_then(|(s, _)| std::fs::read_to_string(s).ok());
@@ -164,13 +171,19 @@ impl Workbench {
             }
             // Half-written file: the last valid settings stay, the error is shown.
             Err(e) => {
+                let line = super::notifications_glue::errors::line_in(&e);
                 let mut warnings = vec![e];
                 warnings.extend(crate::apply_keymap(cx, kpath.as_deref()));
-                self.notice = Some(Notice::Error(warnings.join(" · ").into()));
+                let mut n = Notification::new(Severity::Error, NoticeSource::Settings, warnings.join(" · ")).id("settings-file-broken");
+                if let Some((spath, _)) = &paths {
+                    n = n.action(NoticeAction::OpenFile(spath.clone(), line));
+                }
+                self.notify_with(n);
                 cx.notify();
                 return;
             }
         };
+        warnings.splice(0..0, profile_warning);
         if new.theme != THEME_AUTO && !self.themes.iter().any(|t| t.id == new.theme) {
             let ids: Vec<&str> = self.themes.iter().map(|t| t.id.as_str()).collect();
             warnings.insert(0, format!("settings.jsonc: {}", crate::i18n::tf("theme “{}” not found (available: auto, {})", &[&new.theme, &ids.join(", ")])));
@@ -215,6 +228,8 @@ impl Workbench {
         let mut session = cx.try_global::<settings::SessionScale>().copied().unwrap_or_default();
         new.ui_scale = session.resolve(new.ui_scale);
         cx.set_global(session);
+        crate::diagnostics::log::set_level(new.log_level);
+        crate::diagnostics::log::debug("settings", format_args!("settings applied"));
         cx.set_global(new.clone());
         cx.set_ui_scale(new.ui_scale);
         if !new.web_preview_enabled {
@@ -234,6 +249,7 @@ impl Workbench {
         if ext_schemas_changed
             || (old.schema_associations.as_slice(), old.schema_download, old.schema_validate)
                 != (new.schema_associations.as_slice(), new.schema_download, new.schema_validate)
+            || old.rust_dependency_lookups != new.rust_dependency_lookups
         {
             for ed in self.all_editors() {
                 self.schedule_schema(&ed, Duration::ZERO, cx);
@@ -284,20 +300,24 @@ impl Workbench {
                 t.update(cx, |t, cx| t.reload_all(cx));
             }
         }
-        let view = crate::tree::ViewOptions { compact: new.compact_folders, sort: crate::tree::SortOrder::from_setting(&new.sort_order) };
+        let view = crate::tree::ViewOptions::from_settings(&new);
         for t in self.all_trees() {
-            t.update(cx, |t, cx| t.set_options(view, cx));
+            t.update(cx, |t, cx| t.set_options(view.clone(), cx));
         }
-        self.notice = warnings.first().map(|w| {
-            let more = if warnings.len() > 1 { format!(" {}", crate::i18n::tf("(+{} more)", &[&(warnings.len() - 1)])) } else { String::new() };
-            Notice::Error(format!("{w}{more}").into())
-        });
+        match warnings.first() {
+            Some(w) => {
+                let more = if warnings.len() > 1 { format!(" {}", crate::i18n::tf("(+{} more)", &[&(warnings.len() - 1)])) } else { String::new() };
+                self.notify(NoticeSource::Settings, Notice::Error(format!("{w}{more}").into()));
+            }
+            None => self.dismiss_notice(),
+        }
         crate::system_prefs::sync(cx);
         // A broken setting is the more urgent notice.
-        if colours_changed && self.notice.is_none() {
+        if colours_changed && self.toast_is_none() {
             self.warn_low_contrast(window, cx);
         }
         self.sync_settings_page(cx);
+        self.sync_shortcuts_page(cx);
         self.sync_extensions_view();
         self.sync_running_extensions(window, cx);
         self.sync_ext_views(cx);
@@ -354,11 +374,16 @@ impl Workbench {
                 cx.background_executor().timer(std::time::Duration::from_secs(1)).await;
                 let ok = this
                     .update_in(cx, |this, window, cx| {
+                        if this.profile_folder_missing() {
+                            this.reload_config(window, cx);
+                            return;
+                        }
                         let Some((spath, kpath)) = this.config_paths() else { return };
-                        let lpath = spath.with_file_name(crate::ext::LOCK_FILE);
+                        let root = this.cfg.dir.clone().unwrap_or_else(|| spath.parent().unwrap_or(&spath).to_path_buf());
                         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
                         if this.cfg.dirty
-                            || (mtime(&spath), mtime(&kpath), mtime(&lpath), crate::ext::watch_stamp(spath.parent().unwrap_or(&spath))) != this.cfg.stamp
+                            || this.profile_pointer_moved()
+                            || (mtime(&spath), mtime(&kpath), mtime(&root.join(crate::ext::LOCK_FILE)), crate::ext::watch_stamp(&root)) != this.cfg.stamp
                         {
                             this.reload_config(window, cx);
                         }

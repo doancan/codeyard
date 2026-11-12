@@ -3,8 +3,55 @@
 
 use super::*;
 use crate::i18n::t;
+
+#[path = "workbench_rust_explain.rs"]
+mod explain;
+#[path = "workbench_rust_nextest.rs"]
+mod nextest;
+#[path = "workbench_rust_runnables.rs"]
+mod runnables;
+#[path = "workbench_rust_server.rs"]
+mod server;
+#[path = "workbench_rust_status.rs"]
+mod status;
+#[path = "workbench_rust_target.rs"]
+mod target;
+#[path = "workbench_rust_views.rs"]
+mod views;
+pub use explain::RustExplainError;
+pub(super) use nextest::use_nextest;
+pub use runnables::RustRunRunnable;
+
+/// What a Rust picker is choosing between.
+pub(super) enum Choice {
+    Runnables(Vec<runnables::Entry>),
+    /// The triples listed; `None` is the default (no `--target`).
+    Targets(Vec<Option<String>>),
+}
+pub use server::*;
+pub use target::RustSelectTarget;
+pub use views::{RustOpenDocs, RustViewHir, RustViewMir, RustViewSyntaxTree};
+#[cfg(test)]
+#[path = "workbench_rust_explain_tests.rs"]
+mod explain_tests;
+#[cfg(test)]
+#[path = "workbench_rust_runnables_tests.rs"]
+mod runnable_tests;
+#[cfg(test)]
+#[path = "workbench_rust_tests.rs"]
+mod tests;
+#[cfg(test)]
+#[path = "workbench_rust_trust_tests.rs"]
+mod trust_tests;
+#[cfg(test)]
+#[path = "workbench_rust_views_tests.rs"]
+mod view_tests;
 use crate::lsp::{self, METHOD_NOT_FOUND};
 use serde_json::{Value, json};
+
+/// `Cargo.toml` dependency hints, completion, updates, adding and removing.
+#[path = "workbench_cargo.rs"]
+pub mod cargo;
 
 /// How long a Rust command waits for the language server before it says the server did not answer.
 pub(super) const RUST_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -17,6 +64,24 @@ enum RustCommand {
 }
 
 impl Workbench {
+    /// The answer of a Rust picker: the row chosen, or nothing when it was dismissed.
+    pub(super) fn on_rust_choice_event(&mut self, event: &PickerEvent, window: &mut Window, cx: &mut Context<Self>) {
+        match event {
+            PickerEvent::Confirm(Pick::Item { index, .. }) => {
+                let index = *index;
+                let Some(Overlay { kind: OverlayKind::RustChoice(choice), .. }) = self.close_overlay(window, cx) else { return };
+                match choice {
+                    Choice::Runnables(rows) => self.chose_runnable(rows, index, window, cx),
+                    Choice::Targets(triples) => self.chose_rust_target(triples, index, window, cx),
+                }
+            }
+            PickerEvent::Dismiss => {
+                self.close_overlay(window, cx);
+            }
+            _ => {}
+        }
+    }
+
     pub(super) fn rust_expand_macro(&mut self, _: &RustExpandMacro, window: &mut Window, cx: &mut Context<Self>) {
         self.rust_command(RustCommand::ExpandMacro, window, cx);
     }
@@ -27,6 +92,20 @@ impl Workbench {
 
     pub(super) fn rust_open_cargo_toml(&mut self, _: &RustOpenCargoToml, window: &mut Window, cx: &mut Context<Self>) {
         self.rust_command(RustCommand::OpenCargoToml, window, cx);
+    }
+
+    /// Why there is no rust-analyzer for the file at `path`: the setting, an untrusted folder, or a server that is not up.
+    pub(super) fn rust_unavailable_message(&self, path: &str, cx: &gpui::App) -> String {
+        if !cx.global::<Settings>().lsp_enabled {
+            t("Rust language features are disabled. Enable lsp.enabled in Settings.").to_string()
+        } else if let Some(root) = self.root_of(path, cx).filter(|root| !self.is_trusted_root(root, cx)) {
+            crate::i18n::tf(
+                "Language servers are off in “{}” until you trust it: they can run the project's build scripts. Run “Workspace: Trust This Folder”.",
+                &[&ui::file_name(&root)],
+            )
+        } else {
+            t("Rust language server is not ready. Check Output, then run “Developer: Restart Language Servers”.").to_string()
+        }
     }
 
     fn rust_command(&mut self, cmd: RustCommand, window: &mut Window, cx: &mut Context<Self>) {
@@ -59,16 +138,7 @@ impl Workbench {
                 })
                 .detach();
             } else {
-                let message = if !cx.global::<Settings>().lsp_enabled {
-                    t("Rust language features are disabled. Enable lsp.enabled in Settings.").to_string()
-                } else if let Some(root) = self.root_of(&path, cx).filter(|root| !self.is_trusted_root(root, cx)) {
-                    crate::i18n::tf(
-                        "Language servers are off in “{}” until you trust it: they can run the project's build scripts. Run “Workspace: Trust This Folder”.",
-                        &[&ui::file_name(&root)],
-                    )
-                } else {
-                    t("Rust language server is not ready. Check Output, then run “Developer: Restart Language Servers”.").to_string()
-                };
+                let message = self.rust_unavailable_message(&path, cx);
                 show_info(self, message, cx);
             }
             return;
@@ -137,6 +207,6 @@ impl Workbench {
 }
 
 fn show_info(wb: &mut Workbench, text: String, cx: &mut Context<Workbench>) {
-    wb.notice = Some(Notice::Info(text.into()));
+    wb.notify(NoticeSource::Language, Notice::Info(text.into()));
     cx.notify();
 }

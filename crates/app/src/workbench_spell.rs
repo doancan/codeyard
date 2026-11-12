@@ -83,8 +83,11 @@ impl Workbench {
                     let s = speller.clone();
                     ed.update(cx, |e, cx| e.set_speller(Some(s), cx));
                 }
-                if !missing.is_empty() && !matches!(this.notice, Some(Notice::Error(_))) {
-                    this.notice = Some(Notice::Info(crate::i18n::tf("Spelling: {}. Run “Spelling: Install Dictionary…”.", &[&missing.join(", ")]).into()));
+                if !missing.is_empty() && !matches!(this.notice(), Some(Notice::Error(_))) {
+                    this.notify(
+                        NoticeSource::Language,
+                        Notice::Info(crate::i18n::tf("Spelling: {}. Run “Spelling: Install Dictionary…”.", &[&missing.join(", ")]).into()),
+                    );
                 }
                 cx.notify();
             })
@@ -123,7 +126,7 @@ impl Workbench {
 
     pub(super) fn spell_fix_action(&mut self, _: &FixSpelling, window: &mut Window, cx: &mut Context<Self>) {
         if !self.try_spell_fix(window, cx) {
-            self.notice = Some(Notice::Info(crate::i18n::t("No misspelled word at the cursor.").into()));
+            self.notify(NoticeSource::Language, Notice::Info(crate::i18n::t("No misspelled word at the cursor.").into()));
             cx.notify();
         }
     }
@@ -153,9 +156,12 @@ impl Workbench {
                 }
                 if self.user_words_path().is_none() {
                     // No settings folder: the word is session-only, don't make it look permanent.
-                    self.notice = Some(Notice::Info(
-                        crate::i18n::tf("Added “{}” for this session only: there is no settings folder to keep your dictionary in.", &[&word]).into(),
-                    ));
+                    self.notify(
+                        NoticeSource::Language,
+                        Notice::Info(
+                            crate::i18n::tf("Added “{}” for this session only: there is no settings folder to keep your dictionary in.", &[&word]).into(),
+                        ),
+                    );
                 }
                 if let Some(path) = self.user_words_path() {
                     let result = (|| -> std::io::Result<()> {
@@ -167,9 +173,9 @@ impl Workbench {
                         writeln!(f, "{word}")
                     })();
                     if let Err(e) = result {
-                        self.notice = Some(Notice::Error(crate::i18n::tf("Could not save your dictionary: {}", &[&e]).into()));
+                        self.notify(NoticeSource::Language, Notice::Error(crate::i18n::tf("Could not save your dictionary: {}", &[&e]).into()));
                     } else {
-                        self.notice = Some(Notice::Info(crate::i18n::tf("Added “{}” to your dictionary.", &[&word]).into()));
+                        self.notify(NoticeSource::Language, Notice::Info(crate::i18n::tf("Added “{}” to your dictionary.", &[&word]).into()));
                     }
                 }
                 self.repaint_editors(cx);
@@ -218,7 +224,7 @@ impl Workbench {
     pub(super) fn run_install_dictionary(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         let (Some(a), Some(root)) = (spell::AVAILABLE.get(index), self.spell_root()) else { return };
         let (id, name) = (a.id, a.name);
-        self.notice = Some(Notice::Info(crate::i18n::tf("Downloading the {0} dictionary (about {1} MB)…", &[&name, &a.megabytes]).into()));
+        self.notify(NoticeSource::Language, Notice::Info(crate::i18n::tf("Downloading the {0} dictionary (about {1} MB)…", &[&name, &a.megabytes]).into()));
         cx.notify();
         let task = cx.background_executor().spawn(async move {
             std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
@@ -233,19 +239,22 @@ impl Workbench {
                         langs.push(id.to_string());
                     }
                     this.write_setting("spelling.languages", serde_json::json!(langs), window, cx);
-                    this.notice = Some(Notice::Info(crate::i18n::tf("The {} dictionary is installed and on.", &[&name]).into()));
+                    this.notify(NoticeSource::Language, Notice::Info(crate::i18n::tf("The {} dictionary is installed and on.", &[&name]).into()));
                     cx.notify();
                 }
                 Err(e) => {
                     let first = e.lines().next().unwrap_or(crate::i18n::t("download failed"));
-                    this.notice = Some(Notice::Error(
-                        if first.contains("resolve") || first.contains("connect") || first.contains("curl") {
-                            crate::i18n::tf("Could not install the {0} dictionary: {1}. Check your internet connection and try again.", &[&name, &first])
-                        } else {
-                            crate::i18n::tf("Could not install the {0} dictionary: {1}.", &[&name, &first])
-                        }
-                        .into(),
-                    ));
+                    this.notify(
+                        NoticeSource::Language,
+                        Notice::Error(
+                            if first.contains("resolve") || first.contains("connect") || first.contains("curl") {
+                                crate::i18n::tf("Could not install the {0} dictionary: {1}. Check your internet connection and try again.", &[&name, &first])
+                            } else {
+                                crate::i18n::tf("Could not install the {0} dictionary: {1}.", &[&name, &first])
+                            }
+                            .into(),
+                        ),
+                    );
                     cx.notify();
                 }
             })

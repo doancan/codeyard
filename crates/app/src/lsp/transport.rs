@@ -1,6 +1,7 @@
 //! JSON-RPC over the agent's piped process: framing, request/response matching,
 //! replies to the server's own requests.
 
+use crate::diagnostics::LockExt as _;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
@@ -9,7 +10,7 @@ use std::time::Duration;
 use host::{Host, ProcEvent};
 use serde_json::{Value, json};
 
-use super::{Diagnostic, ServerConfig, parse_diagnostics, path_to_uri};
+use super::{Diagnostic, FlycheckStep, ServerConfig, ServerStatus, parse_diagnostics, parse_flycheck_progress, parse_server_status, path_to_uri};
 
 // --- Framing ---
 
@@ -90,8 +91,17 @@ pub enum ServerEvent {
     },
     /// Ongoing work ("indexing 45%"); `None`: finished.
     Progress(Option<String>),
+    /// rust-analyzer's `experimental/serverStatus`.
+    Status(ServerStatus),
+    /// A step of the check rust-analyzer runs on save (`cargo check`, `clippy`); the token tells workspaces apart.
+    Flycheck {
+        token: String,
+        step: FlycheckStep,
+    },
     /// Message from the server to the user (error/warning).
     Message(String),
+    /// The thread reading the server died by a panic (the text is for the user); an `Exited(None)` follows.
+    ConnectionLost(String),
     /// `window/logMessage`: for the Output panel (type: 1 error … 4 log).
     Log {
         level: u8,
@@ -120,6 +130,11 @@ pub fn merge_server_event(queue: &mut std::collections::VecDeque<ServerEvent>, e
     let slot = match &ev {
         ServerEvent::Diagnostics { path, .. } => queue.iter_mut().find(|e| matches!(e, ServerEvent::Diagnostics { path: p, .. } if p == path)),
         ServerEvent::Progress(_) => queue.iter_mut().find(|e| matches!(e, ServerEvent::Progress(_))),
+        ServerEvent::Status(_) => queue.iter_mut().find(|e| matches!(e, ServerEvent::Status(_))),
+        // The target being checked is replaced by the next one; the start and the end of a run are kept.
+        ServerEvent::Flycheck { token, step: FlycheckStep::Report(_) } => {
+            queue.iter_mut().find(|e| matches!(e, ServerEvent::Flycheck { token: t, step: FlycheckStep::Report(_) } if t == token))
+        }
         _ => None,
     };
     match slot {
@@ -191,29 +206,13 @@ impl Client {
         // the server's own requests (configuration, registration) itself.
         let reader = {
             let (pending, alive, settings) = (pending.clone(), alive.clone(), settings.clone());
+            let (lost_pending, lost_alive, lost_events, lost_host) = (pending.clone(), alive.clone(), events.clone(), host.clone());
             std::thread::Builder::new().name(format!("lsp-{}", config.language)).spawn(move || {
-                let mut dec = Decoder::default();
-                while let Ok(ev) = proc.events.recv() {
-                    match ev {
-                        ProcEvent::Output(data) => {
-                            for msg in dec.push(&data) {
-                                route(msg, &pending, &events, &writer_host, id, &settings);
-                            }
-                        }
-                        ProcEvent::Exit(code) => {
-                            alive.store(false, Ordering::Relaxed);
-                            for (_, tx) in pending.lock().unwrap().drain() {
-                                let message = match code {
-                                    Some(127) => "not found".to_string(),
-                                    Some(c) => format!("exited with code {c}"),
-                                    None => "stopped".to_string(),
-                                };
-                                let _ = tx.send(Err(RpcError { code: None, message }));
-                            }
-                            let _ = events.send(ServerEvent::Exited(code));
-                            break;
-                        }
-                    }
+                // A panic while reading must not leave requests waiting for a server nobody listens to.
+                let read = std::panic::AssertUnwindSafe(|| read_loop(&proc.events, &pending, &alive, &settings, &events, &writer_host, id));
+                if std::panic::catch_unwind(read).is_err() {
+                    connection_lost(&lost_pending, &lost_alive, &lost_events);
+                    lost_host.proc_kill(id);
                 }
             })
         };
@@ -239,13 +238,13 @@ impl Client {
 
     /// The `settings` tree the server currently gets.
     pub fn settings(&self) -> Arc<Value> {
-        self.settings.lock().unwrap().clone()
+        self.settings.lock_recover().clone()
     }
 
     /// New `settings` for a running server: later `workspace/configuration` requests are answered from them, and the
     /// server is told with `workspace/didChangeConfiguration` (most servers then ask again).
     pub fn change_settings(&self, settings: Arc<Value>) {
-        *self.settings.lock().unwrap() = self.config.managed.map_or_else(|| settings.clone(), |service| Arc::new(service.configuration(&settings)));
+        *self.settings.lock_recover() = self.config.managed.map_or_else(|| settings.clone(), |service| Arc::new(service.configuration(&settings)));
         self.notify_settings();
     }
 
@@ -280,10 +279,10 @@ impl Client {
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = mpsc::channel();
-        self.pending.lock().unwrap().insert(id, tx);
+        self.pending.lock_recover().insert(id, tx);
         self.send(json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }));
         let result = rx.recv_timeout(timeout).map_err(|_| {
-            self.pending.lock().unwrap().remove(&id);
+            self.pending.lock_recover().remove(&id);
             // Tell the server we gave up too (so it drops the expensive work).
             self.notify("$/cancelRequest", json!({ "id": id }));
             RpcError { code: None, message: crate::i18n::tf("{0}: no answer from {1}", &[&method, &self.config.command]) }
@@ -396,6 +395,53 @@ pub fn configuration_reply(settings: &Value, params: &Value) -> Value {
     Value::Array(reply.collect())
 }
 
+/// The reader thread's work: until the process ends, answers go to whoever waits and notifications to the event channel.
+fn read_loop(
+    inbox: &mpsc::Receiver<ProcEvent>,
+    pending: &Pending,
+    alive: &AtomicBool,
+    settings: &SharedSettings,
+    events: &mpsc::Sender<ServerEvent>,
+    host: &Arc<dyn Host>,
+    id: u32,
+) {
+    let mut dec = Decoder::default();
+    while let Ok(ev) = inbox.recv() {
+        match ev {
+            ProcEvent::Output(data) => {
+                for msg in dec.push(&data) {
+                    route(msg, pending, events, host, id, settings);
+                }
+            }
+            ProcEvent::Exit(code) => {
+                alive.store(false, Ordering::Relaxed);
+                for (_, tx) in pending.lock_recover().drain() {
+                    let message = match code {
+                        Some(127) => "not found".to_string(),
+                        Some(c) => format!("exited with code {c}"),
+                        None => "stopped".to_string(),
+                    };
+                    let _ = tx.send(Err(RpcError { code: None, message }));
+                }
+                let _ = events.send(ServerEvent::Exited(code));
+                break;
+            }
+        }
+    }
+}
+
+/// The reader thread died by a panic: requests that wait are released with an error, the user is told once, and the server counts as
+/// gone (the workbench starts it again, within its restart limit).
+fn connection_lost(pending: &Pending, alive: &AtomicBool, events: &mpsc::Sender<ServerEvent>) {
+    crate::diagnostics::log::error("language", format_args!("the language server reader stopped after a panic"));
+    alive.store(false, Ordering::Relaxed);
+    for (_, tx) in pending.lock_recover().drain() {
+        let _ = tx.send(Err(RpcError { code: None, message: "connection lost".to_string() }));
+    }
+    let _ = events.send(ServerEvent::ConnectionLost(crate::i18n::t("The connection to the language server was lost").to_string()));
+    let _ = events.send(ServerEvent::Exited(None));
+}
+
 fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host: &Arc<dyn Host>, proc: u32, settings: &SharedSettings) {
     let method = msg["method"].as_str();
     if std::env::var_os("CODEYARD_LSP_TRACE").is_some() {
@@ -411,7 +457,7 @@ fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host
 
 fn deliver_response(msg: &Value, id: &Value, pending: &Pending) {
     let Some(id) = id.as_i64() else { return };
-    let Some(tx) = pending.lock().unwrap().remove(&id) else { return };
+    let Some(tx) = pending.lock_recover().remove(&id) else { return };
     let result = match msg.get("error") {
         Some(e) => Err(RpcError { code: e["code"].as_i64(), message: clip_text(e["message"].as_str().unwrap_or("error"), MAX_MESSAGE_CHARS) }),
         None => Ok(msg.get("result").cloned().unwrap_or(Value::Null)),
@@ -431,7 +477,7 @@ fn answer_server_request(
 ) {
     let result = match method {
         "workspace/configuration" => {
-            let settings = settings.lock().unwrap().clone();
+            let settings = settings.lock_recover().clone();
             configuration_reply(&settings, &msg["params"])
         }
         "window/workDoneProgress/create" | "client/registerCapability" | "client/unregisterCapability" => Value::Null,
@@ -466,7 +512,16 @@ fn handle_notification(msg: &Value, method: &str, events: &mpsc::Sender<ServerEv
                 let _ = events.send(ServerEvent::Diagnostics { path, diagnostics });
             }
         }
+        "experimental/serverStatus" => {
+            if let Some(status) = parse_server_status(&msg["params"]) {
+                let _ = events.send(ServerEvent::Status(status));
+            }
+        }
         "$/progress" => {
+            if let Some((token, step)) = parse_flycheck_progress(&msg["params"]) {
+                let _ = events.send(ServerEvent::Flycheck { token, step });
+                return;
+            }
             let v = &msg["params"]["value"];
             let text = match v["kind"].as_str() {
                 Some("end") => None,
@@ -522,19 +577,24 @@ fn initialize_params(root: &str, init_options: Option<&Value>) -> Value {
         "capabilities": {
             "general": { "positionEncodings": ["utf-16"] },
             "window": { "workDoneProgress": true },
+            // rust-analyzer reports its health and whether it is idle only to clients that ask, and offers a local copy of
+            // the docs only to those that can open one. Other servers ignore the key.
+            "experimental": { "serverStatusNotification": true, "localDocs": true },
             "workspace": {
                 "configuration": true,
                 "workspaceFolders": true,
                 "didChangeConfiguration": { "dynamicRegistration": false },
                 "fileOperations": { "willRename": true },
                 "applyEdit": true,
-                "workspaceEdit": { "documentChanges": true },
+                // Servers rename files only for clients that say they can; the Refactor Preview shows each operation and applies
+                // them all or none (`lsp::refactor`).
+                "workspaceEdit": { "documentChanges": true, "resourceOperations": ["create", "rename", "delete"], "failureHandling": "transactional" },
                 "didChangeWatchedFiles": { "dynamicRegistration": false },
                 "symbol": { "dynamicRegistration": false },
             },
             "textDocument": {
                 "synchronization": { "didSave": true, "dynamicRegistration": false },
-                "publishDiagnostics": { "relatedInformation": true, "dataSupport": true },
+                "publishDiagnostics": { "relatedInformation": true, "dataSupport": true, "codeDescriptionSupport": true },
                 "hover": { "contentFormat": ["markdown", "plaintext"] },
                 "definition": { "linkSupport": true },
                 "references": {},
@@ -548,7 +608,7 @@ fn initialize_params(root: &str, init_options: Option<&Value>) -> Value {
                 "semanticTokens": {
                     "requests": { "full": true },
                     "tokenTypes": SEMANTIC_TYPES,
-                    "tokenModifiers": [],
+                    "tokenModifiers": ["unsafe", "mutable", "consuming"],
                     "formats": ["relative"],
                 },
                 "typeHierarchy": {},
@@ -585,6 +645,38 @@ fn initialize_params(root: &str, init_options: Option<&Value>) -> Value {
 mod tests {
     use super::*;
     use crate::lsp::{hover_text, parse_locations, server_for};
+
+    #[test]
+    fn a_lost_reader_releases_waiting_requests_and_tells_the_user() {
+        let pending: Pending = Arc::default();
+        let (answer, waiting) = mpsc::channel();
+        pending.lock().unwrap().insert(5, answer);
+        let alive = AtomicBool::new(true);
+        let (events, inbox) = mpsc::channel();
+        connection_lost(&pending, &alive, &events);
+        assert!(!alive.load(Ordering::Relaxed));
+        assert_eq!(waiting.try_recv().unwrap().unwrap_err().message, "connection lost");
+        assert!(matches!(inbox.try_recv(), Ok(ServerEvent::ConnectionLost(m)) if m == "The connection to the language server was lost"));
+        assert!(matches!(inbox.try_recv(), Ok(ServerEvent::Exited(None))));
+    }
+
+    #[test]
+    fn a_normal_exit_of_the_server_is_not_a_lost_connection() {
+        let (feed, inbox) = mpsc::channel();
+        feed.send(ProcEvent::Exit(Some(0))).unwrap();
+        let pending: Pending = Arc::default();
+        let (answer, waiting) = mpsc::channel();
+        pending.lock().unwrap().insert(1, answer);
+        let alive = AtomicBool::new(true);
+        let (events, seen) = mpsc::channel();
+        let settings: SharedSettings = Arc::new(Mutex::new(Arc::new(json!({}))));
+        let host: Arc<dyn Host> = Arc::new(host::local());
+        read_loop(&inbox, &pending, &alive, &settings, &events, &host, 0);
+        assert!(!alive.load(Ordering::Relaxed));
+        assert_eq!(waiting.try_recv().unwrap().unwrap_err().message, "exited with code 0");
+        assert!(matches!(seen.try_recv(), Ok(ServerEvent::Exited(Some(0)))));
+        assert!(seen.try_recv().is_err(), "nothing else is told: no lost-connection notice for a normal exit");
+    }
 
     #[test]
     fn frames_split_across_chunks() {
@@ -776,6 +868,58 @@ mod tests {
         assert_eq!(rrx.try_recv().unwrap(), Err(RpcError { code: Some(METHOD_NOT_FOUND), message: "unknown".into() }), "the code is kept");
         assert_eq!(clip_text("kısa", 10), "kısa");
         assert_eq!(clip_text("şğüiö", 3), "şğü…");
+    }
+
+    #[test]
+    fn rust_analyzer_status_and_flycheck_progress_get_their_own_events() {
+        let host: Arc<dyn Host> = Arc::new(host::local());
+        let (tx, rx) = mpsc::channel();
+        let pending: Pending = Arc::default();
+        let settings: SharedSettings = Arc::default();
+        let text = std::fs::read_to_string(format!("{}/testdata/rust-analyzer/notifications.jsonl", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        for line in text.lines() {
+            route(serde_json::from_str(line).unwrap(), &pending, &tx, &host, 0, &settings);
+        }
+        route(
+            json!({ "method": "$/progress", "params": { "token": "rustAnalyzer/Roots Scanned", "value": { "kind": "report", "message": "1/15" } } }),
+            &pending,
+            &tx,
+            &host,
+            0,
+            &settings,
+        );
+        let events: Vec<ServerEvent> = rx.try_iter().collect();
+        assert!(matches!(&events[0], ServerEvent::Status(s) if !s.quiescent));
+        assert!(matches!(&events[1], ServerEvent::Status(s) if s.quiescent));
+        assert!(matches!(&events[2], ServerEvent::Flycheck { step: FlycheckStep::Begin(t), .. } if t == "cargo check"));
+        let flycheck = events.iter().filter(|e| matches!(e, ServerEvent::Flycheck { .. })).count();
+        assert_eq!(flycheck, 12, "the three runs of the real stream: one with four reports, two without");
+        assert!(matches!(events.last(), Some(ServerEvent::Progress(Some(t))) if t.contains("1/15")), "other progress stays generic");
+    }
+
+    #[test]
+    fn a_stalled_ui_keeps_the_latest_status_and_checked_target_but_not_a_run_boundary() {
+        let mut q = std::collections::VecDeque::new();
+        let status = |quiescent| ServerEvent::Status(ServerStatus { quiescent, ..Default::default() });
+        let report = |token: &str, m: &str| ServerEvent::Flycheck { token: token.into(), step: FlycheckStep::Report(m.into()) };
+        merge_server_event(&mut q, ServerEvent::Flycheck { token: "t0".into(), step: FlycheckStep::Begin("cargo check".into()) });
+        for i in 0..1000 {
+            merge_server_event(&mut q, status(i % 2 == 0));
+            merge_server_event(&mut q, report("t0", &format!("crate {i}")));
+            merge_server_event(&mut q, report("t1", &format!("other {i}")));
+        }
+        merge_server_event(&mut q, ServerEvent::Flycheck { token: "t0".into(), step: FlycheckStep::End });
+        assert_eq!(q.len(), 5, "begin, one status, one report per token, end");
+        assert!(matches!(&q[1], ServerEvent::Status(s) if !s.quiescent), "the last status wins");
+        assert!(matches!(&q[2], ServerEvent::Flycheck { step: FlycheckStep::Report(m), .. } if m == "crate 999"));
+        assert!(matches!(q.back(), Some(ServerEvent::Flycheck { step: FlycheckStep::End, .. })));
+    }
+
+    #[test]
+    fn the_client_asks_for_status_notifications_and_local_docs() {
+        let caps = &initialize_params("/w", None)["capabilities"]["experimental"];
+        assert_eq!(caps["serverStatusNotification"], true);
+        assert_eq!(caps["localDocs"], true);
     }
 
     fn items(sections: &[Value]) -> Value {

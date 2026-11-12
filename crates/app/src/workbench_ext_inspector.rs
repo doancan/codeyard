@@ -135,20 +135,20 @@ impl Workbench {
         };
         let now = grants::switch(&self.extension_revoked(id), entry, on);
         if let Err(e) = store.set_revoked_permissions(&ext_id, &source, &now) {
-            self.notice = Some(Notice::Error(e.to_string().into()));
+            self.notify(NoticeSource::Extensions, Notice::Error(e.to_string().into()));
             cx.notify();
             return;
         }
         self.refresh_extension_grants(cx);
         let label = entry_label(entry);
         let done = if on { crate::i18n::tf("{0} may again: {1}", &[&id, &label]) } else { crate::i18n::tf("{0} may no longer: {1}", &[&id, &label]) };
-        self.notice = Some(Notice::Info(done.into()));
+        self.notify(NoticeSource::Extensions, Notice::Info(done.into()));
         cx.notify();
     }
 
     fn copy_fix(&mut self, fix: &str, cx: &mut Context<Self>) {
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(fix.to_string()));
-        self.notice = Some(Notice::Info(crate::i18n::tf("Copied: {}", &[&fix]).into()));
+        self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::tf("Copied: {}", &[&fix]).into()));
         cx.notify();
     }
 
@@ -162,7 +162,7 @@ impl Workbench {
         let Some(e) = self.cfg.exts.list.iter().find(|e| e.manifest.id.as_str() == id) else { return };
         let report = self.extension_crash_report(e);
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(report));
-        self.notice = Some(Notice::Info(crate::i18n::t("The crash report is on the clipboard. Nothing was sent.").into()));
+        self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::t("The crash report is on the clipboard. Nothing was sent.").into()));
         cx.notify();
     }
 

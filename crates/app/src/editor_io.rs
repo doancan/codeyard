@@ -5,6 +5,20 @@ use super::*;
 /// How long after the conflict banner appears a save still counts as an accident.
 const CONFLICT_GRACE: std::time::Duration = std::time::Duration::from_millis(500);
 
+/// Workspace edit of the action run on save: the first action of the requested kind,
+/// completed with `codeAction/resolve` if it has no edit. Actions that run via a command are skipped
+/// (we don't want side effects outside the file during a save).
+fn source_action_edit(client: &crate::lsp::Client, params: serde_json::Value, kind: &str) -> Option<serde_json::Value> {
+    let timeout = std::time::Duration::from_secs(2);
+    let actions = crate::lsp::parse_code_actions(&client.request("textDocument/codeAction", params, timeout).ok()?);
+    let action = actions.into_iter().find(|a| a.kind == kind || a.kind.starts_with(&format!("{kind}.")))?;
+    let mut raw = action.raw;
+    if raw["edit"].is_null() && !raw["data"].is_null() {
+        raw = client.request("codeAction/resolve", raw.clone(), timeout).unwrap_or(raw);
+    }
+    (!raw["edit"].is_null()).then(|| raw["edit"].clone())
+}
+
 impl EditorView {
     pub(super) fn save(&mut self, _: &Save, _: &mut Window, cx: &mut Context<Self>) {
         self.save_now(cx);
@@ -21,6 +35,16 @@ impl EditorView {
         }
         let force = self.conflict;
         self.write_to_disk(force, cx);
+    }
+
+    /// Save, unless another program changed the file since it was read: then nothing is done and `false` is returned, because a
+    /// save would replace their version (a second save on the conflict banner does that on purpose; a button must not).
+    pub fn save_unless_changed_on_disk(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.conflict {
+            return false;
+        }
+        self.save_now(cx);
+        true
     }
 
     /// Save. With a language server, first the `editor.codeActionsOnSave` actions (one request per
@@ -534,7 +558,10 @@ impl EditorView {
                         cx.emit(EditorEvent::Saved);
                     }
                     Err(HostError::Op(proto::Error::Conflict { .. })) => this.flag_conflict(),
-                    Err(e) => this.error = Some(crate::i18n::tf("Could not save: {}", &[&e]).into()),
+                    Err(e) => {
+                        this.error = Some(crate::i18n::tf("Could not save: {}", &[&e]).into());
+                        cx.emit(EditorEvent::SaveFailed(e));
+                    }
                 }
                 cx.emit(EditorEvent::Changed);
                 cx.notify();

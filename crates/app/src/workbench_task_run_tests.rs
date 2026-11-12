@@ -29,9 +29,10 @@ fn find(wb: &Entity<Workbench>, cx: &mut gpui::VisualTestContext, label: &str) -
 }
 
 fn notice(wb: &Entity<Workbench>, cx: &mut gpui::VisualTestContext) -> String {
-    wb.read_with(cx, |wb, _| match &wb.notice {
+    wb.read_with(cx, |wb, _| match &wb.notice() {
         Some(Notice::Error(m)) => format!("error: {m}"),
         Some(Notice::Info(m)) => format!("info: {m}"),
+        Some(Notice::Warning(m)) => format!("warning: {m}"),
         None => String::new(),
     })
 }

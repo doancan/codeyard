@@ -183,6 +183,8 @@ actions!(
     ]
 );
 
+#[path = "editor_cargo.rs"]
+mod cargo_glue;
 #[path = "editor_color.rs"]
 mod color_glue;
 #[path = "editor_complete.rs"]
@@ -221,12 +223,17 @@ pub use popups_glue::HoverRow;
 pub use popups_glue::PopupsA11y;
 #[path = "editor_render.rs"]
 mod render_glue;
+#[path = "editor_runnables.rs"]
+mod run_glue;
 #[path = "editor_schema.rs"]
 mod schema_glue;
+#[path = "editor_semantic.rs"]
+mod semantic_glue;
 #[path = "editor_spell.rs"]
 mod spell_glue;
 #[path = "editor_syntax.rs"]
 mod syntax_glue;
+pub use cargo_glue::{CargoBinding, CargoChoice};
 pub use schema_glue::SchemaBinding;
 
 pub enum EditorEvent {
@@ -235,6 +242,8 @@ pub enum EditorEvent {
     Saved,
     /// A forced save replaced another version of the file (its text): keep a copy so it can be recovered.
     Overwrote(String),
+    /// The write failed (the edit stays unsaved): the window tells the user why, with a way to try again.
+    SaveFailed(host::HostError),
     /// Breakpoints changed (sent to the adapter if a session is open).
     BreakpointsChanged,
     /// Go to definition: position in another (or the same) file (0-based line, UTF-16 column).
@@ -262,6 +271,10 @@ pub enum EditorEvent {
     SendRequest(usize),
     /// Code lenses and inlay hints of extensions (workbench_ext_lenses.rs).
     Extension(ExtEvent),
+    /// A button of the question about contacting crates.io (editor_cargo.rs).
+    Cargo(CargoChoice),
+    /// The run mark in the gutter of this line (0-based) was pressed.
+    RunAt(u32),
 }
 
 /// Open completion list.
@@ -484,6 +497,8 @@ pub struct EditorView {
     /// A block stage operation is in progress (so two writes to the same index don't collide).
     stage_busy: bool,
     lenses: std::collections::HashMap<usize, Vec<crate::lsp::Lens>>,
+    run: run_glue::RunMarks,
+    modmarks: semantic_glue::ModifierMarks,
     /// Semantic token roles: line -> (start, length (UTF-16), role).
     sem: std::collections::HashMap<usize, Vec<(u32, u32, Role)>>,
     hl_task: Option<gpui::Task<()>>,
@@ -565,6 +580,8 @@ pub struct EditorView {
     lsp_root: Option<String>,
     /// JSON/YAML schema (completion and hover come from here when there is no language server); bound by the Workbench.
     schema: Option<Arc<SchemaBinding>>,
+    /// Cargo.toml dependency hints, completion and hover (editor_cargo.rs).
+    cargo: cargo_glue::CargoMarks,
     /// Open color picker (if any).
     color_picker: Option<color_glue::ColorPicker>,
     /// Spell checker (bound by the Workbench); `None` when off.
@@ -963,6 +980,8 @@ impl EditorView {
             symbol_hl: Vec::new(),
             stage_busy: false,
             lenses: Default::default(),
+            run: Default::default(),
+            modmarks: Default::default(),
             sem: Default::default(),
             hl_task: None,
             inlays: Default::default(),
@@ -1021,6 +1040,7 @@ impl EditorView {
             peek_seq: 0,
             hover_task: None,
             schema: None,
+            cargo: Default::default(),
             color_picker: None,
             spell: None,
             fence_cache: Default::default(),
@@ -1464,7 +1484,7 @@ fn block_delims(path: &str) -> Option<(&'static str, &'static str)> {
 /// Minimap width (px).
 const MINIMAP_W: f32 = 90.;
 
-fn role_color(role: Option<Role>, p: &Palette) -> u32 {
+pub(crate) fn role_color(role: Option<Role>, p: &Palette) -> u32 {
     match role {
         None => p.text,
         Some(Role::Keyword) => p.syntax_keyword,
@@ -1665,18 +1685,4 @@ impl EntityInputHandler for EditorView {
         self.enter_focused(window);
         self.index_for_position(point).map(|ix| self.buffer.char_to_utf16(ix))
     }
-}
-
-/// Workspace edit of the action run on save: the first action of the requested kind,
-/// completed with `codeAction/resolve` if it has no edit. Actions that run via a command are skipped
-/// (we don't want side effects outside the file during a save).
-fn source_action_edit(client: &crate::lsp::Client, params: serde_json::Value, kind: &str) -> Option<serde_json::Value> {
-    let timeout = std::time::Duration::from_secs(2);
-    let actions = crate::lsp::parse_code_actions(&client.request("textDocument/codeAction", params, timeout).ok()?);
-    let action = actions.into_iter().find(|a| a.kind == kind || a.kind.starts_with(&format!("{kind}.")))?;
-    let mut raw = action.raw;
-    if raw["edit"].is_null() && !raw["data"].is_null() {
-        raw = client.request("codeAction/resolve", raw.clone(), timeout).unwrap_or(raw);
-    }
-    (!raw["edit"].is_null()).then(|| raw["edit"].clone())
 }

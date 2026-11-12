@@ -31,13 +31,18 @@ const PROBLEMS_COUNT: NodeId = NodeId(117);
 pub(super) const PROBLEM_ROW: u64 = 0x170_0000;
 /// A problem's "Quick Fix…" button (row `i` at `PROBLEM_FIX + i`).
 const PROBLEM_FIX: u64 = PROBLEM_ROW + BLOCK / 4;
+/// A problem's "Copy Problem" button (row `i` at `PROBLEM_COPY + i`).
+const PROBLEM_COPY: u64 = PROBLEM_ROW + BLOCK / 4 * 3;
 /// Rows exposed at most (the panel can hold thousands; the count says how many there are).
 const MAX_ROWS: usize = 2_000;
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct ProblemsSnap {
     rows: Vec<ProblemRow>,
+    /// Problems among the rows, and every problem there is whatever the filter hides.
     problems: usize,
+    totals: crate::workbench::panels_glue::filter::Counts,
+    narrowed: bool,
 }
 
 fn severity(s: u8) -> String {
@@ -52,16 +57,31 @@ impl ProblemsSnap {
     pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, geometry: &Geometry) -> NodeId {
         if self.rows.is_empty() {
             let mut empty = Node::new(Role::Status);
-            empty.set_label(t("No problems."));
+            empty.set_label(if self.totals.total() == 0 { t("No problems.") } else { t("No problems match the filter.") });
             empty.set_live(Live::Polite);
             nodes.push((PROBLEMS_EMPTY, empty));
             return PROBLEMS_EMPTY;
         }
         let mut list = Node::new(Role::List);
         list.set_label(tf("Problems: {}", &[&self.problems]));
-        let count = |s: u8| self.rows.iter().filter(|r| matches!(r, ProblemRow::Problem { severity, .. } if *severity == s)).count();
+        let mut shown = crate::workbench::panels_glue::filter::Counts::default();
+        for row in &self.rows {
+            if let ProblemRow::Problem { severity, .. } = row {
+                shown.add(*severity);
+            }
+        }
         let mut summary = Node::new(Role::Status);
-        summary.set_label(tf("{0} errors, {1} warnings", &[&count(1), &count(2)]));
+        // What is announced is what is listed: with a filter on, the count of the list and of all problems.
+        summary.set_label(if self.narrowed {
+            tf(
+                "Showing {0} of {1} problems: {2} errors, {3} warnings, {4} information",
+                &[&shown.total(), &self.totals.total(), &shown.errors, &shown.warnings, &shown.info],
+            )
+        } else if shown.info == 0 {
+            tf("{0} errors, {1} warnings", &[&shown.errors, &shown.warnings])
+        } else {
+            tf("{0} errors, {1} warnings, {2} information", &[&shown.errors, &shown.warnings, &shown.info])
+        });
         summary.set_live(Live::Polite);
         nodes.push((PROBLEMS_COUNT, summary));
         let mut kids = vec![PROBLEMS_COUNT];
@@ -69,13 +89,17 @@ impl ProblemsSnap {
             let id = NodeId(PROBLEM_ROW + i as u64);
             let mut n = Node::new(Role::ListItem);
             match row {
-                ProblemRow::File { path, count, .. } => {
+                ProblemRow::File { path, count, collapsed, .. } => {
                     n.set_role(Role::Heading);
                     n.set_label(tf("{0}, problems: {1}", &[&crate::ui::file_name(path), count]));
+                    // Activating the heading folds or opens the file's problems.
+                    n.set_expanded(!collapsed);
+                    n.add_action(Action::Click);
                 }
-                ProblemRow::Problem { path, severity: s, text, line, col, .. } => {
+                ProblemRow::Problem { path, severity: s, text, line, col, source, .. } => {
                     n.set_label(format!("{}: {text}", severity(*s)));
-                    n.set_description(tf("{0}, line {1}, column {2}", &[&crate::ui::file_name(path), &(line + 1), &(col + 1)]));
+                    let place = tf("{0}, line {1}, column {2}", &[&crate::ui::file_name(path), &(line + 1), &(col + 1)]);
+                    n.set_description(if source.is_empty() { place } else { format!("{place}, {source}") });
                     n.add_action(Action::Click);
                     // Its fixes: the problem opens and Quick Fix lists them (a picker), as Quick Fix at the caret.
                     let fix = NodeId(PROBLEM_FIX + i as u64);
@@ -85,7 +109,13 @@ impl ProblemsSnap {
                     b.set_has_popup(accesskit::HasPopup::Listbox);
                     b.add_action(Action::Click);
                     nodes.push((fix, b));
-                    n.set_children(vec![fix]);
+                    let copy = NodeId(PROBLEM_COPY + i as u64);
+                    let mut c = Node::new(Role::Button);
+                    c.set_label(t("Copy Problem"));
+                    c.set_description(text.clone());
+                    c.add_action(Action::Click);
+                    nodes.push((copy, c));
+                    n.set_children(vec![fix, copy]);
                 }
                 ProblemRow::Related { text, path, line, .. } => {
                     n.set_label(text.clone());
@@ -109,25 +139,35 @@ impl Workbench {
         if !(self.chrome.panel_open && self.chrome.bottom == Bottom::Problems) {
             return None;
         }
-        let all = self.problems_shown();
-        let mut rows = crate::workbench::panels_glue::problem_rows(&all, self.root(cx).as_deref());
+        let totals = crate::workbench::panels_glue::problem_totals(&self.problems_shown());
+        let mut rows = self.problem_rows_now(cx);
         let problems = rows.iter().filter(|r| matches!(r, ProblemRow::Problem { .. })).count();
         rows.truncate(MAX_ROWS);
-        Some(ProblemsSnap { rows, problems })
+        Some(ProblemsSnap { rows, problems, totals, narrowed: self.problem_filter().narrows() })
     }
 
     /// An activation of a row: opened only if the panel still has that very row there.
     pub(super) fn a11y_problems_action(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let id = req.target_node.0;
         let fix = (PROBLEM_FIX..PROBLEM_FIX + MAX_ROWS as u64).contains(&id);
-        if !(PROBLEM_ROW..PROBLEM_ROW + MAX_ROWS as u64).contains(&id) && !fix {
+        let copy = (PROBLEM_COPY..PROBLEM_COPY + MAX_ROWS as u64).contains(&id);
+        if !(PROBLEM_ROW..PROBLEM_ROW + MAX_ROWS as u64).contains(&id) && !fix && !copy {
             return false;
         }
-        let index = (id - if fix { PROBLEM_FIX } else { PROBLEM_ROW }) as usize;
+        let index = (id
+            - if fix {
+                PROBLEM_FIX
+            } else if copy {
+                PROBLEM_COPY
+            } else {
+                PROBLEM_ROW
+            }) as usize;
         let (Some(old), Some(current)) = (last.views.problems.as_ref(), self.a11y_problems(cx)) else { return true };
         if req.action == Action::Click && old.rows.get(index).is_some_and(|row| current.rows.get(index) == Some(row)) {
             if fix {
                 self.quick_fix_problem_row(index, window, cx);
+            } else if copy {
+                self.copy_problem_row(index, cx);
             } else {
                 self.open_problem_row(index, window, cx);
             }
@@ -267,6 +307,7 @@ impl ViewsSnap {
     pub(super) fn focus_node(&self) -> Option<NodeId> {
         let row = self.row_focus.and_then(|(kind, ix)| match kind {
             crate::workbench::a11y::RowFrame::Port => pages::port_node(ix),
+            crate::workbench::a11y::RowFrame::Problem if ix < MAX_ROWS => Some(NodeId(PROBLEM_ROW + ix as u64)),
             kind => side::row_node(kind, ix),
         });
         self.consent
@@ -418,3 +459,7 @@ mod tests {
         assert_eq!((path.as_str(), line), (file.as_str(), 2));
     }
 }
+
+#[cfg(test)]
+#[path = "a11y_problems_tests.rs"]
+mod problems_tests;

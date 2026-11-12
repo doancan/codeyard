@@ -27,6 +27,25 @@ README; the tests named here are the executable specification.
   ordinary "could not check this file" notice. `fuzz_tests` throws hostile input at every entry point.
   Large files get a hint instead of a check; meta-schemas stay silent.
 
+## Cargo.toml dependencies (`cargo_deps*.rs`, `workbench_cargo.rs`, `editor_cargo.rs`)
+
+- **Parsing.** `toml_edit` with spans, never a regular expression. An unfinished document is an error and the editor keeps
+  the hints it has (they are hidden when the line count differs, so they never sit on the wrong line). Completion cannot
+  rely on a valid document, so `context` is a small lexer over the text before the cursor: table header, key, braces,
+  brackets and strings, enough to tell a crate name, a version string and a `features` entry apart in every spelling.
+- **Versions.** `version` matches requirements with the `semver` crate (Cargo's rules) and rewrites them keeping operator,
+  spacing and precision. Yanked means the locked version (from `Cargo.lock`) or every allowed version was withdrawn.
+- **Network.** `registry` is the only caller of `Fetch`. Order of answers: memory, disk while fresh (3 h; a missing crate
+  1 h), a conditional request when old (`If-None-Match`, a `304` keeps the entry), the old entry marked stale when the
+  network fails. Four requests at most run at once, API requests are a second apart, and a connection failure pauses
+  all requests for 20 s. Crate names are checked (`[A-Za-z0-9_-]`, 64 characters) before they reach a URL, since a manifest
+  is untrusted input. `config` reads `CARGO_HOME` and `[source.crates-io] replace-with`; a project's own config only in a
+  trusted folder.
+- **Edits.** Updates replace the requirement's bytes; add and remove go through `toml_edit`, which keeps comments and
+  layout. Edits are applied to the buffer as one undo step, and only if the document is the version they were computed from.
+- **Tests.** The sparse-index samples in `crates/app/testdata/cargo_deps/` are real lines captured from index.crates.io
+  (serde, tokio, cc, with yanked, pre-release and `features2` lines) and real API answers; tests never use the network.
+
 ## Spell check (`crates/spell`, `workbench_spell.rs`, `editor_spell.rs`)
 
 - Hunspell dictionaries through `spellbook`. English (SCOWL) and a developer word list ship inside the binary; other

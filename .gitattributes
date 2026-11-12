@@ -4,3 +4,5 @@ crates/ext-core/testdata/** -text
 crates/agent/src/shell/** text eol=lf
 # Compiled WebAssembly test fixtures.
 *.wasm binary
+# Captured tool output (rust-analyzer, nextest, rustc, crates.io): tests compare exact text, so no CRLF conversion on Windows checkouts.
+crates/app/testdata/** text eol=lf

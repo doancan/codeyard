@@ -263,7 +263,8 @@ impl EditorView {
         let want_links = !big && client.supports("documentLinkProvider");
         let want_lens = !big && s.code_lens && client.supports("codeLensProvider");
         let want_sem = !big && s.semantic_highlighting && client.supports("semanticTokensProvider");
-        if !(want_inlay || want_fold || want_links || want_lens || want_sem) {
+        let want_runnables = !big && client.config.language == "rust" && client.capabilities["experimental"]["runnables"].is_object();
+        if !(want_inlay || want_fold || want_links || want_lens || want_sem || want_runnables) {
             self.extras_task = None;
             return;
         }
@@ -340,11 +341,18 @@ impl EditorView {
                     let sem = want_sem.then(|| {
                         let legend = client.capabilities["semanticTokensProvider"]["legend"]["tokenTypes"].as_array().cloned().unwrap_or_default();
                         let legend: Vec<String> = legend.iter().map(|x| x.as_str().unwrap_or("").to_string()).collect();
+                        let modifiers = client.capabilities["semanticTokensProvider"]["legend"]["tokenModifiers"].as_array().cloned().unwrap_or_default();
+                        let modifiers: Vec<String> = modifiers.iter().map(|x| x.as_str().unwrap_or("").to_string()).collect();
                         ask("textDocument/semanticTokens/full", serde_json::json!({ "textDocument": doc }))
-                            .map(|v| crate::lsp::decode_semantic_tokens(&v["data"], &legend))
+                            .map(|v| crate::lsp::decode_semantic_tokens(&v["data"], &legend, &modifiers))
                             .unwrap_or_default()
                     });
-                    (hints, folds, links, lenses, sem, errors)
+                    // Without an answer the marks come from reading the text.
+                    let runnables = want_runnables.then(|| {
+                        ask(crate::lsp::RUNNABLES, serde_json::json!({ "textDocument": doc, "position": serde_json::Value::Null }))
+                            .map(|v| crate::lsp::parse_runnables(&v))
+                    });
+                    (hints, folds, links, lenses, sem, runnables, errors)
                 })
                 .await;
             this.update(cx, |e, cx| {
@@ -352,7 +360,10 @@ impl EditorView {
                 if e.lsp_epoch.load(SeqCst) != mine {
                     return;
                 }
-                let (hints, folds, links, lenses, sem, errors) = result;
+                let (hints, folds, links, lenses, sem, runnables, errors) = result;
+                if let Some(list) = runnables {
+                    e.set_runnables(list);
+                }
                 e.lsp_lines = lines;
                 for err in errors {
                     e.log_lsp_failure(err, cx);
@@ -373,6 +384,7 @@ impl EditorView {
                 }
                 if let Some(tokens) = sem {
                     let mut by_line: std::collections::HashMap<usize, Vec<(u32, u32, Role)>> = std::collections::HashMap::new();
+                    e.set_modifier_marks(&tokens);
                     for t in tokens {
                         let Some(role) = semantic_role(&t.kind) else { continue };
                         by_line.entry(t.line).or_default().push((t.start, t.len, role));
@@ -508,6 +520,14 @@ impl EditorView {
         let (a, b) = (self.buffer.from_lsp_position(l0, c0), self.buffer.from_lsp_position(l1, c1));
         self.buffer.set_selection(a.min(b)..a.max(b), b < a);
         cx.notify();
+    }
+
+    /// Before a request whose answer edits several documents: sends the changes not yet sent, and says which state the server now
+    /// has of this document: (the buffer's version, the document version the server was told). `None` without a server.
+    pub fn lsp_snapshot(&mut self) -> Option<(u64, i64)> {
+        self.lsp.as_ref()?;
+        self.sync_lsp();
+        Some((self.buffer.version(), self.lsp_version))
     }
 
     /// Document version for language server requests (see `apply_lsp_edits_if_unchanged`).
@@ -686,8 +706,9 @@ impl EditorView {
         let client = self.lsp.clone();
         let debug = self.debug_eval.clone().zip(self.debug_expression_at(ix));
         let schema_hover = self.schema_hover_input(ix, client.is_some());
+        let cargo_hover = self.cargo_hover_input(ix).filter(|_| client.is_none());
         let ext = self.ext_hover_ask(ix);
-        if client.is_none() && diagnostics.is_empty() && debug.is_none() && schema_hover.is_none() && ext.is_none() {
+        if client.is_none() && diagnostics.is_empty() && debug.is_none() && schema_hover.is_none() && cargo_hover.is_none() && ext.is_none() {
             self.hover_task = None;
             return;
         }
@@ -720,9 +741,10 @@ impl EditorView {
                         .ok()
                         .and_then(|v| crate::lsp::hover_text(&v))
                 }
-                None => match schema_hover {
-                    Some(input) => cx.background_executor().spawn(async move { input.run() }).await,
-                    None => None,
+                None => match (schema_hover, cargo_hover) {
+                    (Some(input), _) => cx.background_executor().spawn(async move { input.run() }).await,
+                    (None, Some(input)) => cx.background_executor().spawn(async move { input.run() }).await,
+                    (None, None) => None,
                 },
             };
             let text = match (value, text) {

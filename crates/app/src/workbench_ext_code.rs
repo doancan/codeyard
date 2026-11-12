@@ -14,6 +14,7 @@ use futures::StreamExt;
 use super::*;
 use crate::ext_broker::{self, Scope, Sink};
 use crate::ext_runtime::{self, Crashes, Event, Pending, Process};
+use crate::workbench::notifications_glue::model::{Notification, Severity};
 
 /// Lines of each extension's log kept for the Inspector (#108).
 const LOG_LINES: usize = 500;
@@ -166,7 +167,7 @@ impl Workbench {
         let Some(active) = reg.active.iter().find(|e| e.id() == extension).cloned() else { return };
         if self.cfg.exts.code.disabled.contains(extension) {
             let msg = crate::i18n::tf("{} crashed three times and is turned off until Codeyard restarts.", &[&extension]);
-            self.notice = Some(Notice::Error(msg.into()));
+            self.notify(NoticeSource::Extensions, Notice::Error(msg.into()));
             cx.notify();
             return;
         }
@@ -189,7 +190,7 @@ impl Workbench {
                 }
                 // Turned off by this very crash: that notice says more than the failed command.
                 if let Some(Err(e)) = result.filter(|_| !this.cfg.exts.code.disabled.contains(&ext)) {
-                    this.notice = Some(Notice::Error(format!("{ext}: {}", explain(&e)).into()));
+                    this.notify(NoticeSource::Extensions, Notice::Error(format!("{ext}: {}", explain(&e)).into()));
                     cx.notify();
                 }
             });
@@ -216,7 +217,7 @@ impl Workbench {
         }
         let Some(exthost) = ext_runtime::exthost_path() else {
             self.cfg.exts.code.queued.remove(&id);
-            self.notice = Some(Notice::Error(crate::i18n::tf("{} cannot run: codeyard-exthost is missing beside Codeyard.", &[&id]).into()));
+            self.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("{} cannot run: codeyard-exthost is missing beside Codeyard.", &[&id]).into()));
             cx.notify();
             return;
         };
@@ -301,7 +302,7 @@ impl Workbench {
                     }
                     Err(e) => {
                         code.pending.lock().unwrap_or_else(|p| p.into_inner()).fail_all(&ext, &e);
-                        this.notice = Some(Notice::Error(crate::i18n::tf("{0} could not start: {1}", &[&ext, &e]).into()));
+                        this.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("{0} could not start: {1}", &[&ext, &e]).into()));
                         cx.notify();
                     }
                 }
@@ -357,7 +358,7 @@ impl Workbench {
             Event::Message(ToApp::Start { ticket, call }) => self.on_extension_call(id, ticket, call, window, cx),
             Event::Message(ToApp::Notify(n)) => self.on_extension_notify(id, n, window, cx),
             Event::Message(ToApp::Activated(Err(e))) => {
-                self.notice = Some(Notice::Error(crate::i18n::tf("{0} failed to start: {1}", &[&id, &e]).into()));
+                self.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("{0} failed to start: {1}", &[&id, &e]).into()));
                 cx.notify();
             }
             Event::Message(ToApp::Denied { call, denied }) => self.cfg.exts.code.record().denied(id, &call, &denied),
@@ -368,6 +369,7 @@ impl Workbench {
             Event::Message(_) => {}
             Event::Exited { crashed, reason } => {
                 self.on_extension_exited(id, crashed, cx);
+                self.end_interrupted_progress(id, &reason, cx);
                 self.forget_extension_watches(id);
                 let code = &mut self.cfg.exts.code;
                 code.procs.remove(id);
@@ -377,7 +379,7 @@ impl Workbench {
                     if code.crashes.record(id, std::time::Instant::now()) {
                         code.disabled.insert(id.to_string());
                         let msg = crate::i18n::tf("{} crashed three times in a minute and was turned off.", &[&id]);
-                        self.notice = Some(Notice::Error(msg.into()));
+                        self.notify(NoticeSource::Extensions, Notice::Error(msg.into()));
                     } else {
                         self.log_extension(id, LogLevel::Error, format!("stopped: {reason}"));
                     }
@@ -420,10 +422,10 @@ impl Workbench {
                 self.show_extension_progress(id, p, cx);
             }
             Notify::EndProgress { id: p } => {
-                if self.cfg.exts.code.progress.remove(&(id.to_string(), p)).is_some()
-                    && matches!(&self.notice, Some(Notice::Info(t)) if t.starts_with(&format!("{id}: ")))
-                {
-                    self.notice = None;
+                if let Some((title, ..)) = self.cfg.exts.code.progress.remove(&(id.to_string(), p)) {
+                    // The one history entry of this run: the ticks before it were toasts only.
+                    let text = crate::i18n::tf("{0}: {1} — done", &[&id, &title]);
+                    self.notify_with(Notification::new(Severity::Info, NoticeSource::Extensions, text).id(progress_entry_id(id, p)));
                     cx.notify();
                 }
             }
@@ -461,7 +463,7 @@ impl Workbench {
         match &call {
             Start::ShowNotice { severity, message, .. } => {
                 let text = format!("{id}: {message}");
-                self.notice = Some(if *severity == v::Severity::Error { Notice::Error(text.into()) } else { Notice::Info(text.into()) });
+                self.notify(NoticeSource::Extensions, if *severity == v::Severity::Error { Notice::Error(text.into()) } else { Notice::Info(text.into()) });
                 cx.notify();
                 complete(&proc, Completion::Chosen(Vec::new()));
             }
@@ -665,6 +667,11 @@ impl Workbench {
     }
 }
 
+/// The history entry of one progress run: the same text-free identity whether it ends well or not.
+fn progress_entry_id(extension: &str, run: u64) -> String {
+    format!("ext-progress:{extension}:{run}")
+}
+
 impl Workbench {
     /// Complete a ticket of `extension` from the window (a pick, an input).
     pub(super) fn complete_extension_ticket(&mut self, extension: &str, ticket: u64, completion: Completion) {
@@ -706,7 +713,20 @@ impl Workbench {
         self.complete_extension_ticket(&ext, ticket, answer.unwrap_or(nothing));
     }
 
-    fn show_extension_progress(&mut self, id: &str, p: u64, cx: &mut Context<Self>) {
+    /// The extension ended while a progress run was open: that run is recorded as failed (same entry as its "done" would have been),
+    /// with the reason the process gave.
+    fn end_interrupted_progress(&mut self, id: &str, reason: &str, cx: &mut Context<Self>) {
+        let mut open: Vec<u64> = self.cfg.exts.code.progress.keys().filter(|(ext, _)| ext == id).map(|(_, p)| *p).collect();
+        open.sort_unstable();
+        for p in open {
+            let Some((title, ..)) = self.cfg.exts.code.progress.remove(&(id.to_string(), p)) else { continue };
+            let text = crate::i18n::tf("{0}: {1} did not finish: the extension stopped", &[&id, &title]);
+            self.notify_with(Notification::new(Severity::Error, NoticeSource::Extensions, text).detail(reason).id(progress_entry_id(id, p)));
+        }
+        cx.notify();
+    }
+
+    pub(in crate::workbench) fn show_extension_progress(&mut self, id: &str, p: u64, cx: &mut Context<Self>) {
         let Some((title, message, percent)) = self.cfg.exts.code.progress.get(&(id.to_string(), p)) else { return };
         let mut text = format!("{id}: {title}");
         if let Some(m) = message {
@@ -715,7 +735,8 @@ impl Workbench {
         if let Some(pc) = percent {
             text.push_str(&format!(" ({pc}%)"));
         }
-        self.notice = Some(Notice::Info(text.into()));
+        // A ticking message: shown, never recorded, or one task would fill the history.
+        self.flash(text);
         cx.notify();
     }
 
@@ -852,3 +873,7 @@ pub(super) fn explain(e: &v::Error) -> String {
         other => other.to_string(),
     }
 }
+
+#[cfg(test)]
+#[path = "workbench_ext_progress_tests.rs"]
+mod progress_tests;

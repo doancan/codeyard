@@ -29,6 +29,8 @@ pub const USER_ONLY_KEYS: &[&str] = &[
     "security.workspaceTrust.startupPrompt",
     "http.confirmRequests",
     "ui.language",
+    // A repository must not make the log file record more (or less) than the user chose.
+    "diagnostics.logLevel",
     // The interface scale applies to every window, so a repository must not zoom the user's whole application.
     "ui.scale",
     "update.check",

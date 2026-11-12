@@ -36,6 +36,7 @@ mod shared_uri;
 mod style;
 mod styled;
 mod subscription;
+#[allow(missing_docs)]
 mod svg_renderer;
 mod tab_stop;
 mod taffy;
@@ -96,7 +97,7 @@ pub use smol::Timer;
 pub use style::*;
 pub use styled::*;
 pub use subscription::*;
-use svg_renderer::*;
+pub use svg_renderer::*;
 pub(crate) use tab_stop::*;
 pub use taffy::{AvailableSpace, LayoutId};
 #[cfg(any(test, feature = "test-support"))]

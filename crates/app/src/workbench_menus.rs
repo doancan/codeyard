@@ -250,7 +250,7 @@ impl Workbench {
         vec![
             (t("Command Palette…"), Box::new(CommandPalette), false),
             (t("Settings"), Box::new(OpenSettingsPage), true),
-            (t("Keyboard Shortcuts"), Box::new(OpenKeybindings), false),
+            (t("Keyboard Shortcuts"), Box::new(ShowKeyboardShortcuts), false),
             (t("Color Theme…"), Box::new(SelectTheme), false),
             (t("File Icon Theme…"), Box::new(SelectIconTheme), false),
             (t("About Codeyard"), Box::new(ShowAbout), true),
@@ -397,9 +397,12 @@ impl Workbench {
             MenuCmd::TerminalLaunch(ix) => self.launch_from_menu(ix, window, cx),
             MenuCmd::ExtViewChoice(ix) => self.ext_view_choice_from_menu(ix, window, cx),
             MenuCmd::SelectForCompare => {
-                self.notice = Some(Notice::Info(
-                    crate::i18n::tf("Selected {} for compare. Right-click another file and choose Compare.", &[&ui::file_name(&target.path)]).into(),
-                ));
+                self.notify(
+                    NoticeSource::App,
+                    Notice::Info(
+                        crate::i18n::tf("Selected {} for compare. Right-click another file and choose Compare.", &[&ui::file_name(&target.path)]).into(),
+                    ),
+                );
                 self.roots.compare_a = Some(target.path);
                 cx.notify();
             }
@@ -517,9 +520,10 @@ impl Workbench {
             self.remove_editor(ix, window, cx);
         }
         if kept_dirty > 0 {
-            self.notice = Some(Notice::Info(
-                crate::i18n::tn("{} tab with unsaved changes stayed open.", "{} tabs with unsaved changes stayed open.", kept_dirty, &[]).into(),
-            ));
+            self.notify(
+                NoticeSource::App,
+                Notice::Info(crate::i18n::tn("{} tab with unsaved changes stayed open.", "{} tabs with unsaved changes stayed open.", kept_dirty, &[]).into()),
+            );
         }
         cx.notify();
     }

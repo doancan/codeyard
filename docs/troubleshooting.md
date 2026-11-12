@@ -78,6 +78,10 @@ stash first.
 
 ## Reporting a problem
 
-If Codeyard panics it writes a report to the `crashes/` folder next to its state database (see `CODEYARD_STATE_DIR` in
-[environment.md](environment.md)); nothing is sent anywhere, attach the file to your issue yourself. Include the version
-(**About Codeyard** in the gear menu), your OS and what you did. For vulnerabilities see [SECURITY.md](../SECURITY.md).
+Run **Help: Copy Diagnostics** and paste the result into your issue: it holds the version, your system, the settings you
+changed, the last notifications and the end of the log, with your home folder and any credentials removed. If Codeyard
+panics it writes a report to the `crashes/` folder next to its state database (see `CODEYARD_STATE_DIR` in
+[environment.md](environment.md)) and tells you at the next start; **Help: Open Log File** and **Help: Open Crash Reports
+Folder** show the files. Nothing is sent anywhere, attach what you want to share yourself; what the log, the diagnostics and
+the crash reports hold, and how to delete them, is in the [user guide](user-guide.md#log-diagnostics-and-crash-reports). Include
+the version (**About Codeyard** in the gear menu), your OS and what you did. For vulnerabilities see [SECURITY.md](../SECURITY.md).

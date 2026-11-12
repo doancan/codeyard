@@ -87,7 +87,7 @@ dependencies = [
 
 [[package]]
 name = "agent"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -139,7 +139,7 @@ dependencies = [
  "piper",
  "polling",
  "regex-automata",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "rustix-openpty",
  "serde",
  "signal-hook",
@@ -186,7 +186,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "app"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
@@ -207,6 +207,7 @@ dependencies = [
  "futures",
  "gpui",
  "host",
+ "image",
  "libc",
  "memchr",
  "mimalloc",
@@ -219,7 +220,9 @@ dependencies = [
  "raw-window-handle",
  "regex",
  "ring",
+ "rusqlite",
  "schema",
+ "semver",
  "serde",
  "serde_json",
  "sha2 0.11.1",
@@ -231,6 +234,7 @@ dependencies = [
  "theme",
  "tokio",
  "toml 1.1.8+spec-1.1.0",
+ "toml_edit 0.25.17+spec-1.1.0",
  "usvg",
  "windows 0.61.3",
 ]
@@ -453,7 +457,7 @@ dependencies = [
  "futures-lite 2.6.1",
  "parking",
  "polling",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "slab",
  "windows-sys 0.61.2",
 ]
@@ -495,7 +499,7 @@ dependencies = [
  "cfg-if 1.0.5",
  "event-listener 5.4.2",
  "futures-lite 2.6.1",
- "rustix 1.1.5",
+ "rustix 1.1.6",
 ]
 
 [[package]]
@@ -521,7 +525,7 @@ dependencies = [
  "cfg-if 1.0.5",
  "futures-core",
  "futures-io",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "signal-hook-registry",
  "slab",
  "windows-sys 0.61.2",
@@ -880,7 +884,7 @@ dependencies = [
 
 [[package]]
 name = "buffer"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "ropey",
  "unicode-segmentation",
@@ -995,7 +999,7 @@ dependencies = [
  "io-lifetimes 3.0.1",
  "ipnet",
  "maybe-owned",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "rustix-linux-procfs",
  "windows-sys 0.61.2",
  "winx",
@@ -1010,7 +1014,7 @@ dependencies = [
  "cap-primitives",
  "io-extras",
  "io-lifetimes 3.0.1",
- "rustix 1.1.5",
+ "rustix 1.1.6",
 ]
 
 [[package]]
@@ -1209,7 +1213,7 @@ dependencies = [
 
 [[package]]
 name = "codeyard-extension"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "ext-ui",
  "serde",
@@ -1219,7 +1223,7 @@ dependencies = [
 
 [[package]]
 name = "codeyard-extension-test"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "codeyard-extension",
  "ext-manifest",
@@ -1745,7 +1749,7 @@ checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
 name = "cyx"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "base64",
  "ext-api",
@@ -1879,7 +1883,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.3",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2098,7 +2102,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2165,7 +2169,7 @@ dependencies = [
 
 [[package]]
 name = "ext-api"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "ext-manifest",
  "serde",
@@ -2174,7 +2178,7 @@ dependencies = [
 
 [[package]]
 name = "ext-core"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "base64",
  "ext-manifest",
@@ -2189,7 +2193,7 @@ dependencies = [
 
 [[package]]
 name = "ext-host"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2208,7 +2212,7 @@ dependencies = [
 
 [[package]]
 name = "ext-manifest"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2217,7 +2221,7 @@ dependencies = [
 
 [[package]]
 name = "ext-net"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "ext-manifest",
  "http-body",
@@ -2232,7 +2236,7 @@ dependencies = [
 
 [[package]]
 name = "ext-pkg"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "ext-api",
  "ext-manifest",
@@ -2245,7 +2249,7 @@ dependencies = [
 
 [[package]]
 name = "ext-proto"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "ext-api",
  "ext-manifest",
@@ -2256,7 +2260,7 @@ dependencies = [
 
 [[package]]
 name = "ext-ui"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "base64",
  "ext-manifest",
@@ -2525,8 +2529,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94e7099f6313ecacbe1256e8ff9d617b75d1bcb16a6fddef94866d225a01a14a"
 dependencies = [
  "io-lifetimes 2.0.4",
- "rustix 1.1.5",
- "windows-sys 0.59.0",
+ "rustix 1.1.6",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2671,7 +2675,7 @@ version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1bd49230192a3797a9a4d6abe9b3eed6f7fa4c8a8a4947977c6f80025f92cbd8"
 dependencies = [
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "windows-link 0.2.1",
 ]
 
@@ -3264,7 +3268,7 @@ dependencies = [
 
 [[package]]
 name = "host"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "agent",
  "dirs 7.0.0",
@@ -3616,7 +3620,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20fd6de4ccfcc187e38bc21cfa543cb5a302cb86a8b114eb7f0bf0dc9f8ac00f"
 dependencies = [
  "io-lifetimes 3.0.1",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4093,7 +4097,7 @@ version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57804b2c9b69967f1536a56f86297e367a33b19e98852ed624b84551cdbc0d90"
 dependencies = [
- "rustix 1.1.5",
+ "rustix 1.1.6",
 ]
 
 [[package]]
@@ -4971,7 +4975,7 @@ dependencies = [
  "concurrent-queue",
  "hermit-abi",
  "pin-project-lite",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "windows-sys 0.61.2",
 ]
 
@@ -5131,7 +5135,7 @@ dependencies = [
 
 [[package]]
 name = "proto"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "postcard",
  "serde",
@@ -5288,7 +5292,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5787,20 +5791,20 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
 name = "rustix"
-version = "1.1.5"
+version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "891efababe418670775f199f0d233d84843c227a0949a883ce15b37c78d6629d"
+checksum = "e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa"
 dependencies = [
  "bitflags 2.13.2",
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5810,7 +5814,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fc84bf7e9aa16c4f2c758f27412dc9841341e16aa682d9c7ac308fe3ee12056"
 dependencies = [
  "once_cell",
- "rustix 1.1.5",
+ "rustix 1.1.6",
 ]
 
 [[package]]
@@ -5821,7 +5825,7 @@ checksum = "1de16c7c59892b870a6336f185dc10943517f1327447096bbb7bb32cd85e2393"
 dependencies = [
  "errno",
  "libc",
- "rustix 1.1.5",
+ "rustix 1.1.6",
 ]
 
 [[package]]
@@ -5947,7 +5951,7 @@ dependencies = [
 
 [[package]]
 name = "schema"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "jsonschema",
  "serde_json",
@@ -6378,7 +6382,7 @@ dependencies = [
 
 [[package]]
 name = "spell"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "spellbook",
 ]
@@ -6463,7 +6467,7 @@ dependencies = [
 
 [[package]]
 name = "state"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "rusqlite",
 ]
@@ -6726,7 +6730,7 @@ dependencies = [
 
 [[package]]
 name = "syntax"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "cc",
  "libc",
@@ -6841,7 +6845,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "task-engine"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "fancy-regex",
  "serde_json",
@@ -6857,8 +6861,8 @@ dependencies = [
  "fastrand 2.5.0",
  "getrandom 0.3.4",
  "once_cell",
- "rustix 1.1.5",
- "windows-sys 0.59.0",
+ "rustix 1.1.6",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6883,7 +6887,7 @@ dependencies = [
 
 [[package]]
 name = "theme"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "serde_json",
 ]
@@ -7969,7 +7973,7 @@ dependencies = [
  "postcard",
  "pulley-interpreter",
  "rayon",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "semver",
  "serde",
  "serde_derive",
@@ -8085,7 +8089,7 @@ checksum = "6326d47c759c0478489a034f1282a6f516ce97594f9af785539697d03add17ec"
 dependencies = [
  "cc",
  "libc",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "wasmtime-environ",
  "wasmtime-internal-versioned-export-macros",
  "windows-sys 0.61.2",
@@ -8160,7 +8164,7 @@ dependencies = [
  "bytes",
  "futures",
  "rand 0.10.3",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "rustix-linux-procfs",
  "thiserror 2.0.21",
  "tokio",
@@ -8214,7 +8218,7 @@ checksum = "38a91b4eaddff87b1cd1074985e3713da4af2c49742d1b356b2c01670a67a078"
 dependencies = [
  "cc",
  "downcast-rs",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "scoped-tls",
  "smallvec",
  "wayland-sys",
@@ -8227,7 +8231,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3c36a0f861ad76d0901f2800b46321410d9f73f2ea88aac0650d86c32688073"
 dependencies = [
  "bitflags 2.13.2",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "wayland-backend",
  "wayland-scanner",
 ]
@@ -8238,7 +8242,7 @@ version = "0.31.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a52d18780be9b1314328a3de5f930b73d2200112e3849ca6cb11822793fb34d"
 dependencies = [
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "wayland-client",
  "xcursor",
 ]
@@ -8363,7 +8367,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -8924,7 +8928,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d6f32a0ff4a9f6f01231eb2059cc85479330739333e0e58cadf03b6af2cca10"
 dependencies = [
  "cfg-if 1.0.5",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -8940,7 +8944,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f3fd376f71958b862e7afb20cfe5a22830e1963462f3a17f49d82a6c1d1f42d"
 dependencies = [
  "bitflags 2.13.2",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -9121,7 +9125,7 @@ dependencies = [
  "as-raw-xcb-connection",
  "gethostname",
  "libc",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "x11rb-protocol",
  "xcursor",
 ]
@@ -9224,7 +9228,7 @@ dependencies = [
 
 [[package]]
 name = "yard"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "ext-api",
  "ext-core",
@@ -9302,7 +9306,7 @@ dependencies = [
  "hex",
  "libc",
  "ordered-stream",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "serde",
  "serde_repr",
  "tracing",

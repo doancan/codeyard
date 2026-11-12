@@ -11,6 +11,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Settings and keyboard shortcuts](#settings-and-keyboard-shortcuts)
 - [Interface scale](#interface-scale)
 - [Interface language](#interface-language)
+- [Notifications](#notifications)
 - [Updates](#updates)
 - [Themes](#themes)
 - [Extensions](#extensions)
@@ -21,7 +22,9 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Testing](#testing)
 - [Workspaces with several folders](#workspaces-with-several-folders)
 - [Language servers](#language-servers)
+- [Refactor Preview](#refactor-preview)
 - [Working in Rust](#working-in-rust)
+- [Cargo dependencies](#cargo-dependencies)
 - [JSON and YAML schemas](#json-and-yaml-schemas)
 - [Data tools](#data-tools)
 - [Colours](#colours)
@@ -66,6 +69,7 @@ Guides**, **Inlay Hints** and **File: Toggle Auto Save**, which change the runni
 | Suggestions / hover | ⌃Space / ⌘K ⌘I | Ctrl+Space / Ctrl+K Ctrl+I |
 | Next / previous change (diff) | F7 / ⇧F7 | F7 / Shift+F7 |
 | Pick the change / stage or unstage the picked lines (diff) | Space / ↵ | Space / Enter |
+| Collapse unchanged lines / ignore whitespace (diff) | ⌘K ⌘O / ⌘K ⌘H | Ctrl+K Ctrl+O / Ctrl+K Ctrl+H |
 | Word left / right (+Shift selects) | ⌥← / ⌥→ | Ctrl+← / Ctrl+→ |
 | Delete word left / right | ⌥⌫ / ⌥⌦ | Ctrl+Backspace / Ctrl+Delete |
 | Select word / line | double / triple click | double / triple click |
@@ -78,6 +82,9 @@ Guides**, **Inlay Hints** and **File: Toggle Auto Save**, which change the runni
 | Terminal find / clear / select all | ⌘F / ⌘K / ⌘A | Ctrl+Shift+F / Ctrl+Shift+K / Ctrl+Shift+A |
 | Toggle bottom panel (opens a terminal if none) | ⌘J | Ctrl+J |
 | Rename / delete (file tree) | F2 / ⌘⌫ | F2 / Ctrl+Backspace |
+| Filter the file tree / clear the filter (file tree focused) | ⌘F / Esc | Ctrl+F / Esc |
+| Zoom in / out, fit, 100% (image tab) | + / - , 0 / 1 | + / - , 0 / 1 |
+| Move the picture / pause an animation (image tab) | ← → ↑ ↓ / Space | ← → ↑ ↓ / Space |
 | Toggle line comment | ⌘/ | Ctrl+/ |
 | Indent / outdent lines | Tab / ⇧Tab (with a selection) | Tab / Shift+Tab |
 | Move lines up / down | ⌥↑ / ⌥↓ | Alt+↑ / Alt+↓ |
@@ -154,7 +161,10 @@ to the right / saved, pin, copy path; drag tabs to reorder them or onto the othe
 Right-click in the editor for go to definition / references, rename, cut/copy/paste,
 file history and blame. A single click in the tree opens a preview tab (italic) that the next
 preview replaces; editing or double-clicking keeps it. Tabs of files with the same name show
-the folder that tells them apart; the breadcrumbs above the editor reveal a folder in the tree.
+the folder that tells them apart; the breadcrumbs above the editor reveal a folder in the tree. After the file name the
+breadcrumbs show where the cursor is in the code, as a chain of symbols (`Shape › area`), each with the icon of its kind. A
+click on a symbol opens a list of the symbols at the same level; choosing one goes there. *Go: Pick Symbol at the Cursor's
+Level* does the same from the palette. On a narrow editor the folders give way, so the file and the symbols stay visible.
 
 **Explorer.** Vertical guides under every folder arrow show the hierarchy; the guide of the
 selected folder is highlighted. Folders that only hold one folder show as one row
@@ -164,6 +174,40 @@ jump to the next name that starts with them. OPEN EDITORS lists the open files a
 (click to switch, × to close, a dot when unsaved; `"explorer.openEditors": false` hides it).
 Right-click also has Duplicate, Open to the Side, Select for Compare / Compare with Selected
 (two files side by side) and Open in Integrated Terminal (in that folder).
+
+**Filter the tree.** The funnel button in the Explorer header (or ⌘F with the tree focused, or *Files: Filter Files in
+Explorer*) opens a box above the tree. Type part of a name and the tree shows only the files and folders whose name
+contains it, with the folders that lead to them, and marks the matching text. Case does not matter, and the Turkish
+dotted and dotless i are the same as `i` (`ISTANBUL`, `İzmir` and `ırmak` all match `i`). It looks through the whole
+folder, including folders you have not opened, using the same file list as Go to File (so it skips what `.gitignore`
+and `files.exclude` hide); a note under the box says when only the opened folders could be searched, or when a very large
+folder was cut at 100,000 files. Selecting several results, copying, moving, deleting and the Git marks work as usual.
+Enter moves the focus to the first file, Esc clears the text, and Esc again (or Esc in the tree) closes the box and shows
+the whole tree with the selected entry revealed. While a filter is on, file nesting is off and folders stay open.
+
+**Nested files.** With `"explorer.fileNesting.enabled": true` (the default) a file that belongs to another one is listed
+under it: `Cargo.lock` under `Cargo.toml`, `app.test.ts` and `app.d.ts` under `app.ts`, lock files under `package.json`.
+The parent shows an arrow and the number of files it holds (`+3`); the arrow, or Right and Left on the parent, opens and
+closes them, and what you opened is remembered for the folder. Clicking the name still opens the file itself. A change in a
+hidden file shows as a dot on its parent. A nested file is an ordinary entry for selecting, dragging, renaming and deleting;
+selecting or deleting the parent never takes its nested files along. The rules are the setting
+`explorer.fileNesting.patterns`, an object of parent → nested names in the same folder. The key is a name or a pattern with
+one `*`; the value is a comma-separated list (or a list of texts) in which `${capture}` is the text the `*` matched:
+
+```jsonc
+"explorer.fileNesting.patterns": {
+  "*.c": "${capture}.h",        // add a rule
+  "*.js": false,                // remove a built-in one
+  "Cargo.toml": "Cargo.lock, deny.toml"  // replace a built-in one
+}
+```
+
+The built-in rules are `*.ts` → `${capture}.test.ts, .spec.ts, .d.ts, .js, .js.map`; `*.tsx` → `.test.tsx, .spec.tsx,
+.module.css`; `*.js` → `.js.map, .min.js, .d.ts`; `*.scss` → `.css, .css.map`; `Cargo.toml` → `Cargo.lock`; `package.json` →
+`package-lock.json, npm-shrinkwrap.json, yarn.lock, pnpm-lock.yaml, bun.lock, bun.lockb`; `go.mod` → `go.sum`;
+`pyproject.toml` → `uv.lock, poetry.lock, pdm.lock`; `Gemfile` → `Gemfile.lock`; `composer.json` → `composer.lock`. A file
+nests under one parent only (the first rule that finds it, in the order above, then the order you wrote), a folder never
+nests, and names are case-sensitive. There is no rule for `.rs` files: Rust sources have no standard companions.
 
 **Selecting several entries.** Cmd-click (Ctrl-click on Windows/Linux) toggles an entry;
 Shift-click selects a range. Shift+Up/Down, Shift+Home/End and Shift+PageUp/PageDown extend
@@ -315,11 +359,37 @@ scroll positions return when the workspace reopens, including empty groups. Exis
 sessions migrate automatically. Welcome/settings/diff/preview tabs stay in their owning group
 while switching focus; session restoration currently saves text-document tabs and empty groups.
 
-**Images** (png, jpg, gif, webp, svg, bmp) open in a preview tab.
+**Images** (png, jpg, gif, webp, svg, bmp) open in a preview tab. The toolbar zooms out and in, the percentage button switches
+between 100% and *fit* (the whole picture in the window, never enlarged past 100%), and the fit button fits it. The keys with the
+picture focused are `+` and `-` to zoom, `0` (or Esc) to fit, `1` for 100%, the arrow keys to move a picture that is bigger than
+the window, and Space to pause or play an animation. The mouse wheel moves the picture; with ⌘ (Ctrl on Windows and Linux) it zooms
+around the pointer. Drag to move the picture, double-click to switch between 100% and fit. Transparent pixels show a checkerboard.
+An SVG is drawn again at each zoom, so it stays sharp; pictures an SVG points to (other files, `data:` images) are never loaded. The bar under the picture gives its size in pixels, the file size and the
+format, and says when it is animated. A GIF or WebP animation plays (it starts paused when reduced motion is on, see
+`workbench.reduceMotion`); an animated PNG shows its first frame. Pictures over 20 MB, 50 million pixels or 16,384 pixels on a side (and animations whose
+frames add up to that many) are not decoded: the tab says so, and a damaged, cut or empty file is reported as such instead of
+showing a blank tab. The tab does not follow changes to the file on disk; close and open it again.
 
 **Find in files** (⇧⌘F) has a replace field. "Replace All" (or ↵ in the field, or "replace in
 this file" on a result) does not write anything: it opens a Search Editor with a replacement
 preview, described below.
+
+**Scopes.** Under the file filter, *Search in:* chooses what Find in files looks in: **Workspace** (the default),
+**Open Editors** (the files that are open now), **Changed Files** (what Git reports as changed: staged, unstaged and
+untracked) or **Current Folder** (the folder of the file in front, and below it). A line under the chips says what the
+choice means ("Only the 3 open files."); the lists follow the editors and the changes as they move on. While a scope
+limits the search, it replaces "Files to include": the include field is dimmed and the line under the chips says "Files to
+include is not used." (choose Workspace to use it again). Only the files the scope names are listed, a file of the same name
+in another folder is not (a root `README.md` does not bring in `docs/README.md`). Replace All, "replace in this file" and
+*Open in a Search Editor tab* use the same files, so the review shows exactly what the scope covers; a file whose name has
+a comma cannot be written in the Search Editor's include list, so it is left out of that review (the panel lists it). With
+a scope that names no file they do nothing. The palette has *Search: Find in Workspace*, *… in Open Editors*, *… in Changed Files* and *… in
+Current Folder*. The scope looks at what the app already knows (the open tabs and the last Git status), so it runs nothing
+by itself and works the same over SSH.
+
+**History.** ↑ and ↓ in the search field step through the searches you ran with ↵ (the last 30). Each one brings back
+the text, the Match case / Whole word / Regular expression / Preserve case options, the include and exclude filters and the
+scope it was run with, not just the text.
 
 ### Search Editors and replacement review
 
@@ -508,9 +578,18 @@ branches or the current one), *Only My Commits* and *Hide Merge Commits*, and of
 click one to turn it off. Stashes are listed with apply, pop and drop. `"git.graph.limit"`,
 `"git.graph.allBranches"` and `"git.timeline.limit"` tune it; the Changes groups fold too.
 
-**Explorer sections.** OPEN EDITORS, the folder tree, **OUTLINE** (functions, types and
-headings of the open file, found without a language server) and **TIMELINE** (the file's git
+**Explorer sections.** OPEN EDITORS, the folder tree, **OUTLINE** (the symbols of the open file) and **TIMELINE** (the file's git
 commits plus a saved copy for every save, "local history"; click an entry for a diff).
+
+**Outline and breadcrumb symbols.** When a language server runs for the file and offers symbols, the Outline and the
+breadcrumbs use its answer (classes, methods, fields, with their real ranges); until it answers, and for files with no server
+(also over SSH), they use line patterns for the common languages and Markdown headings, which is why a method can show as a
+function there. Each symbol has an icon: a tinted square with a mark for its kind (module, class, type, interface, enum,
+function, property, field, variable, constant, heading). The box above the list filters as you type: every word must be in a
+name, ignoring case (and Turkish i/ı), and the enclosing symbols of a match stay as context. **Sort** cycles *Position*
+(document order, nested), *Name* and *Kind* (flat lists, with the parent's name beside each symbol). **Follow Cursor** (on by
+default) scrolls the list to the symbol the cursor is in as it moves. The sort order and the switch are remembered for each
+workspace. Files over 30,000 lines have no outline.
 Clicking the empty space under the tree clears the selection so new files go to the root; open
 folders are remembered per project; ⇧→ / ⇧← (or the context menu) open or close everything
 inside a folder. Right-click ▸ Find in Folder… limits the search to it.
@@ -540,11 +619,75 @@ MDX components are not executed.
 
 `⇧⌘P` → "Preferences: Settings" lists the settings with their current values: pick one to
 toggle it, choose from its options or type a value; it is written to `settings.jsonc` (your
-comments stay) and applies at once. "Preferences: Keyboard Shortcuts" lists every command with
-its keys; picking one adds a line for it to `keybindings.jsonc` and opens the file there.
-"Preferences: Open Settings" / "Open Keyboard Shortcuts" open the files themselves:
+comments stay) and applies at once. "Preferences: Open Settings" / "Open Keyboard Shortcuts" open the files themselves:
 `~/.config/codeyard/settings.jsonc` and `keybindings.jsonc` (comments and trailing commas are
 fine). Changes apply on save; mistakes show in the status bar instead of being ignored.
+### Keyboard Shortcuts page
+
+"Preferences: Keyboard Shortcuts" (also **Keyboard Shortcuts** in the Manage menu and on the Settings page) lists every
+command with its keys, one row per key. Each row shows the command, the key, the context it works in (`when`, for
+example `Editor`) and where the key comes from: **Default**, **Extension** or **User** (an entry of `keybindings.jsonc`).
+The search finds a command by its name or id, or a key: type `comment`, `workbench.quickOpen`, `⌘D` or `cmd+d`.
+
+Select a row (click, or Up and Down) to see its buttons:
+
+- **Change key** (also double-click, or Enter) records a new key in place of this one. Press the keys, for example
+  `⌘K ⌘I` for a sequence of up to three chords, then Enter to save; Escape cancels. While the page listens, no shortcut
+  acts: the key you press is recorded, even one the application uses. Keys are recorded as your keyboard produces them, so
+  `ctrl-ö` on a Turkish keyboard is written as `ctrl-ö`. Enter by itself is recorded as the key Enter; Escape cannot be
+  recorded here (write it in the file). A printable key on its own (`a`, `5`, Space, Shift+letter) is refused with a message, because a
+  shortcut without a modifier would stop you typing that key; add Ctrl, Alt or Cmd, or use a function key, an arrow or Tab. After a
+  first chord any key is fine.
+- **Add another key** gives the command one more key.
+- **Remove key** deletes every identical entry of yours (the page names the command and key; an entry that had `args` loses them,
+  and the message says so), or turns a default or extension key off (an entry with `"command": null` that comes first
+  in the file).
+- **Reset to default** removes everything `keybindings.jsonc` says about the command, including the keys it turned off.
+- **Run command** closes the page and runs the command.
+
+The change is written to `keybindings.jsonc` as one entry, with your comments, other entries and line endings left as they
+were, and applies at once. If the file does not parse, nothing is written and the page says so. When a key is also used by
+another command in an overlapping context (or is the first key of a sequence another command uses), the row shows a
+**Also used by …** badge naming it, and so does the row of the other command; the later of two bindings wins, and you can
+search for `conflict` to list them. Some of the default keys already share a key with another command in a different
+place (the terminal's `⌘K` and the `⌘K` sequences); they are real and shown. A command is bound by its id, so a command
+without an id cannot be changed on this page. **Open keybindings.jsonc** opens the file itself.
+
+### Profiles
+
+A profile is a named bundle of your settings (the theme is one of them), keybindings and snippets. Use one for work and
+one for a demo, or one with big fonts for a talk. There are no accounts and nothing is synced: a profile is a folder.
+
+- *Profiles: Create…* makes a profile with the default settings, keybindings and no snippets, and switches to it.
+- *Profiles: Duplicate Current…* makes a copy of the profile in use (the default profile included) and switches to the copy.
+- *Profiles: Switch…* lists **Default** and your profiles. Settings, keybindings, snippets and the theme change at once, in
+  every window, without a restart. The status bar shows **Profile: name** while a profile other than the default is active;
+  click it to switch.
+- *Profiles: Rename…* and *Profiles: Delete…* work on the profiles you made. Deleting the active profile asks first, switches to
+  Default and then removes the folder.
+
+Profiles live in `~/.config/codeyard/profiles/<name>/` (`settings.jsonc`, `keybindings.jsonc`, `snippets/`). **Default is the
+config folder itself**, exactly as before: if you never create a profile, nothing is added to it and nothing changes. The
+active profile is named in `~/.config/codeyard/active-profile`; deleting that file switches back to Default. Editing a profile's
+files by hand works like editing the default ones.
+
+Layers, lowest first: the defaults, the active profile's `settings.jsonc` (instead of the default `settings.jsonc`), the
+workspace file, the project's `.codeyard/settings.jsonc`. A project's settings still win, and a project's restricted settings still
+need a trusted folder.
+
+A profile name is also a folder name, on every system, so it must be 1 to 40 letters, digits, spaces, `-`, `_` or `.`; it
+cannot start or end with a dot, be a Windows device name (`CON`, `NUL`, `COM1`, … also with an extension), be `Default`, contain
+combining marks (type `é` as one character), or differ from another profile only in letter case (`Work` and `work` are one folder on
+macOS and Windows). Turkish letters such as `ç ğ ı İ ö ş ü` are fine. If the active profile's folder disappears or
+`active-profile` holds something that is not a profile name, Codeyard uses the default profile and says so; if the folder is there but
+cannot be read right now (permissions, a network drive), the file is kept, the message appears once, and the profile returns when
+the folder can be read. Two spellings of one folder name (a letter followed by a combining mark, Hangul jamo, the Kelvin sign) are
+refused; Codeyard has no full Unicode normalization, so rarer look-alike characters are not detected.
+
+What is not part of a profile: extensions (installed extensions, their data and settings) and their update state, color theme
+*files* in `themes/`, recent folders, open windows and files, hot exit and other session state, spelling words, and the
+`security.workspaceTrust` decisions. These stay as they are when you switch. Extensions per profile are not supported.
+
 A project can override settings in `.codeyard/settings.jsonc` (or `.vscode/settings.json`).
 To start over, "Preferences: Reset Settings to Defaults…" (or **Reset All Settings…** on the Settings
 page, next to **Open settings.jsonc**) replaces `settings.jsonc` with this version's default file after
@@ -657,6 +800,63 @@ text arrives translated (see [translating.md](translating.md)).
 **Adding or improving a language.** Translations are plain text files compiled into the binary (`crates/app/locales/<code>.tsv`, no new
 dependency). The format, plurals, quality bar, the template file and the commands that show coverage are in
 [translating.md](translating.md). A missing entry is never an error at run time: that string simply stays English.
+
+## Notifications
+
+Messages from the app (a language server that did not start, a failed update, a Git error, a file that could not be
+saved) used to replace each other and vanish. Now every one is kept.
+
+- **Toasts.** An information message or a warning shows in the status bar for a few seconds; an error shows as a card at
+  the bottom right until you close it.
+- **The bell** at the right end of the status bar counts the warnings and errors you have not looked at yet, in red when
+  one of them is an error. Information messages ("Copied", "Pushed") are kept in the list but never counted. Click the
+  bell, or run *Notifications: Show*, to open the list.
+- **The list** shows the newest first: an icon for the severity, where it came from (Git, Tasks, Language, Update…),
+  how long ago, the message, and a button when there is something to do about it. A message that repeats is one row with
+  a counter (`×3`) that moves to the top. Each row has **Copy** (the message and its details, such as a command's error
+  output) and **Dismiss**; the header has **Do Not Disturb**, **Clear all** and **Close**. The list keeps the last 200
+  messages and is empty again when you restart: nothing is saved to disk.
+- **Buttons on a message.** When there is something you can do about a message, its row has one button, and an error
+  card shows the same button: **Show in Folder** opens the file or folder in Finder or Explorer (the nearest folder that
+  still exists when the path is gone), **Open File** opens a file in a tab (a `settings.jsonc` that does not parse opens at the line of the mistake), **Retry** runs the failed step again (save the
+  file, write the setting, check for updates), and a few messages offer a command, such as *Check for Updates…*. A retry
+  that works removes the old failure from the list; saving the file by hand does the same. Retry is careful: it never
+  replaces a version another program wrote (if the file changed on disk it opens the tab and tells you to resolve the
+  conflict first), it only saves the file of the machine that failed, and it does not write a setting into another profile's
+  settings file or over a value that was changed in the file since. The buttons hold only a path or the name of a step, so a message
+  never keeps a window or a file open.
+- **Messages about files** say what failed, on which path, the likely reason and what to try. For example: "Could not save
+  /work/notes.md. The disk is full (or your quota is used up). Free some space and try again." The operating system's
+  own words are kept in the details, so **Copy** gives you both. Reasons that are covered: no permission, not found, name
+  already used, disk full, read-only disk, another disk, bad or too long name, folder not empty, in use by another
+  program, timeout, interrupted and a closed connection. A long path is shortened in the sentence (the start and the file
+  name stay); the whole path is in the details. Control characters and text-direction marks in a file name are written out
+  (`\u{202e}`), so a name cannot make a message read differently from what it says.
+- **Things saved in the background.** Codeyard remembers your tabs, layout, window position, the open folders of the
+  Explorer, additional folders and terminals in its state database. When that cannot be written (a full or read-only
+  disk), you get one warning for each of these per session, "Could not save your open tabs and layout; they will not be
+  restored next time", with a **Show in Folder** button for the state folder. It does not repeat on every save.
+- **Background update checks.** Being offline is expected, so a check that cannot reach the server is only written to the
+  list as information ("Couldn't check for updates", with the reason in the details), without a toast and without
+  counting on the bell. Repeats collapse into one row. A check that fails for a reason you can act on (a broken secure
+  connection, a signature that does not match) is a warning or an error with the details and a **Retry** button; a later check
+  that works removes it.
+- **Git and Local History.** A file's history never shows an empty side because git failed: you get the error instead
+  ("Could not read a.rs at 1a2b3c4: …"). A file that is simply new or deleted in a commit still shows as added or deleted, and
+  the oldest commit of a shallow clone says its history is cut instead of showing the whole file as added. When
+  Local History cannot write its copies (a full or read-only disk), one warning per session says so, with **Show in
+  Folder**.
+- **Keyboard.** In the open list, Up, Down, Home and End move between rows, Enter runs the row's button, Delete
+  dismisses the row, ⌘C (Ctrl+C) copies it and Escape closes the list and puts the focus back where it was (or on the
+  editor when that is gone). Tab and Shift+Tab walk the buttons (each row's action, Copy and Dismiss, then Do Not
+  Disturb, Clear all and Close); Enter or Space presses the one that has the keyboard. The list closes when the
+  focus moves elsewhere, for example when you click in the editor. It counts what it shows as seen only while it has the
+  keyboard, so a failure that arrives after you left stays on the bell.
+- **Do Not Disturb** hides information and warning toasts. **Errors still show their card** and are still announced to a
+  screen reader, as in VS Code, so a failure is never missed. Everything is still recorded, and warnings and errors
+  still count on the bell (shown with a crossed bell). It lasts until you turn it off or close the window. Messages that
+  only report progress (an extension's "Indexing… 40%") are shown as they tick but are not kept in the list. The
+  palette has *Notifications: Show*, *Notifications: Clear* and *Notifications: Toggle Do Not Disturb*.
 
 ## Updates
 
@@ -1142,11 +1342,30 @@ server):
   every running task and everything it started; "Tasks: Restart Running Task" starts it again, and running
   a task that is still running restarts it. Closing a task's terminal stops it too.
 
-`problemMatcher` (a built-in name such as `$tsc`, `$gcc`, `$rustc`, `$eslint-stylish`, or your own
-`pattern`, including multi-line ones) turns output lines into entries in the Problems panel and
-underlines in the editor; a watcher's `beginsPattern` clears the previous build's problems. Tasks without
-a matcher still get their compiler messages (gcc / clang, Go, javac, rustc / cargo, tsc / MSBuild, eslint
-stylish) found automatically. Running another task clears them. Click a problem to jump to it.
+`problemMatcher` turns output lines into entries in the Problems panel and underlines in the editor. It is read
+like VS Code's, so a `tasks.json` you bring along keeps working:
+
+- A built-in name: `$gcc` (also clang), `$go`, `$tsc`, `$tsc-watch`, `$eslint-stylish`, `$eslint-compact`,
+  `$msCompile`, `$jshint`, `$lessCompile`, `$rustc` and `$rustc-watch`. A list can mix names and objects. `$jshint`
+  reads the plain `file: line N, col N, message` format as a warning, without VS Code's severity and code suffix.
+- Your own object: `owner`, `severity` (the default for a pattern with no severity group), `fileLocation`
+  (`"absolute"`, or `["relative", "${workspaceFolder}/sub"]`) and a `pattern` with `regexp` and the groups `file`,
+  `line`, `column`, `endLine`, `endColumn`, `location`, `severity`, `code` and `message`. A list of patterns matches
+  consecutive lines (a file line, then the message under it); `"loop": true` on the last one keeps reading
+  problems that share the first lines. `"base": "$tsc"` starts from a built-in and changes some fields.
+- `background` with `beginsPattern` and `endsPattern` (and `activeOnStart`) for watchers: each new
+  begin clears the problems of the previous cycle, and the end pattern is what makes the task "ready".
+
+Patterns are regular expressions checked against one output line at a time. A line over 64 KiB, or a pattern that
+needs too many steps on a line (nested repetition with a back-reference, for example), is skipped; the task's
+problems may then be incomplete and a notification says so once per run. A pattern that does not compile, or a group
+number it does not have, stops the task before it starts and says which task and why. A task keeps at most 1,000
+problems; when more are found, a notification says once per run that only the first 1,000 are shown. Problem paths are resolved on the machine the task runs on, relative to the folder (or the
+`fileLocation` base). The matchers only read output; they never run anything, and the task itself still waits for
+Workspace Trust.
+
+Tasks without a matcher still get their compiler messages (gcc / clang, Go, javac, rustc / cargo, tsc / MSBuild,
+eslint stylish) found automatically. Running another task clears them. Click a problem to jump to it.
 
 A debug configuration's `preLaunchTask` runs the same way, and the debugger starts only after it
 succeeds (or, for a background task, becomes ready). If it fails, debugging does not start and the
@@ -1156,13 +1375,63 @@ status bar says why. `postDebugTask` runs when the session ends.
 
 Syntax colors come from tree-sitter for Rust, JavaScript / TypeScript (and JSX / TSX), Python, Go, C, C++,
 Java, C#, Ruby, PHP, Swift, Kotlin, SQL, Lua, Shell, Dockerfile, Makefile, CSS, HTML, JSON, TOML, YAML and
-Markdown; "Editor: Change Language Mode" sets it by hand for one file. The diff view marks the characters that
-changed inside a changed line.
+Markdown; "Editor: Change Language Mode" sets it by hand for one file.
 
-If Codeyard panics it writes a report to `crashes/` next to its state database
-(`~/.local/state/codeyard` or `~/Library/Application Support/codeyard`, or `CODEYARD_STATE_DIR`). Nothing is
-sent anywhere: attach the file to a bug report yourself. The Help menu has **Release Notes**, **Report Issue…** (a new
-issue with the version and system filled in) and, in the palette, **Help: Open Crash Reports Folder**.
+**The diff view.** A changed file opens with the old text on the left and the new text on the right, line by line;
+the characters that changed inside a changed line are marked, and both sides have syntax colors (not for an unknown
+language, nor for a side over 512 KB). The header shows the file, what is compared ("HEAD ↔ Working Tree"), a counter
+("3 of 12") with buttons for the previous and next change (⇧F7 / F7), the number of added and removed lines, and these
+options:
+
+- **Copy path** puts the file's path on the clipboard.
+- **Collapse unchanged lines** (⌘K ⌘O) is on by default: three lines of context stay around each change and the rest
+  folds into a row such as "83 unchanged lines". Click the row to open that part; the button shows the whole file.
+- **Whitespace** (⌘K ⌘H) cycles between showing every difference, ignoring whitespace at the end of lines, and ignoring
+  all whitespace. The diff is computed again. Staging lines is off while whitespace is ignored, because a staged line has
+  to be the exact text you see.
+- **Inline / Side by side** (⌘K ⌘I) puts both texts in one column.
+
+The strip at the right edge is the overview ruler. It shows the whole list: a green mark for added lines, a red one for
+removed lines and a half-red, half-green one for a changed line, in proportion to their place in the file. The lighter
+box is the part on screen, and the outlined mark is the change F7 is on. Click the ruler or drag along it to scroll there.
+
+A binary file and a file over 4 MB show a message instead of a diff. A file with bytes that are not valid UTF-8 still
+shows, with a warning above it, and those bytes appear as replacement characters.
+
+### Log, diagnostics and crash reports
+
+Three things help to find out why something failed. All of them stay on your computer: nothing is sent anywhere, and you
+decide what to share. The state folder is `~/.local/state/codeyard`, `~/Library/Application Support/codeyard` or
+`%LOCALAPPDATA%\codeyard`, or `CODEYARD_STATE_DIR`.
+
+- **The log file** is `logs/codeyard.log` in the state folder. A line is a time, a level, an area and a sentence, for example
+  `2026-11-12T10:00:00.123Z WARN  update: could not remove the previous version`. It records failures the window could
+  not show (an update that could not be installed, a terminal helper that stopped, a saved layout that could not be read)
+  and the warnings and errors you were shown as notifications (information messages only at `debug`). It never holds file contents, only paths and error messages, and your home folder is written as
+  `~`. Passwords, tokens, `Authorization` headers and the user part of `user@host` and of web addresses are removed before a
+  line is written. The file is at most 1 MB; when it is full it moves to `codeyard.log.1` and then `.2`, and older ones are
+  deleted, so the folder never holds more than about 3 MB. The terminal helper process writes its own
+  `codeyard-daemon.log` the same way. Only you can read it (mode 0600 on macOS and Linux).
+  `diagnostics.logLevel` in your settings file chooses what is recorded: `error`, `warn`, `info` (the default) or `debug`.
+  **Help: Open Log File** opens it in an editor and **Help: Reveal Log Folder** shows the folder. To delete the log, delete
+  the `logs` folder.
+- **Copy Diagnostics** (**Help: Copy Diagnostics**) puts a report on the clipboard so you can paste it into a bug report. It
+  holds the version, the build's commit when the build recorded one, your operating system and CPU, the interface
+  language and system locale, the settings that are not at their default (only switches, choices and numbers; no text and
+  no paths), the last 20 notifications (severity, source, message) and the last 100 log lines. The same redaction as in
+  the log applies; host names are kept (`ssh ***@build.example.com`) because the host is often what a problem is about.
+  Nothing is written to disk and nothing is sent.
+- **Crash reports.** If Codeyard panics it writes a report to `crashes/` in the state folder (the newest 10 are kept): the
+  version, the thread, where it happened, the message, the last 20 notifications and log lines, and the backtrace, with your
+  home folder written as `~` and credentials removed, and a line `fatal: unknown`. A panic that Codeyard survives (a
+  background reader that stopped, for example) also writes a report, which is marked `fatal: false` when Codeyard quits
+  normally, and says nothing at the next start. Only a window run counts: `codeyard --version`, `--help` and the other command-line actions neither write nor remove the file. Codeyard keeps a small `running-<process id>` file in the folder while it
+  runs and removes it when it quits. If the next start finds such a file whose process is gone (Codeyard crashed, was killed
+  or lost power; ending it with a terminal's Ctrl+C or a plain `kill` on macOS and Linux counts as quitting), it says so once: a warning "Codeyard quit unexpectedly last time" in the notification list with the place
+  and message from the report when there is one, and a button to the folder. Closing Codeyard normally, and reports from an
+  older version, say nothing. To delete the reports, delete the `crashes` folder. Attach a report to a bug
+  report yourself: the Help menu has **Release Notes** and **Report Issue…** (a new issue with the version and system
+  filled in), and the palette has **Help: Open Crash Reports Folder**.
 
 Over SSH, "File: Save a Copy to This Computer…" saves the open remote file to a path on your own machine.
 
@@ -1393,6 +1662,18 @@ in Problems they are rows under the problem; a click opens the place. The proble
 `-->` arrows, notes and help, ready to paste into a question or a search. When a server repeats those places as hints of
 their own, Problems shows them once, under their problem. Scratch files get no language server.
 
+**Filtering and ordering Problems.** The bar above the list has three switches (errors, warnings, information and
+hints) that each show how many problems there are of their kind, a filter box, **Active File Only**, a sort button, a
+button that folds or opens every file, and **Copy All Problems**. The filter box takes words: a problem is listed when
+every word is found in its path, message, code or source, ignoring case (and Turkish i/ı). While something is hidden the
+panel says "Showing 6 of 18 problems". Each row shows the message, then its code, source and line:column. A click on a
+file's line folds or opens its problems; Tab puts the keyboard on the list, Up and Down move, Enter does what a click does.
+**Sort** cycles *File* (files in path order, the worst problem of each first), *Severity* (files with errors first) and
+*Line* (each file's problems in the order of the code). **Copy Problem** (the button on a hovered row) copies the problem
+as `src/lib.rs:12:5: error [rustc E0382] message`; on a file's line it copies all of that file's problems. The palette has
+*Problems: Copy All* and *Problems: Toggle Active File Only*. The switches, text, sort order and folded files are
+remembered for each workspace.
+
 Besides errors, suggestions, hover and definition: rename (F2), references (⇧F12), symbols
 in the file (⇧⌘O), quick fixes (⌘.), format (⇧⌥F, or `"editor.formatOnSave": true`) and
 parameter hints while typing a call. `"editor.codeActionsOnSave": { "source.organizeImports":
@@ -1400,6 +1681,70 @@ parameter hints while typing a call. `"editor.codeActionsOnSave": { "source.orga
 file is saved anyway). Invisible characters (zero-width spaces, bidi controls) and Cyrillic / Greek
 letters inside Latin words are boxed (`"editor.unicodeHighlight.enabled"`), which exposes
 "Trojan Source" tricks and look-alike identifiers.
+
+## Refactor Preview
+
+A rename (F2) or a quick fix (⌘.) can change many files. When it would change more than one file, a file that is not
+open in an editor, or when it creates, renames or deletes files, Codeyard shows it on a **Refactor Preview** tab before
+anything is written. A change inside one open file is applied at once, as one undo step of that editor. The setting
+`editor.refactorPreview` decides:
+
+| Value | Meaning |
+| --- | --- |
+| `auto` (default) | Review an edit that reaches several files, a file that is not open, or any file operation |
+| `always` | Review every edit of a language server |
+| `never` | Apply at once; an edit with file operations, or with a file that is refused, is still shown |
+
+The page lists each file with a check box and, under it, every change as the old line (the changed text struck out) and
+the new line, with one unchanged line around it (the buttons beside **Context** show 0 to 3). A file operation is a row
+of its own: **Create**, **Rename** or **Delete**. Choose what you want, then press **Apply Selected**; **Discard** closes
+the page and writes nothing. Edits that belong to a file an operation creates or moves are chosen together with it.
+
+| Key | Does |
+| --- | --- |
+| Up, Down | Move through the rows |
+| Space | Choose or clear the file, change or operation |
+| Enter | Open the change in its file (on a file: fold it) |
+| Left, Right | Fold a file, or go from a change to its file; unfold |
+| ⌘Enter (Ctrl+Enter) | Apply Selected |
+| Esc | Discard (back, at the question before a delete) |
+
+Everything a language server sends is checked, and what fails the check is shown with the reason and cannot be chosen:
+
+- A file outside the open folders, after `..` and symbolic links are resolved, is refused with its real location. Codeyard
+  never creates, renames, deletes or writes there.
+- An open file typed into after the request, an edit for another version of the file than the editor has, or unsaved text
+  that the server was never told about: refused. A file that changed on disk after the preview stops the whole apply.
+- Positions are read as the protocol says (UTF-16 columns, so Turkish letters and emoji line up). A position inside a
+  character, a line that does not exist, or edits that overlap refuse that file. Encoding, byte-order mark and line
+  endings are kept as they are.
+- Create and Rename never overwrite: a name that is taken refuses the operation.
+- Deleting is **permanent**: the host protocol has no trash, so a deleted file or folder is gone for good, and a refactoring
+  that has a delete cannot be undone. Apply Selected asks a second time and names what goes; for a folder it says how many
+  files and how many bytes it holds and lists its first entries ("and 3 more"). A delete is refused when the server did not
+  ask for `recursive` and the folder is not empty, when the folder is or holds a `.git`, when a file under it is open with
+  unsaved changes, and for a folder you opened.
+- A refactoring over 1,000 files or 20,000 changes is refused with its counts; nothing is written.
+
+Applying is all or nothing. Open editors take their changes first (unsaved, like any edit); then the files on disk and the
+file operations run in the order the server gave. If a step fails, or you press **Stop**, everything done is taken back: a
+created file is removed, a rename is renamed back, a deleted file comes back, a written file gets its old bytes. A step that cannot be taken
+back is named in the report. **Undo** on the finished page takes back the text changes: one step in each open editor
+(⌘Z in the editor does the same for one file) and the old bytes of each file written, but only where nothing changed since.
+A refactoring with file operations has no Undo; use your version control.
+
+While the files are written Codeyard keeps a small record of the steps in its state folder on this computer (for an SSH folder
+too) and removes it when the steps are done or taken back. If Codeyard is killed or crashes in the middle, the next start tells
+you, once, that a refactoring was interrupted and names the files that may be half-changed. The record holds paths only, no
+copies of the files: it cannot restore anything, so check the named files with your version control. Each write is checked
+again when it happens (a file changed since the review, a link that now points outside the folder, or a file open with unsaved
+changes stops the whole apply and takes back the steps already done).
+
+Some servers also ask to apply an edit while a command runs (`workspace/applyEdit`). Every such edit goes the same way as a
+rename: `editor.refactorPreview` decides whether it is shown (a change inside one open file is applied at once), the trust and
+folder checks apply, and the server gets its answer when you apply (`applied: true`) or discard or when Codeyard refuses it
+(`applied: false` with a reason). In a folder you have not trusted nothing is applied. A quick fix that has an edit and a command runs
+the command only after its edit was applied.
 
 ## Working in Rust
 
@@ -1441,7 +1786,10 @@ arrows, notes and the suggested fix included.
 `#[tokio::main]`) expands to, in a scratch tab with Rust highlighting (`vec!.expansion.rs`). *Rust: Locate Parent Module*
 jumps to the `mod` line that includes the current file, and *Rust: Open Cargo.toml* opens the manifest of the crate the
 file belongs to, a member's own in a workspace. They have no default keys; bind `rust.expandMacro`, `rust.parentModule`
-and `rust.openCargoToml` in `keybindings.jsonc` if you use them often.
+and `rust.openCargoToml` in `keybindings.jsonc` if you use them often. The commands below have no
+default keys either; their ids are `rust.runRunnable`, `rust.showStatus`, `rust.reloadWorkspace`, `rust.rebuildProcMacros`,
+`rust.runFlycheck`, `rust.cancelFlycheck`, `rust.clearFlycheck`, `rust.restartAnalyzer`, `rust.explainError`,
+`rust.selectTarget`, `rust.openDocs`, `rust.viewHir`, `rust.viewMir` and `rust.viewSyntaxTree`.
 
 Opening the manifest also works while the Rust server is off or starting: Codeyard looks from the file's folder up to
 its workspace boundary and opens the nearest manifest. The other Rust commands explain whether language features are
@@ -1459,6 +1807,136 @@ Variables view shows a `String` as `"merhaba"` and a `Vec` or `HashMap` with its
 Cargo folder: your own `initCommands` run after ours, and an entry that imports `lldb_lookup` itself is left alone. If the
 formatters cannot be loaded (no `rustc`, or a toolchain without them), the Debug Console says why in one line and the
 session runs as before. On Windows with the MSVC toolchain they are not loaded (see [platforms](platforms.md)).
+
+## Cargo dependencies
+
+Codeyard can look up the crates a `Cargo.toml` names on crates.io. No language server is needed. **This is off until you turn it
+on**: nothing contacts crates.io by itself. Open a `Cargo.toml` that has dependencies and a question appears above the text
+(it does not block typing): *Show the latest versions of your dependencies? This contacts index.crates.io with the names of
+the crates in this file.* **Enable** turns on `rust.cargo.dependencyLookups`, **Not now** hides the question until the next
+start, and **Don't ask again** is remembered. What you start yourself works without the setting, for the file you start it
+in: *Cargo: Check Dependency Updates* looks the file up once and shows the hints, *Cargo: Add Dependency…* searches
+crates.io as you type, and *Cargo: Update All Dependencies in This File* (and the update commands) look the file up and then
+update it. Such a file stays looked up until its tab closes.
+
+**Hints.** At the end of each dependency's line a short note says what your requirement means for the newest release:
+
+| Note | Meaning |
+| --- | --- |
+| `up to date (latest 1.0.229)` | The requirement allows the latest stable release. |
+| `update available: 2.0.0` | The latest stable release is outside the requirement. |
+| `yanked: 1.0.95` | The locked version, or every version the requirement allows, was withdrawn. It is also a warning in Problems (never an error). |
+| `no version matches` | No published version satisfies the requirement. |
+| `not found on crates.io` | There is no crate with that name. |
+| `offline` | crates.io could not be reached. Nothing is cached for this crate yet. |
+
+Once looked up, hints cover `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]`, `[target.….dependencies]` and
+`[workspace.dependencies]`, in the short form (`serde = "1"`), inline tables, `[dependencies.serde]` tables and
+`package = "…"` renames. Entries with `path`, `git`, another `registry` or `workspace = true` get no hint and are never
+reported as problems. The colour comes from the theme (green, amber, red, grey); the same sentence is in the hint's tooltip
+and in the accessibility tree ("serde is up to date: “1” allows the latest release, 1.0.229"). When `Cargo.lock` is next
+to the manifest (or above it in the workspace), a locked version that was yanked is flagged even if the requirement allows
+newer ones.
+
+**Completion.** Type a crate name at the start of a line in a dependency table to search crates.io; the entry is written
+with the latest version (`serde = "1.0.229"`) and the crate's description is shown next to the item. Inside the quotes of a
+version, the published versions come newest first, releases before pre-releases, yanked ones last. Inside `features = [ … ]`
+the crate's own feature names are offered with what each enables; the ones already listed are left out.
+
+**Hover.** Hover a dependency for its description, licence, the latest version, the version `Cargo.lock` resolved, and the
+docs.rs and repository addresses. Hover a feature name for what it enables.
+
+**Updating.** *Quick Fix* (⌘.) on a dependency offers *Update “serde” to the latest version* and, when it differs, *Update to
+the newest compatible version*, and for the whole file *Update N dependencies … to their newest compatible versions* and *… to
+the latest versions*. The palette has the same as *Cargo: Update Dependency at Cursor to Latest*, *Cargo: Update All
+Dependencies in This File (Compatible)* and *Cargo: Update All Dependencies in This File to Latest*. Only the version text
+changes: `"1.0.100"` becomes `"1.0.229"`, `"1"` stays `"1"` while the latest is 1.x, `"~1.2"` becomes `"~2.3"`, `">=1, <2"`
+becomes the plain latest version. Everything is one undo step.
+
+**Adding and removing.** *Cargo: Add Dependency…* opens a search; type part of a name and choose a crate (the name as typed is
+always offered, which also works offline). It goes into the table the cursor is in (`[dev-dependencies]` and so on), or into
+`[workspace.dependencies]` in a manifest that is only a workspace root. *Cargo: Remove Dependency at Cursor* removes the entry
+under the cursor, with the table form `[dependencies.name]` as a whole. When the file has no unsaved changes, the folder is
+trusted and `cargo` is installed, Codeyard runs `cargo add` or `cargo remove` (which also update `Cargo.lock`, and use the
+network the way `cargo` does in a terminal). Otherwise it edits the text itself, keeping comments, spacing and order; the
+change is then in the open file until you save it.
+
+**Mirrors.** `CARGO_HOME` and `[source.crates-io] replace-with` are honoured: with a sparse mirror
+(`registry = "sparse+https://…"`) the versions and features come from the mirror and the crates.io API (search,
+descriptions, licences) is not used. A mirror that cannot be asked (a git index, a vendored directory), plain `http`, or an
+address with a user name or password in it, turns the lookups off for that project. A project's own `.cargo/config.toml` is read only in a trusted folder. Over SSH the
+default index is used.
+
+### What is sent
+
+Lookups use the system `curl`, over HTTPS only, with a 5 s connect and 12 s total timeout, no redirects, a 16 MiB size cap,
+at most four requests at once and at most one crates.io API request per second. Every request carries
+`User-Agent: codeyard/<version> (https://github.com/doancan/codeyard)` and nothing else of yours: no cookies, no account,
+no file names or contents, no project name. The servers see your IP address as for any web request.
+
+| Request | When | What it contains |
+| --- | --- | --- |
+| `GET https://index.crates.io/<path>/<crate>` | For each crate in a manifest you open or edit, unless its answer is cached and younger than 3 hours (a missing crate: 1 hour). | The crate name in the address, and `If-None-Match` with the ETag of the cached copy. |
+| `GET https://crates.io/api/v1/crates?q=<text>&per_page=20` | A pause after you type a crate name in a dependency table, or in *Cargo: Add Dependency…*. | The text you typed. |
+| `GET https://crates.io/api/v1/crates/<crate>?include=` and `…/<crate>/<version>` | The first time you hover a dependency (kept for 7 days). | The crate name and its latest version. |
+
+Answers are cached in `~/Library/Caches/codeyard/cargo-deps` (`~/.cache/codeyard/cargo-deps` on Linux,
+`%LOCALAPPDATA%\codeyard\cargo-deps` on Windows); entries not refreshed for 60 days are deleted. After a failed connection
+nothing is tried again for 20 seconds, and an old cached answer is used (hints say so in their tooltip) instead of an error.
+With `rust.cargo.dependencyLookups` off (the default) none of the first two requests is made on its own: no hint on open,
+no lookup on hover, no refresh in the background, no completion from the registry. They happen only when you run *Cargo:
+Add Dependency…* (the search), *Cargo: Check Dependency Updates* or an update command (the index files of that file's
+crates), and the hover or completion of a file you asked about. Turn the setting on and they happen as described above for
+every `Cargo.toml` you open; turn it off again to stop them. Memory is bounded: a registry keeps at most 256 crates and 64
+searches, and closing the last `Cargo.toml` drops them. The setting is in the [settings reference](settings.md).
+**Run and debug from the gutter.** In a Rust file a green triangle in the gutter marks every `fn main`, every `#[test]`
+function and every `mod tests` that rust-analyzer can run. Click it to choose *Run* or *Debug* for that item: *Run*
+types the Cargo command into the task terminal (so *Tasks: Rerun Last Task* repeats it and compiler errors land in Problems),
+*Debug* builds the target with Cargo and starts the executable it reports under the debugger. *Rust: Run Runnable at Cursor*
+does the same for the code under the cursor: the one test or program runs at once, and when the cursor is inside a
+test and its module you get the list (innermost first). The list is rust-analyzer's own (`experimental/runnables`), so it follows
+its idea of the project, including a Cargo workspace in a subfolder (the command then names its `--manifest-path`).
+Without a running server the marks and commands come from reading the file: `fn main` of a binary or example and the
+tests the Testing view finds. Documentation tests can be run but not debugged. On Windows the command goes to cmd or PowerShell: a name with spaces
+is double-quoted, and one with characters the two read differently (`"`, `%`, `&`, `$`…) is not run from the gutter. A
+debugged test runs in its package's folder, as `cargo test` runs it.
+
+**Is rust-analyzer well?** The status bar shows the server's own opinion: a check mark when it is ready, a spinner while it
+loads the workspace or runs `cargo check` / Clippy (the target being compiled is in the tooltip), a warning or an error
+sign when it reports a problem (a proc macro that did not load, a workspace that failed). Click it for a page with the
+state, the message, the commands below and the server's own report (`analyzerStatus`). The item stays hidden for servers that
+do not report. *Rust: Show rust-analyzer Status* opens the same page.
+
+**Control the server.** *Rust: Reload Workspace* (after changing `Cargo.toml` outside the editor), *Rust: Rebuild Proc Macros*,
+*Rust: Run Flycheck*, *Rust: Cancel Flycheck*, *Rust: Clear Flycheck* (removes the check's diagnostics until the next
+save) and *Rust: Restart rust-analyzer*, which restarts only the Rust server and leaves the other languages' servers alone.
+They tell you when the server is off, untrusted or too old for a command.
+
+**Explain an error.** A problem with a rustc error code (`E0382`) has a book button in Problems, and *Rust: Explain Error at
+Cursor* does the same for the error under the cursor. When the server linked the code to a page the page opens in the
+browser; otherwise `rustc --explain E0382` runs in the background and its text opens as a read-only page.
+
+**Look at what the compiler sees.** *Rust: Open Documentation* opens docs.rs (or your local `cargo doc` copy when it exists on
+this machine) for the item at the cursor. *Rust: View HIR*, *Rust: View MIR* and *Rust: View Syntax Tree* show rust-analyzer's
+view of the function under the cursor, or of the whole file, as read-only pages.
+
+**Cross-compiling.** `rust.target` adds `--target <triple>` to Run, Debug, tests and the runnables. *Rust: Select Target…*
+lists the targets `rustup target list --installed` reports (or this machine's own when rustup is not installed) and writes
+the choice; *Default* clears it. *Preferences: Apply Rust Setup…* also points rust-analyzer's `cargo.target` at it, so analysis
+and checks match what you build. Project settings (`.codeyard/settings.jsonc`) can pin a target for one repository.
+
+**cargo-nextest.** Tests run with `cargo test` unless you ask for more: with `rust.testRunner` set to `auto` or `nextest`, and
+`cargo nextest` installed, the Testing view, *Test: Run Test at Cursor* and the runnables use it (`cargo nextest run
+--no-fail-fast …`), and the results, times and failure messages appear in Test Results exactly as with `cargo test`. The
+output says when nextest runs the tests. `nextest` tells you when it is missing and runs `cargo test`. Codeyard looks for
+nextest only in a folder you have trusted, since Cargo reads the folder's configuration, gives the question five seconds, and
+remembers a missing nextest for five minutes. nextest does not run documentation tests, and debugging a test always starts the
+test executable itself.
+
+**Hints and modifiers.** `rust.inlayHints.types`, `.parameters` and `.chaining` switch the three kinds of rust-analyzer's inlay
+hints off one by one (they are handed to the server as its own settings, so nothing is requested and thrown away).
+`rust.semanticModifiers` chooses which of the server's token modifiers are drawn over the colors: `unsafe` (underlined in
+the warning color, on by default), `mutable` (underlined) and `consumed` (italics: a value moved out by that use).
 
 ## JSON and YAML schemas
 

@@ -46,8 +46,24 @@ fn set(marks: &mut [Option<LineMark>], i: usize, m: LineMark) {
 
 /// (kind, old lines, new lines). Lines are split on `\n`.
 pub fn diff_ops(base: &str, current: &str) -> Vec<(similar::DiffTag, Range<usize>, Range<usize>)> {
-    let diff = similar::TextDiff::configure().algorithm(similar::Algorithm::Myers).timeout(std::time::Duration::from_millis(200)).diff_lines(base, current);
+    let diff = line_diff_config().diff_lines(base, current);
     diff.ops().iter().map(|op| op.as_tag_tuple()).collect()
+}
+
+/// The line differ every view of a file's changes uses (Myers, giving up on a hard pair after 200 ms).
+pub fn line_diff_config() -> similar::TextDiffConfig {
+    let mut config = similar::TextDiff::configure();
+    config.algorithm(similar::Algorithm::Myers).timeout(std::time::Duration::from_millis(200));
+    config
+}
+
+/// The lines of `text` as the diff counts them: split on `\n`, and the final newline does not start another line.
+pub fn split_lines(text: &str) -> Vec<&str> {
+    let mut lines: Vec<&str> = text.split('\n').collect();
+    if lines.last().is_some_and(|l| l.is_empty()) {
+        lines.pop();
+    }
+    lines
 }
 
 /// Inline (character-level) diffs within a changed line pair: byte ranges in the old and new line.
@@ -152,8 +168,13 @@ pub fn inline_rows(rows: &[DiffRow]) -> Vec<InlineRow> {
 }
 
 pub fn side_by_side(base: &str, current: &str) -> Vec<DiffRow> {
+    rows_from_ops(diff_ops(base, current))
+}
+
+/// The side-by-side rows of a line diff's operations (`diff_ops`).
+pub fn rows_from_ops(ops: impl IntoIterator<Item = (similar::DiffTag, Range<usize>, Range<usize>)>) -> Vec<DiffRow> {
     let mut rows = Vec::new();
-    for (tag, old, new) in diff_ops(base, current) {
+    for (tag, old, new) in ops {
         match tag {
             similar::DiffTag::Equal => rows.extend(old.zip(new).map(|(a, b)| DiffRow::Same(a, b))),
             _ => {

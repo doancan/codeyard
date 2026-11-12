@@ -171,14 +171,14 @@ fn the_error_card_closes_from_the_tree(cx: &mut TestAppContext) {
     let _en = crate::i18n::LangGuard::set("en");
     let (wb, cx) = setup(cx);
     wb.update(cx, |wb, cx| {
-        wb.notice = Some(Notice::Error("Something failed".into()));
+        wb.notify(NoticeSource::App, Notice::Error("Something failed".into()));
         cx.notify();
     });
     cx.run_until_parked();
     let snap = snapshot(&wb, cx);
     let group = snap.to_tree().nodes.into_iter().find(|(_, n)| n.role() == Role::Group && n.label() == Some("Error")).expect("the card's buttons");
     press(&wb, cx, &snap, group.1.children()[0]);
-    assert!(wb.read_with(cx, |wb, _| wb.notice.is_none()));
+    assert!(wb.read_with(cx, |wb, _| wb.notice().is_none()));
 }
 
 /// Run and Debug: the selector opens its menu; a line breakpoint has Go to Breakpoint, which opens its place.

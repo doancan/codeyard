@@ -1,0 +1,10 @@
+şablon.c:4:3: error: call to undeclared function 'undefined_fn'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+    4 |   undefined_fn(3);
+      |   ^
+şablon.c:5:10: error: incompatible pointer to integer conversion returning 'char[2]' from a function with result type 'int' [-Wint-conversion]
+    5 |   return "x";
+      |          ^~~
+şablon.c:3:7: warning: unused variable 'unused' [-Wunused-variable]
+    3 |   int unused;
+      |       ^~~~~~
+1 warning and 2 errors generated.

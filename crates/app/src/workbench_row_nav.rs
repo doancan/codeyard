@@ -22,8 +22,16 @@ gpui::actions!(rows, [RowPrevious, RowNext, RowFirst, RowLast, RowActivate]);
 /// The key context of these lists.
 pub const ROW_LIST: &str = "RowList";
 
-const KINDS: [RowFrame; 7] =
-    [RowFrame::DebugVariable, RowFrame::DebugWatch, RowFrame::DebugStack, RowFrame::DebugBreakpoint, RowFrame::Test, RowFrame::Remote, RowFrame::Port];
+const KINDS: [RowFrame; 8] = [
+    RowFrame::DebugVariable,
+    RowFrame::DebugWatch,
+    RowFrame::DebugStack,
+    RowFrame::DebugBreakpoint,
+    RowFrame::Test,
+    RowFrame::Remote,
+    RowFrame::Port,
+    RowFrame::Problem,
+];
 
 /// Focus, cursor and scroll position of each list.
 pub(super) struct RowNav {
@@ -159,6 +167,7 @@ impl Workbench {
             RowFrame::Test => self.test_rows(cx).len(),
             RowFrame::Remote => self.remote_rows(cx).len(),
             RowFrame::Port => self.ssh_alias().map_or(0, |alias| port_rows(&self.ports.set, &self.ports.listening, &alias).len()),
+            RowFrame::Problem => self.problem_row_count(cx),
         }
     }
 
@@ -219,6 +228,7 @@ impl Workbench {
             },
             // A port row has no click of its own; its buttons and menu are the actions.
             RowFrame::Port => {}
+            RowFrame::Problem => self.open_problem_row(ix, window, cx),
         }
     }
 
@@ -255,7 +265,7 @@ impl Workbench {
                 let Some(row) = port_rows(&self.ports.set, &self.ports.listening, &alias).into_iter().nth(ix) else { return false };
                 self.open_port_menu(&row, at, window, cx);
             }
-            RowFrame::DebugWatch | RowFrame::Test => return false,
+            RowFrame::DebugWatch | RowFrame::Test | RowFrame::Problem => return false,
         }
         true
     }

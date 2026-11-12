@@ -184,7 +184,7 @@ impl Workbench {
     }
 
     fn say(&mut self, message: String, cx: &mut Context<Self>) {
-        self.notice = Some(Notice::Error(message.into()));
+        self.notify(NoticeSource::Debug, Notice::Error(message.into()));
         cx.notify();
     }
 

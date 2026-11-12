@@ -4,13 +4,16 @@
 use gpui::{AnyElement, AppContext as _, Context, Focusable as _, IntoElement as _, ParentElement as _, SharedString, Window, div, prelude::*, px};
 
 use super::{
-    CloneRepository, CommandPalette, FindInFiles, InputPurpose, NewFile, Notice, OpenFolder, OpenKeybindings, OpenMarkdownPreview, OpenMergeEditor,
-    OpenSettingsPage, Page, QuickOpen, SelectIconTheme, SelectTheme, ShowAbout, ShowDiskAccess, ShowRemote, ShowScm, ShowShortcutsPage, ShowWelcome,
-    ToggleTerminal, Tooltip, Workbench, kbd, tilde,
+    CloneRepository, CommandPalette, FindInFiles, InputPurpose, NewFile, Notice, NoticeSource, OpenFolder, OpenMarkdownPreview, OpenMergeEditor,
+    OpenSettingsPage, Page, QuickOpen, SelectIconTheme, SelectTheme, ShowAbout, ShowDiskAccess, ShowKeyboardShortcuts, ShowRemote, ShowScm, ShowShortcutsPage,
+    ShowWelcome, ToggleTerminal, Tooltip, Workbench, kbd, tilde,
 };
 use crate::commands::{Command, Run};
 use crate::settings_page::{SettingsEvent, SettingsPage};
 use crate::ui::{self, Palette, c, icon, text};
+
+#[path = "workbench_shortcuts.rs"]
+mod shortcuts_glue;
 
 /// Tips in the "Did you know?" box; one is shown per day.
 pub const TIPS: &[&str] = &[
@@ -127,7 +130,7 @@ impl Workbench {
     /// Palette: show the full disk access dialog on demand.
     pub(super) fn show_disk_access(&mut self, _: &ShowDiskAccess, window: &mut Window, cx: &mut Context<Self>) {
         if dirs::home_dir().and_then(|h| crate::access::full_disk_access(&h)) == Some(true) {
-            self.notice = Some(Notice::Info(crate::i18n::t("Codeyard already has Full Disk Access.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Codeyard already has Full Disk Access.").into()));
             cx.notify();
             return;
         }
@@ -165,7 +168,7 @@ impl Workbench {
                     SettingsEvent::PickTheme => this.select_theme(&SelectTheme, window, cx),
                     SettingsEvent::PickIconTheme => this.select_icon_theme(&SelectIconTheme, window, cx),
                     SettingsEvent::OpenJson => this.open_settings(&super::OpenSettings, window, cx),
-                    SettingsEvent::OpenKeybindings => this.open_keybindings(&OpenKeybindings, window, cx),
+                    SettingsEvent::OpenKeybindings => this.show_shortcuts_page(&ShowShortcutsPage, window, cx),
                     SettingsEvent::ResetAll => this.reset_settings(&super::settings_ui::ResetSettings, window, cx),
                 }));
                 self.tabs.page = Some(Page::Settings(view.clone()));
@@ -205,7 +208,7 @@ impl Workbench {
         let Some(ed) = self.active_editor().cloned() else { return };
         let ext = ed.read(cx).path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
         if !matches!(ext.as_str(), "md" | "markdown" | "mdx") {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a Markdown file (.md) to preview it.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a Markdown file (.md) to preview it.").into()));
             cx.notify();
             return;
         }
@@ -235,12 +238,12 @@ impl Workbench {
     /// "Merge Conflict: Open Merge Editor": conflicts in the open file card by card (Current | Incoming | Result).
     pub(super) fn open_merge_editor(&mut self, _: &OpenMergeEditor, window: &mut Window, cx: &mut Context<Self>) {
         let Some(ed) = self.active_editor().cloned() else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a file with merge conflicts first.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a file with merge conflicts first.").into()));
             cx.notify();
             return;
         };
         if crate::conflict::find(&ed.read(cx).rope_snapshot()).is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No merge conflicts in this file.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("No merge conflicts in this file.").into()));
             cx.notify();
             return;
         }
@@ -251,30 +254,6 @@ impl Workbench {
         }));
         window.focus(&view.focus_handle(cx));
         self.tabs.page = Some(Page::Merge(view));
-        self.reveal_editor_area(window, cx);
-        self.tabs.page_active = true;
-        self.tabs.diff_active = false;
-        self.tabs.large_active = false;
-        cx.notify();
-    }
-
-    /// "Help: Keyboard Shortcuts Reference": command and key list (searchable, runs on click).
-    pub(super) fn show_shortcuts_page(&mut self, _: &ShowShortcutsPage, window: &mut Window, cx: &mut Context<Self>) {
-        let rows: Vec<(String, Option<String>)> = self.commands().into_iter().map(|c| (c.label.clone(), c.shortcut(cx))).collect();
-        let view = cx.new(|cx| crate::shortcuts_page::ShortcutsPage::new(rows, cx));
-        self.tabs._page_sub = Some(cx.subscribe_in(&view, window, |this, _, ev: &crate::shortcuts_page::ShortcutsEvent, window, cx| {
-            let crate::shortcuts_page::ShortcutsEvent::Run(label) = ev;
-            if let Some(cmd) = this.commands().into_iter().find(|c| c.label == *label) {
-                // The page closes and the command is applied to the active editor.
-                this.close_page(cx);
-                this.focus_active_editor(window, cx);
-                // Run after focus has moved to the editor (on the next turn).
-                let me = cx.entity();
-                window.on_next_frame(move |window, cx| me.update(cx, |this, cx| this.run_command(cmd.run, window, cx)));
-            }
-        }));
-        view.read(cx).focus_search(window, cx);
-        self.tabs.page = Some(Page::Shortcuts(view));
         self.reveal_editor_area(window, cx);
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
@@ -318,6 +297,7 @@ impl Workbench {
                     Page::Merge(_) => "merge",
                     Page::Compare(_) => "compare",
                     Page::Search(_) => "search",
+                    Page::Refactor(_) => "refactor",
                     Page::ExtView(_) => "extension-view",
                     Page::Terminal(_) => "terminal",
                 },
@@ -687,7 +667,14 @@ impl Workbench {
                                                 .child(self.start_row("w-settings", "settings", crate::i18n::t("Settings"), OpenSettingsPage, p, cx))
                                                 .child(self.start_row("w-themes", "palette", crate::i18n::t("Color Theme"), SelectTheme, p, cx))
                                                 .child(self.start_row("w-icons", "folder-tree", crate::i18n::t("File Icon Theme"), SelectIconTheme, p, cx))
-                                                .child(self.start_row("w-keys", "keyboard", crate::i18n::t("Keyboard Shortcuts"), OpenKeybindings, p, cx)),
+                                                .child(self.start_row(
+                                                    "w-keys",
+                                                    "keyboard",
+                                                    crate::i18n::t("Keyboard Shortcuts"),
+                                                    ShowKeyboardShortcuts,
+                                                    p,
+                                                    cx,
+                                                )),
                                         )
                                         .child(
                                             div()
@@ -725,7 +712,7 @@ impl Workbench {
         }
         let name = repo_name(&url);
         if name.is_empty() {
-            self.notice = Some(Notice::Error(crate::i18n::t("That does not look like a repository address.").into()));
+            self.notify(NoticeSource::App, Notice::Error(crate::i18n::t("That does not look like a repository address.").into()));
             cx.notify();
             return;
         }
@@ -735,7 +722,7 @@ impl Workbench {
 
     pub(super) fn run_clone(&mut self, url: String, target: String, cx: &mut Context<Self>) {
         let host = self.remote.host.clone();
-        self.notice = Some(Notice::Info(crate::i18n::tf("Cloning {}…", &[&url]).into()));
+        self.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("Cloning {}…", &[&url]).into()));
         cx.notify();
         let task = cx.background_executor().spawn(async move {
             // No shell here, so expand "~" to the home folder ourselves.
@@ -760,12 +747,12 @@ impl Workbench {
             let result = task.await;
             this.update(cx, |this, cx| match result {
                 Ok(path) => {
-                    this.notice = Some(Notice::Info(crate::i18n::t("Cloned. Opening the folder…").into()));
+                    this.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Cloned. Opening the folder…").into()));
                     this.set_root(path, cx);
                     cx.notify();
                 }
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Clone failed: {}", &[&e]).into()));
+                    this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Clone failed: {}", &[&e]).into()));
                     cx.notify();
                 }
             })

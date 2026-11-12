@@ -131,14 +131,22 @@ mod lsp_glue;
 mod menus_glue;
 #[path = "workbench_nav.rs"]
 mod nav_glue;
+#[path = "workbench_outline.rs"]
+pub(crate) mod outline_glue;
 #[path = "workbench_palette.rs"]
 mod palette_glue;
+use outline_glue::OutlineState;
 #[path = "workbench_panels.rs"]
-mod panels_glue;
+pub(crate) mod panels_glue;
+pub(crate) use notifications_glue::Notice;
+pub(crate) use notifications_glue::model::NoticeSource;
+#[cfg(test)]
+pub(crate) use notifications_glue::model::{NoticeAction, RetryKind, Severity};
 #[cfg(test)]
 pub use panels_glue::ProblemRow;
 #[cfg(test)]
 pub(crate) use panels_glue::interface_scale_notice;
+pub(crate) use panels_glue::notifications_panel as notifications_glue;
 #[path = "workbench_cyx.rs"]
 mod cyx_glue;
 #[path = "workbench_ext_pulls.rs"]
@@ -155,10 +163,12 @@ mod remote_glue;
 mod row_nav_glue;
 pub use row_nav_glue::{ROW_LIST, RowActivate, RowFirst, RowLast, RowNext, RowPrevious};
 #[path = "workbench_rust.rs"]
-mod rust_glue;
+pub(crate) mod rust_glue;
 // --- git-refs ---
 #[path = "workbench_recover.rs"]
 mod recover_glue;
+#[path = "workbench_refactor.rs"]
+pub(crate) mod refactor_glue;
 #[path = "workbench_refs.rs"]
 mod refs_glue;
 #[path = "workbench_render.rs"]
@@ -169,7 +179,7 @@ mod replace_glue;
 #[path = "workbench_schema.rs"]
 mod schema_glue;
 #[path = "workbench_search_editor.rs"]
-mod search_editor_glue;
+pub(crate) mod search_editor_glue;
 #[path = "workbench_session.rs"]
 mod session_glue;
 #[path = "workbench_settings.rs"]
@@ -573,17 +583,6 @@ const FILE_LIMIT: u32 = 100_000;
 /// Midnight / Daylight following the system light/dark mode.
 pub const THEME_AUTO: &str = "auto";
 
-/// Explorer OUTLINE section: symbols of the active file (refreshed at most every 400 ms while typing).
-#[derive(Default)]
-struct OutlineState {
-    key: Option<(String, u64)>,
-    symbols: Vec<crate::outline::Symbol>,
-    supported: bool,
-    too_large: bool,
-    computed_at: Option<std::time::Instant>,
-    refresh_pending: bool,
-}
-
 /// Pages opened as tabs.
 #[derive(Clone)]
 enum Page {
@@ -597,6 +596,8 @@ enum Page {
     Settings(Entity<crate::settings_page::SettingsPage>),
     Markdown(Entity<crate::markdown::MarkdownPreview>),
     Shortcuts(Entity<crate::shortcuts_page::ShortcutsPage>),
+    /// A language server's refactoring under review (workbench_refactor.rs).
+    Refactor(Entity<crate::lsp::refactor::preview::RefactorPreview>),
     LanguageServices(Entity<crate::language_services_page::LanguageServicesPage>),
     Merge(Entity<crate::merge::MergeView>),
     // --- compare ---
@@ -807,11 +808,6 @@ enum Conn {
     },
 }
 
-enum Notice {
-    Info(SharedString),
-    Error(SharedString),
-}
-
 pub struct Workbench {
     /// Watch set last sent to the agent, and the task listening for events.
     watched: Vec<String>,
@@ -839,12 +835,9 @@ pub struct Workbench {
     active_terminal: usize,
     /// A specific shell in tests; the user's shell otherwise.
     shell: Option<String>,
-    notice: Option<Notice>,
+    /// Everything told to the user: history, toast, bell, Do Not Disturb (see `workbench_notifications.rs`).
+    notices: notifications_glue::NoticeCenter,
     title: String,
-    /// Last seen notice: on change, a clear timer is set up for info messages.
-    /// Message identity (string address and length): the same text arriving again is still a new message.
-    notice_seen: Option<(usize, usize)>,
-    notice_task: Option<gpui::Task<()>>,
     dev: bool,
     themes: Vec<Theme>,
     theme_choice: String,
@@ -914,7 +907,7 @@ pub fn migrate_legacy_dirs() {
             continue; // CODEYARD_CONFIG_DIR / CODEYARD_STATE_DIR
         }
         if let Err(e) = move_legacy_dir(&new) {
-            eprintln!("could not move the old {LEGACY_APP_DIR} folder to {}: {e}", new.display());
+            crate::diagnostics::log::warn("files", format_args!("could not move the old {LEGACY_APP_DIR} folder to {}: {e}", new.display()));
         }
     }
 }
@@ -1085,9 +1078,8 @@ impl Workbench {
                     this.tabs.pending_reveal = Some((path.clone(), *line, *column, *len));
                     this.open_file(path.clone(), window, cx);
                 }
-                SearchEvent::OpenInEditor(spec) => {
-                    this.open_search_editor(spec.clone(), None, window, cx);
-                }
+                SearchEvent::OpenInEditor(spec) => drop(this.open_search_editor(spec.clone(), None, window, cx)),
+                SearchEvent::ScopeChanged => this.sync_search_scope(cx),
                 SearchEvent::ReviewReplace { spec, only } => {
                     let review = match only {
                         Some(path) => crate::search_editor::Review::Only(path.clone()),
@@ -1243,10 +1235,8 @@ impl Workbench {
             ports: ports_glue::PortsState::new(port_field),
             folder_task: None,
             window_handle: window.window_handle(),
-            notice,
+            notices: notifications_glue::NoticeCenter::with_startup(notice),
             title: String::new(),
-            notice_seen: None,
-            notice_task: None,
             dev,
             themes,
             theme_choice: theme_choice.clone(),
@@ -1275,7 +1265,10 @@ impl Workbench {
                 tests: Default::default(),
             },
             lsp: state_glue::LspState {
+                cargo: Default::default(),
+                rust: Default::default(),
                 restricted_notified: Default::default(),
+                refactor: Default::default(),
                 servers: Default::default(),
                 diagnostics: Default::default(),
                 output: Default::default(),
@@ -1322,6 +1315,7 @@ impl Workbench {
                 web_preview: Default::default(),
                 panel: Some(Panel::Explorer),
                 bottom: Bottom::Terminal,
+                problems: Default::default(),
                 sidebar_w,
                 resizing_sidebar: false,
                 panel_open: false,
@@ -1360,19 +1354,7 @@ impl Workbench {
                 edit_versions: Default::default(),
                 recent_files: Vec::new(),
             },
-            cfg: state_glue::ConfigState {
-                dir: config_dir,
-                stamp: (None, None, None, 0),
-                theme_override: false,
-                project: Vec::new(),
-                trusted: Default::default(),
-                trust_ask: Default::default(),
-                dirty: false,
-                folders: Default::default(),
-                folder_texts: Default::default(),
-                user_text: None,
-                exts: Default::default(),
-            },
+            cfg: state_glue::ConfigState { dir: config_dir, ..Default::default() },
             persist: state_glue::PersistState {
                 workspace_id: None,
                 data_dir: None,
@@ -1440,6 +1422,7 @@ impl Workbench {
         wb.poll_extension_updates(window, cx);
         wb.poll_autofetch(window, cx);
         wb.listen_fs(cx);
+        wb.warn_interrupted_refactor(cx);
         wb
     }
 
@@ -1458,7 +1441,7 @@ impl Workbench {
         let Some((spath, kpath)) = self.config_paths() else { return };
         let (path, template) = if settings_file { (spath, settings::TEMPLATE) } else { (kpath, settings::KEYBINDINGS_TEMPLATE) };
         if let Err(e) = settings::ensure_file(&path, template) {
-            self.notice = Some(Notice::Error(crate::i18n::tf("Could not create {0}: {1}", &[&path.display(), &e]).into()));
+            self.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not create {0}: {1}", &[&path.display(), &e]).into()));
             cx.notify();
             return;
         }
@@ -1470,17 +1453,17 @@ impl Workbench {
     /// are left alone). If the theme isn't here, copy it from the installed VS Code theme.
     fn import_vscode(&mut self, _: &ImportVsCode, window: &mut Window, cx: &mut Context<Self>) {
         let Some(dir) = crate::vscode::user_dir() else {
-            self.notice = Some(Notice::Info(crate::i18n::t("No settings from another editor found on this machine").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("No settings from another editor found on this machine").into()));
             cx.notify();
             return;
         };
         match self.import_vscode_from(&dir) {
             Ok(msg) => {
                 self.reload_user_themes();
-                self.notice = Some(Notice::Info(msg.into()));
+                self.notify(NoticeSource::App, Notice::Info(msg.into()));
                 self.reload_config(window, cx);
             }
-            Err(e) => self.notice = Some(Notice::Error(e.into())),
+            Err(e) => self.notify(NoticeSource::App, Notice::Error(e.into())),
         }
         cx.notify();
     }
@@ -1589,12 +1572,6 @@ impl Workbench {
         let prefill = self.active_editor().and_then(|e| e.read(cx).selected_text());
         self.search.update(cx, |s, cx| s.focus_query(prefill, window, cx));
         cx.notify();
-    }
-
-    pub fn notice_text(&self) -> Option<String> {
-        self.notice.as_ref().map(|n| match n {
-            Notice::Info(m) | Notice::Error(m) => m.to_string(),
-        })
     }
 
     fn panel(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1851,7 +1828,7 @@ impl Workbench {
         if self.any_dirty(cx) {
             // Can't save while disconnected: saying "save first" would be a dead end, so point the way.
             let down = matches!(self.remote.conn, Conn::Failed { .. } | Conn::Reconnecting { .. });
-            self.notice = Some(Notice::Error(
+            self.notify(NoticeSource::App, Notice::Error(
                 if down {
                     crate::i18n::t("The connection is down, so files with unsaved changes cannot be saved. Use File: Save a Copy to This Computer… to keep them, or close them, then reconnect.")
                 } else {
@@ -1906,7 +1883,7 @@ impl Workbench {
         self.tabs.active = None;
         self.tabs.open_error = None;
         self.tabs.opening = None;
-        self.notice = None;
+        self.dismiss_notice();
         self.roots.file_index = None;
         self.load_git_branch(&path, cx);
         self.vcs.status = None;
@@ -1935,6 +1912,7 @@ impl Workbench {
         self.restore_tree(cx);
         self.restore_extra_roots(cx);
         self.load_debug_state(cx);
+        self.load_problems_filter(cx);
         self.load_favorites();
         self.restore_forwards(cx);
         self.load_project_settings(cx);
@@ -1996,7 +1974,7 @@ impl Workbench {
     /// "Preferences: Open Workspace Settings": `.codeyard/settings.jsonc` (created if missing).
     fn open_workspace_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.root(cx) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a folder first: project settings live in it.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a folder first: project settings live in it.").into()));
             cx.notify();
             return;
         };
@@ -2015,7 +1993,7 @@ impl Workbench {
             this.update_in(cx, |this, window, cx| match result {
                 Ok(()) => this.open_file(path, window, cx),
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not create {0}: {1}", &[&PROJECT_SETTINGS, &e]).into()));
+                    this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not create {0}: {1}", &[&PROJECT_SETTINGS, &e]).into()));
                     cx.notify();
                 }
             })
@@ -2289,7 +2267,7 @@ impl Workbench {
         let re = match agent::search::compile(&query) {
             Ok(re) => re,
             Err(e) => {
-                self.notice = Some(Notice::Error(e.to_string().into()));
+                self.notify(NoticeSource::App, Notice::Error(e.to_string().into()));
                 cx.notify();
                 return;
             }
@@ -2418,33 +2396,6 @@ impl Workbench {
         (!parts.is_empty()).then(|| parts.join(" — "))
     }
 
-    /// Info messages stay in the status bar a few seconds; errors stay as a card until dismissed.
-    fn track_notice(&mut self, cx: &mut Context<Self>) {
-        const INFO_FOR: Duration = Duration::from_secs(8);
-        let current = self.notice.as_ref().map(|n| match n {
-            Notice::Info(m) | Notice::Error(m) => m.clone(),
-        });
-        let id = current.as_ref().map(|m| (m.as_ptr() as usize, m.len()));
-        if id == self.notice_seen {
-            return;
-        }
-        self.notice_seen = id;
-        self.notice_task = match (&self.notice, current) {
-            (Some(Notice::Info(_)), Some(text)) => Some(cx.spawn(async move |this, cx| {
-                cx.background_executor().timer(INFO_FOR).await;
-                this.update(cx, |this, cx| {
-                    // If another message arrived meanwhile, leave it alone.
-                    if matches!(&this.notice, Some(Notice::Info(m)) if *m == text) {
-                        this.notice = None;
-                        cx.notify();
-                    }
-                })
-                .ok();
-            })),
-            _ => None,
-        };
-    }
-
     /// Title layout: `● file — folder — ssh-host` (● unsaved).
     fn update_title(&mut self, window: &mut Window, cx: &mut App) {
         let remote = self.remote.host.is_remote().then(|| self.remote.host.label());
@@ -2485,10 +2436,12 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                     server.changed(&ed.read(cx).path);
                 }
                 this.reload_snippets_if_edited(ed, cx);
+                this.save_failure_resolved(ed, cx);
                 this.refresh_git(200, cx);
                 this.record_history(ed, cx);
             }
             EditorEvent::Overwrote(text) => return this.keep_overwritten(ed, text, cx),
+            EditorEvent::SaveFailed(error) => return this.report_save_failed(ed, error, cx),
             EditorEvent::OpenLocation { path, line, col } => {
                 // From an editor's own window: the same file moves there; another file opens in this window, in front.
                 if this.reveal_in_editor_window(ed, path, *line, *col, cx) {
@@ -2506,7 +2459,7 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 return;
             }
             EditorEvent::Message(m) => {
-                this.notice = Some(Notice::Info(m.clone().into()));
+                this.notify(NoticeSource::App, Notice::Info(m.clone().into()));
                 cx.notify();
                 return;
             }
@@ -2533,7 +2486,9 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
             }
             EditorEvent::OpenMergeEditor => return this.open_merge_editor(&OpenMergeEditor, window, cx),
             EditorEvent::SendRequest(line) => return this.send_request_at(Some(*line), window, cx),
+            EditorEvent::RunAt(line) => return this.run_mark_pressed(ed, *line, window, cx),
             EditorEvent::Extension(_) => return, // workbench_ext_lenses.rs
+            EditorEvent::Cargo(choice) => return this.cargo_consent_chosen(*choice, window, cx),
             EditorEvent::Changed => {
                 // The user moved on: what extensions were asked about the old text is cancelled.
                 this.cancel_providers_about(&ed.read(cx).path.clone());

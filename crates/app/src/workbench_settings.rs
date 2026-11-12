@@ -5,8 +5,8 @@
 use gpui::{AppContext as _, Context, Window};
 use serde_json::Value;
 
-use super::{InputPurpose, Notice, OverlayKind, Workbench};
-use crate::commands;
+use super::notifications_glue::errors::Verb;
+use super::{InputPurpose, Notice, NoticeSource, OverlayKind, Workbench};
 use crate::picker::{PickItem, Picker, Source as PickSource};
 use crate::settings::{self, AutoSave, Settings};
 
@@ -46,6 +46,13 @@ pub const CATALOG: &[Entry] = &[
     e("editor.wordHighlight", crate::i18n::tr("Highlight other uses of the word under the cursor"), Kind::Bool),
     e("editor.indentGuides", crate::i18n::tr("Show indent guides"), Kind::Bool),
     e("editor.formatOnSave", crate::i18n::tr("Format with the language server when saving"), Kind::Bool),
+    e(
+        "editor.refactorPreview",
+        crate::i18n::tr(
+            "Review a language server's rename or quick fix before it is applied: auto (when it changes several files or moves, creates or deletes files), always or never (file operations are always reviewed)",
+        ),
+        Kind::Choice(&["auto", "always", "never"]),
+    ),
     e("editor.autoClosingBrackets", crate::i18n::tr("Insert the closing bracket or quote"), Kind::Bool),
     e("editor.wordBasedSuggestions", crate::i18n::tr("Suggest words from the file when there is no language server"), Kind::Bool),
     e("files.autoSave", crate::i18n::tr("Save files automatically"), Kind::Choice(&["off", "afterDelay", "onFocusChange"])),
@@ -58,6 +65,7 @@ pub const CATALOG: &[Entry] = &[
     e("files.fallbackEncoding", crate::i18n::tr("Encoding for files that are not UTF-8"), Kind::Choice(&["windows1254", "iso88599", "iso88591", "utf8"])),
     e("explorer.autoReveal", crate::i18n::tr("Select the active file in the explorer"), Kind::Bool),
     e("explorer.compactFolders", crate::i18n::tr("Show folders that only hold one folder as one row"), Kind::Bool),
+    e("explorer.fileNesting.enabled", crate::i18n::tr("Show related files under the file they belong to (Cargo.lock under Cargo.toml)"), Kind::Bool),
     e("explorer.sortOrder", crate::i18n::tr("Order of files and folders in the explorer"), Kind::Choice(&["default", "filesFirst", "mixed", "type"])),
     e("explorer.openEditors", crate::i18n::tr("Show the Open Editors list in the explorer"), Kind::Bool),
     e("editor.renderWhitespace", crate::i18n::tr("Show spaces and tabs as marks"), Kind::Choice(&["none", "boundary", "all"])),
@@ -311,6 +319,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "editor.wordHighlight" => json!(s.word_highlight),
         "editor.indentGuides" => json!(s.indent_guides),
         "editor.formatOnSave" => json!(s.format_on_save),
+        "editor.refactorPreview" => json!(s.refactor_preview.as_str()),
         "editor.formatOnPaste" => json!(s.format_on_paste),
         "editor.formatOnType" => json!(s.format_on_type),
         "editor.editorconfig" => json!(s.editorconfig),
@@ -351,6 +360,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "files.fallbackEncoding" => json!(s.fallback_encoding.setting_name()),
         "explorer.autoReveal" => json!(s.auto_reveal),
         "explorer.compactFolders" => json!(s.compact_folders),
+        "explorer.fileNesting.enabled" => json!(s.explorer_nesting.enabled),
         "explorer.sortOrder" => json!(s.sort_order),
         "explorer.openEditors" => json!(s.open_editors),
         "editor.renderWhitespace" => json!(s.render_whitespace),
@@ -507,7 +517,7 @@ impl Workbench {
     /// "Preferences: Settings": the settings list (key, value, description).
     pub(super) fn show_settings_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.config_paths().is_none() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No settings folder on this machine.").to_string().into()));
+            self.notify(NoticeSource::Settings, Notice::Info(crate::i18n::t("No settings folder on this machine.").to_string().into()));
             cx.notify();
             return;
         }
@@ -566,8 +576,10 @@ impl Workbench {
     /// Write to the settings file (comments preserved) and apply immediately. `null`: back to default.
     pub(super) fn write_setting(&mut self, key: &str, value: Value, window: &mut Window, cx: &mut Context<Self>) {
         if key == "modules.containers.enabled" && value != Value::Bool(true) && self.any_container_connected(cx) {
-            self.notice =
-                Some(Notice::Info(crate::i18n::t("Disconnect the container before disabling the container module. Your open files are kept.").into()));
+            self.notify(
+                NoticeSource::Settings,
+                Notice::Info(crate::i18n::t("Disconnect the container before disabling the container module. Your open files are kept.").into()),
+            );
             cx.notify();
             return;
         }
@@ -577,15 +589,19 @@ impl Workbench {
             .and_then(|text| crate::fsutil::write_atomic(&spath, settings::set_value_in(&text, key, &value)));
         match result {
             Ok(()) => {
+                self.settings_file_written(&spath);
                 // A stale message from the previous setting must not hide the new one; a reload warning wins.
-                self.notice = None;
+                self.dismiss_notice();
                 self.reload_config(window, cx);
-                if self.notice.is_none() {
+                if self.toast_is_none() {
                     let shown = if value.is_null() { crate::i18n::t("default").into() } else { show(&value) };
-                    self.notice = Some(Notice::Info(format!("{key}: {shown}").into()));
+                    self.notify(NoticeSource::Settings, Notice::Info(format!("{key}: {shown}").into()));
                 }
             }
-            Err(e) => self.notice = Some(Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
+            Err(e) => {
+                let retry = Self::write_setting_retry(&spath, key, &value);
+                self.report_settings_file_failed(&spath, &e, Verb::Write, Some(retry));
+            }
         }
         cx.notify();
     }
@@ -596,50 +612,10 @@ impl Workbench {
         match parse_setting_input(key, entry.kind, &text) {
             Ok(v) => self.write_setting(key, v, window, cx),
             Err(e) => {
-                self.notice = Some(Notice::Error(format!("{key}: {e}").into()));
+                self.notify(NoticeSource::Settings, Notice::Error(format!("{key}: {e}").into()));
                 cx.notify();
             }
         }
-    }
-
-    /// "Preferences: Keyboard Shortcuts": command ids and their keys; choosing one
-    /// adds an empty line for that command to `keybindings.jsonc` and opens the file.
-    pub(super) fn show_shortcuts_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.config_paths().is_none() {
-            return;
-        }
-        if self.overlay.is_some() {
-            self.close_overlay(window, cx);
-        }
-        let items = commands::COMMAND_IDS
-            .iter()
-            .map(|id| {
-                let keys = commands::action_by_id(id).and_then(|a| commands::Command { label: String::new(), run: commands::Run::Action(a) }.shortcut(cx));
-                PickItem { label: (*id).into(), detail: None, keys: keys.map(Into::into) }
-            })
-            .collect();
-        let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Search commands to bind a key"), "", None, cx));
-        self.show_overlay(picker, OverlayKind::Shortcuts, window, cx);
-    }
-
-    pub(super) fn bind_shortcut(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let (Some(id), Some((_, kpath))) = (commands::COMMAND_IDS.get(index), self.config_paths()) else { return };
-        let result = settings::ensure_file(&kpath, settings::KEYBINDINGS_TEMPLATE).and_then(|_| std::fs::read_to_string(&kpath)).and_then(|text| {
-            let (text, line) = add_binding_line(&text, id);
-            crate::fsutil::write_atomic(&kpath, text).map(|_| line)
-        });
-        match result {
-            Ok(line) => {
-                let path = kpath.to_string_lossy().into_owned();
-                let host = self.remote.local_host.clone();
-                self.open_file_on(host, path.clone(), window, cx);
-                // Cursor goes inside the quotes of the "key" value.
-                self.open_location(path, line as u32, 12, window, cx);
-                self.notice = Some(Notice::Info(crate::i18n::tf("Type the shortcut for {} (e.g. cmd-shift-d), then save", &[&id]).into()));
-            }
-            Err(e) => self.notice = Some(Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&kpath.display(), &e]).into())),
-        }
-        cx.notify();
     }
 
     pub(super) fn apply_rust_setup(&mut self, _: &ApplyRustSetup, window: &mut Window, cx: &mut Context<Self>) {
@@ -661,10 +637,16 @@ impl Workbench {
             this.update_in(cx, |this, window, cx| {
                 match write_default_settings(&spath) {
                     Ok(backup) => {
-                        this.notice = backup.map(|b| Notice::Info(crate::i18n::tf("Settings reset. The old file is kept as {}", &[&b.display()]).into()));
+                        match backup {
+                            Some(b) => this.notify(
+                                NoticeSource::Settings,
+                                Notice::Info(crate::i18n::tf("Settings reset. The old file is kept as {}", &[&b.display()]).into()),
+                            ),
+                            None => this.dismiss_notice(),
+                        }
                         this.reload_config(window, cx);
                     }
-                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
+                    Err(e) => this.report_settings_file_failed(&spath, &e, Verb::Write, None),
                 }
                 cx.notify();
             })
@@ -679,7 +661,7 @@ impl Workbench {
         let text = match settings::ensure_file(&spath, settings::TEMPLATE).and_then(|_| std::fs::read_to_string(&spath)) {
             Ok(text) => text,
             Err(e) => {
-                self.notice = Some(Notice::Error(crate::i18n::tf("Could not read {0}: {1}", &[&spath.display(), &e]).into()));
+                self.report_settings_file_failed(&spath, &e, Verb::Read, None);
                 return cx.notify();
             }
         };
@@ -687,7 +669,7 @@ impl Workbench {
         if diff.is_empty() {
             let done =
                 if reset { crate::i18n::t("settings.jsonc has no Rust setup to reset.") } else { crate::i18n::t("settings.jsonc already has the Rust setup.") };
-            self.notice = Some(Notice::Info(done.into()));
+            self.notify(NoticeSource::Settings, Notice::Info(done.into()));
             return cx.notify();
         }
         let answer = crate::questions::rust_setup(reset, &diff).ask(window, cx);
@@ -703,10 +685,10 @@ impl Workbench {
                     Err(std::io::Error::other(crate::i18n::t("the file changed; try again")))
                 } {
                     Ok(()) => {
-                        this.notice = None;
+                        this.dismiss_notice();
                         this.reload_config(window, cx);
                     }
-                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
+                    Err(e) => this.report_settings_file_failed(&spath, &e, Verb::Write, None),
                 }
                 cx.notify();
             })
@@ -736,70 +718,15 @@ pub fn write_default_settings(path: &std::path::Path) -> std::io::Result<Option<
 
 /// `text` with the Rust setup written (`reset`: removed), and the unified diff of that change (empty: no change).
 pub fn rust_setup_change(text: &str, s: &Settings, reset: bool) -> (String, String) {
-    let new = settings::rust_setup(s).iter().fold(text.to_string(), |t, (path, v)| settings::set_path_in(&t, path, (!reset).then_some(v)));
+    let mut new = settings::rust_setup(s).iter().fold(text.to_string(), |t, (path, v)| settings::set_path_in(&t, path, (!reset).then_some(v)));
+    if reset {
+        new = settings::set_path_in(&new, &settings::RUST_ANALYZER_TARGET, None);
+    }
     if new == text {
         return (new, String::new());
     }
     let diff = similar::TextDiff::from_lines(text, &new).unified_diff().context_radius(1).to_string();
     (new, diff)
-}
-
-/// Whether the byte is real JSON (`false` inside comments and strings), so a `]` or `}`
-/// in a comment isn't taken as the insertion point.
-fn code_mask(text: &str) -> Vec<bool> {
-    let b = text.as_bytes();
-    let mut mask = vec![true; b.len()];
-    let mut i = 0;
-    while i < b.len() {
-        match (b[i], b.get(i + 1)) {
-            (b'/', Some(b'/')) => {
-                let end = text[i..].find('\n').map_or(b.len(), |n| i + n);
-                mask[i..end].iter_mut().for_each(|m| *m = false);
-                i = end;
-            }
-            (b'/', Some(b'*')) => {
-                let end = text[i + 2..].find("*/").map_or(b.len(), |n| i + 2 + n + 2);
-                mask[i..end].iter_mut().for_each(|m| *m = false);
-                i = end;
-            }
-            (b'"', _) => {
-                let mut j = i + 1;
-                while j < b.len() && b[j] != b'"' {
-                    j += if b[j] == b'\\' { 2 } else { 1 };
-                }
-                let end = (j + 1).min(b.len());
-                mask[i..end].iter_mut().for_each(|m| *m = false);
-                i = end;
-            }
-            _ => i += 1,
-        }
-    }
-    mask
-}
-
-/// Before the array's closing, add `{ "key": "", "command": "<id>" },`; (new text, line).
-/// If the previous item has no trailing comma, one is added (comments and other lines preserved).
-pub fn add_binding_line(text: &str, id: &str) -> (String, usize) {
-    let entry = format!("  {{ \"key\": \"\", \"command\": \"{id}\" }},");
-    let mask = code_mask(text);
-    let last_code = |ch: u8, before: usize| (0..before).rev().find(|&i| mask[i] && text.as_bytes()[i] == ch);
-    let Some(close) = last_code(b']', text.len()) else { return (format!("[\n{entry}\n]\n"), 1) };
-    let line_start = text[..close].rfind('\n').map_or(0, |n| n + 1);
-    // If `]` is on its own line, a new line before it; otherwise in between.
-    let pos = if text[line_start..close].trim().is_empty() { line_start } else { close };
-    let build = |head: &str| {
-        let sep = if head.ends_with('\n') { "" } else { "\n" };
-        format!("{head}{sep}{entry}\n{}", &text[pos..])
-    };
-    let parses = |t: &str| serde_json::from_str::<Value>(&theme::themes::strip_jsonc(t)).is_ok();
-    let mut out = build(&text[..pos]);
-    if !parses(&out)
-        && let Some(last) = last_code(b'}', pos)
-    {
-        out = build(&format!("{},{}", &text[..=last], &text[last + 1..pos]));
-    }
-    let line = out[..out.rfind(&entry).unwrap_or(0)].matches('\n').count();
-    (out, line)
 }
 
 #[cfg(test)]
@@ -833,26 +760,10 @@ mod tests {
         assert_eq!(parse_input(Kind::Text, " /bin/zsh "), Ok(Value::from("/bin/zsh")));
         assert!(parse_input(Kind::Choice(&["a", "b"]), "c").is_err());
     }
-
-    #[test]
-    fn binding_line_goes_before_the_closing_bracket() {
-        let (t, line) = add_binding_line(settings::KEYBINDINGS_TEMPLATE, "git.stash");
-        let lines: Vec<&str> = t.lines().collect();
-        assert_eq!(lines[line].trim(), r#"{ "key": "", "command": "git.stash" },"#);
-        assert_eq!(lines[line + 1].trim(), "]");
-        // No comma on the previous item: it is added, the result is valid JSONC.
-        let (t, line) = add_binding_line("[ { \"key\": \"a\", \"command\": \"x\" } ]", "y");
-        assert_eq!(t.lines().nth(line).map(str::trim), Some(r#"{ "key": "", "command": "y" },"#));
-        assert!(serde_json::from_str::<Value>(&theme::themes::strip_jsonc(&t)).is_ok(), "{t}");
-        assert_eq!(add_binding_line("", "z").1, 1);
-        // Brackets/braces in a comment aren't taken for the insertion point.
-        let text = "[\n  { \"key\": \"a\", \"command\": \"x\" } // bkz. {belge}\n]\n// son not: [docs]\n";
-        let (t, line) = add_binding_line(text, "y");
-        assert_eq!(t.lines().nth(line).map(str::trim), Some(r#"{ "key": "", "command": "y" },"#), "{t}");
-        let v = serde_json::from_str::<Value>(&theme::themes::strip_jsonc(&t)).expect(&t);
-        assert_eq!(v.as_array().map(Vec::len), Some(2));
-    }
 }
+
+#[path = "workbench_profiles.rs"]
+pub(crate) mod profiles_glue;
 
 #[cfg(test)]
 #[path = "rust_setup_tests.rs"]

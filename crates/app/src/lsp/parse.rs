@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use super::{Range16, path_to_uri, uri_to_path};
+use super::{Range16, modifier_flags, path_to_uri, uri_to_path};
 
 // --- Diagnostics ---
 
@@ -18,6 +18,8 @@ pub struct Diagnostic {
     pub source: Option<String>,
     /// The diagnostic's code (`E0382`), numbers as text.
     pub code: Option<String>,
+    /// Where the server explains the code (`codeDescription.href`), when it is a web link.
+    pub code_href: Option<String>,
     /// Secondary locations ("value moved here"), at most `MAX_RELATED`.
     pub related: Vec<Related>,
     /// How many more related locations the server sent beyond `related`.
@@ -167,6 +169,7 @@ fn parse_diagnostic(d: &Value) -> Diagnostic {
         }
         std::sync::Arc::from(text)
     });
+    let code_href = d["codeDescription"]["href"].as_str().filter(|h| h.starts_with("https://") || h.starts_with("http://")).map(|h| super::clip_text(h, 500));
     Diagnostic {
         start,
         end,
@@ -174,6 +177,7 @@ fn parse_diagnostic(d: &Value) -> Diagnostic {
         message: d["message"].as_str().unwrap_or_default().to_string(),
         source: d["source"].as_str().map(str::to_string),
         code,
+        code_href,
         related,
         more_related,
         rendered,
@@ -524,6 +528,8 @@ pub struct Symbol {
     pub kind: u8,
     pub line: u32,
     pub col: u32,
+    /// The last line of the symbol's range (its own line when the server gave none).
+    pub end_line: u32,
     pub depth: usize,
 }
 
@@ -559,12 +565,15 @@ pub fn parse_symbols(v: &Value) -> Vec<Symbol> {
         for it in items {
             let range = if it.get("selectionRange").is_some() { &it["selectionRange"] } else { &it["location"]["range"] };
             let (line, col) = parse_range(range).0;
+            let full = if it.get("range").is_some() { &it["range"] } else { &it["location"]["range"] };
+            let end_line = if full.is_object() { parse_range(full).1.0.max(line) } else { line };
             out.push(Symbol {
                 name: it["name"].as_str().unwrap_or_default().to_string(),
                 detail: it["detail"].as_str().or(it["containerName"].as_str()).unwrap_or_default().to_string(),
                 kind: it["kind"].as_u64().unwrap_or(0) as u8,
                 line,
                 col,
+                end_line,
                 depth,
             });
             if let Some(children) = it["children"].as_array() {
@@ -576,7 +585,8 @@ pub fn parse_symbols(v: &Value) -> Vec<Symbol> {
     if let Some(a) = v.as_array() {
         walk(a, 0, &mut out);
     }
-    out.sort_by_key(|s| (s.line, s.col));
+    // Stable, and a symbol before the ones it holds when they start at the same place.
+    out.sort_by_key(|s| (s.line, s.col, s.depth));
     out
 }
 
@@ -777,10 +787,13 @@ pub struct SemToken {
     pub start: u32,
     pub len: u32,
     pub kind: String,
+    /// The `MOD_*` flags of the modifiers the editor draws (`unsafe`, `mutable`, `consuming`).
+    pub mods: u8,
 }
 
-/// `semanticTokens/full` data (relative quintuples) → tokens. `legend`: the server's type table.
-pub fn decode_semantic_tokens(data: &Value, legend: &[String]) -> Vec<SemToken> {
+/// `semanticTokens/full` data (relative quintuples) → tokens. `legend`: the server's type table; `modifiers`: its modifier
+/// table, whose bit `i` in a token's set is the modifier `modifiers[i]`.
+pub fn decode_semantic_tokens(data: &Value, legend: &[String], modifiers: &[String]) -> Vec<SemToken> {
     const MAX_TOKENS: usize = 200_000;
     let Some(a) = data.as_array() else { return Vec::new() };
     // Malformed data (a non-number item, a length not a multiple of five) would shift all tokens: drop it.
@@ -800,7 +813,7 @@ pub fn decode_semantic_tokens(data: &Value, legend: &[String]) -> Vec<SemToken> 
             col = col.saturating_add(to_u32(t[1]));
         }
         if let Some(k) = usize::try_from(t[3]).ok().and_then(|i| legend.get(i)).filter(|k| !k.is_empty()) {
-            out.push(SemToken { line, start: col, len: to_u32(t[2]), kind: k.clone() });
+            out.push(SemToken { line, start: col, len: to_u32(t[2]), kind: k.clone(), mods: modifier_flags(t[4], modifiers) });
         }
     }
     out
@@ -963,28 +976,28 @@ mod tests {
         // Relative encoding: (0,2,3,k0) (0,5,2,k1) (2,1,4,k0)
         let data = serde_json::json!([0, 2, 3, 0, 0, 0, 5, 2, 1, 0, 2, 1, 4, 0, 0]);
         let legend = vec!["function".to_string(), "variable".to_string()];
-        let t = decode_semantic_tokens(&data, &legend);
+        let t = decode_semantic_tokens(&data, &legend, &[]);
         assert_eq!(
             t,
             vec![
-                SemToken { line: 0, start: 2, len: 3, kind: "function".into() },
-                SemToken { line: 0, start: 7, len: 2, kind: "variable".into() },
-                SemToken { line: 2, start: 1, len: 4, kind: "function".into() },
+                SemToken { line: 0, start: 2, len: 3, kind: "function".into(), mods: 0 },
+                SemToken { line: 0, start: 7, len: 2, kind: "variable".into(), mods: 0 },
+                SemToken { line: 2, start: 1, len: 4, kind: "function".into(), mods: 0 },
             ]
         );
-        assert!(decode_semantic_tokens(&serde_json::Value::Null, &legend).is_empty());
+        assert!(decode_semantic_tokens(&serde_json::Value::Null, &legend, &[]).is_empty());
     }
 
     #[test]
     fn hostile_semantic_tokens_and_uri_remapping() {
         let legend = vec!["function".to_string()];
         let huge = serde_json::json!([0, 4294967295u64, 4294967295u64, 0, 0, 0, 4294967295u64, 1, 0, 0]);
-        let t = decode_semantic_tokens(&huge, &legend);
+        let t = decode_semantic_tokens(&huge, &legend, &[]);
         assert_eq!(t.len(), 2);
         assert_eq!(t[1].start, u32::MAX, "overflow saturates, no panic");
-        assert!(decode_semantic_tokens(&serde_json::json!([0, 1, 2, 0]), &legend).is_empty(), "length is not a multiple of five");
-        assert!(decode_semantic_tokens(&serde_json::json!([0, "x", 2, 0, 0]), &legend).is_empty(), "non-number item");
-        assert!(decode_semantic_tokens(&serde_json::json!([0, 1, 2, 9, 0]), &legend).is_empty(), "type not in the legend");
+        assert!(decode_semantic_tokens(&serde_json::json!([0, 1, 2, 0]), &legend, &[]).is_empty(), "length is not a multiple of five");
+        assert!(decode_semantic_tokens(&serde_json::json!([0, "x", 2, 0, 0]), &legend, &[]).is_empty(), "non-number item");
+        assert!(decode_semantic_tokens(&serde_json::json!([0, 1, 2, 9, 0]), &legend, &[]).is_empty(), "type not in the legend");
         let edit = serde_json::json!({
             "changes": { "file:///a/old/x.ts": [], "file:///a/other.ts": [] },
             "documentChanges": [{ "textDocument": { "uri": "file:///a/old.ts", "version": 1 }, "edits": [] }]
@@ -1117,5 +1130,32 @@ mod tests {
         assert_eq!(parse_locations(&json!([loc, loc])).len(), 2);
         assert_eq!(parse_locations(&json!([link])), vec![("/p/src/lib.rs".to_string(), (3, 4))]);
         assert!(parse_locations(&Value::Null).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod symbol_order_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn at(line: u32, col: u32) -> Value {
+        json!({ "start": {"line": line, "character": col}, "end": {"line": line, "character": col + 1} })
+    }
+
+    #[test]
+    fn symbols_at_the_same_place_keep_their_order_and_a_parent_comes_before_its_child() {
+        let item = |name: &str, line, col, children: Value| json!({ "name": name, "kind": 12, "range": at(line, col), "selectionRange": at(line, col), "children": children });
+        // Same position, same depth: the order the server gave. A child at its parent's position follows it.
+        let flat = parse_symbols(&json!([item("second", 3, 0, json!([])), item("first", 3, 0, json!([])), item("early", 1, 0, json!([]))]));
+        assert_eq!(flat.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["early", "second", "first"]);
+        let nested = parse_symbols(&json!([item("outer", 2, 4, json!([item("inner", 2, 4, json!([]))]))]));
+        assert_eq!(nested.iter().map(|s| (s.name.as_str(), s.depth)).collect::<Vec<_>>(), [("outer", 0), ("inner", 1)]);
+    }
+
+    #[test]
+    fn a_server_range_gives_the_last_line() {
+        let v = json!([{ "name": "f", "kind": 12, "range": { "start": {"line": 1, "character": 0}, "end": {"line": 9, "character": 1} }, "selectionRange": at(1, 3) }]);
+        let s = parse_symbols(&v);
+        assert_eq!((s[0].line, s[0].end_line), (1, 9));
     }
 }

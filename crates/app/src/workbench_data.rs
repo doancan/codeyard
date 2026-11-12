@@ -9,7 +9,7 @@ use std::time::Duration;
 use gpui::{AnyElement, AppContext as _, ClipboardItem, Context, Entity, Focusable as _, Subscription, Window, div, prelude::*, px};
 use serde_json::Value;
 
-use super::{DataConvert, DataCopyPath, DataDecode, DataQuery, Notice, Overlay, OverlayKind, Workbench};
+use super::{DataConvert, DataCopyPath, DataDecode, DataQuery, Notice, NoticeSource, Overlay, OverlayKind, Workbench};
 use crate::datalens::{self, Format, MAX_QUERY_BYTES, Options, QueryError, QueryOutput};
 use crate::editor::DataSource;
 use crate::i18n::{t, tf, tn};
@@ -208,7 +208,7 @@ impl Workbench {
     }
 
     fn data_notice(&mut self, notice: Notice, cx: &mut Context<Self>) {
-        self.notice = Some(notice);
+        self.notify(NoticeSource::App, notice);
         cx.notify();
     }
 

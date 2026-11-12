@@ -5,7 +5,7 @@ use super::*;
 impl Workbench {
     /// Error card: bottom right, above the status bar; closed with ×.
     fn error_toast(&self, p: &Palette, cx: &mut Context<Self>) -> Option<impl IntoElement> {
-        let Some(Notice::Error(message)) = &self.notice else { return None };
+        let Some(Notice::Error(message)) = &self.notice() else { return None };
         Some(
             div()
                 .id("error-toast")
@@ -27,6 +27,7 @@ impl Workbench {
                 .occlude()
                 .child(div().flex_none().pt(px(1.)).child(icon("circle-x", 16., p.danger)))
                 .child(div().flex_1().min_w_0().child(message.clone()))
+                .children(self.toast_action_button(p, cx))
                 .when(matches!(self.remote.conn, Conn::Failed { .. }), |d| {
                     d.child(
                         div()
@@ -59,7 +60,7 @@ impl Workbench {
                             crate::a11y_controls::Control::button(crate::i18n::t("Error"), "close", crate::i18n::t("Close"), |_, _| {}).on_entity(
                                 cx.entity().downgrade(),
                                 |this, _, cx| {
-                                    this.notice = None;
+                                    this.dismiss_notice();
                                     cx.notify();
                                 },
                             ),
@@ -75,7 +76,7 @@ impl Workbench {
                         .child(icon("x", 14., p.text_muted))
                         .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Close").into())).into())
                         .on_click(cx.listener(|this, _, _, cx| {
-                            this.notice = None;
+                            this.dismiss_notice();
                             cx.notify();
                         })),
                 ),
@@ -177,9 +178,11 @@ impl Workbench {
                     .flex()
                     .justify_center()
                     .pt(px(top))
+                    // A window narrower than the picker keeps it whole inside, with a margin.
+                    .px(px(theme::SPACE[3]))
                     // Click outside = Esc.
                     .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.on_overlay_event(&PickerEvent::Dismiss, window, cx)))
-                    .child(div().occlude().child(picker)),
+                    .child(div().id("picker-layer").occlude().min_w_0().max_w_full().debug_selector(|| "picker-layer".into()).child(picker)),
             )
             .into_any_element(),
         )
@@ -214,11 +217,13 @@ impl Render for Workbench {
         self.chrome.window_bounds = Some(window.window_bounds());
         self.sync_manage_menu(window, cx);
         self.track_notice(cx);
+        self.settle_notifications(window, cx);
         self.sync_watches(cx);
         self.sync_ext_scm(window, cx);
         self.sync_slots(cx);
         self.sync_timeline(cx);
         self.sync_outline(cx);
+        self.sync_search_scope(cx);
         self.sync_ext_views_frame(cx);
         self.sync_update_window(window, cx);
         let remote = self.remote.host.is_remote();
@@ -266,6 +271,7 @@ impl Render for Workbench {
                 Page::Merge(view) => view.into_any_element(),
                 Page::Compare(view) => view.into_any_element(),
                 Page::Search(view) => view.into_any_element(),
+                Page::Refactor(view) => view.into_any_element(),
                 Page::ExtView(id) => self.ext_view_frame(&id, &p, cx),
                 Page::Terminal(view) => self.editor_terminal_view(view, &p),
             },
@@ -495,6 +501,7 @@ impl Render for Workbench {
             )
             .when(self.chrome.zen.is_none() && cx.global::<Settings>().status_bar, |d| d.child(self.status_bar(&p, window.viewport_size().width / px(1.), cx)))
             .children(self.error_toast(&p, cx))
+            .children(self.notifications_panel(&p, cx))
             .children(self.update_dialog(&p, cx))
             .children(self.trust_dialog(&p, cx))
             // A menu or picker opened from an editor's own window is drawn there.
@@ -524,7 +531,7 @@ mod resize_tests {
         crate::qa_workbench_tests::open_in(&wb, &project.join("src/main.rs"), cx);
         wb.update(cx, |wb, cx| {
             wb.vcs.branch = Some("feature/very-long-branch-name-".repeat(12).into());
-            wb.notice = Some(Notice::Info("A long workbench notification. ".repeat(80).into()));
+            wb.notify(NoticeSource::App, Notice::Info("A long workbench notification. ".repeat(80).into()));
             cx.notify();
         });
         for width in [480., 800., 1280.] {
@@ -535,6 +542,30 @@ mod resize_tests {
             assert_eq!(bar.size.height, px(28.));
             assert!(resources.left() >= bar.left() && resources.right() <= bar.right(), "resource control at {width}: {resources:?} inside {bar:?}");
             assert!(resources.size.width >= px(28.) && resources.size.height >= px(24.));
+        }
+    }
+
+    /// The notice's text box is sized from the width left beside the other items; the bell and its count are among them, so the
+    /// text is cut with an ellipsis inside its area instead of running under the bell.
+    #[gpui::test]
+    fn the_status_notice_leaves_room_for_the_bell(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        wb.update(cx, |wb, cx| {
+            for i in 0..120 {
+                wb.notify(NoticeSource::Git, Notice::Error(format!("failure {i}").into()));
+            }
+            wb.notify(NoticeSource::App, Notice::Info("A long workbench notification. ".repeat(40).into()));
+            cx.notify();
+        });
+        // Narrow logical widths are what a 150 % interface scale gives a 480 px window.
+        for width in [320., 360., 480., 520., 800., 1280.] {
+            cx.simulate_resize(gpui::size(px(width), px(800.)));
+            cx.run_until_parked();
+            let (bar, area) = (cx.debug_bounds("status-bar").unwrap(), cx.debug_bounds("status-notice-area").unwrap());
+            let (text, bell) = (cx.debug_bounds("status-notice").unwrap(), cx.debug_bounds("sb-notifications").unwrap());
+            assert!(bell.left() >= bar.left() && bell.right() <= bar.right(), "the bell at {width}: {bell:?} inside {bar:?}");
+            assert!(area.right() <= bell.left() + px(0.5), "the notice area ends before the bell at {width}: {area:?} / {bell:?}");
+            assert!(text.right() <= area.right() + px(0.5), "the notice text fits its area at {width}: {text:?} / {area:?}");
         }
     }
 

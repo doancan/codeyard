@@ -4,7 +4,7 @@
 
 use gpui::{AppContext as _, Context, Focusable as _, Window};
 
-use super::{InputPurpose, Notice, OverlayKind, Workbench};
+use super::{InputPurpose, Notice, NoticeSource, OverlayKind, Workbench};
 use crate::git;
 use crate::picker::{PickItem, Picker, Source as PickSource};
 
@@ -142,15 +142,19 @@ impl Workbench {
         }
         let (path, text) = (e.path.clone(), e.text_lines().join("\n"));
         let dir = crate::history::dir_for(&data, &self.history_host(), &path);
+        let folder = dir.clone();
         let task = cx.background_executor().spawn(async move { crate::history::record(&dir, &text) });
         cx.spawn(async move |this, cx| {
-            if let Ok(true) = task.await {
-                this.update(cx, |this, cx| {
-                    this.timeline.rev += 1;
-                    cx.notify();
-                })
-                .ok();
-            }
+            let result = task.await;
+            this.update(cx, |this, cx| {
+                match result {
+                    Ok(true) => this.timeline.rev += 1,
+                    Ok(false) => {}
+                    Err(e) => this.report_history_failed(&folder, &e),
+                }
+                cx.notify();
+            })
+            .ok();
         })
         .detach();
     }
@@ -177,7 +181,7 @@ impl Workbench {
                 );
             }
             Err(e) => {
-                self.notice = Some(Notice::Error(crate::i18n::tf("Could not read the saved copy: {}", &[&e]).into()));
+                self.notify(NoticeSource::Git, Notice::Error(crate::i18n::tf("Could not read the saved copy: {}", &[&e]).into()));
                 cx.notify();
             }
         }
@@ -230,7 +234,7 @@ impl Workbench {
             let result = task.await;
             this.update_in(cx, |this, window, cx| match result {
                 Ok(list) if list.is_empty() => {
-                    this.notice = Some(Notice::Info(crate::i18n::t("There are no stashes.").into()));
+                    this.notify(NoticeSource::Git, Notice::Info(crate::i18n::t("There are no stashes.").into()));
                     cx.notify();
                 }
                 Ok(list) => {
@@ -246,7 +250,7 @@ impl Workbench {
                     this.show_overlay(picker, OverlayKind::Stashes { refs, msgs, op, repo }, window, cx);
                 }
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not list stashes: {}", &[&first_line(&e)]).into()));
+                    this.notify(NoticeSource::Git, Notice::Error(crate::i18n::tf("Could not list stashes: {}", &[&first_line(&e)]).into()));
                     cx.notify();
                 }
             })
@@ -259,14 +263,14 @@ impl Workbench {
     pub(super) fn active_in_repo(&mut self, cx: &mut Context<Self>) -> Option<(String, String)> {
         let root = self.repo_root(cx)?;
         let Some(path) = self.active_editor().map(|e| e.read(cx).path.clone()) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a file first.").into()));
+            self.notify(NoticeSource::Git, Notice::Info(crate::i18n::t("Open a file first.").into()));
             cx.notify();
             return None;
         };
         match path.strip_prefix(&format!("{}/", root.trim_end_matches('/'))) {
             Some(rel) => Some((root, rel.to_string())),
             None => {
-                self.notice = Some(Notice::Info(crate::i18n::t("This file is not in the repository.").into()));
+                self.notify(NoticeSource::Git, Notice::Info(crate::i18n::t("This file is not in the repository.").into()));
                 cx.notify();
                 None
             }
@@ -284,7 +288,7 @@ impl Workbench {
             let result = task.await;
             this.update_in(cx, |this, window, cx| match result {
                 Ok(log) if log.is_empty() => {
-                    this.notice = Some(Notice::Info(crate::i18n::tf("{} has no commits yet.", &[&crate::ui::file_name(&rel)]).into()));
+                    this.notify(NoticeSource::Git, Notice::Info(crate::i18n::tf("{} has no commits yet.", &[&crate::ui::file_name(&rel)]).into()));
                     cx.notify();
                 }
                 Ok(log) => {
@@ -301,7 +305,7 @@ impl Workbench {
                     this.show_overlay(picker, OverlayKind::FileHistory { root, log }, window, cx);
                 }
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not read the history: {}", &[&first_line(&e)]).into()));
+                    this.notify(NoticeSource::Git, Notice::Error(crate::i18n::tf("Could not read the history: {}", &[&first_line(&e)]).into()));
                     cx.notify();
                 }
             })
@@ -321,14 +325,30 @@ impl Workbench {
         let e = entry.clone();
         let task = cx.background_executor().spawn(async move {
             let h = host.as_ref();
-            // The first commit has no parent: left side is empty.
-            let old = git::show(h, &root, &format!("{}^", e.hash), old_path.as_deref().unwrap_or(&e.path)).unwrap_or_default();
-            let new = git::show(h, &root, &e.hash, &e.path).unwrap_or_default();
-            (old, new)
+            // The first commit has no parent, and an added or deleted file is missing on one side: that side is empty. A failure of
+            // git is not: it would look like "file added".
+            if git::parent_is_cut(h, &root, &e.hash)? {
+                return Err(crate::i18n::t("This copy of the repository is a shallow clone and ends at this commit, so the file before it is not available.")
+                    .to_string());
+            }
+            let old = git::show_checked(h, &root, &format!("{}^", e.hash), old_path.as_deref().unwrap_or(&e.path))?;
+            let new = git::show_checked(h, &root, &e.hash, &e.path)?;
+            Ok::<_, String>((old.unwrap_or_default(), new.unwrap_or_default()))
         });
         cx.spawn_in(window, async move |this, cx| {
-            let (old, new) = task.await;
+            let result = task.await;
             this.update_in(cx, |this, window, cx| {
+                let (old, new) = match result {
+                    Ok(sides) => sides,
+                    Err(why) => {
+                        this.notify_detailed(
+                            NoticeSource::Git,
+                            Notice::Error(crate::i18n::tf("Could not read {0} at {1}: {2}", &[&entry.path, &entry.short, &first_line(&why)]).into()),
+                            why,
+                        );
+                        return cx.notify();
+                    }
+                };
                 let label = format!("{} {} · {}", entry.short, entry.subject, entry.author);
                 let view = cx.new(|cx| crate::diff::DiffView::new(entry.path.clone(), false, &old, &new, cx).with_label(label));
                 window.focus(&view.focus_handle(cx));
@@ -354,12 +374,12 @@ impl Workbench {
             let result = task.await;
             this.update_in(cx, |this, window, cx| match result {
                 Ok(files) if files.is_empty() => {
-                    this.notice = Some(Notice::Info(crate::i18n::tf("{} changed no files (merge or empty commit).", &[&commit.short]).into()));
+                    this.notify(NoticeSource::Git, Notice::Info(crate::i18n::tf("{} changed no files (merge or empty commit).", &[&commit.short]).into()));
                     cx.notify();
                 }
                 Ok(files) => this.show_changed_files(root, commit, files, window, cx),
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not read the commit: {}", &[&first_line(&e)]).into()));
+                    this.notify(NoticeSource::Git, Notice::Error(crate::i18n::tf("Could not read the commit: {}", &[&first_line(&e)]).into()));
                     cx.notify();
                 }
             })
@@ -409,13 +429,16 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
-                this.notice = Some(match result {
-                    Ok(b) if b.hash.chars().all(|c| c == '0') => Notice::Info(crate::i18n::tf("Line {}: not committed yet", &[&(line + 1)]).into()),
-                    Ok(b) => Notice::Info(
-                        crate::i18n::tf("Line {}: {} · {}, {} · {}", &[&(line + 1), &b.short, &b.author, &git::ago_phrase(&b.when), &b.subject]).into(),
-                    ),
-                    Err(e) => Notice::Error(crate::i18n::tf("Could not blame: {}", &[&first_line(&e)]).into()),
-                });
+                this.notify(
+                    NoticeSource::Git,
+                    match result {
+                        Ok(b) if b.hash.chars().all(|c| c == '0') => Notice::Info(crate::i18n::tf("Line {}: not committed yet", &[&(line + 1)]).into()),
+                        Ok(b) => Notice::Info(
+                            crate::i18n::tf("Line {}: {} · {}, {} · {}", &[&(line + 1), &b.short, &b.author, &git::ago_phrase(&b.when), &b.subject]).into(),
+                        ),
+                        Err(e) => Notice::Error(crate::i18n::tf("Could not blame: {}", &[&first_line(&e)]).into()),
+                    },
+                );
                 cx.notify();
             })
             .ok();
@@ -625,7 +648,7 @@ impl Workbench {
         let current = self.scm.read(cx).target(None).ok();
         let same = pinned.is_some() && *pinned == current;
         if !same {
-            self.notice = Some(Notice::Error(crate::i18n::t("Repository changed while the operation was pending.").into()));
+            self.notify(NoticeSource::Git, Notice::Error(crate::i18n::t("Repository changed while the operation was pending.").into()));
             cx.notify();
         }
         same
@@ -635,7 +658,7 @@ impl Workbench {
         match self.git_status() {
             Some(st) => Some(st.root.clone()),
             None => {
-                self.notice = Some(Notice::Info(crate::i18n::t("This folder is not a git repository.").into()));
+                self.notify(NoticeSource::Git, Notice::Info(crate::i18n::t("This folder is not a git repository.").into()));
                 cx.notify();
                 None
             }
@@ -659,7 +682,7 @@ impl Workbench {
                 let infos = match result {
                     Ok(b) => b,
                     Err(e) => {
-                        this.notice = Some(Notice::Error(crate::i18n::tf("Could not list branches: {}", &[&e]).into()));
+                        this.notify(NoticeSource::Git, Notice::Error(crate::i18n::tf("Could not list branches: {}", &[&e]).into()));
                         cx.notify();
                         return;
                     }
@@ -732,8 +755,10 @@ impl Workbench {
                 match result {
                     // Changes in the way: offer to put them in a stash and switch.
                     Err(e) if git::is_checkout_blocked(&e) && !create => this.confirm_stash_and_switch(source_root, branch, remote, window, cx),
-                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not switch to {0}: {1}", &[&branch, &first_line(&e)]).into())),
-                    Ok(()) => this.notice = Some(Notice::Info(crate::i18n::tf("Switched to {}", &[&branch]).into())),
+                    Err(e) => {
+                        this.notify(NoticeSource::Git, Notice::Error(crate::i18n::tf("Could not switch to {0}: {1}", &[&branch, &first_line(&e)]).into()))
+                    }
+                    Ok(()) => this.notify(NoticeSource::Git, Notice::Info(crate::i18n::tf("Switched to {}", &[&branch]).into())),
                 }
                 this.refresh_git(0, cx);
                 cx.notify();
@@ -795,7 +820,7 @@ impl Workbench {
                 let entries = match result {
                     Ok(v) => v,
                     Err(e) => {
-                        this.notice = Some(Notice::Error(crate::i18n::tf("Could not list: {}", &[&first_line(&e)]).into()));
+                        this.notify(NoticeSource::Git, Notice::Error(crate::i18n::tf("Could not list: {}", &[&first_line(&e)]).into()));
                         cx.notify();
                         return;
                     }
@@ -806,7 +831,7 @@ impl Workbench {
                     .filter(|(n, _)| !(matches!(op, BranchOp::Merge | BranchOp::Rebase | BranchOp::Delete) && current.as_deref() == Some(n.as_str())))
                     .collect();
                 if entries.is_empty() {
-                    this.notice = Some(Notice::Info(crate::i18n::t("Nothing to choose from.").into()));
+                    this.notify(NoticeSource::Git, Notice::Info(crate::i18n::t("Nothing to choose from.").into()));
                     cx.notify();
                     return;
                 }
@@ -980,7 +1005,7 @@ impl Workbench {
         f: impl FnOnce(&dyn host::Host) -> Result<String, String> + Send + 'static,
         after: impl FnOnce(&mut Self, &mut Context<Self>) + 'static,
     ) {
-        self.notice = Some(Notice::Info(working.to_string().into()));
+        self.notify(NoticeSource::Git, Notice::Info(working.to_string().into()));
         cx.notify();
         let host = self.remote.host.clone();
         let source_host = host.clone();
@@ -993,8 +1018,8 @@ impl Workbench {
                     return;
                 }
                 match result {
-                    Ok(m) => this.notice = Some(Notice::Info(m.into())),
-                    Err(e) => this.notice = Some(Notice::Error(first_line(&e).to_string().into())),
+                    Ok(m) => this.notify(NoticeSource::Git, Notice::Info(m.into())),
+                    Err(e) => this.notify(NoticeSource::Git, Notice::Error(first_line(&e).to_string().into())),
                 }
                 this.refresh_git(0, cx);
                 after(this, cx);
@@ -1008,12 +1033,12 @@ impl Workbench {
     /// "Git: Initialize Repository": `git init` in the folder that is open, when it is not a repository yet.
     pub(super) fn git_init(&mut self, cx: &mut Context<Self>) {
         let Some(root) = self.all_roots(cx).into_iter().next() else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a folder first.").into()));
+            self.notify(NoticeSource::Git, Notice::Info(crate::i18n::t("Open a folder first.").into()));
             cx.notify();
             return;
         };
         if self.git_status().is_some() {
-            self.notice = Some(Notice::Info(crate::i18n::t("This folder is already a git repository.").into()));
+            self.notify(NoticeSource::Git, Notice::Info(crate::i18n::t("This folder is already a git repository.").into()));
             cx.notify();
             return;
         }

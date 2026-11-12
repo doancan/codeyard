@@ -1349,3 +1349,7 @@ mod hardening {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "markdown_svg_tests.rs"]
+mod svg_tests;

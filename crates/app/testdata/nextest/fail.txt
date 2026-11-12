@@ -1,0 +1,32 @@
+   Compiling demo v0.1.0 (/work/demo)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+────────────
+ Nextest run ID b662bcfb-4d5f-4b84-8447-6bf6d20c1b50 with nextest profile: default
+    Starting 2 tests across 2 binaries (1 test skipped)
+        FAIL [   0.017s] (1/2) demo tests::fails_on_purpose
+  stdout ───
+
+    running 1 test
+    test tests::fails_on_purpose ... FAILED
+
+    failures:
+
+    failures:
+        tests::fails_on_purpose
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'tests::fails_on_purpose' (1657929) panicked at src/lib.rs:21:9:
+    assertion `left == right` failed
+      left: 3
+     right: 4
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+  Cancelling due to test failure: 1 test still running
+        PASS [   0.018s] (2/2) demo tests::adds_up
+────────────
+     Summary [   0.019s] 2 tests run: 1 passed, 1 failed, 1 skipped
+        FAIL [   0.017s] (1/2) demo tests::fails_on_purpose
+error: test run failed

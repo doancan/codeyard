@@ -1852,3 +1852,101 @@ fn the_red_button_of_the_dialogs_window_answers_like_esc(cx: &mut TestAppContext
     assert!(dialog(&wb, cx).is_none());
     assert_eq!(state(&wb, cx), "available 0.2.0", "the offer stays in the status bar");
 }
+
+/// Being offline is expected: the history says so (once, with a counter), no toast, no button.
+#[gpui::test]
+fn an_offline_background_check_is_recorded_as_information_without_a_toast(cx: &mut TestAppContext) {
+    let (wb, cx, fake) = rig(cx);
+    for round in 1..=2 {
+        fake.check_returns(Err(network()));
+        wb.update_in(cx, |wb, window, cx| wb.background_check_for_test(window, cx));
+        wait_ticking(cx, "the check ran", |_| fake.count("check") == round);
+        wait_state(&wb, cx, "idle");
+    }
+    assert_eq!(notice(&wb, cx), None, "no toast");
+    let history = wb.read_with(cx, |wb, _| wb.history_for_test());
+    assert_eq!(history.len(), 1, "{history:?}");
+    let e = &history[0];
+    assert_eq!((e.severity, e.id.as_str(), e.count, e.read), (crate::workbench::Severity::Info, "update-check-failed", 2, true));
+    assert_eq!(e.message, "Couldn't check for updates");
+    assert!(e.detail.as_deref().is_some_and(|d| d.contains("Could not resolve host")), "{:?}", e.detail);
+    assert_eq!(e.action, None);
+    assert!(history.iter().all(|e| e.read), "nothing for the bell either");
+}
+
+/// A release whose signature does not verify is not "offline": an error with the details and a button to check again.
+#[gpui::test]
+fn a_background_check_that_fails_verification_is_an_error_with_a_retry_button(cx: &mut TestAppContext) {
+    use crate::workbench::{NoticeAction, RetryKind, Severity};
+    let (wb, cx, fake) = rig(cx);
+    fake.check_returns(Err(UpdateError::BadSignature));
+    wb.update_in(cx, |wb, window, cx| wb.background_check_for_test(window, cx));
+    wait_ticking(cx, "the check ran", |_| fake.count("check") == 1);
+    wait_state(&wb, cx, "idle");
+    let history = wb.read_with(cx, |wb, _| wb.history_for_test());
+    assert_eq!(history.len(), 1, "{history:?}");
+    let e = &history[0];
+    assert_eq!((e.severity, e.id.as_str()), (Severity::Error, "update-check-failed"));
+    assert_eq!(e.action, Some(NoticeAction::Retry(RetryKind::UpdateCheck)));
+    assert!(e.detail.as_deref().is_some_and(|d| d.contains("Nothing was installed")), "the plain lead is in the details: {:?}", e.detail);
+    assert_eq!(notice(&wb, cx).map(|n| n.0), Some(true), "an error shows its card");
+    // The button checks again.
+    fake.check_returns(Ok(None));
+    let serial = e.serial;
+    wb.update_in(cx, |wb, window, cx| wb.run_notification_action_for_test(serial, window, cx));
+    wait_ticking(cx, "the second check ran", |_| fake.count("check") == 2);
+}
+
+/// A broken secure connection (a wrong clock, a proxy) can be put right by the user: a warning, not silence.
+#[gpui::test]
+fn a_background_check_with_a_broken_secure_connection_is_a_warning(cx: &mut TestAppContext) {
+    use crate::workbench::Severity;
+    let (wb, cx, fake) = rig(cx);
+    fake.check_returns(Err(UpdateError::Tls("certificate is not yet valid".into())));
+    wb.update_in(cx, |wb, window, cx| wb.background_check_for_test(window, cx));
+    wait_ticking(cx, "the check ran", |_| fake.count("check") == 1);
+    wait_state(&wb, cx, "idle");
+    let history = wb.read_with(cx, |wb, _| wb.history_for_test());
+    assert_eq!(history.len(), 1, "{history:?}");
+    assert_eq!(history[0].severity, Severity::Warning);
+    assert!(history[0].detail.as_deref().is_some_and(|d| d.contains("date and time")), "{:?}", history[0].detail);
+}
+
+/// What the update flow remembers is saved in the state database; when that fails the user hears it once, not on every check.
+#[gpui::test]
+fn a_state_database_that_cannot_remember_update_choices_is_reported_once(cx: &mut TestAppContext) {
+    let home = fresh("update-remember");
+    let (wb, cx) = setup_persistent(cx, &home);
+    let fake = Fake::new();
+    wb.update(cx, |wb, _| wb.set_update_backend_for_test(fake.clone()));
+    rusqlite::Connection::open(home.join("state.db")).unwrap().execute_batch("drop table kv").unwrap();
+    for round in 1..=2 {
+        fake.check_returns(Ok(None));
+        wb.update_in(cx, |wb, window, cx| wb.background_check_for_test(window, cx));
+        wait_ticking(cx, "the check ran", |_| fake.count("check") == round);
+        wait_state(&wb, cx, "idle");
+    }
+    wb.update(cx, |wb, cx| wb.track_notice(cx));
+    let history = wb.read_with(cx, |wb, _| wb.history_for_test());
+    let warnings: Vec<_> = history.iter().filter(|e| e.id == "persist:update").collect();
+    assert_eq!(warnings.len(), 1, "{history:?}");
+    assert_eq!((warnings[0].count, warnings[0].severity), (1, crate::workbench::Severity::Warning));
+}
+
+/// A later check that works takes the old failure out of the list (and its card off the screen).
+#[gpui::test]
+fn a_good_check_clears_the_failure_an_earlier_one_left(cx: &mut TestAppContext) {
+    let (wb, cx, fake) = rig(cx);
+    fake.check_returns(Err(UpdateError::BadSignature));
+    wb.update_in(cx, |wb, window, cx| wb.background_check_for_test(window, cx));
+    wait_ticking(cx, "the first check ran", |_| fake.count("check") == 1);
+    wait_state(&wb, cx, "idle");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.history_for_test()).len(), 1);
+    assert!(notice(&wb, cx).is_some(), "the error card shows");
+    fake.check_returns(Ok(None));
+    wb.update_in(cx, |wb, window, cx| wb.background_check_for_test(window, cx));
+    wait_ticking(cx, "the second check ran", |_| fake.count("check") == 2);
+    wait_state(&wb, cx, "idle");
+    assert!(wb.read_with(cx, |wb, _| wb.history_for_test()).is_empty(), "the failure is out of date");
+    assert_eq!(notice(&wb, cx), None);
+}

@@ -2,6 +2,7 @@
 # Copy this file to `<code>.tsv`, put the translation after the TAB (see docs/translating.md). A key containing `|` is a plural
 # entry: write one form per plural form of the language, separated by `|`. Do not edit the left column.
 (+{} more)	
+(from the cache, offline)	
 (modified)	
 (nothing)	
 (the lines are removed)	
@@ -12,6 +13,7 @@
 1 minute	
 15 minutes	
 5 minutes	
+A .git folder is never deleted by a refactoring.	
 A command failed with code {}	
 A command finished	
 A command is running	
@@ -19,11 +21,22 @@ A compatible Node.js runtime could not be used on this host. Install Node.js 22.
 A container operation is running. Use Docker: Cancel Operation before starting another.	
 A file named “{}” is already there; a folder cannot replace it. Rename or remove it first.	
 A file you opened names a schema that is hosted on {}. Downloading it sends a request to that server (your IP address and the schema's address). Only allow it if you trust the file and the host.	
+A folder cannot be moved into itself.	
 A folder named “{}” is already there; a file cannot replace it. Rename or remove it first.	
+A git dependency: not looked up on crates.io.	
+A key that types text cannot be a shortcut on its own. Add Ctrl, Alt or Cmd, or press a function key.	
 A merge commit is created unless it can fast-forward. Conflicts are resolved in Source Control.	
+A part of the path is a file, not a folder.	
+A path dependency: not looked up on crates.io.	
 A pattern is one expression or statement, not several.	
 A pattern that is only a variable would match everything.	
+A profile name cannot contain combining marks; type the letter as one character.	
+A profile name cannot contain “{}”. Use letters, digits, spaces, - and _.	
+A profile name cannot end with a dot.	
+A profile name cannot start with a dot.	
+A profile name has at most {} characters.	
 A rebase is already in progress: use Git: Continue Rebase or Git: Abort Rebase	
+A refactoring was interrupted; these files may be half-changed: {}	
 A request is still being sent; wait for its answer first.	
 A sign-in answer for {0} carried the code of {1}'s sign-in; it was ignored.	
 A sync is already running.	
@@ -51,6 +64,8 @@ Actions
 Activate Breakpoints	
 Activated {0} time, last at {1} by {2}|Activated {0} times, last at {1} by {2}	
 Activating the completed installation…	
+Active File Only	
+Activity:	
 Add	
 Add Configuration…	
 Add Cursor Above	
@@ -64,8 +79,10 @@ Add SSH Host…
 Add SSH host…	
 Add a debug configuration	
 Add a host	
+Add another key	
 Add comment	
 Add comment…	
+Add dependency	
 Add remote	
 Add to .gitignore	
 Add to Favorites	
@@ -74,11 +91,14 @@ Add worktree
 Add “{}” to the dictionary	
 Added	
 Added remote {}	
+Added with cargo add	
 Added worktree {}: open it with Git: Open Worktree…	
 Added {} to .gitignore	
+Added “{0}” by editing the file (cargo add: {1}). Save the file to keep it.	
 Added “{}”	
 Added “{}” for this session only: there is no settings folder to keep your dictionary in.	
 Added “{}” to your dictionary.	
+Added “{}”. Save the file to keep it.	
 Adding comment…	
 Adding remote…	
 Adding worktree…	
@@ -86,23 +106,30 @@ All
 All Branches	
 All conflicts are resolved	
 All levels	
+All whitespace is ignored. Click to show whitespace differences	
 Allow	
 Allow Host	
 Allow Host…	
 Allow file access	
 Allow for this session	
 Already debugging: Shift+F5 stops the session.	
+Already exists; Codeyard never overwrites a file in a refactoring.	
 Already formatted	
 Already listed after an update? Remove it with − and add it again.	
 Already minified	
 Also every folder inside “{}”, now and later.	
 Also get its pre-releases, at once and before others get them	
+Also used by {}	
 Always open *.{0} as {1}	
 Amended {}	
+An edit ends before it starts.	
+An entry of keybindings.jsonc has no key	
 An existing file with the same name is never overwritten.	
+An open folder is never deleted by a refactoring.	
 Anchors and aliases were expanded.	
 Another debug adapter	
 Another git process is using this repository. If none is running, a crash left {} behind: delete it and try again.	
+Another program is using it.	
 Another publisher now: {0}. The version you have came from {1}.	
 Answer the install sheet first.	
 App: Quit	
@@ -112,6 +139,7 @@ Applied {}
 Apply	
 Apply (keep the stash)	
 Apply .editorconfig files (indent, line endings, final newline…)	
+Apply Selected	
 Apply Stash…	
 Apply a file operation to {} entry?|Apply a file operation to {} entries?	
 Apply the Rust setup to settings.jsonc?	
@@ -165,7 +193,9 @@ Brightness
 Bring a folder's tabs and unsaved changes back when you open it	
 Build and Open	
 Build failed: {}	
+Build for target	
 Building the tests…	
+Building…	
 Built-in	
 CPU	
 CPU usage	
@@ -202,7 +232,10 @@ Cannot tell which remote {} belongs to
 Cannot update {0}: {1}	
 Cannot use {} as an entry	
 Cannot use {} as an object key	
+Cargo changed Cargo.toml on disk while you were editing it. Your edits were kept; saving asks which version to keep.	
+Cargo dependency	
 Cargo did not report a Rust test executable	
+Cargo did not report an executable to debug	
 Cargo metadata has no packages	
 Cargo metadata has no workspace members	
 Cargo package has no manifest path	
@@ -211,20 +244,35 @@ Cargo package has no targets
 Cargo reported {0} executables for target {1}	
 Cargo target has no name	
 Cargo was not found. Install Rust from https://rustup.rs and make sure `cargo` is on the PATH of this machine.	
+Cargo.toml is not valid TOML yet.	
+Cargo.toml is not valid TOML: {}	
+Cargo: Add Dependency…	
+Cargo: Check Dependency Updates	
+Cargo: Remove Dependency at Cursor	
+Cargo: Update All Dependencies in This File (Compatible)	
+Cargo: Update All Dependencies in This File to Latest	
+Cargo: Update Dependency at Cursor to Latest	
 Categories	
 Change	
 Change All Occurrences	
 Change Color…	
 Change Local Port…	
 Change all files in the workspace	
+Change key	
+Change overview	
 Change the URL of which remote?	
 Change {}	
+Change {} of {}	
 Changed	
+Changed Files	
 Changed files	
 Changed {0} file ({1} file operations skipped)|Changed {0} files ({1} file operations skipped)	
 Changed {0} in {1}	
 Changed {} file|Changed {} files	
 Changes	
+Changes in open files are not saved yet.	
+Changes the order of the problems	
+Changes the order of the symbols	
 Check Daily	
 Check JSON and YAML files against their schema (problems, hover, suggestions)	
 Check comments in code files too (prose files are always checked)	
@@ -234,6 +282,12 @@ Check out
 Check out #{} as pr-{}	
 Check out detached…	
 Check out which branch, tag or commit (detached)?	
+Check that the path is right and that the drive or network share is connected.	
+Check the connection or the disk, then try again.	
+Check the connection, then try again.	
+Check the path.	
+Check the permissions of the file and its folder, then try again.	
+Check whether the item is locked or protected, or choose another location.	
 Checked out #{} as pr-{}	
 Checked out {} (detached HEAD)	
 Checked out {} as {}	
@@ -255,17 +309,22 @@ Choose
 Choose a Docker environment	
 Choose a container (stopped containers can be started)	
 Choose a container engine	
+Choose a file instead.	
 Choose a folder on this computer…	
 Choose an action	
 Choose an answer (Esc: none)	
 Choose an extension in the Extensions view.	
+Choose another name or remove the existing one first.	
 Choose…	
 Clear	
 Clear Terminal	
+Clear all notifications	
+Clear filter	
 Clear filters	
 Clear the picked lines (Escape)	
 Clear the search	
 Clear the search field	
+Click for details.	
 Click to remove this filter	
 Click to sort using current values. Order stays fixed during live updates.	
 Click: details · Double-click: open · Right-click: actions	
@@ -284,6 +343,7 @@ Close Preview
 Close Saved	
 Close a terminal first: at most {} can be open.	
 Close details	
+Close the other program, then try again.	
 Close the terminal?	
 Close to the Right	
 Close window	
@@ -302,6 +362,7 @@ Codeyard is not signed in to GitHub: run `gh auth login` in a terminal, then try
 Codeyard is still installing an update	
 Codeyard is up to date	
 Codeyard memory	
+Codeyard quit unexpectedly last time	
 Codeyard signs its requests to {} with this account. The extension never sees your password or token. You can sign out on its page in Extensions.	
 Codeyard will reopen your windows.	
 Codeyard {} is available	
@@ -310,9 +371,11 @@ Codeyard {} is available. Click for details.
 Codeyard {} is installed. Click for details.	
 Collapse	
 Collapse All	
+Collapse All Files	
 Collapse All Inside	
 Collapse Folders	
 Collapse all results	
+Collapse unchanged lines	
 Color Theme	
 Color Theme…	
 Color matching brackets by nesting depth	
@@ -326,6 +389,7 @@ Colorful Folders
 Column where lines wrap with wordWrapColumn or bounded	
 Column {0}: {1}	
 Columns	
+Command	
 Command Palette	
 Command Palette…	
 Command palette	
@@ -421,14 +485,17 @@ Convert indentation to tabs
 Convert to…	
 Converted to {}	
 Copied	
+Copied the notification	
 Copied {}	
 Copied {} item ({}) to {}|Copied {} items ({}) to {}	
 Copied {} item.|Copied {} items.	
+Copied {} problem|Copied {} problems	
 Copied {}.	
 Copied “{}” ({}) to {}	
 Copied: {}	
 Copy	
 Copy Address	
+Copy All Problems	
 Copy Call Stack	
 Copy Commit Hash	
 Copy Last Command Output	
@@ -437,6 +504,7 @@ Copy Line Up
 Copy Message	
 Copy Path	
 Copy Port Number	
+Copy Problem	
 Copy Relative Path	
 Copy Report	
 Copy Value	
@@ -446,7 +514,10 @@ Copy branch name
 Copy code	
 Copy container ID	
 Copy fix	
+Copy it to the other disk, then delete the original.	
 Copy link	
+Copy notification	
+Copy path	
 Copy text selected with the mouse: while Claude Code or Codex runs, always, or never	
 Copy the files again on the current host before pasting.	
 Copy the full hash	
@@ -465,6 +536,7 @@ Copying {0} item was not confirmed: {1}|Copying {0} items was not confirmed; fir
 Copying…	
 Could not add the configuration: {}	
 Could not add the instance: {}	
+Could not add “{}”: cargo is not available and its version is not known offline.	
 Could not allow the server: {}	
 Could not be compared	
 Could not blame: {}	
@@ -475,8 +547,11 @@ Could not connect to {}: {}
 Could not create the extension: {}	
 Could not create the scratch file: {}	
 Could not create {0}: {1}	
+Could not create {}.	
 Could not create {}: {}	
+Could not delete {}.	
 Could not download js-debug: {}	
+Could not explain {0}: {1}	
 Could not find the home folder; type an absolute path.	
 Could not find your home folder	
 Could not format: {}	
@@ -486,10 +561,12 @@ Could not inspect Cargo targets: {}
 Could not install cyx: {}	
 Could not install the {0} dictionary: {1}.	
 Could not install the {0} dictionary: {1}. Check your internet connection and try again.	
-Could not keep a copy of the version that was on disk: {}	
 Could not list branches: {}	
 Could not list files: {}	
 Could not list stashes: {}	
+Could not list the WSL distributions: {}	
+Could not list the containers: {}	
+Could not list the installed targets: {}	
 Could not list the server's ports: {}	
 Could not list worktrees: {}	
 Could not list: {}	
@@ -497,7 +574,7 @@ Could not load: {}
 Could not look for tests: {}	
 Could not minify: {}	
 Could not open the debug session: {}	
-Could not open the state database: {}. Tabs, recent folders and backups will not be remembered this session.	
+Could not open the state database {0}: {1}. Tabs, recent folders and backups will not be remembered this session.	
 Could not paste: {}	
 Could not reach {}: check the network connection and try again	
 Could not read Docker environments: {}	
@@ -508,22 +585,34 @@ Could not read the history: {}
 Could not read the remote URL: {}	
 Could not read the saved copy: {}	
 Could not read the stash: {}	
+Could not read {0} at {1}: {2}	
 Could not read {0}: {1}	
 Could not read {}	
+Could not read {}.	
 Could not read {}: {}	
 Could not read: {}	
 Could not refresh container data: {}. Check Docker access on the SSH host and retry.	
+Could not remember your update choices; Codeyard may ask or check again.	
 Could not remove the instance: {}	
 Could not remove the server: {}	
+Could not remove {}; delete it by hand.	
+Could not rename {}.	
 Could not reserve a temporary Git reference.	
 Could not reserve a temporary file for comparison.	
 Could not resolve “{}”: check the spelling and the network (the request ran on {}).	
+Could not retry: {}	
 Could not run “{}”: {}	
 Could not save files before debugging: {}	
+Could not save the open folders of the Explorer; they will not be restored next time.	
 Could not save the report: {}	
 Could not save the theme: {}	
+Could not save the window position; it will not be restored next time.	
 Could not save the workspace file: {}	
+Could not save your additional folders; they will not be restored next time.	
 Could not save your dictionary: {}	
+Could not save your open tabs and layout; they will not be restored next time.	
+Could not save your terminals; they will not be restored next time.	
+Could not save {}.	
 Could not save: {}	
 Could not set up key login for {}: {}	
 Could not set {}: {}	
@@ -534,9 +623,13 @@ Could not start debugging: {}
 Could not start the debug adapter: {}	
 Could not start the debug session: {}	
 Could not start the test runner: {}	
+Could not switch profile: {}	
 Could not switch to {0}: {1}	
+Could not take back the change in {}: it was edited since. Undo it in the editor.	
+Could not take back {0}: {1}. Check it before going on.	
 Could not tell whether it is merged ({}): git will refuse if commits would be lost.	
 Could not write {0}: {1}	
+Could not write {}.	
 Could not write {}: {}	
 Couldn't check for updates	
 Couldn't download the update	
@@ -551,11 +644,16 @@ Create a launch configuration
 Create branch	
 Create file	
 Create folder	
+Create profile	
 Create scratch file	
 Create tag	
+Create the folder first, or check that the path is right.	
+Create {}	
 Created branch {0} at {1}	
+Created {}	
 Creating {}…	
 Current	
+Current Folder	
 Current branch	
 Current parameter: {}	
 Cursor animation	
@@ -585,6 +683,7 @@ Debug Test: {}
 Debug session ended	
 Debug session stopped	
 Debug toolbar	
+Debug {}	
 Debug: Add Configuration…	
 Debug: Add Function Breakpoint…	
 Debug: Add Watch Expression…	
@@ -616,21 +715,27 @@ Debug: Toggle Breakpoint
 Debugger	
 Dec	
 Decoded here only: nothing is sent or logged	
+Default	
 Default terminal profile	
+Default: build for this machine	
 Delay for afterDelay (ms)	
 Delete	
 Delete Permanently	
 Delete Tag…	
+Delete a profile	
+Delete and Apply	
 Delete branch {} on the remote?	
 Delete branch {}?	
 Delete from the left	
 Delete from the right	
 Delete tag {} on the remote?	
 Delete tag {}?	
+Delete the profile “{}”?	
 Delete which branch on the remote?	
 Delete which branch?	
 Delete which tag on the remote?	
 Delete which tag?	
+Delete {}	
 Delete “{0}” from {1}?	
 Delete “{}” permanently?	
 Deleted	
@@ -655,6 +760,7 @@ Dev Container setup failed: {}. Check Output and install the Dev Container CLI i
 Developer: Extension Inspector	
 Developer: Restart Language Servers	
 Diagnostic copied	
+Diagnostics copied. Nothing was sent anywhere: paste them where you want to share them.	
 Diff view side by side (off: inline)	
 Disable	
 Disable All Breakpoints	
@@ -681,7 +787,9 @@ Disk read / write rate
 Disk size	
 Disk size includes the writable layer and virtual image size; volumes are excluded. Disk and network I/O are cumulative totals.	
 Disk write	
+Dismiss notification	
 Dismiss this file from the results	
+Do Not Disturb is on: information and warning toasts are hidden. Click to turn it off	
 Do you trust the authors of this folder?	
 Do you trust the authors of this workspace?	
 Do you want to save the changes you made to {}?	
@@ -693,10 +801,13 @@ Docker: Show Containers and Services…
 Docker: {}	
 Docker: {}. Check Output and verify that the selected engine is running.	
 Docker: {}. Check Output. Dev Container creation requires the separately installed Dev Container CLI.	
+Documentation: {}	
 Don't Save	
 Don't Trust	
 Don't Trust This Folder	
 Done	
+Done.	
+Don’t ask again	
 Download	
 Download Here	
 Download Page	
@@ -723,12 +834,15 @@ Dropped {}
 Duplicate	
 Duplicate key	
 Duplicate key “{}”	
+Duplicate profile	
 Each file is written on its own; files that were not changed keep their contents.	
 Edit	
 Edit Condition…	
 Edit Host…	
 Edit a host	
+Edit requested by the language server	
 Edit which SSH host?	
+Edit {} of the language server is malformed.	
 Edit “{}”: which setting?	
 Edit, test, set up key login, remove	
 Editing, search, Git and themes work as usual.	
@@ -826,8 +940,10 @@ Editor: Undo
 Editor: Unfold	
 Editor: Unfold All	
 Editor: Unfold Recursively	
+Edits overlap, so the server's answer cannot be trusted. Nothing in this file is changed.	
 Empty folder	
 Empty group: ⌘P opens a file here	
+Empty the folder first, or delete its contents too.	
 Enable	
 Enable All Breakpoints	
 Enable Breakpoint	
@@ -835,6 +951,8 @@ Enable Web Preview for HTML, CSS and JavaScript (user settings only; stops serve
 Enable Web Preview in Settings > Modules to preview HTML files.	
 Enable container environments (user settings only; disconnect containers before disabling)	
 Enabled	
+Enables nothing else	
+Enables: {}	
 Encoding for files that are not UTF-8	
 End files with a newline when saving	
 Enter a folder path on {}…	
@@ -844,6 +962,7 @@ Enter the remote as: name url
 Enter unstages the picked lines	
 Enter: path branch	
 Error	
+Error code {}	
 Errors and warnings	
 Esc keeps Restricted Mode. Change it later with Workspace: Manage Workspace Trust…	
 Evaluate	
@@ -856,6 +975,7 @@ Everything resolved so far in this merge is discarded.
 Existing custom server commands are preserved. Services start only in trusted folders. Closing this tab cancels an installation that has not reached activation.	
 Exit	
 Expand	
+Expand All Files	
 Expand All Inside	
 Expand Emmet abbreviations (div.box>ul>li*3) with Tab	
 Expand Folders (the selected one, or the open file's folders)	
@@ -864,10 +984,12 @@ Expand all results
 Expected KEY=value	
 Expected a cargo test command	
 Expected “{}”	
+Explain error {}	
 Explorer	
 Explorer (⇧⌘E)	
 Export as Text…	
 Exposed only; not published on the server.	
+Extension	
 Extension Inspector	
 Extension View	
 Extension id, like publisher.name or publisher.name@1.2.0	
@@ -958,11 +1080,16 @@ Files to include / exclude
 Files were changed by a replacement since this search ran. Rerun to refresh.	
 Files with the same name are overwritten; other files in the folder are kept.	
 Files: Collapse Folders in Explorer	
+Files: Filter Files in Explorer	
 Files: Open Folder…	
 Files: {0}/{1}	
 Files: {}	
 Filter	
 Filter (e.g. text, path)	
+Filter Files…	
+Filter files by name	
+Filter problems	
+Filter symbols	
 Filtering needs sh, tail, grep and cut on the host (on Windows: Git Bash or WSL). {}	
 Filtering {0} for “{1}”…	
 Find	
@@ -974,6 +1101,7 @@ Find in file (searched on the host)
 Find in files	
 Find in selection (⌥⌘L)	
 Finished: {}	
+Fit to window (0)	
 Flag a terminal and the taskbar when its program rings the bell or asks for you	
 Focus Left Editor Group	
 Focus Next Terminal	
@@ -986,6 +1114,7 @@ Folder to clone into
 Folders colored by purpose (src, tests, docs…) and colored file glyphs	
 Follow	
 Follow (Tail)	
+Follow Cursor	
 Follow the end of the file as it grows (tail -f). Scrolling up pauses.	
 Following latest logs	
 Font size of the editor	
@@ -1005,7 +1134,9 @@ Forward a port:
 Forward ports opened on SSH hosts	
 Forwarded Address	
 Forwarded Ports	
+Free some space and try again.	
 Friday	
+From the registry “{}”: not looked up.	
 From the {0} registry, published by {1}	
 Get Pre-releases	
 Get only releases of this extension from now on	
@@ -1106,6 +1237,7 @@ Go to a symbol in this file
 Go to file	
 Go to line {0}, column {1}	
 Go to line {}	
+Go to symbol at this level	
 Go to symbol in file	
 Go to the next merge conflict	
 Go: Back	
@@ -1115,6 +1247,7 @@ Go: Last Edit Location
 Go: Line…	
 Go: Next Change	
 Go: Next Problem	
+Go: Pick Symbol at the Cursor's Level	
 Go: Previous Change	
 Go: Previous Problem	
 Go: Symbol in File…	
@@ -1122,20 +1255,27 @@ Go: Symbol in Workspace…
 Graph	
 Graph starts with every branch	
 HEAD ↔ Staged	
+HIR of {}	
 HOME is not set	
 HTTP: Send Request	
 HTTP: Show Last Response Headers	
 Hard reset to {}?	
+Has unsaved changes the language server has not seen: save or revert it first.	
+Has unsaved changes: save or revert it first.	
 Header	
 Health	
+Health:	
 Help	
 Help: About Codeyard	
 Help: Check for Updates…	
+Help: Copy Diagnostics	
 Help: Grant Full Disk Access…	
 Help: Keyboard Shortcuts Reference	
 Help: Open Crash Reports Folder	
+Help: Open Log File	
 Help: Release Notes	
 Help: Report Issue…	
+Help: Reveal Log Folder	
 Help: Welcome	
 Hex dump (read-only copy)	
 Hide	
@@ -1151,6 +1291,7 @@ Highlight the matching bracket
 History is collected while monitoring is active. CPU can exceed 100% across cores. Rates need two samples; counter resets show no rate.	
 History of {}	
 Hold Shift or ⌥ to select text	
+Homepage: {}	
 Host and client id of your {} server, such as git.example.com 3f2a9c	
 Host name (from ~/.ssh/config) or user@host	
 Host name of the server {} may connect to, such as github.example.com	
@@ -1158,10 +1299,13 @@ Hover
 Hover an option to preview the result.	
 Hue	
 Identical	
+Idle	
 If the remote branch moves while this question is open, git refuses.	
 Ignore Case	
+Ignore all	
 Ignore case unless the query has capital letters	
 Ignore line endings	
+Ignore trailing	
 Ignore whitespace	
 Ignore “{}” in this session	
 Ignored	
@@ -1231,6 +1375,10 @@ It brings its own programs, built for each platform. They run on the computer th
 It can't be moved to the Trash ({}). Deleting it permanently can't be undone.	
 It connects only to the servers you allow here, such as the one in its “{}” setting.	
 It declares no permissions.	
+It does not exist (it may have been moved or deleted).	
+It holds a Git repository (.git), which a refactoring never deletes.	
+It holds too many files to check what would be deleted.	
+It is a folder, not a file.	
 It may send requests to {0} over HTTPS, with whatever it can read or store, such as a token you give it. Remove it on the extension's page in Extensions.	
 It may sign in to your account on {0} with the OAuth application you registered there (client id {1}, redirect URI {2}). Codeyard signs its requests to {0} with that account; the extension never sees the token. Remove it on the extension's page in Extensions.	
 It wants to read the text you copied, here or in other apps.	
@@ -1242,6 +1390,7 @@ Its publisher deprecated it.
 Its publisher withdrew this version, and there is no earlier one to go back to.	
 Its tasks, language servers and settings run. Nothing outside the workspace's folders is trusted.	
 Its tasks, language servers and settings run. Other folders keep asking.	
+Its “args” were removed with it.	
 JSON schema for {}	
 JSON: Minify Document	
 Jan	
@@ -1261,6 +1410,7 @@ Key login is set up for “{}” (created {}). The next connection needs no pass
 Key login is set up for “{}”. The next connection needs no password.	
 Key login was already set up for “{}” (created {}). The next connection needs no password.	
 Key login was already set up for “{}”. The next connection needs no password.	
+Keybinding	
 Keyboard Shortcuts	
 Keymap preset	
 Keymap preset from an installed extension, as publisher.name/label (empty: Codeyard's own keys)	
@@ -1303,12 +1453,16 @@ Let {0} run programs on {1}?
 Let {0} sign in to your {1} account?	
 Let {0} use your account on {1}?	
 Let {} read the clipboard?	
+License: {}	
 Lifecycle: {}	
 Lightweight editing, on this machine or over SSH.	
 Line Numbers	
 Line endings for this file (applied on save)	
 Line height in pixels	
 Line numbers in the gutter	
+Line {0} does not exist (the file has {1} lines).	
+Line {0}, column {1} is inside a character.	
+Line {0}, column {1}: “{2}” → “{3}”	
 Line {0}: {1}	
 Line {0}: {1} → {2}	
 Line {} added	
@@ -1333,9 +1487,11 @@ Load more
 Loading container details…	
 Loading image…	
 Loading pull requests…	
+Loading the workspace or indexing	
 Loading {}…	
 Loading…	
 Local	
+Local History could not keep a copy of the file you saved. {}	
 Local changes would be overwritten: commit or stash them first.	
 Local history	
 Local port {} is busy	
@@ -1343,10 +1499,16 @@ Local time is not available on this system
 Log	
 Logs	
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
+Looking for cargo-nextest…	
+Looking for installed targets…	
 Looking for tests…	
 Looking for {} in your registries…	
+Looking up the latest versions on crates.io…	
+Looking up {}…	
 Lost the connection to {}: {}. Your open files stay here and unsaved changes are kept, but they cannot be saved until you reconnect (File: Save a Copy to This Computer… keeps one locally).	
 Lost the connection to {}: {}. Your open files stay here.	
+MIR of {}	
+Make the location writable, or save somewhere else.	
 Manage SSH hosts	
 Manage SSH hosts…	
 Manage: About, Settings, Color Theme…	
@@ -1422,12 +1584,14 @@ Move to Trash
 Move “{0}” into “{1}”?	
 Move “{}” to the Trash?	
 Name	
+Name of the copy (it starts with the settings, keybindings and snippets in use)	
 Name of the new branch (from the current one)	
 Name of the new branch (starts at this commit)	
 Name of the new branch (starts at {})	
 Name of the new extension, like my-theme	
 Name of the new file	
 Name of the new folder	
+Name of the new profile (empty settings, keybindings and snippets)	
 Name of the new theme (it joins the theme list)	
 Name of the stash (shown in the stash list)	
 Name with an extension: the extension picks the language (scratch.md, notes.json…)	
@@ -1435,6 +1599,7 @@ Names can't contain / or be . or ..
 Names only	
 Native program (C, C++, Rust, Swift)	
 Native programs	
+Needs Rust {} or newer	
 Needs attention	
 Network I/O total	
 Network RX / TX rate	
@@ -1452,11 +1617,13 @@ New URL of {}
 New Window	
 New branch name	
 New name	
+New name of the profile	
 New name of the remote	
 Newer versions of extensions from a registry: install (by themselves; versions that run code 48 hours after they are published; a version that asks for more permissions waits for your OK), notify (shown in the Extensions view; you install them) or off (nothing is downloaded until you ask). A withdrawn version is still replaced and a revoked one still stopped. Your own settings only; a folder cannot change it	
 Next	
 Next Match	
 Next Problem	
+Next change	
 Next match (↵)	
 Next result (F4)	
 No Cargo.toml found for this file	
@@ -1472,6 +1639,7 @@ No bookmarks yet: ⌥⌘K toggles one on the cursor's line.
 No breakpoints: F9 or a click in the gutter adds one.	
 No change here to revert	
 No change here to stage	
+No changed files.	
 No changes	
 No changes in this file	
 No changes to discard	
@@ -1487,6 +1655,7 @@ No containers in this Docker environment.
 No containers in this environment.	
 No containers match the current filters.	
 No crash reports: Codeyard has not crashed.	
+No crates matching “{}”	
 No debug adapter for type “{0}”. Supported: lldb (C, C++, Rust, Swift), go, python; or add {1} to the configuration.	
 No debug configuration: add .vscode/launch.json, or open a Cargo / Go project or a Python file.	
 No debug session.	
@@ -1494,6 +1663,7 @@ No debug session. F5 starts one.
 No definition found	
 No description.	
 No differences.	
+No documentation found for the item at the cursor	
 No editor is in a window of its own.	
 No edits yet in this session.	
 No enclosing brackets	
@@ -1503,6 +1673,8 @@ No extension registry is set up yet. Add one to extensions.registries in your se
 No extension registry is set up yet. Add one to extensions.registries in your settings.	
 No extensions installed. Install one from a .cyx file or a folder.	
 No favorites yet: right-click a file → Add to Favorites, or “Favorites: Toggle Active File”.	
+No file is open in this folder.	
+No file is open.	
 No file “{}” in this project	
 No files in this folder	
 No folder is open.	
@@ -1527,6 +1699,7 @@ No merge conflicts in this file.
 No merges	
 No misspelled word at the cursor.	
 No mounted storage	
+No notifications	
 No open pull requests.	
 No outgoing calls found	
 No outline for this file type.	
@@ -1535,10 +1708,12 @@ No parent module found
 No previous version is in the store.	
 No problem at the cursor	
 No problems in this file	
+No problems match the filter.	
 No problems.	
 No problems. Language servers start when you open a file.	
 No profiles or shells were found on this machine.	
 No published ports	
+No published version matches the requirement	
 No quick fixes here	
 No recent folders	
 No recently opened files	
@@ -1546,6 +1721,7 @@ No references found
 No results	
 No results in {} file.|No results in {} files.	
 No running containers.	
+No rustc error code at the cursor	
 No saved copies yet. Save the file to start its local history.	
 No setting matches.	
 No settings folder on this machine.	
@@ -1555,6 +1731,7 @@ No subtypes found
 No supertypes found	
 No symbols found.	
 No symbols in this file	
+No symbols match the filter.	
 No symbols matching “{}”	
 No task is running.	
 No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.	
@@ -1583,6 +1760,7 @@ None of this repository's remotes is on github.com, and no installed extension p
 None yet	
 None: it only adds data to Codeyard.	
 Not Now	
+Not a file: {}	
 Not activated in this window yet	
 Not breaking on exceptions.	
 Not changed (cancelled): {}	
@@ -1593,6 +1771,7 @@ Not deleted: {}
 Not forwarded	
 Not in a git repository	
 Not installed; open setup instructions	
+Not now	
 Not paused	
 Not saved: {0} (U+{1}) cannot be written in {2}. Remove it, or save a copy as UTF-8.	
 Not saved: {0} cannot be written in {1}.	
@@ -1600,24 +1779,36 @@ Not valid Base64: left unchanged
 Not valid URL encoding: left unchanged	
 Not valid {}: left unchanged	
 Nothing	
+Nothing changed	
 Nothing changed: every setting has its default value.	
 Nothing in this file is staged	
 Nothing is listening on the server yet.	
 Nothing is listening on {0}:{1} (start the program with its debug server first, e.g. `python -m debugpy --listen {1} --wait-for-client app.py`).	
 Nothing is staged: stage the changes to commit first (or turn on git.enableSmartCommit)	
 Nothing left to resolve	
+Nothing selected.	
 Nothing to choose from.	
 Nothing to commit	
+Nothing to do: it is already so.	
 Nothing to rename here	
 Nothing to replace: the files no longer contain matches.	
+Nothing to run at the cursor: put it inside a test or main.	
+Nothing to run on this line.	
 Nothing to run: select some text or put the cursor on a line.	
+Nothing to show for the item at the cursor	
 Nothing to stage in these lines	
 Nothing to unstage in these lines	
+Nothing to update: the requirements are current.	
 Nothing was installed. Run the command again with --accept-permissions to grant these, or install it from the Extensions view.	
 Nothing was installed. This release isn't signed, so Codeyard can't verify it.	
 Nothing was installed. What the update server sent didn't match the signed checksums, so Codeyard discarded it.	
 Nothing yet.	
 Nothing yet: open a folder to see it here.	
+Notifications	
+Notifications, Do Not Disturb is on	
+Notifications: Clear	
+Notifications: Show	
+Notifications: Toggle Do Not Disturb	
 Nov	
 Now	
 Numbers and booleans were written as text.	
@@ -1631,18 +1822,23 @@ One quiet color, outline glyphs
 Only My Commits	
 Only When I Ask	
 Only a published branch can be force-pushed: use Publish Branch first.	
+Only in the folder {}.	
 Only left	
 Only on the left	
 Only on the right	
 Only right	
 Only send it if you trust this file.	
 Only the connection is removed; the remote repository itself is untouched.	
+Only the first {} files are searched.	
 Only the local tag is removed. A copy on a remote stays until you delete it there (Git: Delete Remote Tag…).	
+Only the {} changed file.|Only the {} changed files.	
+Only the {} open file.|Only the {} open files.	
 Only this host's entry is removed. The previous file is kept as config.codeyard-bak.	
 Only trust folders from people you know: what you trust can run programs on the computer that holds it, with your rights.	
 Opacity	
 Open	
 Open Changes	
+Open Crash Reports Folder	
 Open Editors	
 Open Editors ({})	
 Open File	
@@ -1659,16 +1855,19 @@ Open System Settings
 Open View: {0} ({1})	
 Open a .code-workspace file in the editor first.	
 Open a .http or .rest file to send requests.	
+Open a Cargo.toml first	
 Open a Markdown file (.md) to preview it.	
 Open a Rust file first	
 Open a file first	
 Open a file first.	
 Open a file in a Git repository first.	
 Open a file in the editor first.	
+Open a file inside a folder to run it.	
 Open a file inside a folder to run its tests.	
 Open a file to see its history.	
 Open a file to see its structure.	
 Open a file with merge conflicts first.	
+Open a folder first	
 Open a folder first (⌘O), then create files in it.	
 Open a folder first, then save it as a project.	
 Open a folder first.	
@@ -1694,6 +1893,7 @@ Open in Browser
 Open in Integrated Terminal	
 Open in New Window	
 Open in a Search Editor tab	
+Open keybindings.jsonc	
 Open on GitHub	
 Open on {}	
 Open recent or connect… (⌃R)	
@@ -1709,12 +1909,14 @@ Open worktree in this window
 Open ~/.ssh/config	
 Open “{}”	
 Opening…	
+Opens the rust-analyzer status page	
 Order of files and folders in the explorer	
 Origin	
 Outline	
 Output	
 Output of {}	
 Output: Clear	
+Outside the open folders: {}	
 Overview	
 Overwrite	
 Panel	
@@ -1736,6 +1938,7 @@ Paths can't end with / or contain . or .. parts
 Pattern, e.g. foo($X, $$$REST)	
 Pause	
 Pause (F6)	
+Pause animation (Space)	
 Pause the program first (a breakpoint or ⏸): the variable has to be in scope.	
 Pause updates	
 Paused	
@@ -1745,7 +1948,10 @@ Payload
 Permalink copied.	
 Permalink copied. The file has changes that are not committed, so the link shows the committed version.	
 Permanently delete {0} item on {1}?|Permanently delete {0} items on {1}?	
+Permanently delete {0} item? It cannot be undone and is not moved to the trash: {1}|Permanently delete {0} items? They cannot be undone and are not moved to the trash: {1}	
 Permanently delete “{0}” on {1}?	
+Permanently deletes the file; it is not moved to the trash.	
+Permanently deletes the folder and everything in it; it is not moved to the trash.	
 Permission switches	
 Permissions	
 Permissions: none.	
@@ -1762,6 +1968,7 @@ Pin the enclosing function or class line while scrolling
 Pin to the top	
 Plain Text	
 Platform	
+Play animation (Space)	
 Pop (apply and drop)	
 Pop Latest Stash	
 Pop Stash…	
@@ -1791,6 +1998,8 @@ Preferences: Reset Settings to Defaults…
 Preferences: Settings	
 Preserve case (⌥P)	
 Preserve case when replacing	
+Press keys…	
+Press the keys for “{}”. Escape cancels.	
 Preview	
 Preview HTML in your browser	
 Preview Replace	
@@ -1800,19 +2009,32 @@ Preview port (0: choose a free port automatically)
 Preview {}	
 Previous Match	
 Previous Problem	
+Previous change	
 Previous match (⇧↵)	
 Previous result (⇧F4)	
 Previous session ended; started a new shell	
 Primary Side Bar	
 Primary side bar: {}	
 Problems	
+Problems: Copy All	
 Problems: Copy Full Diagnostic	
+Problems: Toggle Active File Only	
 Problems: {}	
+Proc macros rebuilt	
 Process ended. Press any key to close.	
 Process exited with code {}	
 Process exited with code {}. Press any key to close.	
 Processes	
 Profile new terminals use	
+Profile “{0}” is now “{1}”.	
+Profile “{}” deleted.	
+Profile “{}” is active.	
+Profile: {}	
+Profiles: Create…	
+Profiles: Delete…	
+Profiles: Duplicate Current…	
+Profiles: Rename…	
+Profiles: Switch…	
 Progress	
 Project	
 Project lifecycle commands will run. Rebuild replaces the container; persistent volumes are kept.	
@@ -1822,6 +2044,9 @@ Projects: Add Folder to Projects…
 Projects: Edit Projects	
 Projects: Remove from Recent…	
 Projects: Switch Project… (Open Recent)	
+Proposed: {0} {1}, {2}.	
+Proposed: {0} {1}.	
+Proposed: {}.	
 Protocol: HTTP	
 Protocol: HTTPS	
 Protocol: TCP	
@@ -1858,6 +2083,7 @@ Pushing tags…
 Pushing {}…	
 Pushing…	
 Put the cursor inside a merge conflict	
+Put the cursor on a dependency first	
 Put the cursor on a symbol to rename it	
 Python: attach to a debug server	
 Python: current file	
@@ -1883,6 +2109,7 @@ Read {}
 Reading folders… {0} and {1} entries	
 Reading the file…	
 Reading the registries…	
+Real location: {}	
 Rebase	
 Rebase aborted	
 Rebase finished	
@@ -1895,6 +2122,7 @@ Rebased onto {}
 Rebasing onto {}…	
 Rebuild Dev Container…	
 Rebuild and Open	
+Rebuilding proc macros…	
 Recent	
 Recent denials	
 Reconnect	
@@ -1905,6 +2133,7 @@ Reconnected. Terminals kept running.
 Reconnecting to {0} (attempt {1})	
 Reconnecting to {}… (attempt {})	
 Redo	
+Refactor Preview	
 Refresh	
 Refresh Explorer	
 Refresh Tests	
@@ -1920,6 +2149,8 @@ Reinstall Previous Version
 Release Notes	
 Release Page	
 Reload history	
+Reloading the Rust workspace…	
+Remote	
 Remote & Languages	
 Remote Docker environments currently support attaching to existing containers. Create Dev Containers with a local Docker engine.	
 Remote Explorer	
@@ -1949,12 +2180,14 @@ Remove Host…
 Remove a host	
 Remove blank lines at the end of a file when saving	
 Remove control characters from pasted text	
+Remove dependency “{}”	
 Remove folder from workspace	
 Remove from Favorites	
 Remove from Recent	
 Remove from recent	
 Remove from the workspace file	
 Remove it from Recent?	
+Remove key	
 Remove remote {}?	
 Remove trailing spaces when saving	
 Remove which SSH host from ~/.ssh/config?	
@@ -1965,19 +2198,27 @@ Remove “{}” from ~/.ssh/config?
 Removed	
 Removed from favorites: {}	
 Removed remote {}	
+Removed with cargo remove	
 Removed worktree {}	
+Removed {0} from “{1}”	
 Removed {} from “{}”.	
+Removed “{0}” by editing the file (cargo remove: {1}). Save the file to keep it.	
 Removed “{}” from ~/.ssh/config	
+Removed “{}”. Save the file to keep it.	
 Removing {}…	
 Rename	
 Rename Symbol	
 Rename Terminal…	
+Rename a profile	
 Rename branch	
+Rename profile	
 Rename remote	
 Rename the matching HTML/XML tag while you edit one	
 Rename to	
+Rename to “{}”	
 Rename which branch?	
 Rename which remote?	
+Rename {0} to {1}	
 Renamed	
 Renamed remote {0} to {1}	
 Renamed {0} to {1}	
@@ -2009,6 +2250,8 @@ Repository changed while the operation was pending.
 Repository discovery failed	
 Repository is no longer available: {}	
 Repository: {}	
+Requirement “{0}”, Cargo.lock has {1}	
+Requirement “{}”	
 Rerun	
 Reset	
 Reset All Settings…	
@@ -2020,6 +2263,7 @@ Reset Zoom
 Reset all settings to the defaults?	
 Reset past {0} commit that is already on {1}?|Reset past {0} commits that are already on {1}?	
 Reset the Rust setup in settings.jsonc?	
+Reset to default	
 Reset to {0} ({1}); the branch was at {2}	
 Resolve Conflicts	
 Resolve the file conflict before debugging.	
@@ -2036,6 +2280,7 @@ Restart to update
 Restart without saving	
 Restarting language servers…	
 Restarting loses everything since the last save.	
+Restarting rust-analyzer…	
 Restore Panel Size	
 Restore window	
 Restored from the last session, only the first {} results were kept: they may be out of date. Rerun to refresh.	
@@ -2056,6 +2301,7 @@ Revert in progress
 Revert stopped and was undone: {}	
 Reverted {}	
 Reverting a change is not supported in this file (non-UTF-8 or CR-only line endings)	
+Review a language server's rename or quick fix before it is applied: auto (when it changes several files or moves, creates or deletes files), always or never (file operations are always reviewed)	
 Review every change before replacing (↵ in the field)	
 Review the Dev Container environment	
 Review…	
@@ -2074,25 +2320,48 @@ Run Without Debugging
 Run a command	
 Run and Debug	
 Run and Debug (⌃⇧D)	
+Run command	
+Run or debug	
+Run or debug on line {}	
 Run task	
 Run the search again	
 Run this search again in the same folder	
 Run to Cursor	
+Run {}	
 Run {} with any arguments	
 Running	
 Running Process	
 Running code extensions in this window: why they started, how long their calls took, what was denied. Nothing here leaves this computer.	
 Running task: {}	
 Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	
+Running with cargo-nextest. Documentation tests are not run.	
 Running: {}	
 Running…	
+Rust check cancelled	
+Rust check results cleared	
+Rust check started	
 Rust formatters not loaded: {}	
 Rust language features are disabled. Enable lsp.enabled in Settings.	
 Rust language server is not ready. Check Output, then run “Developer: Restart Language Servers”.	
 Rust tests did not build. See Output and Problems for the compiler errors.	
+Rust workspace reloaded	
+Rust: Cancel Flycheck	
+Rust: Clear Flycheck	
 Rust: Expand Macro Recursively	
+Rust: Explain Error at Cursor	
 Rust: Locate Parent Module	
 Rust: Open Cargo.toml	
+Rust: Open Documentation	
+Rust: Rebuild Proc Macros	
+Rust: Reload Workspace	
+Rust: Restart rust-analyzer	
+Rust: Run Flycheck	
+Rust: Run Runnable at Cursor	
+Rust: Select Target…	
+Rust: Show rust-analyzer Status	
+Rust: View HIR	
+Rust: View MIR	
+Rust: View Syntax Tree	
 SSH Hosts	
 SSH host	
 SSH {0}: {1}. Docker must be installed and accessible to the SSH user on the remote host.	
@@ -2134,13 +2403,15 @@ Search
 Search (⇧⌘F)	
 Search Commits	
 Search commands or keys (e.g. “comment”, “⌘D”)	
-Search commands to bind a key	
 Search commits	
 Search commits (message, author, hash)	
 Search containers, images or projects…	
+Search failed: {}	
 Search files by name	
 Search files by name (> commands, : line, # symbols, ? help)	
+Search in:	
 Search installed extensions	
+Search is not available for this project's registry	
 Search log messages or timestamps…	
 Search results	
 Search results are incomplete; rerun before replacing.	
@@ -2148,7 +2419,11 @@ Search settings
 Search the Market	
 Search {}	
 Search: Find TODO Comments	
+Search: Find in Changed Files	
+Search: Find in Current Folder	
 Search: Find in Files	
+Search: Find in Open Editors	
+Search: Find in Workspace	
 Search: Open Search Editor	
 Search: Structural Replace…	
 Search: Structural Search…	
@@ -2181,6 +2456,9 @@ Select the active file in the explorer
 Selected container	
 Selected {} for compare. Right-click another file and choose Compare.	
 Selected {} for compare. Right-click another folder and choose Compare Folder with Selected.	
+Selected: {0} {1}, {2}.	
+Selected: {0} {1}.	
+Selected: {}.	
 Selection	
 Send	
 Send Request	
@@ -2190,6 +2468,8 @@ Sending {} {}…
 Sep	
 Served folder (empty: automatic; relative to the workspace, or an absolute path on the active host)	
 Server binding	
+Server report	
+Server:	
 Servers	
 Services	
 Set	
@@ -2207,6 +2487,7 @@ Setting up key login for {}…
 Setting upstream of {}…	
 Setting: {}	
 Settings	
+Settings profile “{}”. Click to switch profiles.	
 Settings reset. The old file is kept as {}	
 Settings…	
 Several Rust targets reported this test name. Run it individually to identify the failing target.	
@@ -2215,10 +2496,13 @@ Shell for new terminals (empty: login shell)
 Show All	
 Show Changed Files…	
 Show Codeyard in Finder	
+Show Errors	
+Show Information	
 Show Installed	
 Show Only Failed Tests	
 Show Output	
 Show Stash…	
+Show Warnings	
 Show a color swatch next to #rrggbb values	
 Show a tooltip when the mouse rests on a word	
 Show changed files	
@@ -2229,10 +2513,12 @@ Show file icons on tabs
 Show fold arrows in the gutter	
 Show folders that only hold one folder as one row	
 Show identical	
+Show in Folder	
 Show in the Explorer	
 Show indent guides	
 Show line numbers in search results	
 Show lines matching (regular expression, case-insensitive), e.g. {}	
+Show related files under the file they belong to (Cargo.lock under Cargo.toml)	
 Show spaces and tabs as marks	
 Show the Markdown source	
 Show the Open Editors list in the explorer	
@@ -2240,13 +2526,17 @@ Show the activity bar
 Show the author name on Source Control graph rows	
 Show the editor tab bar	
 Show the file path above the editor	
+Show the latest versions of your dependencies? This contacts index.crates.io with the names of the crates in this file.	
 Show the minimap	
 Show the short commit hash on Source Control graph rows	
 Show the status bar	
+Show these lines	
 Show type and parameter name hints from the language server	
 Show who last changed the cursor line (and when) at the end of the line	
 Showing the first 100,000 files of a very large folder	
 Showing the last successful snapshot.	
+Showing {0} of {1} problems	
+Showing {0} of {1} problems: {2} errors, {3} warnings, {4} information	
 Shrink Selection	
 Side by side	
 Sign In…	
@@ -2264,8 +2554,17 @@ Snippets: Insert Snippet…
 Software Update	
 Solid blue folders like Finder, outline files with a language dot like GitHub	
 Solid folders colored and marked by purpose, solid files colored by language	
+Some bytes are not valid UTF-8 and are shown as replacement characters	
+Something with that name already exists.	
 Sort by {}	
 Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order)	
+Sort: File	
+Sort: Kind	
+Sort: Line	
+Sort: Name	
+Sort: Position	
+Sort: Severity	
+Source	
 Source Control	
 Source Control (⌃⇧G)	
 Source Control graph view: graph (branch lanes), compact (one line per commit) or dates (grouped by day)	
@@ -2294,6 +2593,8 @@ Staging changes inside a symlink or submodule is not supported
 Staging changes is not supported in files with old-Mac (CR only) line endings	
 Staging changes needs a UTF-8 file	
 Staging changes needs a UTF-8 file (this one is stored in another encoding)	
+Staging is off while whitespace is ignored	
+Staging is off: the file is not valid UTF-8	
 Staging…	
 Start	
 Start Debugging	
@@ -2349,6 +2650,8 @@ Suggestions
 Suggestions pop up while typing (off: only Ctrl+Space)	
 Sunday	
 Switch Workspace or Connect to Host…	
+Switch between 100% and fit	
+Switch to a profile	
 Switched to {}	
 Switched to {}. Your changes are in the stash: Git: Pop Latest Stash brings them back.	
 Switching to {}…	
@@ -2357,6 +2660,7 @@ Sync Changes {}
 Sync changes?	
 Synced	
 Syncing…	
+Syntax tree of {}	
 TOML dates were turned into text.	
 TOML needs a table at the top level, but this document is a {}	
 Tab Moves Focus	
@@ -2381,6 +2685,7 @@ Task “{}” has a variable that cannot be expanded.
 Task “{}” has no command.	
 Task “{}” needs an open file.	
 Task “{}” runs in the background but its problem matcher has no endsPattern, so nothing can wait for it.	
+Tasks	
 Tasks, tests and debugging	
 Tasks: Configure Tasks	
 Tasks: Rerun Last Task	
@@ -2435,6 +2740,7 @@ Test: Stop Running Tests
 Testing	
 Testing {}…	
 Tests: {0} passed, {1} failed	
+That dependency is gone.	
 That does not look like a repository address.	
 The JavaScript debugger is already installed.	
 The README is shortened here; the full one is in the package.	
@@ -2448,19 +2754,27 @@ The branch goes back to how it was before the rebase started.
 The branch is fully merged into the current branch.	
 The branch is removed from the remote repository for everyone. Local branches are not touched.	
 The branch moved while the question was open. Nothing was changed.	
+The build failed. See Output and Problems for the compiler errors.	
 The bundled service catalogue is invalid. Reinstall Codeyard before retrying.	
 The changes are too large for one patch.	
 The clipboard has no text.	
 The commit stays on {}: the next Sync brings it back. To remove it there too, push with force after undoing (Git: Push (Force)…).	
 The complete file list is available in Output.	
+The connection closed before it finished.	
 The connection dropped; trying to reconnect. Unsaved changes are kept.	
 The connection is down, so files with unsaved changes cannot be saved. Use File: Save a Copy to This Computer… to keep them, or close them, then reconnect.	
+The connection or folder changed since the preview. Nothing was changed.	
 The connection or folder changed since the preview. Rerun the search and preview again.	
+The connection or folder changed while the refactoring was prepared. Nothing was changed.	
+The connection to the debug adapter was lost	
+The connection to the language server was lost	
 The connection to {} dropped while the data was being exchanged.	
 The connection to {} dropped. Reconnecting…	
 The connection to {} was lost during the scan, so the result is partial. Scan again once it is back.	
 The connection was lost; the results are incomplete.	
 The crash report is on the clipboard. Nothing was sent.	
+The current folder is not inside this folder.	
+The current folder is the workspace.	
 The debug adapter did not accept a connection	
 The debug adapter did not start listening	
 The debug adapter exited before connecting	
@@ -2468,37 +2782,67 @@ The debug adapter exited before it started listening
 The debug adapter stopped	
 The debug adapter stopped (exit code {})	
 The debugger could not bind this breakpoint.	
+The default profile is active.	
+The default profile is already active.	
+The dependency versions are not loaded yet. Try again in a moment.	
 The destination window is no longer available.	
+The disk is full (or your quota is used up).	
+The disk or folder is read-only.	
 The download finished but js-debug was not found in it.	
+The edit list is missing.	
 The editor could not move to a new window: {}	
 The element can't be renamed.	
 The file changed during the write ({})	
+The file changed meanwhile. Try again.	
 The file changed on disk while you were editing. Nothing was saved.	
+The file changed on disk; resolve the conflict first.	
 The file changed since this diff was shown. It has been reloaded: pick the lines again.	
 The file could not be read.	
 The file is empty.	
 The file is not open any more.	
 The file is not tracked by Git.	
 The file is too large for an outline.	
+The file list could not be read: only opened folders are searched.	
+The file to delete is not there.	
+The file to rename is not there.	
+The file was edited while the language server was working, so its answer no longer fits. Try again.	
+The files changed since the preview. Discard this page and start the refactoring again.	
 The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
+The folder is not empty and the server did not ask to delete what is in it.	
+The folder is not empty.	
+The folder it belongs in does not exist.	
+The folder of “{}” with its settings, keybindings and snippets is deleted. This cannot be undone.	
+The full report is in the crash reports folder and stays on this computer. Help: Report Issue… opens a new issue with the version filled in.	
 The host stopped responding. Installation files were retained because a process may still be running. Reconnect and inspect the destination before retrying.	
 The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	
 The input “{}” would run an editor command; use promptString or pickString.	
+The language server proposed no changes.	
+The language server sent a documentation link that is not a web page or a local HTML file, so it was not opened	
+The language server's refactoring is too large to review ({0} files, {1} changes; the limit is {2} files and {3} changes). Nothing was changed.	
 The last background fetch failed: {}	
 The last command exited with code {}	
+The last session ended without closing normally, and no crash report explains why.	
 The local port is busy	
 The local port was not changed: {}. Back on localhost:{}	
 The managed installation is incomplete or belongs to another catalogue. Reinstall the services to repair it.	
+The name has characters this system does not allow.	
+The name or the path is too long.	
+The new name is taken; Codeyard never overwrites a file in a refactoring.	
 The new version couldn't be installed from here. You can download it from the release page instead.	
 The number {} cannot be written in JSON	
 The open folder is no longer listed in the workspace file.	
+The operation took too long and was stopped.	
+The operation was interrupted.	
 The other editor's settings.json could not be read	
 The patch is too large.	
 The patch was not applied: {}	
 The pattern does not parse: {0} (line {1}, column {2})	
 The preLaunchTask “{0}” did not succeed ({1}), so debugging was not started. Check its terminal, then start debugging again.	
+The problem matcher of “{}” skipped a line it could not read (too long, or the pattern took too long). Problems from that task may be missing.	
+The profile “{}” cannot be read now. The default profile is active until it can.	
+The profile “{}” is missing or cannot be used. The default profile is active.	
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	
 The program is running: pause it first, or set a breakpoint.	
 The project's Rust toolchain is not installed. Run `rustup toolchain install` in the project folder.	
@@ -2509,6 +2853,7 @@ The query is too long
 The query needs more work than allowed; narrow it down	
 The query was edited: press Enter or Rerun to search for it.	
 The quoted value is not closed	
+The refactoring failed, so everything it had done was taken back. Nothing was changed.	
 The release notes are longer: read the rest at {}	
 The release notes are longer: read the rest on GitHub.	
 The remote has commits you do not have: pull first (Git: Pull), then push. To overwrite them instead, use Git: Push (Force).	
@@ -2520,19 +2865,28 @@ The response could not be saved (curl write error).
 The response is larger than {} and was not downloaded.	
 The result would not parse in {0} file: {1}|The result would not parse in {0} files: {1}	
 The runtime checksum did not match. Nothing was activated. Check the connection and retry.	
+The saved editor layout could not be read: the files are shown in one group.	
 The search failed.	
 The search or the connection changed while the preview was being made. Preview again.	
 The secondary side bar shows no view.	
 The selection is neither a JWT nor a Unix timestamp	
 The server did not answer within 60 seconds.	
+The server gave two different document versions for this file.	
 The server no longer accepts an account password: use a personal access token as the password (or sign in with the GitHub CLI: gh auth login).	
 The server protects this branch and refuses direct pushes: push to another branch and open a pull request.	
 The server refused the login: check the account and that the token may push.	
 The server wants credentials that were not given: try again and enter them when asked, or set up an SSH key.	
+The server's edit is for version {0} of this file, the editor has version {1}.	
+The settings file is not {} any more (another profile?). Nothing was written.	
+The settings folder is gone. Nothing was changed.	
 The shell has exited	
 The shell may run each line as soon as it arrives.	
+The source and the target are on different disks.	
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
+The state database {0} is damaged ({1}) and could not be moved aside. {2} Tabs, recent folders and backups will not be remembered this session.	
 The string is not closed	
+The system does not allow this: the item may be protected, locked or sandboxed.	
+The system reported an error: {}.	
 The tag disappears from the remote repository for everyone. Your local copy is kept.	
 The task file has an invalid “{}”.	
 The task file is not valid JSON.	
@@ -2541,10 +2895,13 @@ The terminal could not move to a new window: {}
 The test runner stopped without reporting this test. See Test Results for build or runner errors.	
 The text is not a patch.	
 The token has no signature.	
+The two sides differ only in whitespace	
 The update couldn't be installed	
 The update couldn't be verified	
 The update failed part-way and Codeyard couldn't put the previous version back. It may be at {0}. If Codeyard doesn't start, move it back to {1}.	
 The update failed. Click for details.	
+The version comes from [workspace.dependencies].	
+The version that was on disk could not be kept in Local History. {}	
 The version that was on disk has been kept in Local History.	
 The view could not move to a new window: {}	
 The workspace changed. Open the source project and review its container configuration again.	
@@ -2564,10 +2921,15 @@ Themes live in {}: drop theme .json files there
 Themes, languages, language servers, snippets and key bindings that come with Codeyard are built in and always on.	
 There are no changes to put in a patch.	
 There are no local changes to stash	
+There are no profiles yet. Create one with “Profiles: Create…”.	
 There are no staged changes to stash	
 There are no stashes.	
+There is already a profile named “{}”. Names differ by more than letter case.	
 There is no breakpoint on this line (F9 adds one).	
 There is no commit to undo	
+There is no log file yet.	
+There is no profile named “{}”.	
+There is no refactoring to undo.	
 There is no replacement to undo.	
 There is no request here. Write METHOD URL on a line, separate requests with ###.	
 There is no task called “{}”.	
@@ -2579,12 +2941,14 @@ There isn't enough free disk space for the download. Free some space and try aga
 These branches share no history, so git will not merge them. In a terminal, `git merge --allow-unrelated-histories` merges them anyway.	
 They stay on {}: the next Sync brings them back. To remove them there too, push with force after the reset (Git: Push (Force)…).	
 They were not found.	
+This animation has {0} frames of {1} × {2} pixels, too large to play.	
 This branch is not published yet. Click to publish it.	
 This can't be undone.	
 This change removes the file: unstage the whole file instead	
 This computer	
 This container is paused or restarting. Resume it in Docker before connecting.	
 This copy isn't installed as an app, so download the new version yourself.	
+This copy of the repository is a shallow clone and ends at this commit, so the file before it is not available.	
 This debug adapter cannot change values.	
 This debug adapter does not support data breakpoints.	
 This debug adapter has no exception breakpoints.	
@@ -2595,15 +2959,18 @@ This file cannot be read as {}
 This file has merge conflicts: resolve them first (Source Control marks it resolved when staged)	
 This file has no commits or saved copies yet.	
 This file is already on this computer. Use Save As instead.	
+This file is binary, so there is no line diff to show	
 This file is not in the repository.	
 This file is outside the open folder.	
 This file is outside the repository root	
+This file is too large to compare here ({} MB; the limit is {} MB)	
 This file is {0} MB; Data: Query handles files up to {1} MB.	
 This file mixes line endings; saving writes all of them as {}, like its first line. Change it in the status bar.	
 This file was deleted on disk. Save it explicitly before debugging.	
 This file was deleted on disk. Saving will create it again.	
 This folder is already a git repository.	
 This folder is not a git repository.	
+This folder is not trusted, so a language server's edits are not applied.	
 This frame cannot be restarted.	
 This image is {0} × {1} pixels, too large to preview.	
 This is a development build and can't update itself. Download the new version yourself.	
@@ -2625,6 +2992,7 @@ This search belongs to {0} on {1}, which this window does not show. Results cann
 This tab cannot move to that window: its folder is on another machine.	
 This view is not available.	
 This window is installing an update. You can close it in a few seconds.	
+This {} file could not be read. It may be damaged or cut short.	
 Thursday	
 Timeline	
 Title bar	
@@ -2640,6 +3008,7 @@ Toggle a break-on-exception filter
 Toggle inline view	
 Too many files to preview ({}). Narrow the search.	
 Track which remote branch?	
+Trailing whitespace is ignored. Click to ignore all whitespace	
 Transfer cancelled.	
 Transfer failed: {}	
 Trust Folder	
@@ -2653,18 +3022,22 @@ Trust this host and connect
 Trusted “{}”	
 Try Again	
 Try again	
+Try again.	
+Try again; copy the details if it keeps happening.	
 Tuesday	
+Turn on Do Not Disturb	
 Two tasks are called “{}”.	
 Type > for commands	
 Type a commit message first	
+Type a crate name to search crates.io	
 Type a line number between 1 and {}	
 Type a name	
+Type a name for the profile.	
 Type a name from ~/.ssh/config or user@host	
 Type a query and press Enter to search.	
 Type a query. Esc closes the bar.	
 Type into terminals	
 Type the host and the client id, separated by a space.	
-Type the shortcut for {} (e.g. cmd-shift-d), then save	
 Type {} to install it.	
 TypeScript {} · TypeScript Language Server {} · HTML/CSS {}	
 UI font of the whole window (empty: system font)	
@@ -2678,6 +3051,7 @@ Undo Last Commit
 Undo Replace	
 Undo a commit that is already on {}?	
 Undo conflict: {} changed after the replacement and was left as it is.	
+Undo is not available here: the refactoring was made in another folder or connection.	
 Undo is not available here: the replacement was made in another folder or connection.	
 Unexpected text after the closing quote	
 Unexpected “{}”	
@@ -2689,6 +3063,7 @@ Uninstall
 Uninstall {}?	
 Uninstall…	
 Unknown configuration “{}” in compound “{}”	
+Unknown file operation “{}”	
 Unknown input “{0}” in “{1}”	
 Unknown outcome, check before retrying: {0} ({1})	
 Unknown theme '{0}'. Available: {1}	
@@ -2705,16 +3080,24 @@ Unsupported encoding: the file would not be written back exactly, so it is not c
 Unterminated quote in the Cargo test command	
 Untracked files will be deleted. This can't be undone.	
 Unwrapped lines	
+Up and Down move, Space selects, Enter opens, Left and Right fold, {}Enter applies, Escape discards. Nothing is written before Apply Selected.	
+Up to date: the latest release is {}	
 Up to {} editors can be in windows of their own.	
 Update	
 Update Now	
 Update available	
+Update available: {}	
 Update failed	
 Update installed	
 Update installed. Restart Codeyard to finish.	
 Update needs your OK	
 Update {}	
+Update {} dependency in this file to its newest compatible version|Update {} dependencies in this file to their newest compatible versions	
+Update {} dependency in this file to the latest version|Update {} dependencies in this file to the latest versions	
+Update “{0}” to the latest version, {1}	
+Update “{0}” to {1}, the newest compatible version	
 Updated the URL of {}	
+Updated {} dependency|Updated {} dependencies	
 Updates paused	
 Updating .gitignore…	
 Updating {}…	
@@ -2729,6 +3112,10 @@ Uploading has to wait: the connection is still being set up.
 Uploading is not possible in this workspace.	
 Uploading needs the connection to {}, which failed: use Reconnect first.	
 Uploading works with a connected SSH host: connect first (⌃R).	
+Use a name without special characters.	
+Use a shorter name or a shallower folder.	
+Use the name as typed	
+User	
 User Forwarded	
 User: {}	
 Username	
@@ -2747,6 +3134,7 @@ Version {} asks for more than the version you have, which keeps running until yo
 Version {} is available.	
 Version {} is installed.	
 Version {} waits: the registry's list is more than 3 days old.	
+Version {} was yanked	
 Versions	
 View	
 View File History	
@@ -2833,11 +3221,15 @@ Welcome (no recent folders yet)
 What kind of extension?	
 What opens at start: welcome (the start page), continue (where you left off, SSH hosts included) or blank (an empty window)	
 What runs after a commit: nothing, push or sync. Your own settings only; a folder cannot change it	
+What you can do	
+When	
 When a file, diff or page opens while the panel is maximized: shrink the panel to half, give it back its size, or move the terminal into a tab	
 When the close button of a tab shows	
 Where .http requests are sent from: the workspace host (the server when connected over SSH) or this computer	
 Where a right click goes while a program in the terminal reads the mouse: the terminal's menu or the program (Shift opens the menu)	
 Where forwarded ports listen: this computer only, or every network interface	
+Whitespace	
+Whitespace differences are shown. Click to ignore trailing whitespace	
 Whole word	
 Whole word (⌥W)	
 Why: {}	
@@ -2848,6 +3240,8 @@ Without Full Disk Access, Desktop, Documents or external drives may look empty.
 Without one, F5 finds a configuration from the project (Cargo, Go, or the open Python or JavaScript file).	
 Word Wrap	
 Workbench	
+Workspace	
+Workspace Trust	
 Workspace Trust is off (security.workspaceTrust.enabled).	
 Workspace Trust: Restricted Mode, this folder is not trusted. Select a folder to stop trusting it	
 Workspace Trust: select a trusted folder to stop trusting it	
@@ -2863,10 +3257,12 @@ Worktree locked: {}
 Worktrees	
 Wrap long lines: at the window edge (on), at a column (wordWrapColumn) or at whichever comes first (bounded)	
 Wrapped lines	
+Write the selected changes; nothing else is touched ({}Enter)	
 Write to the clipboard	
 YAML schema for {}	
 You are connected to “{}”. Disconnect first.	
 You can restore it from the Trash.	
+You do not have permission to do that.	
 You have unsaved changes	
 You have {}	
 You have {}, the latest version.	
@@ -2882,6 +3278,9 @@ Your uncommitted changes would be overwritten by the switch. They go into a stas
 Zoom	
 Zoom In	
 Zoom Out	
+Zoom in (+)	
+Zoom level	
+Zoom out (-)	
 `{}` did not answer within {} seconds; check the network connection and try again	
 `{}` is not installed or not on PATH	
 a comment is not closed	
@@ -2891,7 +3290,10 @@ a program
 a string is not closed	
 a theme must be a JSON object	
 about {0} MB · {1}	
+active	
 added	
+animated PNG, first frame shown	
+animated, {} frame|animated, {} frames	
 another Codeyard window has them; started new shells	
 approved	
 args must be a list of texts	
@@ -2908,6 +3310,7 @@ by {}
 cancelled	
 cannot read “{}” in the path	
 cannot read “{}” of the response	
+cargo-nextest was not found, so the tests run with cargo test. Install it with `cargo install cargo-nextest`.	
 changes requested	
 class	
 click to open · Esc to close	
@@ -2925,6 +3328,7 @@ could not list
 could not load pull requests	
 could not read {}: {}	
 could not run curl on {}: {}	
+crates.io could not be reached (offline?)	
 curl is not installed on {0}; install it or set http.runOn to {1}	
 curl returned no response headers	
 current	
@@ -2955,6 +3359,7 @@ edit the file by hand
 editor.formatters.{}: expected “lsp” or an extension id	
 empty body	
 empty variable	
+enabled by default	
 ended	
 ended before it was ready	
 entry	
@@ -2966,6 +3371,7 @@ env.{} is not used: a name of letters, digits and _ with a text value
 event	
 exception	
 expected a list [ … ]	
+expected an object of patterns	
 expected an object with path, args, env or color	
 expected an object { … }	
 expected an object { … } (previous settings kept)	
@@ -2973,6 +3379,8 @@ expression to watch (e.g. total * 2, items.len())
 extensions.registries[{0}]: the name “{1}” is used twice	
 failed	
 failed (exit code {})	
+feature {0} of {1}: enables nothing else	
+feature {0} of {1}: enables {2}	
 features: {}	
 fetches {} from {}	
 field	
@@ -2997,6 +3405,7 @@ git {} failed
 goes to an address whose host cannot be read reliably	
 goes to {}, which you have not sent anything to in this session	
 goto	
+heading	
 image default	
 in a key binding, == and != compare editor.language with a language id	
 in {} file|in {} files	
@@ -3023,6 +3432,7 @@ keymap preset “{}” is not installed
 label, e.g. web (empty: none)	
 language server is not running	
 language “{0}” names grammar “{1}”, which Codeyard does not have	
+latest	
 latest {} open	
 left	
 light	
@@ -3034,6 +3444,7 @@ lines {0}–{1}
 link target differs	
 local agent, protocol test	
 local port, e.g. 8080	
+lookup failed	
 merge	
 merged	
 method	
@@ -3050,11 +3461,13 @@ no default features
 no file name	
 no item {} in the response	
 no upstream	
+no version matches	
 no “{}” in the response	
 not UTF-8	
 not a PNG, JPEG, GIF, WebP or SVG image	
 not available	
 not declared	
+not found on crates.io	
 not run	
 not run: a dependency failed	
 not run: too many tasks in the background	
@@ -3064,9 +3477,11 @@ not set
 not signed in to {0}; call auth.session with “{1}” first	
 now	
 of {}	
+offline	
 only the first {} files were looked at (search.structural.maxFiles)	
 open	
 operator	
+optional dependency	
 output: {}	
 package	
 partly selected	
@@ -3094,13 +3509,24 @@ remote
 renamed	
 renamed from {}	
 render must answer with response.view	
+repeated {} times	
 request failed	
 review needed	
 revoked: {}	
 right	
 running	
+rust-analyzer is not running for this file	
+rust-analyzer status	
+rust-analyzer: checking	
+rust-analyzer: error	
+rust-analyzer: loading	
+rust-analyzer: ready	
+rust-analyzer: warning	
+rust.semanticModifiers: unknown modifier {} ({})	
+rust.target: {} is not a target triple (letters, digits, - _ .)	
 rustc not found	
 seconds	
+section	
 selected	
 send the request named “{}” first	
 sends {} to {}	
@@ -3122,6 +3548,7 @@ symbol
 symbolic links are not copied	
 syntax error at “{}”	
 tag	
+target: {}	
 task	
 terminal name	
 terminal.scrollback: {} lines can use hundreds of megabytes per terminal and slow down scrolling and search (up to {} is comfortable); applied as set	
@@ -3186,6 +3613,7 @@ too many copies
 too many or too large patterns	
 turned off after three crashes	
 turned off on the extension page	
+type	
 type parameter	
 unclosed [ in the path	
 undefined variable {}	
@@ -3200,6 +3628,8 @@ unknown role: {}
 unknown setting {}	
 unknown variable {}	
 unrecognized theme format (expected “color” or “colors”)	
+up to date (latest {})	
+update available: {}	
 uploading agent	
 uploads a file whose name comes from a variable ({})	
 uploads {}, which is outside this file's folder	
@@ -3213,12 +3643,16 @@ via the GitHub API
 via the gh CLI	
 via the public GitHub API (set GITHUB_TOKEN or use gh for private repositories and check results)	
 waiting for the connection to come back	
+when {}	
 whole file	
 with subfolders	
 withdrawn	
 withdrawn by its publisher	
 workbench.colorCustomizations: unknown color role {0} (see crates/theme/design/tokens.json: {1})	
+yanked	
+yanked: {}	
 your words	
+{0} (+{1} more)	
 {0} (from {1})	
 {0} (line {1}, column {2})	
 {0} (saved) ↔ {1} (editor)	
@@ -3227,12 +3661,16 @@ your words
 {0} ({1}) is published by {2}.	
 {0} / {1} containers	
 {0} / {1} lines · {2} errors · {3} warnings	
+{0} Files to include is not used.	
+{0} Warning: {1} is also used by {2}.	
 {0} and {1} cannot be added	
 {0} and {1} cannot be divided	
 {0} and {1} cannot be divided because the divisor is zero	
 {0} and {1} cannot be multiplied	
 {0} and {1} cannot be subtracted	
 {0} and {1} cannot have their containment checked	
+{0} and {1} more	
+{0} can be updated: “{1}” does not allow the latest release, {2}	
 {0} can now sign in to {1}.	
 {0} cannot be used with {1}	
 {0} commit{1} only exist on this branch and will be lost (the reflog keeps them for a while).	
@@ -3242,13 +3680,16 @@ your words
 {0} could not draw this view: {1}	
 {0} could not start: {1}	
 {0} errors, {1} warnings	
+{0} errors, {1} warnings, {2} information	
 {0} failed to start: {1}	
 {0} files and {1} folders go from {2} ({3}) to {4} ({5}). Files that exist there are replaced; anything that changed since the scan is left alone.	
+{0} for “{1}”: press Enter to save, or the next key of a sequence. Escape cancels.	
 {0} has no package for {1}	
 {0} is back at version {1}.	
 {0} is now published by {1}, not {2} as before; review it with Extensions: Install from Registry…	
 {0} is signed in to {1} as {2}.	
 {0} is signed out of {1}.	
+{0} is up to date: “{1}” allows the latest release, {2}	
 {0} isn't available ({1}). Or set “lsp.servers” in settings.	
 {0} isn't available on {1} ({2}). Or set “lsp.servers” in settings.	
 {0} isn't available on {1}. Or set “lsp.servers” in settings.	
@@ -3279,12 +3720,15 @@ your words
 {0} was updated to version {1}.	
 {0} went back to version {1}: its publisher withdrew {2}.	
 {0} went back to version {1}: the registry revoked {2}.	
+{0} with {1}, {2}: {3}	
 {0} {1} ({2}) asks to:	
 {0} {1} waits for your OK in the Extensions view.	
 {0} {1}: I/O {2}, overhead {3}	
 {0} {1}: guest {2}	
+{0} · line {1}	
 {0} · version {1}	
 {0} · version {1} · {2} license	
+{0} × {1} pixels, {2}, {3}	
 {0}, by {1}	
 {0}, change {1} of {2}	
 {0}, from {1}	
@@ -3295,6 +3739,7 @@ your words
 {0}, problems: {1}	
 {0}, signed by {1} in the {2} registry	
 {0}, {1} {2} {3}	
+{0}. Choose another symbol at this level.	
 {0}. The search stopped at the result limit, so the results are incomplete.	
 {0}. The search was cancelled, so the results are incomplete.	
 {0}/{1} passed	
@@ -3309,14 +3754,23 @@ your words
 {0}: expected {1} or a list of kinds	
 {0}: expected {1} or null	
 {0}: finish signing in to {1} in your browser.	
+{0}: lookup failed: {1}	
 {0}: no answer from {1}	
+{0}: no published version matches “{1}”	
+{0}: no published version matches “{1}” (latest is {2})	
 {0}: signed in as {1}	
+{0}: version {1} was yanked and should not be used	
+{0}: version {1} was yanked from crates.io. Update to a release that is not yanked.	
 {0}: {1} cannot be written in TOML	
+{0}: {1} did not finish: the extension stopped	
 {0}: {1} does not fit in a TOML integer (64 bits, signed)	
 {0}: {1} to pull, {2} to push. Click to sync.	
+{0}: {1} — done	
+{0}: {1}. Fix the file, then try again.	
 {0}: {1}. Start the selected container engine and check Output.	
 {0}: “{1}” is not a name .env files can hold (letters, digits and _)	
 {0}{1} found	
+{1} has no feature named {0}	
 {{$processEnv}} needs a name	
 {} (Enter)	
 {} (curl exit {})	
@@ -3331,9 +3785,9 @@ your words
 {} (selection) ↔ Clipboard	
 {} (terminal)	
 {} (terminal, exited)	
+{} (turned off)	
+{} ({})	
 {} (“{}” failed; {} of {} items were transferred before it)	
-{} KB · image preview	
-{} MB · image preview	
 {} YAML documents became one list.	
 {} accepted the connection but sent no reply.	
 {} added	
@@ -3347,6 +3801,7 @@ your words
 {} cannot receive native programs	
 {} cannot run: codeyard-exthost is missing beside Codeyard.	
 {} changed no files (merge or empty commit).	
+{} changes	
 {} change|{} changes	
 {} command|{} commands	
 {} commit leaves this branch.|{} commits leave this branch.	
@@ -3357,12 +3812,14 @@ your words
 {} conflict|{} conflicts	
 {} contains a request that:	
 {} contains code, but codeyard-exthost is missing beside Codeyard	
+{} copy	
 {} crashed three times and is turned off until Codeyard restarts.	
 {} crashed three times in a minute and was turned off.	
 {} crashed three times within a minute and is turned off until Codeyard restarts. Nothing was sent anywhere.	
 {} cursor|{} cursors	
 {} day ago|{} days ago	
 {} definition|{} definitions	
+{} did not answer within 5 seconds	
 {} download, including updates|{} downloads, including updates	
 {} download|{} downloads	
 {} entry is left out.|{} entries are left out.	
@@ -3371,10 +3828,12 @@ your words
 {} exited with {}	
 {} extension|{} extensions	
 {} failed	
+{} file operation|{} file operations	
 {} file skipped, binary or too large|{} files skipped, binary or too large	
 {} file skipped, parse errors|{} files skipped, parse errors	
 {} file still has conflicts: resolve it and stage it first|{} files still have conflicts: resolve them and stage them first	
 {} files	
+{} file|{} files	
 {} forwarded	
 {} gets pre-releases from now on.	
 {} gets releases only; the pre-release you have stays until a release passes it.	
@@ -3387,6 +3846,8 @@ your words
 {} has no length	
 {} has no newer version	
 {} has no valid hash in its package	
+{} has too many or too large snippet files to copy.	
+{} has unsaved changes: save or revert it first.	
 {} holds no changes to tracked files.	
 {} hour ago|{} hours ago	
 {} implementation|{} implementations	
@@ -3412,6 +3873,7 @@ your words
 {} is not in the registry	
 {} is not installed	
 {} is not installed. Open the setup instructions, then try again.	
+{} is not open any more; nothing to save.	
 {} is replaced by the default settings of this version. The current file is kept next to it as a backup.	
 {} is too large to be a time in seconds or milliseconds	
 {} is uninstalled.	
@@ -3427,17 +3889,22 @@ your words
 {} month ago|{} months ago	
 {} more entry that the comparison hides (ignored by .gitignore or the compare settings) goes too.|{} more entries that the comparison hides (ignored by .gitignore or the compare settings) go too.	
 {} more ports are not listed here	
+{} needs a file operation that is not selected.	
+{} nested file|{} nested files	
 {} no longer exists, so it was not reopened.	
 {} of them is on no other branch, tag or remote: after the reset only Git's reflog still finds it.|{} of them are on no other branch, tag or remote: after the reset only Git's reflog still finds them.	
+{} of {}	
 {} open	
 {} outgoing call|{} outgoing calls	
 {} parent module|{} parent modules	
 {} ports are forwarded	
+{} problems	
 {} reference|{} references	
 {} removed	
 {} result in 1 file|{} results in 1 file	
 {} result|{} results	
 {} running	
+{} shortcut shares its key with another command|{} shortcuts share their key with another command	
 {} skipped	
 {} space|{} spaces	
 {} still has merge conflict markers. Resolve them (Accept Current / Incoming / Both) and save first.	
@@ -3447,6 +3914,9 @@ your words
 {} terminals have programs running. Close them anyway?	
 {} test|{} tests	
 {} type definition|{} type definitions	
+{} unchanged line|{} unchanged lines	
+{} unread notification|{} unread notifications	
+{} was changed in the settings file since. Nothing was written.	
 {} was not installed from a registry	
 {} week ago|{} weeks ago	
 {} year ago|{} years ago	
@@ -3459,7 +3929,9 @@ your words
 {}: .env has no null; give it a value or remove it	
 {}: .env holds only text; nested values need the “joined with __” choice	
 {}: TOML has no null; give it a value or remove it	
+{}: a pattern may hold one *	
 {}: connection failed	
+{}: crates.io could not be reached	
 {}: expected a file pattern or a list of patterns	
 {}: expected a list	
 {}: expected a list of numbers ({}–{})	
@@ -3469,10 +3941,12 @@ your words
 {}: expected an object	
 {}: expected an object { … }	
 {}: expected text	
+{}: expected text or a list of text	
 {}: expected true or false	
 {}: invalid color {}	
 {}: no answer from the debug adapter	
 {}: no changed files.	
+{}: no crate with this name on crates.io	
 {}: no open pull requests.	
 {}: not signed in	
 {}: path must not contain control characters	
@@ -3496,23 +3970,34 @@ your words
 {}s	
 {}w	
 {}y	
+“Default” is the profile everyone has. Choose another name.	
 “color” must be an object	
 “folders” must be a list	
 “localhost” means {0}: for a service on your own computer set http.runOn to {1}.	
 “{0}” cannot be written in {1}: not changed.	
+“{0}” found more than {1} problems: only the first {1} are shown.	
 “{0}” is not a valid regular expression ({1}). Escape special characters with a backslash.	
+“{0}” now uses {1}	
 “{}” already exists. Replace it?	
 “{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	
 “{}” asks for inputs, which a compound cannot ask for: start it on its own.	
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	
 “{}” can't be opened	
 “{}” cannot be used in a key binding	
+“{}” has another spelling that is the same folder on macOS. Use the usual letter.	
+“{}” in Cargo.toml is not a table	
 “{}” is a built-in shortcut; an extension cannot change it	
+“{}” is a reserved name on Windows. Choose another.	
+“{}” is already a dependency here	
+“{}” is already the active profile.	
+“{}” is back to its default keys	
 “{}” is called with the wrong number of arguments	
 “{}” is missing here	
 “{}” is not a branch of a known remote	
+“{}” is not a crate name	
 “{}” is not a free local port	
 “{}” is not a function this query language has	
+“{}” is not a key	
 “{}” is not a number	
 “{}” is not a port number	
 “{}” is not a usable branch or remote name	
@@ -3524,8 +4009,11 @@ your words
 “{}” is not supported	
 “{}” is not the command of an active extension	
 “{}” is still running in this terminal. Close it anyway?	
+“{}” is the active profile. The default profile takes over, then the folder of “{}” with its settings, keybindings and snippets is deleted.	
+“{}” was not found in the file	
 “{}” was not found in ~/.ssh/config	
 “{}”: {} = {}	
+… (cut after {} characters)	
 … {} more	
 … {} more line|… {} more lines	
 … {} running	

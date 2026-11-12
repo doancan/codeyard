@@ -41,37 +41,91 @@ fn prune(dir: &Path) {
     }
 }
 
-fn report_text(info: &std::panic::PanicHookInfo<'_>, backtrace: &std::backtrace::Backtrace) -> String {
-    let message = info
-        .payload()
+/// A report is cut here (bytes): a backtrace of a runaway recursion must not fill the disk or the memory.
+const MAX_REPORT_BYTES: usize = 256 * 1024;
+/// Log lines and notifications that go into a report.
+const LOG_LINES: usize = 20;
+
+fn panic_message(info: &std::panic::PanicHookInfo<'_>) -> String {
+    info.payload()
         .downcast_ref::<&str>()
         .map(|s| s.to_string())
         .or_else(|| info.payload().downcast_ref::<String>().cloned())
-        .unwrap_or_else(|| "(no message)".into());
-    let at = info.location().map_or("(unknown)".into(), |l| format!("{}:{}:{}", l.file(), l.line(), l.column()));
-    format!(
-        "Codeyard {} ({} {})\nthread: {}\nat: {at}\n\n{message}\n\n{backtrace}\n",
+        .unwrap_or_else(|| "(no message)".into())
+}
+
+fn panic_location(info: &std::panic::PanicHookInfo<'_>) -> String {
+    info.location().map_or("(unknown)".into(), |l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+}
+
+/// The report as written: the home folder and credentials are removed and the size is bounded. `logged` and `notices` are the
+/// last lines of the log and the last notifications (oldest first).
+fn compose(header: &str, message: &str, logged: &[String], notices: &[String], backtrace: &str, home: Option<&str>) -> String {
+    let mut text = String::with_capacity(8 * 1024);
+    text.push_str(header);
+    text.push_str(&format!("\n{message}\n"));
+    text.push_str("\nlast notifications:\n");
+    notices.iter().for_each(|l| text.push_str(&format!("{l}\n")));
+    text.push_str("\nlast log lines:\n");
+    logged.iter().for_each(|l| text.push_str(&format!("{l}\n")));
+    text.push_str(&format!("\n{backtrace}\n"));
+    let mut text = crate::diagnostics::redact::redact(&text, home);
+    if text.len() > MAX_REPORT_BYTES {
+        let mut end = MAX_REPORT_BYTES;
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        text.truncate(end);
+        text.push_str("\n(cut)\n");
+    }
+    text
+}
+
+fn report_text(info: &std::panic::PanicHookInfo<'_>, backtrace: &std::backtrace::Backtrace) -> String {
+    use crate::diagnostics::log;
+    let header = format!(
+        "Codeyard {} ({} {})\nthread: {}\nat: {}\n{FATAL_UNKNOWN}\n",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH,
         std::thread::current().name().unwrap_or("(unnamed)"),
-    )
+        panic_location(info),
+    );
+    let logged = log::try_tail(LOG_LINES);
+    compose(&header, &panic_message(info), &logged, &log::try_notices(), &backtrace.to_string(), log::home_if_ready())
 }
 
-/// Install the panic hook: the previous hook (stderr output) keeps running, and it stays silent if the report can't be written.
+/// What a report says about whether the process survived: the hook cannot know. A normal exit rewrites it as `fatal: false`.
+pub(crate) const FATAL_UNKNOWN: &str = "fatal: unknown";
+
+/// Install the panic hook. The previous hook (stderr output) keeps running.
+///
+/// A panic inside a panic hook aborts the process, and `catch_unwind` does not contain it, so nothing here may panic or wait:
+/// no `unwrap`, `expect` or indexing; the log and notification buffers are read with `try_lock` and skipped when another
+/// thread holds them; every size is capped; the patterns the redaction needs are compiled in advance; and every I/O error is
+/// ignored.
 pub fn install(dir: Option<PathBuf>) {
     let Some(dir) = dir else { return };
+    crate::diagnostics::log::home();
+    crate::diagnostics::redact::warm_up();
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         previous(info);
+        crate::diagnostics::log::error_from_hook("crash", format_args!("panic at {}: {}", panic_location(info), panic_message(info)));
         let backtrace = std::backtrace::Backtrace::force_capture();
         let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-        match write_report(&dir, secs, &report_text(info, &backtrace)) {
-            Ok(path) => eprintln!("crash report written to {}", path.display()),
-            Err(e) => eprintln!("could not write a crash report: {e}"),
+        if let Ok(path) = write_report(&dir, secs, &report_text(info, &backtrace)) {
+            // Stderr may be closed (a GUI app): a failed write is not worth a second panic.
+            let _ = writeln!(std::io::stderr(), "crash report written to {}", path.display());
+            session::note_report(path);
         }
+        crate::diagnostics::log::flush_from_hook();
     }));
 }
+
+#[path = "crash_session.rs"]
+pub mod session;
+pub use session::PreviousCrash;
 
 #[cfg(test)]
 mod tests {
@@ -133,7 +187,15 @@ mod tests {
         assert!(text.contains("thread: boom"), "{text}");
         assert!(text.contains("crash.rs"), "{text}");
         assert!(text.starts_with("Codeyard "), "{text}");
+        assert!(text.contains("last log lines:") && text.contains("last notifications:"), "{text}");
+        if let Some(home) = dirs::home_dir().map(|h| h.to_string_lossy().into_owned()).filter(|h| h.len() > 3) {
+            assert!(!text.contains(&home), "the home folder must not be in the report");
+        }
         let _ = std::panic::take_hook();
         std::fs::remove_dir_all(&dir).ok();
     }
 }
+
+#[cfg(test)]
+#[path = "crash_tests.rs"]
+mod follow_up_tests;

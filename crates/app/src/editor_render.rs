@@ -2,6 +2,9 @@
 
 use super::*;
 
+/// Width the gutter of a Rust file gives to the run marks.
+const RUN_SLOT: f32 = 22.;
+
 impl Render for EditorView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         RENDER_SLOT.with(|s| s.set(self.slot));
@@ -19,6 +22,8 @@ impl Render for EditorView {
         } else {
             lines.to_string().len().max(3) as f32 * cx.global::<Settings>().editor_font_size * 0.62 + theme::SPACE[8]
         };
+        // Rust files keep a column for the run marks, whether or not a line has one, so the text does not move when they appear.
+        let gutter_w = if self.language() == "Rust" { gutter_w + RUN_SLOT } else { gutter_w };
         let cursor = self.buffer.cursor();
         let cursors = self.buffer.cursors();
         let selections: Vec<Range<usize>> = self.buffer.selections().into_iter().filter(|r| !r.is_empty()).collect();
@@ -38,6 +43,7 @@ impl Render for EditorView {
         let dragging = (self.selecting || self.scrollbar_drag.is_some()).then_some((cx.entity(), self.slot));
         let settings = cx.global::<Settings>();
         let (font_size, line_h) = (settings.editor_font_size, settings.editor_line_height);
+        let modifiers = settings.rust_build.modifiers;
         let font_family: SharedString = settings.editor_font_family.clone().map_or(MONO_FONT.into(), Into::into);
         let ligatures = settings.font_ligatures;
         let (word_highlight, indent_guides) = (settings.word_highlight, settings.indent_guides);
@@ -326,6 +332,7 @@ impl Render for EditorView {
                                         let folded = this.fold_headers();
                                         let bookmarks = this.bookmark_lines();
                                         let breakpoints = this.breakpoints();
+                                        let run_marks = this.run_mark_lines();
                                         let debug_line = this.debug_line;
                                         let tab = this.tab_width();
                                         // Segments of the same line come one after another: split once per line.
@@ -355,7 +362,12 @@ impl Render for EditorView {
                                                     };
                                                     let code = window.text_system().shape_line(text.clone().into(), px(font_size), &[run], None).width;
                                                     // Extension lenses and hints name their extension.
-                                                    let tip: SharedString = match (id == "line-end-hint").then(|| this.ext_eol_tooltip(ix)).flatten() {
+                                                    let more = match id {
+                                                        "line-end-hint" => this.ext_eol_tooltip(ix),
+                                                        "extension-decoration" => this.cargo_detail(ix),
+                                                        _ => None,
+                                                    };
+                                                    let tip: SharedString = match more {
                                                         Some(t) => format!("{hint}\n{t}").into(),
                                                         None => hint.clone(),
                                                     };
@@ -583,6 +595,45 @@ impl Render for EditorView {
                                                                         ),
                                                                 )
                                                             })
+                                                            // Run mark: a green triangle that starts a run or a debug session.
+                                                            .when(seg == 0 && run_marks.binary_search(&(ix as u32)).is_ok(), |d| {
+                                                                d.child(
+                                                                    div()
+                                                                        .id(("run", row))
+                                                                        .absolute()
+                                                                        .left(px(16.))
+                                                                        .top_0()
+                                                                        .bottom_0()
+                                                                        .w(px(14.))
+                                                                        .flex()
+                                                                        .items_center()
+                                                                        .justify_center()
+                                                                        .cursor(CursorStyle::PointingHand)
+                                                                        .hover(|d| d.bg(c(p.surface_hover)))
+                                                                        .tooltip(|_, cx| {
+                                                                            cx.new(|_| crate::workbench::Tooltip(crate::i18n::t("Run or debug").into())).into()
+                                                                        })
+                                                                        .child(crate::a11y_controls::control(
+                                                                            crate::a11y_controls::Control::button(
+                                                                                this.name.to_string(),
+                                                                                format!("run{ix}"),
+                                                                                crate::i18n::tf("Run or debug on line {}", &[&(ix + 1)]),
+                                                                                |_, _| {},
+                                                                            )
+                                                                            .on_entity(cx.entity().downgrade(), move |e: &mut Self, _, cx| {
+                                                                                e.press_run_mark(ix, cx)
+                                                                            }),
+                                                                        ))
+                                                                        .child(icon("play", 11., p.success))
+                                                                        .on_mouse_down(
+                                                                            MouseButton::Left,
+                                                                            cx.on(move |e, _: &MouseDownEvent, _, cx| {
+                                                                                cx.stop_propagation();
+                                                                                e.press_run_mark(ix, cx);
+                                                                            }),
+                                                                        ),
+                                                                )
+                                                            })
                                                             // Stopped line: yellow arrow.
                                                             .when(seg == 0 && debug_line == Some(ix), |d| {
                                                                 d.child(div().absolute().left(px(1.)).top_0().bottom_0().flex().items_center().child(icon(
@@ -716,7 +767,18 @@ impl Render for EditorView {
                                                                 Some(h) => format!("{text} · {h}"),
                                                                 None => text,
                                                             };
-                                                            d.child(annotation("extension-decoration", shown.into(), super::tone_color(&p, tone), 0.8))
+                                                            let said = this.cargo_detail(ix).map(|detail| {
+                                                                crate::a11y_controls::said(
+                                                                    this.name.to_string(),
+                                                                    format!("dep{ix}"),
+                                                                    accesskit::Role::Label,
+                                                                    detail,
+                                                                )
+                                                            });
+                                                            d.child(
+                                                                annotation("extension-decoration", shown.into(), super::tone_color(&p, tone), 0.8)
+                                                                    .children(said),
+                                                            )
                                                         },
                                                     )
                                                     // Right-aligned inside the space left after the shaped code.
@@ -752,6 +814,7 @@ impl Render for EditorView {
                                                                 None => base,
                                                             }
                                                         },
+                                                        mods: this.modifier_spans(ix, full, (b0, b1), modifiers),
                                                         text: text.into(),
                                                         cursors: if focused && this.cursor_on { line_cursors } else { Vec::new() },
                                                         selections: sel,
@@ -969,6 +1032,8 @@ impl Render for EditorView {
 
 /// A single line: shapes the text, paints the selection and cursor, reports its layout to the editor.
 struct LineElement {
+    /// Semantic token modifiers to draw: byte ranges of the text and `MOD_*` flags.
+    mods: Vec<(Range<usize>, u8)>,
     editor: Entity<EditorView>,
     line: usize,
     /// Segments covering the line (byte length, syntax role).
@@ -1085,6 +1150,7 @@ impl Element for LineElement {
             })
             .collect();
         let brackets: Vec<(usize, gpui::Hsla)> = self.brackets.iter().map(|&(b, color)| (b, c(color).into())).collect();
+        runs = crate::editor_overlay::modifier_runs(runs, &self.mods, c(p.warning).into());
         runs = crate::editor_overlay::overlay_runs(runs, self.marked.as_ref(), &diags, &brackets);
         let font_size = style.font_size.to_pixels(window.rem_size());
         let space = TextRun { len: 1, font: style.font(), color: c(p.text).into(), background_color: None, underline: None, strikethrough: None };

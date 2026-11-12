@@ -122,7 +122,7 @@ pub fn undo_all(store: &dyn Store, entries: &[UndoDisk], cancel: &AtomicBool) ->
 
 /// After a failed write: read the file back. Still `before` → confirmed unchanged; `after` → the write landed; anything
 /// else, or no answer, cannot be confirmed either way.
-fn settle(store: &dyn Store, path: &str, before: u64, after: u64, err: HostError) -> Outcome {
+pub(crate) fn settle(store: &dyn Store, path: &str, before: u64, after: u64, err: HostError) -> Outcome {
     if let HostError::Op(proto::Error::Conflict { .. }) = err {
         return Outcome::Conflict;
     }

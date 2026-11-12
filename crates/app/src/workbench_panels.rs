@@ -7,9 +7,21 @@ const PANEL_ANIM: std::time::Duration = std::time::Duration::from_millis(180);
 #[cfg(test)]
 pub(super) const PANEL_ANIM_FOR_TEST: std::time::Duration = PANEL_ANIM;
 
+#[path = "problems_filter.rs"]
+pub mod filter;
+#[path = "workbench_notifications.rs"]
+pub(crate) mod notifications_panel;
 #[cfg(test)]
 #[path = "workbench_panel_tests.rs"]
 mod panel_tests;
+#[path = "workbench_problems.rs"]
+mod problems_panel;
+#[cfg(test)]
+#[path = "problem_rows_tests.rs"]
+mod rows_tests;
+use filter::{Counts, ProblemFilter, Sort};
+pub use notifications_panel::{ClearNotifications, CopyDiagnostics, OpenLogFile, RevealLogFolder, ShowNotifications, ToggleDoNotDisturb};
+pub use problems_panel::{CopyAllProblems, ProblemsView, ToggleProblemsActiveFile};
 
 /// "Interface scale: 110%" in the interface language (Turkish puts the sign first: "%110").
 pub(crate) fn interface_scale_notice(scale: f32) -> String {
@@ -102,8 +114,8 @@ impl Workbench {
             }
             cx.set_ui_scale(scale);
         }
-        if !matches!(self.notice, Some(Notice::Error(_))) {
-            self.notice = Some(Notice::Info(interface_scale_notice(scale).into()));
+        if !matches!(self.notice(), Some(Notice::Error(_))) {
+            self.notify(NoticeSource::App, Notice::Info(interface_scale_notice(scale).into()));
         }
         cx.notify();
     }
@@ -320,80 +332,6 @@ impl Workbench {
         }
     }
 
-    pub(super) fn problems_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let all = self.problems_shown();
-        if all.is_empty() {
-            let msg = if self.lsp.servers.is_empty() {
-                crate::i18n::t("No problems. Language servers start when you open a file.")
-            } else {
-                crate::i18n::t("No problems.")
-            };
-            return div().px(px(theme::SPACE[6])).py(px(theme::SPACE[3])).text_color(c(p.text_muted)).child(msg).into_any_element();
-        }
-        let root = self.root(cx);
-        let rows: Vec<AnyElement> = problem_rows(&all, root.as_deref())
-            .into_iter()
-            .enumerate()
-            .map(|(i, row)| match row {
-                ProblemRow::File { path, dir, count } => div()
-                    .h(px(layout::ROW_H))
-                    .flex()
-                    .items_center()
-                    .gap(px(theme::SPACE[2]))
-                    .px(px(theme::SPACE[4]))
-                    .child(crate::icon_theme::file_icon_el(ui::file_name(&path), layout::ICON, p))
-                    .child(ui::file_name(&path).to_string())
-                    .child(div().text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(dir))
-                    .child(
-                        div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).text_size(px(text::XS.0)).child(count.to_string()),
-                    )
-                    .into_any_element(),
-                ProblemRow::Problem { severity, text, detail, .. } => {
-                    let (glyph, color) = match severity {
-                        1 => ("circle-x", p.danger),
-                        2 => ("alert", p.warning),
-                        _ => ("info", p.info),
-                    };
-                    problem_row(i, theme::SPACE[8], p, cx)
-                        .child(icon(glyph, 14., color))
-                        .child(div().flex_shrink().min_w_0().overflow_hidden().child(text))
-                        .child(div().flex_none().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(detail))
-                        .into_any_element()
-                }
-                ProblemRow::Related { text, .. } => problem_row(i, theme::SPACE[8] + 22., p, cx)
-                    .text_color(c(p.text_muted))
-                    .child(div().min_w_0().overflow_hidden().child(text))
-                    .into_any_element(),
-            })
-            .collect();
-        // Each row records where it is painted, for the accessibility tree.
-        let rows = rows.into_iter().enumerate().map(|(i, row)| div().relative().child(row).child(a11y::part_frame(a11y::Part::Problem(i), cx)));
-        div().id("problems").size_full().overflow_y_scroll().children(rows).into_any_element()
-    }
-
-    /// A click on Problems row `i`: a problem or a related location opens at its position.
-    pub(super) fn open_problem_row(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let root = self.root(cx);
-        if let Some(ProblemRow::Problem { path, line, col, .. } | ProblemRow::Related { path, line, col, .. }) =
-            problem_rows(&self.all_problems(), root.as_deref()).into_iter().nth(i)
-        {
-            self.open_location(path, line, col, window, cx);
-        }
-    }
-
-    /// "Quick Fix…" on Problems row `i`: the problem opens at its place, then its fixes are asked for there, as Quick
-    /// Fix at the caret does (a file that is still opening asks once it is in front).
-    pub(super) fn quick_fix_problem_row(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let root = self.root(cx);
-        let Some(ProblemRow::Problem { path, line, col, .. }) = problem_rows(&self.all_problems(), root.as_deref()).into_iter().nth(i) else { return };
-        self.open_location(path.clone(), line, col, window, cx);
-        match &mut self.lsp.pending_reveal {
-            // Still opening: the fixes are asked for when it is in front.
-            Some((p, _, _, fix)) if *p == path => *fix = true,
-            _ => self.code_actions(&CodeActions, window, cx),
-        }
-    }
-
     /// A location shown in its editor (`activate`), and its fixes asked for when Problems' Quick Fix… waits for them.
     pub(super) fn reveal_location(&mut self, ed: Entity<EditorView>, (line, col): (u32, u32), fix: bool, window: &mut Window, cx: &mut Context<Self>) {
         ed.update(cx, |e, cx| e.reveal_lsp(line, col, window, cx));
@@ -404,7 +342,7 @@ impl Workbench {
 
     #[cfg(test)]
     pub fn problem_rows_for_test(&self, cx: &App) -> Vec<ProblemRow> {
-        problem_rows(&self.all_problems(), self.root(cx).as_deref())
+        self.problem_rows_now(cx)
     }
 
     #[cfg(test)]
@@ -518,7 +456,7 @@ impl Workbench {
             return;
         }
         let Some(path) = self.active_editor().map(|e| e.read(cx).path.clone()).filter(|p| !p.is_empty()) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a file first.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a file first.").into()));
             cx.notify();
             return;
         };
@@ -542,7 +480,7 @@ impl Workbench {
             .or_else(|| self.active_editor().map(|e| e.read(cx).path.clone()))
             .filter(|p| !p.is_empty());
         let Some(path) = path else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a file first.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a file first.").into()));
             cx.notify();
             return;
         };
@@ -562,7 +500,7 @@ impl Workbench {
             return;
         }
         let host = self.remote.host.clone();
-        self.notice = Some(Notice::Info(crate::i18n::tf("Filtering {0} for “{1}”…", &[&ui::file_name(&path), &pattern]).into()));
+        self.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("Filtering {0} for “{1}”…", &[&ui::file_name(&path), &pattern]).into()));
         cx.notify();
         let (p, pat) = (path.clone(), pattern.clone());
         let task = cx.background_executor().spawn(async move {
@@ -599,7 +537,7 @@ impl Workbench {
             let result = task.await;
             this.update_in(cx, |this, window, cx| match result {
                 Ok(text) if text.is_empty() => {
-                    this.notice = Some(Notice::Info(crate::i18n::tf("No lines match “{}”.", &[&pattern]).into()));
+                    this.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("No lines match “{}”.", &[&pattern]).into()));
                     cx.notify();
                 }
                 Ok(text) => {
@@ -611,11 +549,11 @@ impl Workbench {
                     } else {
                         crate::i18n::tn("{0} line matches “{1}”.", "{0} lines match “{1}”.", n, &[&pattern])
                     };
-                    this.notice = Some(Notice::Info(msg.into()));
+                    this.notify(NoticeSource::App, Notice::Info(msg.into()));
                     cx.notify();
                 }
                 Err(e) => {
-                    this.notice = Some(Notice::Error(e.into()));
+                    this.notify(NoticeSource::App, Notice::Error(e.into()));
                     cx.notify();
                 }
             })
@@ -665,21 +603,76 @@ impl Workbench {
 /// One row of the Problems panel: a file, one of its problems, or a related location of that problem.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProblemRow {
-    File { path: String, dir: String, count: usize },
-    Problem { path: String, severity: u8, text: String, detail: String, line: u32, col: u32 },
-    Related { text: String, path: String, line: u32, col: u32 },
+    File {
+        path: String,
+        dir: String,
+        count: usize,
+        collapsed: bool,
+    },
+    Problem {
+        path: String,
+        severity: u8,
+        text: String,
+        detail: String,
+        line: u32,
+        col: u32,
+        message: String,
+        source: String,
+        code: String,
+        explain: Option<(String, Option<String>)>,
+    },
+    Related {
+        text: String,
+        path: String,
+        line: u32,
+        col: u32,
+    },
 }
 
-/// The Problems panel's rows: files in path order, their problems by severity and position, each followed by its related
-/// locations.
-pub fn problem_rows(all: &std::collections::BTreeMap<String, Vec<crate::lsp::Diagnostic>>, root: Option<&str>) -> Vec<ProblemRow> {
-    let mut rows = Vec::new();
+/// The Problems panel's rows: the files that have a problem passing `filter` (in path order, or the most severe first),
+/// their problems by severity and position (or by position alone), each followed by its related locations. A file in
+/// `filter.collapsed` is only its own row; `active` is the open file, the only one shown when `filter.active_file_only`.
+pub fn problem_rows(
+    all: &std::collections::BTreeMap<String, Vec<crate::lsp::Diagnostic>>,
+    root: Option<&str>,
+    filter: &ProblemFilter,
+    active: Option<&str>,
+) -> Vec<ProblemRow> {
+    let mut files: Vec<(&String, Vec<&crate::lsp::Diagnostic>)> = Vec::new();
     for (path, diags) in all {
+        if filter.active_file_only && active != Some(path.as_str()) {
+            continue;
+        }
         let rel = crate::lsp::related_path(path, root);
-        let mut sorted: Vec<&crate::lsp::Diagnostic> = diags.iter().filter(|d| !is_related_copy(d, path, diags)).collect();
-        rows.push(ProblemRow::File { path: path.clone(), dir: rel.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default(), count: sorted.len() });
-        sorted.sort_by_key(|d| (d.severity, d.start));
-        for d in sorted {
+        let mut kept: Vec<&crate::lsp::Diagnostic> = diags.iter().filter(|d| !is_related_copy(d, path, diags) && filter.admits(rel, d)).collect();
+        if kept.is_empty() {
+            continue;
+        }
+        if filter.sort == Sort::Line {
+            kept.sort_by_key(|d| d.start);
+        } else {
+            kept.sort_by_key(|d| (d.severity, d.start));
+        }
+        files.push((path, kept));
+    }
+    if filter.sort == Sort::Severity {
+        // The sort is stable: files of the same worst severity stay in path order.
+        files.sort_by_key(|(_, kept)| kept.iter().map(|d| d.severity).min().unwrap_or(u8::MAX));
+    }
+    let mut rows = Vec::new();
+    for (path, kept) in files {
+        let rel = crate::lsp::related_path(path, root);
+        let collapsed = filter.collapsed.contains(path.as_str());
+        rows.push(ProblemRow::File {
+            path: path.clone(),
+            dir: rel.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default(),
+            count: kept.len(),
+            collapsed,
+        });
+        if collapsed {
+            continue;
+        }
+        for d in kept {
             let source = d.source.as_deref().map_or("", |s| if s == "task" { crate::i18n::t("task") } else { s });
             rows.push(ProblemRow::Problem {
                 path: path.clone(),
@@ -688,6 +681,10 @@ pub fn problem_rows(all: &std::collections::BTreeMap<String, Vec<crate::lsp::Dia
                 detail: format!("{source} [{}:{}]", d.start.0.saturating_add(1), d.start.1.saturating_add(1)),
                 line: d.start.0,
                 col: d.start.1,
+                explain: crate::rust_toolchain::explain::code_of(d.code.as_deref(), &d.message).map(|code| (code.to_string(), d.code_href.clone())),
+                message: d.message.lines().next().unwrap_or_default().to_string(),
+                source: source.to_string(),
+                code: d.code.clone().unwrap_or_default(),
             });
             for r in &d.related {
                 rows.push(ProblemRow::Related { text: crate::lsp::related_label(r, path, root), path: r.path.clone(), line: r.start.0, col: r.start.1 });
@@ -695,6 +692,17 @@ pub fn problem_rows(all: &std::collections::BTreeMap<String, Vec<crate::lsp::Dia
         }
     }
     rows
+}
+
+/// How many problems of each severity there are, without any filter (the header shows what each switch would show).
+pub fn problem_totals(all: &std::collections::BTreeMap<String, Vec<crate::lsp::Diagnostic>>) -> Counts {
+    let mut counts = Counts::default();
+    for (path, diags) in all {
+        for d in diags.iter().filter(|d| !is_related_copy(d, path, diags)) {
+            counts.add(d.severity);
+        }
+    }
+    counts
 }
 
 /// Some servers (rust-analyzer) also publish each related location of a diagnostic as a hint of its own, which would show
@@ -706,23 +714,6 @@ fn is_related_copy(d: &crate::lsp::Diagnostic, path: &str, all: &[crate::lsp::Di
             o.related.iter().any(|r| r.path == path && r.start == d.start && r.message == d.message)
                 || (o.severity < 4 && o.message == d.message && d.related.iter().any(|r| r.path == path && r.start == o.start))
         })
-}
-
-/// A clickable Problems row indented by `indent`.
-fn problem_row(i: usize, indent: f32, p: &Palette, cx: &mut Context<Workbench>) -> gpui::Stateful<gpui::Div> {
-    div()
-        .id(("problem", i))
-        .h(px(layout::ROW_H))
-        .flex()
-        .items_center()
-        .gap(px(theme::SPACE[2]))
-        .pl(px(indent))
-        .pr(px(theme::SPACE[4]))
-        .whitespace_nowrap()
-        .overflow_hidden()
-        .cursor_pointer()
-        .hover(|s| s.bg(c(p.surface_hover)))
-        .on_click(cx.listener(move |this, _, window, cx| this.open_problem_row(i, window, cx)))
 }
 
 #[cfg(test)]
@@ -753,7 +744,7 @@ mod tests {
             diag(4, (0, 0), "unrelated hint", vec![]),
         ];
         let all = std::collections::BTreeMap::from([("/p/src/lib.rs".to_string(), diags)]);
-        let rows = problem_rows(&all, Some("/p"));
+        let rows = problem_rows(&all, Some("/p"), &ProblemFilter::default(), None);
         let problems: Vec<&str> = rows.iter().filter_map(|r| if let ProblemRow::Problem { text, .. } = r { Some(text.as_str()) } else { None }).collect();
         assert_eq!(problems, ["E0382: borrow of moved value: `s`", "E0382: unrelated hint"]);
         assert!(matches!(&rows[0], ProblemRow::File { count: 2, dir, .. } if dir == "src"));
@@ -761,6 +752,6 @@ mod tests {
         // An error is never left out, even when a related row repeats it.
         let twice = vec![diag(1, (2, 12), "value moved here", vec![]), diag(1, (3, 15), msg, vec![rel(2, 12, "value moved here")])];
         let all = std::collections::BTreeMap::from([("/p/src/lib.rs".to_string(), twice)]);
-        assert!(matches!(&problem_rows(&all, Some("/p"))[0], ProblemRow::File { count: 2, .. }));
+        assert!(matches!(&problem_rows(&all, Some("/p"), &ProblemFilter::default(), None)[0], ProblemRow::File { count: 2, .. }));
     }
 }

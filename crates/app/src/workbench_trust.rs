@@ -136,7 +136,7 @@ impl Workbench {
         self.cfg.exts.scm.invalidate();
         self.reload_config(window, cx);
         self.restart_lsp(cx);
-        self.notice = Some(Notice::Info(notice.into()));
+        self.notify(NoticeSource::Trust, Notice::Info(notice.into()));
         cx.notify();
     }
 
@@ -160,7 +160,7 @@ impl Workbench {
     /// "Workspace: Manage Workspace Trust…": trust or stop trusting the open folder, and the list of trusted folders.
     pub(super) fn manage_workspace_trust(&mut self, _: &ManageWorkspaceTrust, window: &mut Window, cx: &mut Context<Self>) {
         if !cx.global::<Settings>().workspace_trust {
-            self.notice = Some(Notice::Info(crate::i18n::t("Workspace Trust is off (security.workspaceTrust.enabled).").into()));
+            self.notify(NoticeSource::Trust, Notice::Info(crate::i18n::t("Workspace Trust is off (security.workspaceTrust.enabled).").into()));
             return cx.notify();
         }
         let current = self.active_root(cx).map(|root| {
@@ -174,7 +174,7 @@ impl Workbench {
         records.retain(|(key, _)| Some(key) != own_key.as_ref());
         let rows = trust_rows(current.as_ref().map(|(r, t, o)| (r.as_str(), *t, *o)), &records);
         if rows.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No trusted folders yet.").into()));
+            self.notify(NoticeSource::Trust, Notice::Info(crate::i18n::t("No trusted folders yet.").into()));
             return cx.notify();
         }
         if self.overlay.is_some() {

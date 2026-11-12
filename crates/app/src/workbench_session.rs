@@ -1,5 +1,6 @@
 //! Workbench: Session: saving tabs, backups and restoring.
 
+use super::notifications_glue::failures::Area;
 use super::*;
 
 /// Layout and view metadata share the tab transaction; document contents remain in backups.
@@ -77,7 +78,7 @@ impl Workbench {
         for (path, id, active) in layout {
             let Some(ed) = all.iter().find(|e| e.read(cx).path == *path).cloned() else { continue };
             let target = if groups.contains_key(id) { *id } else { grid.focused() };
-            let group = groups.get_mut(&target).expect("focused group exists");
+            let group = fallback::group_or_empty(&mut groups, target, "a tab names a group that is not in the layout");
             if !group.editors.contains(&ed) {
                 group.editors.push(ed);
             }
@@ -87,7 +88,7 @@ impl Workbench {
         }
         for ed in all {
             if !groups.values().any(|group| group.editors.contains(&ed)) {
-                groups.get_mut(&grid.focused()).expect("focused group exists").editors.push(ed);
+                fallback::group_or_empty(&mut groups, grid.focused(), "the focused group").editors.push(ed);
             }
         }
         for group in groups.values_mut() {
@@ -102,10 +103,10 @@ impl Workbench {
             orphans.extend(g.searches);
             terminals.extend(g.terminals);
         }
-        let focused = groups.get_mut(&grid.focused()).expect("focused group exists");
+        let focused = fallback::group_or_empty(&mut groups, grid.focused(), "the focused group");
         focused.searches.extend(orphans);
         focused.terminals.extend(terminals);
-        let current = groups.remove(&grid.focused()).expect("focused group exists");
+        let current = fallback::take_group_or_empty(&mut groups, grid.focused());
         self.tabs = state_glue::TabsState { current, groups, layout: grid, ..Default::default() };
         self.sync_slots(cx);
         if let Some(saved) = saved {
@@ -116,14 +117,19 @@ impl Workbench {
 
     /// Tabs and views (when the folder changes, when a tab is opened or closed, on exit).
     pub(super) fn persist_session(&self, cx: &mut App) {
-        if let (Some(b), Some(s)) = (self.chrome.window_bounds, &self.persist.state) {
-            s.set(WINDOW_BOUNDS_KEY, &format_bounds(b)).ok();
+        if let (Some(b), Some(s)) = (self.chrome.window_bounds, &self.persist.state)
+            && let Err(e) = s.set(WINDOW_BOUNDS_KEY, &format_bounds(b))
+        {
+            self.persist_failed(Area::WindowPosition, &e);
         }
         let (Some(ws), Some(s)) = (self.persist.workspace_id, &self.persist.state) else { return };
         let mut tabs = Vec::new();
         let mut views = Vec::new();
         for id in self.tabs.layout.groups() {
-            let group = self.tabs.group(id).expect("layout group has state");
+            let Some(group) = self.tabs.group(id) else {
+                crate::diagnostics::log::warn("session", format_args!("editor group {id} is in the layout but has no state; its tabs are not saved"));
+                continue;
+            };
             for (index, ed) in group.editors.iter().enumerate() {
                 let e = ed.read(cx);
                 if !e.uses_host(&self.remote.host) {
@@ -132,15 +138,22 @@ impl Workbench {
                 let Some(path) = self.rel(&e.path, cx) else { continue };
                 let pinned = e.pinned;
                 let view = ed.update(cx, |e, _| e.view_for_slot(usize::from(id)));
-                let _ = s.save_view(ws, &path, view);
+                if let Err(e) = s.save_view(ws, &path, view) {
+                    self.persist_failed(Area::Tabs, &e);
+                }
                 self.save_bookmarks(ed, cx);
                 views.push(SavedGroupView { group: id, path: path.clone(), line: view.line, column: view.column, scroll_line: view.scroll_line });
                 tabs.push(state::Tab { rel_path: path, active: group.active == Some(index), pinned, group: id });
             }
         }
         let session = SavedEditorSession { version: 1, grid: self.tabs.layout.clone(), views };
-        if let Ok(json) = serde_json::to_string(&session) {
-            let _ = s.save_tabs_with_layout(ws, &tabs, Some(&json));
+        match serde_json::to_string(&session) {
+            Ok(json) => {
+                if let Err(e) = s.save_tabs_with_layout(ws, &tabs, Some(&json)) {
+                    self.persist_failed(Area::Tabs, &e);
+                }
+            }
+            Err(e) => self.persist_failed(Area::Tabs, &e),
         }
         self.persist_moved_terminals(cx);
         self.persist_editor_windows(cx);
@@ -264,7 +277,12 @@ impl Workbench {
         let windows = self.saved_editor_windows(ws);
         let Some(s) = &self.persist.state else { return false };
         let mut tabs = s.tabs(ws).unwrap_or_default();
-        let saved = s.tab_layout(ws).as_deref().and_then(SavedEditorSession::parse);
+        let stored_layout = s.tab_layout(ws);
+        let saved = stored_layout.as_deref().and_then(SavedEditorSession::parse);
+        let layout_unreadable = stored_layout.is_some() && saved.is_none();
+        if let Some(text) = stored_layout.as_deref().filter(|_| layout_unreadable) {
+            fallback::keep_copy(s, ws, text);
+        }
         let focus_left = s.get(&format!("focus_left:{ws}")).is_none_or(|v| v != "0");
 
         let backups = if cx.global::<Settings>().hot_exit { s.backups(ws).unwrap_or_default() } else { Vec::new() };
@@ -281,6 +299,16 @@ impl Workbench {
                 tabs.push(state::Tab { rel_path: rel.to_string(), active: false, pinned: false, group: 0 });
                 for_windows.push(rel.to_string());
             }
+        }
+        if layout_unreadable && fallback::first_announcement(ws) {
+            // Deferred: the saved state is still borrowed here.
+            cx.defer_in(window, |this, _, cx| {
+                this.notify(
+                    NoticeSource::App,
+                    Notice::Warning(crate::i18n::t("The saved editor layout could not be read: the files are shown in one group.").into()),
+                );
+                cx.notify();
+            });
         }
         if tabs.is_empty() {
             if saved.is_some() && self.tabs.opening.is_none() {
@@ -403,7 +431,7 @@ impl Workbench {
             None if std::path::Path::new(&path).is_dir() => self.set_root(path, cx),
             // Folder deleted or moved: stay on the welcome screen and say why.
             None => {
-                self.notice = Some(Notice::Info(crate::i18n::tf("{} no longer exists, so it was not reopened.", &[&tilde(&path)]).into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("{} no longer exists, so it was not reopened.", &[&tilde(&path)]).into()));
                 cx.notify();
             }
             Some(alias) => {
@@ -466,3 +494,10 @@ fn write_blobs(dir: &std::path::Path, writes: Vec<BackupWrite>) -> Vec<(BackupWr
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "workbench_session_tests.rs"]
+mod tests;
+
+#[path = "workbench_session_fallback.rs"]
+pub(super) mod fallback;

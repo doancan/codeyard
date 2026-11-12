@@ -213,7 +213,7 @@ impl Workbench {
             ViewLocation::Editor => {
                 // The consent sheet waits for the user's answer; no extension page takes its place.
                 if self.cfg.exts.pending.is_some() && matches!(self.tabs.page, Some(Page::Extension)) {
-                    self.notice = Some(Notice::Info(crate::i18n::t("Answer the install sheet first.").into()));
+                    self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::t("Answer the install sheet first.").into()));
                     cx.notify();
                     return;
                 }

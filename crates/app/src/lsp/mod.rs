@@ -2,13 +2,17 @@
 //! on the machine where the files live (local or SSH). `transport` is the JSON-RPC side (framing,
 //! request/response matching, replies to the server's own requests), `parse` turns responses into
 //! editor types, `servers` is the table of known servers; all of it is re-exported here.
-//! Independent of the UI; blocking calls are made on background threads.
+//! Independent of the UI (but for `refactor`, which holds the review page of a server's multi-file edit); blocking calls are made on
+//! background threads.
 
 mod parse;
+pub mod refactor;
+mod rust;
 mod servers;
 mod transport;
 
 pub use parse::*;
+pub use rust::*;
 pub use servers::*;
 pub use transport::*;
 

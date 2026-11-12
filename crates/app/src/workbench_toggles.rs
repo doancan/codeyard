@@ -64,7 +64,7 @@ impl Workbench {
         let s = cx.global_mut::<Settings>();
         s.auto_save = toggled_auto_save(&s.auto_save);
         let message = if s.auto_save == AutoSave::Off { crate::i18n::t("Auto Save is off.") } else { crate::i18n::t("Auto Save is on.") };
-        self.notice = Some(Notice::Info(message.into()));
+        self.notify(NoticeSource::App, Notice::Info(message.into()));
         cx.refresh_windows();
     }
 
@@ -81,7 +81,7 @@ impl Workbench {
         match crash_dir().filter(|d| d.is_dir()) {
             Some(dir) => cx.reveal_path(&dir),
             None => {
-                self.notice = Some(Notice::Info(crate::i18n::t("No crash reports: Codeyard has not crashed.").into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("No crash reports: Codeyard has not crashed.").into()));
                 cx.notify();
             }
         }

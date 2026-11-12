@@ -91,6 +91,19 @@ pub fn parse_results(kind: Kind, output: &str) -> BTreeMap<String, TestResult> {
     }
 }
 
+/// The message and the place (path as printed, 1-based line) of a failure from the lines of its output: what follows the
+/// `panicked at path:line:col:` line up to the backtrace note, or the whole block when nothing panicked.
+pub fn failure_details(block: &[&str]) -> (Option<String>, Option<(String, u32)>) {
+    let Some(p) = block.iter().position(|l| l.contains("panicked at ")) else { return (clip(block), None) };
+    let at = block[p].split("panicked at ").nth(1).unwrap_or_default().trim_end_matches(':');
+    let mut parts = at.rsplitn(3, ':');
+    let (_col, line, path) = (parts.next(), parts.next().and_then(|l| l.parse().ok()), parts.next());
+    let location = path.zip(line).map(|(path, line)| (path.to_string(), line));
+    let msg: Vec<&str> =
+        block[p + 1..].iter().take_while(|l| !l.trim_start().starts_with("note:") && !l.trim_start().starts_with("stack backtrace")).copied().collect();
+    (clip(&msg), location)
+}
+
 /// cargo's harness: `test a::b ... ok|FAILED|ignored`, then `---- a::b stdout ----` blocks with the panic.
 fn parse_libtest(output: &str) -> BTreeMap<String, TestResult> {
     let mut out = BTreeMap::new();
@@ -145,20 +158,8 @@ fn parse_libtest(output: &str) -> BTreeMap<String, TestResult> {
         while end < lines.len() && !lines[end].starts_with("---- ") && lines[end] != "failures:" {
             end += 1;
         }
-        let block = &lines[start..end];
         if let Some(r) = out.get_mut(id) {
-            if let Some(p) = block.iter().position(|l| l.contains("panicked at ")) {
-                let at = block[p].split("panicked at ").nth(1).unwrap_or_default().trim_end_matches(':');
-                let mut parts = at.rsplitn(3, ':');
-                let (_col, line, path) = (parts.next(), parts.next().and_then(|l| l.parse().ok()), parts.next());
-                if let (Some(path), Some(line)) = (path, line) {
-                    r.location = Some((path.to_string(), line));
-                }
-                let msg: Vec<&str> = block[p + 1..].iter().take_while(|l| !l.starts_with("note:") && !l.starts_with("stack backtrace")).copied().collect();
-                r.message = clip(&msg);
-            } else {
-                r.message = clip(block);
-            }
+            (r.message, r.location) = failure_details(&lines[start..end]);
         }
         i = end;
     }
@@ -390,7 +391,11 @@ pub fn job_for(file: &TestFile, test: Option<usize>) -> Option<Job> {
 /// a failed build/runner must not leave earlier green results visible. JavaScript is judged by exit code. A Rust test whose module
 /// path is not the file's (a `#[path]` module) is found by its last two segments when that is unambiguous.
 pub fn outcomes(job: &Job, output: &str, exit: Option<i32>) -> Vec<((String, String), TestResult)> {
-    let parsed = parse_results(job.kind, output);
+    let parsed = if job.kind == Kind::Rust && crate::rust_toolchain::nextest::is_nextest_command(&job.command) {
+        crate::rust_toolchain::nextest::parse(output)
+    } else {
+        parse_results(job.kind, output)
+    };
     let mut out = Vec::new();
     for (rel, id) in &job.scope {
         let found = match job.kind {

@@ -270,13 +270,13 @@ impl Workbench {
     pub(super) fn editor_into_new_window(&mut self, keep_tab: bool, window: &mut Window, cx: &mut Context<Self>) {
         let ed = self.tab_editor().filter(|_| !self.tabs.diff_active && !self.tabs.large_active && !self.tabs.page_active).cloned();
         let Some(ed) = ed else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a file in the editor first.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a file in the editor first.").into()));
             return cx.notify();
         };
         let at = window.bounds();
         let bounds = Bounds::new(at.origin + gpui::point(px(40.), px(40.)), SIZE);
         if let Err(e) = self.show_in_editor_window(ed.clone(), bounds, None, cx) {
-            self.notice = Some(Notice::Error(e.into()));
+            self.notify(NoticeSource::App, Notice::Error(e.into()));
             return cx.notify();
         }
         // The window exists, so the document is still open somewhere when its tab goes.
@@ -427,7 +427,7 @@ impl Workbench {
     /// "View: Move Editors Back to Main Window": every editor in a window of its own comes back as a tab.
     pub(super) fn return_editor_windows(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.chrome.editor_windows.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No editor is in a window of its own.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("No editor is in a window of its own.").into()));
             return cx.notify();
         }
         let all: Vec<(Entity<EditorView>, usize)> = self.chrome.editor_windows.iter().map(|d| (d.editor.clone(), d.slot)).collect();
@@ -501,6 +501,7 @@ impl Workbench {
             return;
         }
         let path = ed.read(cx).path.clone();
+        self.forget_cargo(&path, cx);
         self.discard_response_file(&path);
         self.drop_backup(&path, cx);
         let (line, col) = ed.read(cx).cursor_position();

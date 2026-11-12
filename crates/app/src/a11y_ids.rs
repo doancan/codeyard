@@ -37,6 +37,7 @@ const _: () = {
         EXPLORER_MENU,
         super::term_tab_access::TERM_TAB,
         super::scm_access::history::HISTORY_ITEM,
+        super::refactor_access::REFACTOR_ROW,
         ROW_BASE,
     ];
     let mut i = 1;
@@ -87,6 +88,13 @@ const _: () = {
         SEARCH_ED_LIST,
         SEARCH_ED_APPLY,
         SEARCH_ED_UNDO,
+        super::refactor_access::REFACTOR,
+        super::refactor_access::REFACTOR_STATUS,
+        super::refactor_access::REFACTOR_LIST,
+        super::refactor_access::REFACTOR_APPLY,
+        super::refactor_access::REFACTOR_DISCARD,
+        super::refactor_access::REFACTOR_UNDO,
+        super::refactor_access::REFACTOR_REPORT,
         SCM_REPOS,
         SCM_CHANGES,
         EXT,

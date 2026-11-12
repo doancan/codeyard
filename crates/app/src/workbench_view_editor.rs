@@ -86,6 +86,7 @@ impl Workbench {
                     Some(Page::Merge(view)) => view.into_any_element(),
                     Some(Page::Compare(view)) => view.into_any_element(),
                     Some(Page::Search(view)) => view.into_any_element(),
+                    Some(Page::Refactor(view)) => view.into_any_element(),
                     Some(Page::ExtView(id)) => self.ext_view_frame(&id, p, cx),
                     Some(Page::Terminal(view)) => self.editor_terminal_view(view, p),
                     Some(Page::Welcome) => self.welcome_view(p, cx).into_any_element(),
@@ -732,6 +733,7 @@ impl Workbench {
                     Page::Merge(v) => ("git-compare", v.read(cx).title(cx)),
                     Page::Compare(v) => ("git-compare", v.read(cx).title()),
                     Page::Search(v) => ("search", v.read(cx).title()),
+                    Page::Refactor(v) => ("pencil", v.read(cx).title().to_string()),
                     Page::ExtView(id) => ("plug", self.ext_view_title(id)),
                     Page::Terminal(v) => ("terminal", v.read(cx).title.to_string()),
                 };
@@ -871,20 +873,22 @@ impl Workbench {
                     .into_any_element(),
             );
         }
+        let symbols = self.symbol_crumbs(p, cx);
+        // On a narrow editor the folders give way (their start is cut off) so the file and its symbols stay visible.
         Some(
             div()
                 .h(px(layout::BREADCRUMBS_H))
                 .flex_none()
                 .flex()
                 .items_center()
-                .gap(px(theme::SPACE[1]))
                 .px(px(theme::SPACE[5]))
                 .bg(c(p.bg))
                 .text_size(px(text::XS.0))
                 .text_color(c(p.text_muted))
                 .overflow_hidden()
                 .whitespace_nowrap()
-                .children(items),
+                .child(div().flex().flex_shrink().min_w_0().overflow_hidden().justify_end().items_center().gap(px(theme::SPACE[1])).children(items))
+                .child(div().flex().flex_none().items_center().gap(px(theme::SPACE[1])).children(symbols)),
         )
     }
 

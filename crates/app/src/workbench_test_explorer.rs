@@ -159,7 +159,7 @@ impl Workbench {
                         t.js_runner = js;
                         t.root = Some(root);
                     }
-                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not look for tests: {}", &[&e]).into())),
+                    Err(e) => this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not look for tests: {}", &[&e]).into())),
                 }
                 cx.notify();
             })
@@ -197,7 +197,7 @@ impl Workbench {
 
     fn run_test_jobs(&mut self, jobs: Vec<Job>, window: &mut Window, cx: &mut Context<Self>) {
         if jobs.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No tests to run.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("No tests to run.").into()));
             cx.notify();
             return;
         }
@@ -217,6 +217,16 @@ impl Workbench {
         }
         // Dropping the task (Stop, or a new run) cancels it; `stop_tests` cleans up after it.
         self.jobs.tests.run = Some(cx.spawn(async move |this, cx| {
+            // Rust tests go through cargo-nextest when `rust.testRunner` and the machine allow it (looked up while the run
+            // already shows as started, so Stop works at once).
+            let windows = this.update(cx, |this, _| this.remote.host.info().os == "windows").unwrap_or(false);
+            let jobs = if Self::has_rust_jobs(&jobs) && super::rust_glue::use_nextest(&this, cx, &root).await {
+                let line = format!("\x1b[2m{}\x1b[0m\n", crate::rust_toolchain::nextest::notice());
+                out.update(cx, |t, cx| t.append(line.as_bytes(), cx)).ok();
+                Self::nextest_jobs(jobs, windows)
+            } else {
+                jobs
+            };
             for job in jobs {
                 let header = format!("\x1b[1m$ {}\x1b[0m\n", job.command);
                 out.update(cx, |t, cx| t.append(header.as_bytes(), cx)).ok();
@@ -282,7 +292,7 @@ impl Workbench {
                 this.jobs.tests.before.clear();
                 let (passed, failed, _, _) = testexp::summary(&this.jobs.tests.files, &this.jobs.tests.results);
                 let text = crate::i18n::tf("Tests: {0} passed, {1} failed", &[&passed, &failed]);
-                this.notice = Some(if failed > 0 { Notice::Error(text.into()) } else { Notice::Info(text.into()) });
+                this.notify(NoticeSource::App, if failed > 0 { Notice::Error(text.into()) } else { Notice::Info(text.into()) });
                 cx.notify();
             })
             .ok();
@@ -358,7 +368,7 @@ impl Workbench {
         let at_cursor = crate::testrun::plan(&rel, &text, line, false, None);
         let test = at_cursor.and_then(|run| tests.iter().find(|t| t.id == run.id).cloned());
         let (Some(kind), Some(test)) = (testexp::kind_of(&rel), test) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("No test at the cursor: put it inside a test function.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("No test at the cursor: put it inside a test function.").into()));
             cx.notify();
             return;
         };
@@ -384,13 +394,15 @@ impl Workbench {
         let prepare_epoch = self.dbg.prepare_epoch;
         match file.kind {
             Kind::Js => {
-                self.notice =
-                    Some(Notice::Info(crate::i18n::t("JavaScript tests can be run here, not debugged: add a launch configuration for the runner.").into()));
+                self.notify(
+                    NoticeSource::App,
+                    Notice::Info(crate::i18n::t("JavaScript tests can be run here, not debugged: add a launch configuration for the runner.").into()),
+                );
                 cx.notify();
             }
             Kind::Rust => {
                 // The test binary is built first; its path comes from cargo's messages.
-                self.notice = Some(Notice::Info(crate::i18n::t("Building the tests…").into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Building the tests…").into()));
                 cx.notify();
                 let host = self.remote.host.clone();
                 let r = root.clone();
@@ -436,12 +448,14 @@ impl Workbench {
                                     this.lsp.output.pop_front();
                                 }
                                 this.set_task_problems(crate::problems::parse_output(&output, &root), cx);
-                                this.notice =
-                                    Some(Notice::Error(crate::i18n::t("Rust tests did not build. See Output and Problems for the compiler errors.").into()));
+                                this.notify(
+                                    NoticeSource::App,
+                                    Notice::Error(crate::i18n::t("Rust tests did not build. See Output and Problems for the compiler errors.").into()),
+                                );
                                 return cx.notify();
                             }
                         };
-                        this.notice = None;
+                        this.dismiss_notice();
                         let configs = testexp::debug_configs(&file, &test, &root, &bins);
                         this.choose_debug_config_trusted(configs, window, cx);
                     })

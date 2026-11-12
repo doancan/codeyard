@@ -120,9 +120,13 @@ impl Workbench {
 
     /// Tree menu: "Select Folder for Compare".
     pub(super) fn select_folder_for_compare(&mut self, path: String, cx: &mut Context<Self>) {
-        self.notice = Some(Notice::Info(
-            crate::i18n::tf("Selected {} for compare. Right-click another folder and choose Compare Folder with Selected.", &[&ui::file_name(&path)]).into(),
-        ));
+        self.notify(
+            NoticeSource::App,
+            Notice::Info(
+                crate::i18n::tf("Selected {} for compare. Right-click another folder and choose Compare Folder with Selected.", &[&ui::file_name(&path)])
+                    .into(),
+            ),
+        );
         self.roots.compare_folder_a = Some(Spot { local: false, path });
         cx.notify();
     }
@@ -153,14 +157,14 @@ impl Workbench {
             CompareEvent::Copy(path, dir) => self.compare_copy(view, path.clone(), *dir, window, cx),
             CompareEvent::Delete(path, side) => self.compare_delete(view, path.clone(), *side, window, cx),
             CompareEvent::Message(text) => {
-                self.notice = Some(Notice::Info(text.clone().into()));
+                self.notify(NoticeSource::App, Notice::Info(text.clone().into()));
                 cx.notify();
             }
         }
     }
 
     fn notify_compare(&mut self, notice: Notice, cx: &mut Context<Self>) {
-        self.notice = Some(notice);
+        self.notify(NoticeSource::App, notice);
         cx.notify();
     }
 

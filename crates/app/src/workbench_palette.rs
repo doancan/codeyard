@@ -55,6 +55,10 @@ impl Workbench {
             Command::action("Go: File…", QuickOpen),
             Command::action("Go: Line…", GoToLine),
             Command::action("Search: Find in Files", FindInFiles),
+            Command::action("Search: Find in Workspace", search_editor_glue::scope_files::SearchInWorkspace),
+            Command::action("Search: Find in Open Editors", search_editor_glue::scope_files::SearchInOpenEditors),
+            Command::action("Search: Find in Changed Files", search_editor_glue::scope_files::SearchInChangedFiles),
+            Command::action("Search: Find in Current Folder", search_editor_glue::scope_files::SearchInCurrentFolder),
             Command::action("Search: Open Search Editor", OpenSearchInEditor),
             Command::action("Search: Undo Last Replace", UndoSearchReplace),
             Command::action("File: Follow (Tail) Active File", FollowFile),
@@ -138,6 +142,9 @@ impl Workbench {
             Command::action("Help: Release Notes", ShowReleaseNotes),
             Command::action("Help: Report Issue…", ReportIssue),
             Command::action("Help: Open Crash Reports Folder", OpenCrashReportsFolder),
+            Command::action("Help: Copy Diagnostics", panels_glue::CopyDiagnostics),
+            Command::action("Help: Open Log File", panels_glue::OpenLogFile),
+            Command::action("Help: Reveal Log Folder", panels_glue::RevealLogFolder),
             Command::action("View: Toggle Render Whitespace", ToggleRenderWhitespace),
             Command::action("Git: Revert Selected Lines", editor::RevertHunk),
             Command::action("Editor: Transpose Characters", editor::TransposeCharacters),
@@ -254,6 +261,7 @@ impl Workbench {
             Command::action("Bookmarks: Clear in File", editor::ClearBookmarks),
             Command::action("Preferences: Open Workspace Settings", OpenWorkspaceSettings),
             Command::action("File: Refresh Explorer", RefreshExplorer),
+            Command::action("Files: Filter Files in Explorer", crate::tree::ToggleFilter),
             Command::action("File: Cancel File Operation", CancelFileOperation),
             Command::action("File: Copy Path of Active File", CopyActivePath),
             Command::action("File: Copy Relative Path of Active File", CopyActiveRelativePath),
@@ -314,6 +322,11 @@ impl Workbench {
             Command::action("Theme: Open User Themes Folder", OpenThemesFolder),
             Command::action("Preferences: Settings", ShowSettings),
             Command::action("Preferences: Keyboard Shortcuts", ShowKeyboardShortcuts),
+            Command::action("Profiles: Create…", settings_ui::profiles_glue::CreateProfile),
+            Command::action("Profiles: Switch…", settings_ui::profiles_glue::SwitchProfile),
+            Command::action("Profiles: Rename…", settings_ui::profiles_glue::RenameProfile),
+            Command::action("Profiles: Delete…", settings_ui::profiles_glue::DeleteProfile),
+            Command::action("Profiles: Duplicate Current…", settings_ui::profiles_glue::DuplicateProfile),
             Command::action("Preferences: Open Settings", OpenSettingsPage),
             Command::action("Preferences: Open Settings (JSON)", OpenSettings),
             Command::action("Help: Welcome", ShowWelcome),
@@ -344,9 +357,35 @@ impl Workbench {
             Command::action("Preferences: Reset Settings to Defaults…", settings_ui::ResetSettings),
             Command::action("View: Problems", ShowProblems),
             Command::action("Problems: Copy Full Diagnostic", CopyFullDiagnostic),
+            Command::action("Problems: Copy All", panels_glue::CopyAllProblems),
+            Command::action("Notifications: Show", panels_glue::ShowNotifications),
+            Command::action("Notifications: Clear", panels_glue::ClearNotifications),
+            Command::action("Notifications: Toggle Do Not Disturb", panels_glue::ToggleDoNotDisturb),
+            Command::action("Go: Pick Symbol at the Cursor's Level", outline_glue::BreadcrumbSymbols),
+            Command::action("Problems: Toggle Active File Only", panels_glue::ToggleProblemsActiveFile),
             Command::action("Rust: Expand Macro Recursively", RustExpandMacro),
             Command::action("Rust: Locate Parent Module", RustParentModule),
             Command::action("Rust: Open Cargo.toml", RustOpenCargoToml),
+            Command::action("Cargo: Add Dependency…", rust_glue::cargo::AddDependency),
+            Command::action("Cargo: Remove Dependency at Cursor", rust_glue::cargo::RemoveDependency),
+            Command::action("Cargo: Update Dependency at Cursor to Latest", rust_glue::cargo::UpdateDependency),
+            Command::action("Cargo: Update All Dependencies in This File (Compatible)", rust_glue::cargo::UpdateAllCompatible),
+            Command::action("Cargo: Update All Dependencies in This File to Latest", rust_glue::cargo::UpdateAllLatest),
+            Command::action("Cargo: Check Dependency Updates", rust_glue::cargo::CheckDependencyUpdates),
+            Command::action("Rust: Run Runnable at Cursor", rust_glue::RustRunRunnable),
+            Command::action("Rust: Select Target…", rust_glue::RustSelectTarget),
+            Command::action("Rust: Explain Error at Cursor", rust_glue::RustExplainError),
+            Command::action("Rust: Open Documentation", rust_glue::RustOpenDocs),
+            Command::action("Rust: View HIR", rust_glue::RustViewHir),
+            Command::action("Rust: View MIR", rust_glue::RustViewMir),
+            Command::action("Rust: View Syntax Tree", rust_glue::RustViewSyntaxTree),
+            Command::action("Rust: Show rust-analyzer Status", rust_glue::RustShowStatus),
+            Command::action("Rust: Reload Workspace", rust_glue::RustReloadWorkspace),
+            Command::action("Rust: Rebuild Proc Macros", rust_glue::RustRebuildProcMacros),
+            Command::action("Rust: Run Flycheck", rust_glue::RustRunFlycheck),
+            Command::action("Rust: Cancel Flycheck", rust_glue::RustCancelFlycheck),
+            Command::action("Rust: Clear Flycheck", rust_glue::RustClearFlycheck),
+            Command::action("Rust: Restart rust-analyzer", rust_glue::RustRestartAnalyzer),
             Command::action("View: Output", ShowOutput),
             Command::action("Output: Clear", ClearOutput),
             Command::action("View: Ports (SSH port forwarding)", ShowPorts),
@@ -601,7 +640,7 @@ impl Workbench {
                                 .ok();
                         }
                         Err(e) => {
-                            this.notice = Some(Notice::Error(crate::i18n::tf("Could not list files: {}", &[&e]).into()));
+                            this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not list files: {}", &[&e]).into()));
                             weak_picker.update(cx, |p, cx| p.set_paths(0, Vec::new(), false, cx)).ok();
                             cx.notify();
                         }
@@ -741,6 +780,14 @@ impl Workbench {
                     ed.update(cx, |e, cx| e.reveal_lsp(line, col, window, cx));
                 }
             }
+            (OverlayKind::CargoAdd { .. }, PickerEvent::Query(q)) => {
+                let q = q.clone();
+                self.cargo_search(q, cx);
+            }
+            (OverlayKind::CargoAdd { path, hits }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (path, hit) = (path.clone(), hits[*index].clone());
+                self.cargo_add_chosen(path, hit, window, cx);
+            }
             (OverlayKind::QuickFixes(fixes), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let fix = fixes[*index].clone();
                 self.close_overlay(window, cx);
@@ -790,15 +837,15 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.pick_setting(index, window, cx);
             }
+            (OverlayKind::Profile { action, names }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (action, name) = (*action, names.get(*index).cloned().flatten());
+                self.close_overlay(window, cx);
+                self.profile_picked(action, name, window, cx);
+            }
             (OverlayKind::SettingChoice { key, options }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let (key, value) = (*key, options[*index]);
                 self.close_overlay(window, cx);
                 self.write_setting(key, serde_json::Value::String(value.into()), window, cx);
-            }
-            (OverlayKind::Shortcuts, PickerEvent::Confirm(Pick::Item { index, .. })) => {
-                let index = *index;
-                self.close_overlay(window, cx);
-                self.bind_shortcut(index, window, cx);
             }
             (OverlayKind::Stashes { refs, msgs, op, repo }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let (stash, msg, op, repo) = (refs[*index].clone(), msgs.get(*index).cloned(), *op, repo.clone());
@@ -1083,11 +1130,12 @@ impl Workbench {
                 | OverlayKind::Switcher(_)
                 | OverlayKind::LspQuestion(_)
                 | OverlayKind::SettingChoice { .. }
-                | OverlayKind::Shortcuts,
+                | OverlayKind::Profile { .. },
                 PickerEvent::Dismiss,
             ) => {
                 self.close_overlay(window, cx);
             }
+            (OverlayKind::RustChoice(_), _) => self.on_rust_choice_event(event, window, cx),
             (OverlayKind::ExtPick { .. } | OverlayKind::Input { purpose: InputPurpose::ExtInput { .. }, .. }, _) => {
                 self.on_extension_overlay_event(event, window, cx);
             }

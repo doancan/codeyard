@@ -69,7 +69,27 @@ musl binary of about 1.5 MB.
    state. The `Workbench` struct stays under 80 lines.
 3. **Large enums** (`OverlayKind`, `InputPurpose`, `MenuCmd`) live in `workbench_types.rs`.
 
+Notifications are `notifications.rs` (the bounded log: severity, source, collapsing of repeats, unread counts; no UI and no
+clock) and `workbench_notifications.rs` (a child of `workbench_panels.rs`: `Workbench::notify` / `notify_with` are the only way a
+message reaches the user; the toast, Do Not Disturb, the list's keyboard and commands) with `workbench_notifications_view.rs` (the bell and
+the list). Nothing assigns a toast directly, and the history is never persisted.
+
+A notification's button is a `NoticeAction` (a palette command, `Reveal(path)`, `OpenFile(path, line)` or `Retry(RetryKind)`): plain
+data, never a closure or an entity, so the history cannot keep anything alive. `workbench_notification_actions.rs` is the one place that
+turns an action into work. `errors.rs` is the pure text of a failed file operation (`describe_io`, `describe_host`: what failed, the path,
+the cause, a next step; the raw system text goes to the detail). `persist_failures.rs` queues a failure reported from `&self` code (the
+session saves) for the next frame and reports each area once per session.
+
 Compare Folders is three files: `compare_logic.rs` (matching two `HashTree` scans, plans, report; no UI), `compare_folders.rs` (the tab) and `workbench_compare.rs` (picker, trust gate, copies and deletes checked against the scan).
+
+The Explorer's tree (`tree.rs`) keeps its rows and events; the filter and file nesting hang off it as `#[path]` children:
+`tree_match.rs` (case-insensitive, Turkish-i-aware name matching), `tree_universe.rs` (every path of the workspace in tree order,
+built once on a worker thread, scanned per keystroke), `tree_filter.rs` (the box, its state, the host's file list),
+`tree_nesting.rs` (the rules and the grouping of one folder's entries, pure) and `tree_nest_rows.rs` (open parents and the
+per-folder grouping cache). The image viewer is `large_image.rs` (reading, decoding, drawing; a child of `large.rs`) with
+`large_image_zoom.rs` (scale and pan as numbers) and `large_image_info.rs` (format, size and animation read from the bytes).
+Decoding happens off the UI thread after the header checks refuse what would take gigabytes; SVG is rasterised again per zoom
+through `SvgRenderer` (exported by a small GPUI patch, see `vendor/gpui/PATCHES.md`).
 
 `scripts/arch-check.sh` enforces size limits and only ever lowers them: `workbench.rs` ≤ 2600 lines,
 `editor.rs` ≤ 1700, `buffer/src/lib.rs` ≤ 1800, every other source file ≤ 1500 (`*_tests.rs` and test helpers ≤ 2500,
@@ -84,6 +104,23 @@ Rust workspace discovery, target selection and compiler messages share `cargo_pr
 generated test commands back into literal Cargo argv. Debug executable paths come from Cargo artifacts rather than
 directory guesses. `workbench_debug_save.rs` coordinates workspace saves before discovery/build/start and cancels
 the start on a save error, Stop or a changed workspace. Editor saves keep their hash/conflict protection.
+
+`Cargo.toml` dependency intelligence lives in `cargo_deps*.rs`, hung off `cargo_project.rs` (`cargo_project::deps`; `main.rs`
+is at its size limit). The core (manifest parsing with `toml_edit`, version logic with `semver`, the sparse-index client, the
+cache, text edits) knows nothing of GPUI; the network is one trait, `Fetch`, with the system `curl` behind it and a fake in
+the tests. `editor_cargo.rs` binds a registry to a manifest's editor (hints, completion, hover); `workbench_cargo.rs`
+(a child of `workbench_rust.rs`) refreshes it, runs Quick Fix, the palette commands and `cargo add` / `cargo remove`.
+A language server's multi-file edit (rename, quick fix) is reviewed before it is written: `lsp/refactor/` holds the pure parts
+(`edit` reads the `WorkspaceEdit`, `plan` makes the checked plan on top of `replace_plan`'s file plans, `apply` runs it as a
+transaction with rollback, `env` is the plan's view of a host) and the review page (`preview`, with `a11y_refactor.rs`);
+`workbench_refactor.rs` reads the open editors, applies, undoes and answers the server. Tests use a real rust-analyzer answer
+kept in `crates/app/testdata/refactor`.
+The Rust toolchain integration is split the same way: plain logic in `rust_toolchain.rs` and its children (`rust_runnables`,
+`rust_status`, `rust_target`, `rust_nextest`, `rust_explain`, `rust_hints`, `rust_views`; no GPUI) and `lsp/rust.rs` (rust-analyzer's
+protocol extensions as data); the workbench side is `workbench_rust.rs` with `workbench_rust_*.rs` sub-topics (status, server
+controls, runnables, explain, views, target, nextest). The gutter marks are drawn by `editor_runnables.rs`, the token
+modifiers by `editor_semantic.rs` and `editor_overlay::modifier_runs`. Tests use real rust-analyzer and cargo-nextest output
+kept in `crates/app/testdata/rust-analyzer` and `crates/app/testdata/nextest`.
 
 ## Stack
 
@@ -111,8 +148,12 @@ the start on a save error, Stop or a changed workspace. Editor saves keep their 
 | Spelling | `spellbook` (pure Rust Hunspell) | English built in, other languages installable |
 
 No server and no account; the extension registry is not live yet. Outbound requests: SchemaStore and schema downloads (cached 7 days, can be disabled),
-dictionary installs, GitHub pull request listing, requests sent from `.http` files and update checks. The update check is the one
-the app starts by itself, and only when the user chose daily checks (`update.check`); otherwise it happens when the user asks
+dictionary installs, GitHub pull request listing, requests sent from `.http` files, update checks and crates.io lookups for
+`Cargo.toml` (index.crates.io and crates.io, only the crate names and what the user types; see
+[Cargo dependencies](user-guide.md#cargo-dependencies)). The update check is the one the app starts by itself, and only when the
+user chose daily checks (`update.check`); the crates.io lookups also start by themselves, but only after the user turned on
+`rust.cargo.dependencyLookups` (off by default, asked once above a `Cargo.toml`), and otherwise run only when the user asks
+(*Cargo: Check Dependency Updates*, *Add Dependency…*, an update command). Otherwise a request happens when the user asks
 for one. It downloads two small files from github.com (see [Updates](#updates) for exactly what GitHub sees).
 
 ## Updates

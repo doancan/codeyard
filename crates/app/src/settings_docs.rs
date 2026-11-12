@@ -9,6 +9,18 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
     ("theme", "theme id or `auto`", "`auto`", "Colour theme; `auto` follows the system light/dark setting. Picked with the theme picker (⌘K ⌘T)."),
     ("editor.rulers", "list of columns", "`[]`", "Draw vertical rulers at these columns, e.g. `[80, 120]`."),
     ("files.exclude", "list of globs", "`[]`", "Hide matching paths from the explorer and from file lists, e.g. `[\"**/node_modules\"]`."),
+    (
+        "explorer.fileNesting.patterns",
+        "object of pattern → file names",
+        "built-in rules (see the user guide)",
+        "Which files the explorer lists under another file when `explorer.fileNesting.enabled` is on, added to the built-in rules. The key is a file name or a pattern with one `*`; the value is a comma-separated list of names (or a list of texts) in the same folder, where `${capture}` stands for the text the `*` matched, e.g. `{ \"*.c\": \"${capture}.h\" }`. An entry replaces the built-in rule with the same key; `false` removes it. A file is nested under one parent only (the first matching rule wins). Names are case-sensitive.",
+    ),
+    (
+        "diagnostics.logLevel",
+        "`error`, `warn`, `info` or `debug`",
+        "`info`",
+        "What the log file (`logs/codeyard.log` in the state folder) records: `error` only failures, `warn` adds problems that were worked around, `info` adds what the app did, `debug` is for bug reports. Only your own settings file counts; a folder's setting is ignored.",
+    ),
     ("search.exclude", "list of globs", "`[]`", "Skip matching paths in Find in Files."),
     (
         "compare.folders.ignore",
@@ -74,10 +86,52 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
     ("rust.noDefaultFeatures", "boolean", "`false`", "Build Run and Debug targets without the package's default features."),
     ("rust.profile", "string", "Cargo's default (`dev`)", "Cargo profile Run and Debug build with, e.g. `release` or a custom `[profile.*]`."),
     (
+        "rust.testRunner",
+        "`cargo`, `auto`, `nextest`",
+        "`cargo`",
+        "What runs Rust tests from the Testing view, *Test: Run Test at Cursor* and *Rust: Run Runnable at Cursor*. `cargo` (the default) runs `cargo test`. `auto` uses cargo-nextest when `cargo nextest` is installed and `cargo test` otherwise; `nextest` says so when it is missing and falls back to `cargo test`. Whether nextest is installed is looked for only in a folder you have trusted (Cargo reads the folder's configuration), within five seconds, and a missing one is remembered for five minutes. The output says when nextest runs the tests. Documentation tests are rustdoc's, so nextest does not run them.",
+    ),
+    (
+        "rust.inlayHints.types",
+        "boolean",
+        "`true`",
+        "Show rust-analyzer's type hints (`let x` → `: i32`). Needs `editor.inlayHints`. Sent to the server as `rust-analyzer.inlayHints.typeHints.enable`, unless `lsp.servers.rust.settings` sets that itself.",
+    ),
+    (
+        "rust.inlayHints.parameters",
+        "boolean",
+        "`true`",
+        "Show rust-analyzer's parameter name hints (`f(` `a:` `1)`), as `rust-analyzer.inlayHints.parameterHints.enable`.",
+    ),
+    (
+        "rust.inlayHints.chaining",
+        "boolean",
+        "`true`",
+        "Show rust-analyzer's hints on method chains (the type at the end of each line), as `rust-analyzer.inlayHints.chainingHints.enable`.",
+    ),
+    (
+        "rust.semanticModifiers",
+        "list of `unsafe`, `mutable`, `consumed`",
+        "`[\"unsafe\"]`",
+        "Which semantic token modifiers from rust-analyzer are drawn over the colours: `unsafe` is underlined in the warning colour, `mutable` is underlined and `consumed` (a value moved out by that use) is in italics. Needs `editor.semanticHighlighting`.",
+    ),
+    (
+        "rust.target",
+        "target triple",
+        "Cargo's own (this machine)",
+        "Target triple (`--target`) that Run, Debug, tests and *Rust: Run Runnable at Cursor* build for, e.g. `aarch64-unknown-linux-musl`; *Rust: Select Target…* lists the installed ones. *Preferences: Apply Rust Setup…* also points rust-analyzer at it.",
+    ),
+    (
         "rust.targetDir",
         "path",
         "Cargo's own",
         "Output folder for Run and Debug builds (`--target-dir`); a relative path is resolved against the workspace folder on the machine that builds, also over SSH.",
+    ),
+    (
+        "rust.cargo.dependencyLookups",
+        "boolean",
+        "`false`",
+        "Let `Cargo.toml` look up the crates it names on its own: the latest version of each dependency as a hint, and completion of crate names, versions and features. Off by default, so nothing contacts crates.io unless you start it: *Cargo: Add Dependency…*, *Cargo: Check Dependency Updates* and *Update All* each look up on request, and a one-time question above a `Cargo.toml` offers to turn this on. When on, it asks index.crates.io for the crates named in the file and crates.io for search and descriptions (see *Cargo dependencies* in the user guide for exactly what is sent).",
     ),
     ("workbench.colorCustomizations", "object", "`{}`", "Override single colour roles; an entry in `[Theme Name]` applies to that theme only."),
 ];
@@ -183,10 +237,15 @@ mod tests {
     /// Every key the settings parser reads is documented, either in the catalog or in `FILE_ONLY`.
     #[test]
     fn docs_reference_covers_every_parsed_setting() {
-        let src =
-            concat!(include_str!("settings.rs"), include_str!("settings_terminal.rs"), include_str!("settings_rust.rs"), include_str!("settings_workbench.rs"));
+        let src = concat!(
+            include_str!("settings.rs"),
+            include_str!("settings_terminal.rs"),
+            include_str!("settings_rust.rs"),
+            include_str!("settings_workbench.rs"),
+            include_str!("settings_lsp.rs")
+        );
         let mut parsed = std::collections::BTreeSet::new();
-        for m in ["bool", "bool_or", "quick_suggestions", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale"] {
+        for m in ["bool", "bool_or", "quick_suggestions", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale", "get"] {
             let needle = format!("r.{m}(\"");
             let mut rest = src;
             while let Some(i) = rest.find(&needle) {
@@ -197,7 +256,7 @@ mod tests {
             }
         }
         // A new reader method (`r.something("key")`) that is not in the list above would hide its keys from this test: fail instead.
-        let known = ["bool", "bool_or", "quick_suggestions", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale"];
+        let known = ["bool", "bool_or", "quick_suggestions", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale", "get"];
         let mut unknown_methods = std::collections::BTreeSet::new();
         for (at, _) in src.match_indices("r.") {
             if src[..at].chars().next_back().is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.') {

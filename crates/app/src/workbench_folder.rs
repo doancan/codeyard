@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use gpui::{AppContext as _, Context, Window};
 
-use super::{Notice, Overlay, OverlayKind, Workbench};
+use super::{Notice, NoticeSource, Overlay, OverlayKind, Workbench};
 use crate::picker::{Pick, PickItem, Picker, Source as PickSource};
 use crate::ui;
 use host::Host;
@@ -146,7 +146,7 @@ impl Workbench {
             this.update(cx, |this, cx| match check {
                 Ok(()) => this.set_root(path, cx),
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Can't open {0}: {1}", &[&path, &e]).into()));
+                    this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Can't open {0}: {1}", &[&path, &e]).into()));
                     cx.notify();
                 }
             })
@@ -296,7 +296,7 @@ impl Workbench {
         let path = if self.remote.host.is_remote() { path } else { ui::local_path(std::path::Path::new(&path)) };
         let path = path.trim_end_matches('/').to_string();
         let refuse = |this: &mut Self, why: String, cx: &mut Context<Self>| {
-            this.notice = Some(Notice::Info(why.into()));
+            this.notify(NoticeSource::App, Notice::Info(why.into()));
             cx.notify();
             false
         };
@@ -312,7 +312,7 @@ impl Workbench {
         let host = self.remote.host.clone();
         let tree = cx.new(|cx| crate::tree::FileTree::new(host.clone(), cx));
         let settings = cx.global::<crate::settings::Settings>();
-        let view = crate::tree::ViewOptions { compact: settings.compact_folders, sort: crate::tree::SortOrder::from_setting(&settings.sort_order) };
+        let view = crate::tree::ViewOptions::from_settings(settings);
         tree.update(cx, |t, cx| {
             t.set_options(view, cx);
             t.set_root(host, Some(path.clone()), cx);
@@ -424,8 +424,10 @@ impl Workbench {
         if self.roots.workspace.is_some() {
             return;
         }
-        if let (Some(ws), Some(s)) = (self.persist.workspace_id, &self.persist.state) {
-            let _ = s.set(&format!("folders:{ws}"), &self.roots.extra_roots.join("\n"));
+        if let (Some(ws), Some(s)) = (self.persist.workspace_id, &self.persist.state)
+            && let Err(e) = s.set(&format!("folders:{ws}"), &self.roots.extra_roots.join("\n"))
+        {
+            self.persist_failed(super::notifications_glue::failures::Area::ExtraFolders, &e);
         }
     }
 
@@ -497,7 +499,7 @@ impl Workbench {
     /// "File: Add Folder to Workspace…"
     pub(super) fn add_folder_to_workspace(&mut self, _: &super::AddFolderToWorkspace, _: &mut Window, cx: &mut Context<Self>) {
         if self.root(cx).is_none() {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a folder first; folders are added to it.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a folder first; folders are added to it.").into()));
             cx.notify();
             return;
         }
@@ -528,7 +530,7 @@ impl Workbench {
     /// "File: Remove Folder from Workspace…"
     pub(super) fn show_remove_folder(&mut self, _: &super::RemoveFolderFromWorkspace, window: &mut Window, cx: &mut Context<Self>) {
         if self.roots.extra_roots.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("The workspace has no extra folders.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("The workspace has no extra folders.").into()));
             cx.notify();
             return;
         }

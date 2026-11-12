@@ -17,6 +17,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures::StreamExt as _;
 
+use super::notifications_glue::model::{Action, Notification, Severity};
 use super::*;
 use crate::i18n::{t, tf};
 use crate::markdown;
@@ -24,6 +25,9 @@ use crate::update::{ErrorKind, Policy, Progress, Release, UpdateError, higher_ve
 pub(crate) use crate::update_backend::UpdateBackend;
 use crate::update_install::{InstallKind, InstallPlan, ManualReason};
 use crate::update_restart;
+
+#[path = "workbench_update_report.rs"]
+mod report;
 
 /// Keys in the state database (machine-written values stay out of `settings.jsonc`).
 const LAST_CHECK: &str = "update.last_check";
@@ -899,7 +903,10 @@ impl Workbench {
                 let seen = self.stored(HIGHEST_SEEN);
                 if seen.as_deref().is_some_and(|seen| is_rollback(&release.version, seen)) {
                     // Genuinely signed, but older than what this installation was offered before: an old list played back.
-                    eprintln!("update: ignoring {}: an earlier check already saw {}", release.version, seen.unwrap_or_default());
+                    crate::diagnostics::log::warn(
+                        "update",
+                        format_args!("update: ignoring {}: an earlier check already saw {}", release.version, seen.unwrap_or_default()),
+                    );
                     self.update.state = if manual { UpdateState::UpToDate } else { UpdateState::Idle };
                 } else {
                     self.remember(HIGHEST_SEEN, &higher_version(&release.version, seen.as_deref()));
@@ -932,7 +939,7 @@ impl Workbench {
         self.update.state = UpdateState::Available(release);
         if !manual && self.stored(NOTIFIED).as_deref() != Some(version.as_str()) {
             self.remember(NOTIFIED, &version);
-            self.notice = Some(Notice::Info(tf("Codeyard {} is available.", &[&version]).into()));
+            self.notify(NoticeSource::Update, Notice::Info(tf("Codeyard {} is available.", &[&version]).into()));
         }
         cx.notify();
     }
@@ -1025,7 +1032,7 @@ impl Workbench {
                     // The setup program is running and closes this app itself; leave through the normal quit path first.
                     self.restart_now(window, cx);
                 } else if self.update.dialog != Dialog::Update {
-                    self.notice = Some(Notice::Info(t("Update installed. Restart Codeyard to finish.").into()));
+                    self.notify(NoticeSource::Update, Notice::Info(t("Update installed. Restart Codeyard to finish.").into()));
                 }
             }
             (Err(e), Some(release)) if e.kind() == ErrorKind::Cancelled => self.update.state = UpdateState::Available(release),
@@ -1041,7 +1048,7 @@ impl Workbench {
     fn fail(&mut self, error: &UpdateError, release: Option<Release>, phase: Phase, window: &mut Window, cx: &mut Context<Self>) {
         self.update.run = None;
         let failure = Failure::from_error(error, release, phase);
-        eprintln!("update: {}: {}", failure.title(), failure.detail);
+        crate::diagnostics::log::warn("update", format_args!("update: {}: {}", failure.title(), failure.detail));
         if phase == Phase::Check {
             let now = self.update.backend.now();
             self.update.failures.push(now);
@@ -1049,9 +1056,15 @@ impl Workbench {
         if self.update.dialog == Dialog::Update {
             self.update.state = UpdateState::Error(failure);
         } else if phase == Phase::Check {
+            self.report_background_check_failure(&failure);
             self.update.state = UpdateState::Idle;
         } else {
-            self.notice = Some(Notice::Error(failure.title().into()));
+            self.notify_with(
+                Notification::new(Severity::Error, NoticeSource::Update, failure.title())
+                    .id("update-failure")
+                    .detail(failure.detail.clone())
+                    .action(Action { label: crate::i18n::tr("Check for Updates…"), command: "Help: Check for Updates…" }),
+            );
             self.update.state = UpdateState::Error(failure);
         }
         self.focus_update_primary(window, cx);
@@ -1148,8 +1161,10 @@ impl Workbench {
             if handed_over && let Some(dir) = &self.persist.data_dir {
                 update_restart::discard(dir);
             }
-            self.notice =
-                Some(Notice::Error(tf("Codeyard could not start the new version: {}. The update is installed; open Codeyard again to use it.", &[&e]).into()));
+            self.notify(
+                NoticeSource::Update,
+                Notice::Error(tf("Codeyard could not start the new version: {}. The update is installed; open Codeyard again to use it.", &[&e]).into()),
+            );
             cx.notify();
             return;
         }
@@ -1186,7 +1201,7 @@ impl Workbench {
         match update_restart::write(dir, &update_restart::Handover { to: version.clone(), windows, focused }, self.update.backend.now()) {
             Ok(()) => true,
             Err(e) => {
-                eprintln!("could not leave the open windows for the new version: {e}");
+                crate::diagnostics::log::warn("update", format_args!("could not leave the open windows for the new version: {e}"));
                 false
             }
         }
@@ -1230,7 +1245,7 @@ impl Workbench {
         if !matches!(self.update.state, UpdateState::Installing { .. }) {
             return false;
         }
-        self.notice = Some(Notice::Info(t("This window is installing an update. You can close it in a few seconds.").into()));
+        self.notify(NoticeSource::Update, Notice::Info(t("This window is installing an update. You can close it in a few seconds.").into()));
         cx.notify();
         true
     }
@@ -1260,10 +1275,11 @@ impl Workbench {
         self.persist.state.as_ref().and_then(|s| s.get(key))
     }
 
-    /// A failed write only costs a repeated notice or check, so it is logged, not shown.
+    /// A failed write costs a repeated notice or check: it is reported once per session (see `persist_failures.rs`).
     fn remember(&self, key: &str, value: &str) {
         if let Some(Err(e)) = self.persist.state.as_ref().map(|s| s.set(key, value)) {
-            eprintln!("could not remember {key}: {e}");
+            crate::diagnostics::log::warn("update", format_args!("could not remember {key}: {e}"));
+            self.persist_failed(super::notifications_glue::failures::Area::UpdateChoice, &e);
         }
     }
 
@@ -1277,6 +1293,7 @@ impl Workbench {
         self.update.last_check = Some(now);
         self.update.failures.clear();
         self.remember(LAST_CHECK, &unix_ms(now).to_string());
+        self.dismiss_notice_id(report::CHECK_FAILED_ID);
     }
 }
 

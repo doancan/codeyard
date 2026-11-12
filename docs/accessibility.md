@@ -29,7 +29,8 @@ The tree, in the order a screen reader walks it:
   terminal toggle, merge conflicts, a data path, the web preview's Open and Stop) joined to the status bar's node; the
   resource monitor (its "Resources" button, expanded while the figures show, each figure as a label, Pin and Close);
   the error card's Reconnect and Close; the containers' "Back to SSH workspace" bar; the breadcrumbs (`Link`s that
-  show the folder or file in the Explorer); the menu bar the app draws on Windows and Linux (`MenuItem`s that open
+  show the folder or file in the Explorer, then a `Button` per symbol around the cursor, with its kind as description, that
+  opens a picker of the symbols at its level); the menu bar the app draws on Windows and Linux (`MenuItem`s that open
   their menu under them); the panel's buttons (New Terminal, Launch Profile…, Split Terminal, Kill Terminal, Move
   Panel, Maximize or Restore, Hide Panel) and its list of terminals ("Terminals": a `Tab` each, selected while in
   front, with Kill Terminal; Move Terminal Up and Down reorder them from the palette and the menu, as dragging does for the
@@ -39,9 +40,9 @@ The tree, in the order a screen reader walks it:
   Containers, the Inspector, Language Services…) as tabs of the "Editor tabs" list with their Close buttons; and
   every other editor group's tabs in a group "Editor group 2", whose `Click` brings that group forward with the tab.
 - The side views' drawn controls, declared the same way: the Explorer's empty-state buttons (Open Folder, Open
-  recent), header buttons (New File, New Folder, Refresh, Expand and Collapse Folders), each section's header (a
+  recent), header buttons (New File, New Folder, Filter Files…, Refresh, Expand and Collapse Folders), the filter box (a `SearchInput` named "Filter files by name" with its text as value and a Clear filter button; a status line says how many names match), each section's header (a
   `Button` with its count, expanded while open; `Click` folds it), the open editors (a `ListItem` each, selected while
-  in front, with Close), favorites, the outline (`TreeItem`s with their line, selected at the caret) and the timeline
+  in front, with Close), favorites, the outline (a "Filter symbols" `TextInput`, a "Sort: Position / Name / Kind" `Button` that changes the order, a "Follow Cursor" toggle `Button`, and `TreeItem`s with their kind and line as description, selected at the caret) and the timeline
   (saved copies and commits), and its notes as labels; Source Control's Refresh and More Actions…, the Stashes header
   and each stash's Apply, Pop and Drop (the stash as description), a repository's fold button; the Search view's
   Clear field, Previous and Next result, Expand or Collapse all, Open in a Search Editor tab, Run again, Clear and, in
@@ -60,7 +61,12 @@ The tree, in the order a screen reader walks it:
   Accept Incoming, Accept Both and Both, Incoming First with the conflict as description, Accept All, Save File and
   Close); the folder comparison (the option chips as `CheckBox`es, Stop, Scan Again, Copy Report and Export, each row
   a `TreeItem` with both sides and its status as description, expanded for a folder, with Copy to the right or left
-  and Delete from either side); the diff (a heading with the comparison and counts, Toggle inline view, every line
+  and Delete from either side); the diff (a heading with the comparison and counts, a `Status` "Change 2 of 12" with Previous change and Next
+  change buttons, Copy path, Collapse unchanged lines as a toggled button, Ignore whitespace as a toggled button
+  whose description is the current mode, Toggle inline view, a button "83 unchanged lines" for each fold, the
+  "Change overview" `Slider` of the overview ruler (0 at the top, 100 at the end; Increment and Decrement scroll by a
+  tenth, its description says how many changes there are), a `Status` for the notices (bytes that are not valid
+  UTF-8, only whitespace differs) and a `Label` in place of the lines for a binary or very large file; every line
   drawn as a `ListItem` "Added, line 3: text", side by side or inline; in Source Control's diffs also each changed
   line as a `CheckBox` named after both of its sides that picks it for staging, each change's Stage Change or Unstage
   Change button ("Stage Change, change 2 of 3"), the picked count, Clear, Stage Lines and the result as a `Status`);
@@ -76,7 +82,10 @@ The tree, in the order a screen reader walks it:
 - The editor's own drawn controls, in a group named after the file: each breakpoint in the gutter ("Breakpoint on line
   2", its condition, log message, binding failure or "disabled" as description; `Click` removes it as a click on the
   dot does, F9 sets one), each fold button ("Fold line 1" or "Unfold line 1", expanded while open), each Git mark
-  ("Line 3 changed", "Line 4 added", "Lines deleted above line 7"), an extension's lens at the end of a line, the
+  ("Line 3 changed", "Line 4 added", "Lines deleted above line 7"), an extension's lens at the end of a line, a `Cargo.toml`
+  dependency hint at the end of its line (a label with the full sentence, "serde is up to date: “1” allows the latest
+  release, 1.0.229"; the sentence is also the tooltip, and a yanked version is a warning in Problems), the question above a
+  `Cargo.toml` about contacting crates.io (a label with the question and the buttons Enable, Not now and Don't ask again), the
   sticky scope lines (`Link`s to their line), a merge conflict's Accept Current, Incoming and Both Changes and Open
   Merge Editor (`Link`s with "Conflict at line 2") and an `.http` request's Send Request. The color picker is a group
   "Color picker": Hue (0–359), Saturation, Brightness and Opacity (0–100 %) as `Slider`s over the planes a drag sets
@@ -89,7 +98,7 @@ The tree, in the order a screen reader walks it:
 - One `Tree` per folder of the workspace: "Explorer", or "Explorer: name" when there are several. One `TreeItem` per
   row in a range of 1,000 rows: name, level, selected, expanded, set position in the whole tree. The range is centred
   on the selection while it is on screen, otherwise on the visible rows; the tree reports its scroll position in rows
-  and supports scroll up/down by a page, which moves the range. These trees are in the tree only while a side bar (or a window of its own) shows the Explorer: another view, a hidden side bar or zen mode takes them out, and focus, scroll and row actions from an older tree then do nothing. Row actions resolve the current path rather than reusing an old row index.
+  and supports scroll up/down by a page, which moves the range. These trees are in the tree only while a side bar (or a window of its own) shows the Explorer: another view, a hidden side bar or zen mode takes them out, and focus, scroll and row actions from an older tree then do nothing. Row actions resolve the current path rather than reusing an old row index. The image viewer (an image tab) exposes the picture as an `Image` named after the file, with its pixel size, format and file size as the description, the info bar as a label, and toolbar buttons (Zoom out, Zoom level with the percentage as its value, Zoom in, Fit to window, Pause or Play animation) as painted controls; every zoom has a key (see the user guide), and a message about a file that cannot be shown is a label. An animation is paused from the start when reduced motion is on. A file that holds nested files (`explorer.fileNesting.*`) is a `TreeItem` with the expanded state and the description "N nested files"; Right and Left on it open and close them, and its nested files are items one level deeper.
 - While Source Control is visible, a `Group` with the branch, a writable `MultilineTextInput` for the commit message
   and the commit button, labeled with what it commits ("Commit (2)", "Commit All (3)") and disabled with "Nothing to
   commit" as its description when there is nothing. Then a `List` "Changed files" of the change groups: each group a
@@ -119,12 +128,18 @@ The tree, in the order a screen reader walks it:
   frame. Actions name the commit hash, worktree path, file of that commit or label the tree showed: from an outdated
   tree they do nothing when it changed, and a header or the search toggle only acts from the state that was read.
 - While the Problems panel is open, a `List` labeled with the number of problems: first a polite `Status` with the
-  counts ("2 errors, 1 warnings", spoken when it changes), then a `Heading` per file and a `ListItem` per problem
-  ("Error: …", with file, line and column as its description) or related location, each with `Click` to open it and its
-  painted frame. A problem holds a "Quick Fix…" `Button` (a list popup): it opens the problem at its place and asks for
-  its fixes there, as Quick Fix at the caret does; they come as the picker below, whose option applies the fix, and the
-  keyboard is back in the editor afterwards. At most 2,000 rows are exposed. With nothing to show, a polite `Status`
-  says "No problems.". An activation from an outdated tree opens or fixes nothing unless the same row is still at the
+  counts ("2 errors, 1 warnings", spoken when it changes; with a filter on, "Showing 2 of 3 problems: 1 errors, 0
+  warnings, 1 information"), then a `Heading` per file (expanded or collapsed; `Click` folds or opens its problems) and
+  a `ListItem` per problem ("Error: …", with file, line, column and source as its description) or related location,
+  each with `Click` to open it and its painted frame. A problem holds a "Quick Fix…" `Button` (a list popup): it opens
+  the problem at its place and asks for its fixes there, as Quick Fix at the caret does; they come as the picker below,
+  whose option applies the fix, and the keyboard is back in the editor afterwards. A second `Button`, "Copy Problem",
+  copies the problem's line. At most 2,000 rows are exposed. With nothing to show, a polite `Status` says "No
+  problems." or, when the filter hides everything, "No problems match the filter.". The filter bar is painted controls
+  of the surface "Problems": the switches "Show Errors", "Show Warnings" and "Show Information" (toggle `Button`s with
+  their count as description), the text input "Filter problems", and the buttons "Active File Only" (a toggle), "Sort:
+  File" (it names the current order; pressing it changes the order), "Collapse All Files" / "Expand All Files" and
+  "Copy All Problems". The list takes the keyboard as one stop (Up, Down, Home, End, Enter), like the other lists. An activation from an outdated tree opens or fixes nothing unless the same row is still at the
   same place.
 - While the bottom panel is open, a `TabList` with its tabs (Problems, Output, Debug Console while debugging, Ports,
   Terminal), the selected one marked and counts as descriptions; `Click` switches tabs. While Output is shown, a polite
@@ -139,7 +154,9 @@ The tree, in the order a screen reader walks it:
   options as `CheckBox`es (Match case, Whole word, Regular expression, Preserve case when replacing, Structural search;
   `Click` toggles from the state the tree showed), the replacement (`TextInput`), Replace All (disabled until there are
   results; it opens the review as the button does), the "Files to include / exclude" disclosure `Button` (expanded
-  while the two fields show) and those fields, the status line as a polite `Status` and a search or pattern error as an
+  while the two fields show) and those fields, the scope chips "Workspace", "Open Editors", "Changed Files" and "Current
+  Folder" (toggle `Button`s of the surface "Search"; pressing one limits the search and searches again) with a `Label`
+  that says what the scope means ("Only the 3 open files."), the status line as a polite `Status` and a search or pattern error as an
   assertive `Alert`, then a `Tree` "Search results" of up to 500 rows around the current match (or the rows on screen;
   scroll up/down by 100 rows moves the range): a file per level-1 `TreeItem` (folder as description, match count as
   value, `Expand`/`Collapse`/`Click`, with "Replace in this file" and "Dismiss this file from the results") and its
@@ -161,10 +178,18 @@ The tree, in the order a screen reader walks it:
   page or a closed or reopened page changes nothing. With no rows, a polite `Status` says why. A rejected value is
   also an assertive `Alert` ("Editor: Font Size: …"), so it is said as the field turns invalid; the keyboard stays in
   the field.
-- The Keyboard Shortcuts page in front is a `Group` with its `SearchInput` and a `List` ("{n} commands") of up to
-  2,000 rows: command as label, its key (or "No shortcut") as description, set position. `Click` runs the command as a
-  click on the row does, only while the page still lists it. The page is read-only otherwise: keys are assigned in the
-  "Preferences: Open Keyboard Shortcuts" picker, which is exposed as a picker.
+- The Keyboard Shortcuts page in front is a `Group` with its `SearchInput`, a live `Status` line and a `List`
+  ("{n} commands") of up to 2,000 rows: command as label; the key, where it comes from (Default, Extension, User), its
+  context and the commands that share the key ("Also used by …") as description; set position; `selected`. `Click`
+  selects the row, as on screen, only while the page still lists the same row at that place. A selected row has `Button`s
+  named for what they do ("Change key", "Add another key", "Remove key", "Reset to default", "Run command"), each with
+  the command and its key as description; the first three and Reset appear only when there is a settings folder to
+  write to and the command has an id. "Change key" and "Add another key" start recording: the `Status` line (polite)
+  then says which command listens and shows the chords so far, the keys pressed go to the page and nothing else acts on
+  them, Enter saves and Escape cancels. The result ("… now uses …", or a problem in `Alert` priority such as a key
+  another command also uses, or a `keybindings.jsonc` that does not parse) is announced in the same line. "Open
+  keybindings.jsonc" is a `Button` in the header. The keyboard works without the tree: Up and Down move the selection,
+  Enter records a key for the selected row, Delete removes its key.
 - While Run and Debug is visible, a `Group` "Run and Debug": the "Start Debugging (F5)" `Button` (the configuration it
   starts as description), a `RadioGroup` of the launch configurations (`Click` selects, as the selector's menu does),
   the selector itself (a `Button` with the configuration's name, "Launch configuration" as description, menu popup:
@@ -259,6 +284,16 @@ The tree, in the order a screen reader walks it:
   and position give the full count; Click opens a match or toggles a file, Focus moves the keyboard row), and the
   "Apply N changes in M files" and "Undo Replace" buttons. Apply is disabled while the results are incomplete; row and
   Apply actions are refused if the row's label or the Apply label changed since the tree was read.
+- The Refactor Preview in front is a `Group` with the refactoring's title (its summary is the description): a live `Status`
+  with what is chosen ("Selected: 3 changes in 2 files."; an `Alert` while a chosen edit needs a file operation that is
+  not chosen, or at the question before a delete), a polite `Status` with the report after Apply, a `Tree` "Refactor
+  Preview" and the buttons "Apply Selected" (disabled with nothing chosen), "Discard" ("Back" at the question, "Stop"
+  while writing, "Close" when done) and "Undo". The tree's items are a window of at most 200 rows around the keyboard row
+  (set size and position give the full count): a file or file operation at level 1 with a checked state (true, mixed,
+  false) and, for a file, expanded or collapsed, and each change at level 2 as "Line 5, column 9: “old” → “new”" with its
+  line as the description and a checked state; the line after the change and the lines around it are plain items. Click
+  on a row with a check box chooses or clears it, Expand and Collapse fold a file, Focus moves the keyboard row. Actions
+  are refused if the row's label, or the label of Apply or Discard, changed since the tree was read.
 - While the find bar is open, a `Group` "Find": a `SearchInput` with the query, a `TextInput` "Replace" while the replace
   row shows, a `Status` with "3 of 12" (a polite live region, so it is spoken while typing and moving between matches),
   then the options as `CheckBox` (with their state) and the buttons, in the order they are drawn. Labels are the tooltips,
@@ -279,6 +314,28 @@ The tree, in the order a screen reader walks it:
 - `Status` "Status bar": one item per entry; every entry that opens something on a click is a `Button` with the same
   action (Remote, Branch, Problems, position, indentation, line ending, language, update), the encoding a label;
   then the painted controls of the status bar (above).
+- Rust files (the gutter and the status bar): each run mark of the gutter is a painted `Button` named "Run or debug on line N"
+  that opens the list of Run and Debug rows (a picker, so the usual list semantics apply); the status bar's rust-analyzer item is a
+  `Button` named by the server's state ("rust-analyzer: checking. cargo check: demo (lib)") described as opening the status
+  page, and Problems rows with a rustc error code hold a `Button` "Explain error E0308". The status page and the other Rust views
+  (HIR, MIR, syntax tree, error explanations) are Markdown pages, so they are read as documents. The token modifiers
+  (underline, italics) are visual extras: nothing depends on seeing them.
+- The notification bell is a status bar `Button` named "N unread notifications" (or "Notifications"; "Notifications, Do
+  Not Disturb is on") with an expanded state. The open list is a surface of painted controls: a `Heading`, the header
+  buttons (Do Not Disturb as a toggle, Clear all, Close) and one `ListItem` per notification named "severity, source,
+  age, repeated N times: message", with `Button`s to run its action, copy and dismiss it. Up, Down, Home, End, Enter,
+  Delete, Ctrl/Cmd+C and Escape work on the list when it has the keyboard; Escape returns the focus to where it was (the
+  editor when that element is gone). Tab and Shift+Tab walk the buttons of the header and of each row, Enter or Space press
+  the focused one, and keys the list does not use (letters, function keys) pass on. The list closes when the focus leaves
+  it. A row's action button is named by its action ("Retry", "Show in Folder", "Open File" or the command's name); the error
+  card has the same button (a `Button` in the "Error" surface) next to Close, and the same action is reachable from the list
+  with the keyboard (Enter on the row, or Tab to the button and Enter or Space). Do Not Disturb hides information and warning toasts only: an error card still appears and its live region is
+  still announced.
+  A repeated message does not change the text of the live region below, so it is not spoken again.
+  "Codeyard quit unexpectedly last time" is a warning row like the others, with the place and message as its details and an
+  action button "Open Crash Reports Folder"; an extension's progress run is one row ("done", or an error with the reason).
+  *Help: Copy Diagnostics*, *Open Log File* and *Reveal Log Folder* are palette commands and tell the result in a notice.
+- Settings profiles: while a profile other than the default is active, the status bar has a painted `Button` "Profile: {name}" (its description says that a click switches profiles); with the default profile nothing is added. The five *Profiles:* commands are pickers and prompts, so the usual list and field semantics apply; a refused name is the notice below, said as an error, with the reason ("… is a reserved name on Windows").
 - The notice in the status bar is a live region of its own: an error (including a file that could not be opened) is an
   `Alert` with `Live::Assertive`, so it interrupts speech; an information notice is a `Status` with `Live::Polite`.
 - While a picker is open (command palette, go to file, go to symbol, themes, branches and every other list that opens
@@ -301,7 +358,7 @@ The tree, in the order a screen reader walks it:
   categories, a choice's options, a changed setting's Reset button and the page's three buttons, the Extensions view's
   Installed and Market rows, the picker (its dialog, query box, list and each row it draws), the suggestion list and each
   suggestion, the bottom panel's tabs, the Search Editor (the page, its query, status, list, each row it draws, Apply
-  and Undo Replace) and the Search Editor and terminal tabs of the focused group, and the update dialog (or the
+  and Undo Replace), the Refactor Preview (the page, status, list, each row it draws and its buttons) and the Search Editor and terminal tabs of the focused group, and the update dialog (or the
   first-run question) drawn in the window with each of its buttons. A row scrolled out of its list (a picker or the
   suggestion list draws only what fits), and an item the status bar leaves out at the current width, has none. The
   picker reports its frames only to the window it is drawn in, and suggestions only while their editor was drawn in

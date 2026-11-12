@@ -13,7 +13,7 @@ use task_engine::variables::{self, Context};
 /// Commands that run at the same time in one run (the engine caps watchers separately).
 const PARALLELISM: usize = 8;
 /// Problems kept per task: a runaway compiler cannot fill memory.
-const MAX_PROBLEMS: usize = 5_000;
+pub const MAX_PROBLEMS: usize = 1_000;
 
 /// The engine's platform for a host's `HostInfo::os`.
 pub fn platform_of(os: &str) -> Platform {
@@ -347,6 +347,10 @@ pub struct Run {
     problems: BTreeMap<usize, Vec<Problem>>,
     /// Nodes asked to stop whose exit has not arrived yet.
     stopping: BTreeSet<usize>,
+    /// Nodes whose matcher already failed on a line (said once).
+    unreadable: BTreeSet<usize>,
+    /// Nodes that already hit the problem cap (said once).
+    capped: BTreeSet<usize>,
 }
 
 /// What the workbench does after an event.
@@ -358,6 +362,10 @@ pub struct Effects {
     pub kill: Vec<u32>,
     /// The problems changed.
     pub problems: bool,
+    /// Tasks whose matcher could not read a line (too long, or the pattern gave up); each is named once per run.
+    pub unreadable: Vec<usize>,
+    /// Tasks that reached `MAX_PROBLEMS`: more were found and dropped; each is named once per run.
+    pub capped: Vec<usize>,
 }
 
 impl Run {
@@ -385,6 +393,8 @@ impl Run {
             matchers,
             problems: BTreeMap::new(),
             stopping: BTreeSet::new(),
+            unreadable: BTreeSet::new(),
+            capped: BTreeSet::new(),
         })
     }
 
@@ -412,7 +422,7 @@ impl Run {
     pub fn advance(&mut self) -> Effects {
         let changes = self.scheduler.advance();
         let kill = changes.stop.iter().filter_map(|n| self.stop_node(*n)).collect();
-        Effects { start: changes.start, kill, problems: false }
+        Effects { start: changes.start, kill, ..Effects::default() }
     }
 
     fn stop_node(&mut self, node: usize) -> Option<u32> {
@@ -435,23 +445,32 @@ impl Run {
     /// Output of `node`: lines go through its matchers. A background task's end pattern releases its dependents.
     pub fn output(&mut self, node: usize, bytes: &[u8]) -> Effects {
         let mut lines = Vec::new();
+        let mut skipped = false;
         let decoder = self.decoders.entry(node).or_default();
-        decoder.push(bytes, |event| {
-            if let Event::Line(line) = event {
-                lines.push(line.to_string());
-            }
+        decoder.push(bytes, |event| match event {
+            Event::Line(line) => lines.push(line.to_string()),
+            // A line that was too long or not text never reaches the matchers.
+            Event::Fault(_) => skipped = true,
         });
-        self.lines(node, lines)
+        self.lines(node, lines, skipped)
     }
 
-    fn lines(&mut self, node: usize, lines: Vec<String>) -> Effects {
+    fn lines(&mut self, node: usize, lines: Vec<String>, skipped: bool) -> Effects {
         let mut effects = Effects::default();
+        if skipped && self.matchers.get(&node).is_some_and(|m| !m.is_empty()) && self.unreadable.insert(node) {
+            effects.unreadable.push(node);
+        }
         let mut ready = false;
         let Some(matchers) = self.matchers.get_mut(&node) else { return effects };
         let problems = self.problems.entry(node).or_default();
         for line in lines {
             for matcher in matchers.iter_mut() {
-                let Ok(update) = matcher.line(&line) else { continue };
+                let Ok(update) = matcher.line(&line) else {
+                    if self.unreadable.insert(node) {
+                        effects.unreadable.push(node);
+                    }
+                    continue;
+                };
                 if update.began {
                     // A watcher started a new compilation: the previous one's problems are stale.
                     if !problems.is_empty() {
@@ -459,11 +478,13 @@ impl Run {
                         effects.problems = true;
                     }
                 }
-                if let Some(problem) = update.problem
-                    && problems.len() < MAX_PROBLEMS
-                {
-                    problems.push(problem);
-                    effects.problems = true;
+                if let Some(problem) = update.problem {
+                    if problems.len() < MAX_PROBLEMS {
+                        problems.push(problem);
+                        effects.problems = true;
+                    } else if self.capped.insert(node) {
+                        effects.capped.push(node);
+                    }
                 }
                 ready |= update.ready;
             }
@@ -479,14 +500,14 @@ impl Run {
     /// `node`'s process ended (`None`: killed or disconnected). A partial last line is still matched.
     pub fn exited(&mut self, node: usize, code: Option<i32>) -> Effects {
         let mut tail = Vec::new();
+        let mut skipped = false;
         if let Some(mut decoder) = self.decoders.remove(&node) {
-            decoder.finish(|event| {
-                if let Event::Line(line) = event {
-                    tail.push(line.to_string());
-                }
+            decoder.finish(|event| match event {
+                Event::Line(line) => tail.push(line.to_string()),
+                Event::Fault(_) => skipped = true,
             });
         }
-        let mut effects = self.lines(node, tail);
+        let mut effects = self.lines(node, tail, skipped);
         self.procs.remove(&node);
         self.stopping.remove(&node);
         self.scheduler.exited(node, code);
@@ -556,3 +577,7 @@ pub fn state_label(state: &State) -> String {
 #[cfg(test)]
 #[path = "task_run_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "task_matchers_tests.rs"]
+mod matcher_tests;

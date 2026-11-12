@@ -541,7 +541,7 @@ Crates marked vendored live in `vendor/`.
 | rustc-hash | 2.1.3 | Apache-2.0 OR MIT |  |
 | rustc_version | 0.4.1 | MIT OR Apache-2.0 |  |
 | rustix | 0.38.44 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
-| rustix | 1.1.5 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| rustix | 1.1.6 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | rustix-linux-procfs | 0.1.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | rustix-openpty | 0.2.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT |  |

@@ -39,6 +39,11 @@ pub(super) enum OverlayKind {
     },
     /// Language server results: locations (references), symbols, code actions.
     Locations(Vec<(String, u32, u32)>),
+    /// "Cargo: Add Dependency…": the manifest and the crates the search returned.
+    CargoAdd {
+        path: String,
+        hits: Vec<crate::cargo_project::deps::registry::SearchHit>,
+    },
     Symbols(Vec<(u32, u32)>),
     CodeActions {
         actions: Vec<crate::lsp::CodeAction>,
@@ -52,6 +57,8 @@ pub(super) enum OverlayKind {
     Favorites(Vec<String>),
     /// "Tasks: Run Task…"
     Tasks(Vec<tasks::Task>),
+    /// A Rust picker: runnables to run or debug, target triples to build for.
+    RustChoice(super::rust_glue::Choice),
     /// Extra folder to remove from the workspace.
     RemoveFolder(Vec<String>),
     /// Debugger: exception filters (id, name); selecting toggles them.
@@ -96,6 +103,11 @@ pub(super) enum OverlayKind {
     },
     /// Open editors, most recently used first: row -> index into `editors`.
     Switcher(Vec<usize>),
+    /// Profiles to switch to, rename or delete (`None`: the default profile).
+    Profile {
+        action: super::settings_ui::profiles_glue::ProfileAction,
+        names: Vec<Option<String>>,
+    },
     /// Files of the commit selected in the graph: (status, path, old path).
     CommitFiles {
         root: String,
@@ -119,7 +131,6 @@ pub(super) enum OverlayKind {
         key: &'static str,
         options: &'static [&'static str],
     },
-    Shortcuts,
     /// Active editor's setting from the status bar (line ending, indentation).
     EditorOption(Vec<EditorOpt>),
     /// Git branch picker (repo root, rows).
@@ -241,6 +252,8 @@ impl InputContext {
 }
 
 pub(super) enum InputPurpose {
+    /// A profile name: create, duplicate or rename.
+    Profile(super::settings_ui::profiles_glue::ProfileInput),
     /// `window.input-box` of a code extension: its ticket completes with the text.
     ExtInput {
         extension: String,

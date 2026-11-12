@@ -120,7 +120,7 @@ fn closing_a_terminal_tab_returns_it_to_the_panel_still_running(cx: &mut gpui::T
     assert!(!vcx.update(|_, cx| term.read(cx).has_exited()), "it was not ended");
     wb.update_in(vcx, |wb, window, cx| {
         wb.move_terminal_back_to_panel(window, cx);
-        assert!(wb.notice.is_some(), "no terminal is in front: the command says so");
+        assert!(wb.notice().is_some(), "no terminal is in front: the command says so");
     });
 }
 

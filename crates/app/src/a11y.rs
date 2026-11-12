@@ -136,6 +136,8 @@ pub(in crate::workbench) use chrome_access::view_part;
 mod popups_access;
 #[path = "a11y_problems.rs"]
 mod problems_access;
+#[path = "a11y_refactor.rs"]
+mod refactor_access;
 #[path = "a11y_scm.rs"]
 mod scm_access;
 #[path = "a11y_search_editor.rs"]
@@ -191,6 +193,8 @@ pub struct Snapshot {
     /// The Search Editor in front, and every Search Editor tab of the focused group.
     pub(crate) search_editor: Option<SearchEdSnap>,
     pub(crate) search_tabs: Vec<SearchTabSnap>,
+    /// The Refactor Preview in front.
+    pub(crate) refactor: Option<refactor_access::RefactorSnap>,
     /// The terminal tabs of the focused group.
     pub(crate) term_tabs: Vec<TermTabSnap>,
     pub picker: Option<PickerSnap>,
@@ -335,6 +339,9 @@ impl Snapshot {
                 if r.is_dir {
                     n.set_expanded(r.expanded);
                     n.set_description(t("folder"));
+                } else if r.nested > 0 {
+                    n.set_expanded(r.expanded);
+                    n.set_description(tn("{} nested file", "{} nested files", r.nested, &[]));
                 }
                 n.add_action(Action::Click);
                 n.add_action(Action::Focus);
@@ -462,6 +469,10 @@ impl Snapshot {
         if let Some(se) = &self.search_editor {
             se.append_tree(&mut nodes);
             kids.push(SearchEdSnap::id());
+        }
+        if let Some(r) = &self.refactor {
+            r.append_tree(&mut nodes);
+            kids.push(refactor_access::REFACTOR);
         }
 
         // Editor
@@ -679,6 +690,9 @@ impl Snapshot {
             _ if self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).is_some() => {
                 self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).expect("focused search editor")
             }
+            _ if self.refactor.as_ref().and_then(refactor_access::RefactorSnap::focus_node).is_some() => {
+                self.refactor.as_ref().and_then(refactor_access::RefactorSnap::focus_node).expect("focused refactor preview")
+            }
             _ if self.views.focus_node().is_some() => self.views.focus_node().expect("focused view"),
             _ if crate::a11y_controls::focus_node(&self.controls).is_some() => crate::a11y_controls::focus_node(&self.controls).expect("focused control"),
             _ if self.scm.as_ref().and_then(ScmSnap::history_focus).is_some() => self.scm.as_ref().and_then(ScmSnap::history_focus).expect("graph search"),
@@ -719,7 +733,7 @@ impl Workbench {
                     .into_iter()
                     .skip(first)
                     .take(EXPLORER_WINDOW)
-                    .map(|(path, name, depth, is_dir, expanded)| RowSnap {
+                    .map(|(path, name, depth, is_dir, expanded, nested)| RowSnap {
                         id: row_id(&path).0,
                         selected: tree.path_is_selected(&path),
                         frame: tree.a11y_row_frame(&path, window),
@@ -728,6 +742,7 @@ impl Workbench {
                         depth,
                         is_dir,
                         expanded,
+                        nested,
                     })
                     .collect();
                 ExplorerSnap { name: tree.root().map_or(String::new(), |r| crate::ui::file_name(r).to_string()), rows, rows_total, first, focused }
@@ -789,10 +804,10 @@ impl Workbench {
         if !geometry.editor_painted() {
             editor.iter_mut().flat_map(|e| e.runs.iter_mut()).for_each(|r| r.frame = None);
         }
-        let notice = match (&self.notice, &self.tabs.open_error) {
+        let notice = match (&self.notice(), &self.tabs.open_error) {
             (Some(Notice::Error(m)), _) => Some(NoticeSnap { text: m.to_string(), error: true }),
             (_, Some((_, m))) => Some(NoticeSnap { text: m.to_string(), error: true }),
-            (Some(Notice::Info(m)), _) => Some(NoticeSnap { text: m.to_string(), error: false }),
+            (Some(Notice::Info(m) | Notice::Warning(m)), _) => Some(NoticeSnap { text: m.to_string(), error: false }),
             (None, None) => None,
         };
         let tabs = self.tabs.editors.iter().map(|e| e.read(cx)).map(|e| TabSnap { name: e.name.to_string(), dirty: e.is_dirty() }).collect();
@@ -898,6 +913,7 @@ impl Workbench {
             ext_views: self.a11y_ext_views(window),
             search_editor,
             search_tabs,
+            refactor: self.a11y_refactor_snap(window, cx),
             term_tabs: self.a11y_term_tabs(cx),
             picker,
             notice,
@@ -936,7 +952,11 @@ impl Workbench {
             cx.notify();
             return;
         }
-        if self.a11y_search_action(req, last, window, cx) || self.a11y_term_tab_action(req, last, window, cx) || self.a11y_popup_action(req, last, window, cx) {
+        if self.a11y_refactor_action(req, last, window, cx)
+            || self.a11y_search_action(req, last, window, cx)
+            || self.a11y_term_tab_action(req, last, window, cx)
+            || self.a11y_popup_action(req, last, window, cx)
+        {
             return;
         }
         match (req.action, req.target_node) {
