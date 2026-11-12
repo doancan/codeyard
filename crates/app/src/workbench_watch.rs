@@ -381,7 +381,8 @@ impl Workbench {
                         let root = this.cfg.dir.clone().unwrap_or_else(|| spath.parent().unwrap_or(&spath).to_path_buf());
                         if this.cfg.dirty
                             || this.profile_pointer_moved()
-                            || (file_mark(&spath), file_mark(&kpath), file_mark(&root.join(crate::ext::LOCK_FILE)), crate::ext::watch_stamp(&root)) != this.cfg.stamp
+                            || (file_mark(&spath), file_mark(&kpath), file_mark(&root.join(crate::ext::LOCK_FILE)), crate::ext::watch_stamp(&root))
+                                != this.cfg.stamp
                         {
                             this.reload_config(window, cx);
                         }
