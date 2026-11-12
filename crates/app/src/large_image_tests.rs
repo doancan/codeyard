@@ -36,14 +36,10 @@ fn open<'a>(cx: &'a mut gpui::TestAppContext, path: &str, format: ImageFormat) -
     cx.update(|cx| cx.bind_keys(key_bindings()));
     let path = path.to_string();
     let (view, cx) = cx.add_window_view(move |_, cx| LargeFileView::new_image(Arc::new(host::local()), path, format, cx));
-    for _ in 0..300 {
-        cx.run_until_parked();
-        if view.read_with(cx, |v, _| v.error.is_some() || v.image_loaded()) {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
+    settle(&view, cx, |v| v.error.is_some() || v.image_loaded());
+    if view.read_with(cx, |v, _| v.image_loaded()) {
+        quiet(&view, cx);
     }
-    cx.run_until_parked();
     (view, cx)
 }
 
@@ -110,7 +106,6 @@ fn an_animation_too_big_to_hold_in_memory_is_refused(cx: &mut gpui::TestAppConte
 fn an_svg_loads_and_zooms_with_buttons_keys_wheel_and_drag(cx: &mut gpui::TestAppContext) {
     let (view, cx) = open(cx, &file("svg", "a.svg", SVG_400X300.as_bytes()), ImageFormat::Svg);
     assert!(view.read_with(cx, |v, _| v.image_loaded()), "{}", error(&view, cx));
-    cx.run_until_parked();
     let viewport = view.read_with(cx, |v, _| v.viewport_size());
     assert!(viewport.0 > 0. && viewport.1 > 0., "the viewport was measured: {viewport:?}");
     assert_eq!(label(&view, cx), "100%", "400 × 300 fits the window and is not enlarged");
@@ -168,29 +163,47 @@ fn a_picture_that_fits_cannot_be_dragged_and_fit_recentres(cx: &mut gpui::TestAp
     assert_eq!(view.read_with(cx, |v, _| v.image_view_for_test().pan), (0., 0.));
 }
 
+/// Let the view's background work finish: returns as soon as `done` holds, and fails the test if it does not within a generous
+/// deadline (a loaded runner is slow, not wrong).
 fn settle(view: &gpui::Entity<LargeFileView>, cx: &mut gpui::VisualTestContext, mut done: impl FnMut(&LargeFileView) -> bool) {
-    for _ in 0..300 {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
         cx.run_until_parked();
         if view.read_with(cx, |v, _| done(v)) {
             return;
         }
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        assert!(std::time::Instant::now() < deadline, "timed out after 30 s waiting for the image view to settle");
+        std::thread::sleep(std::time::Duration::from_millis(5));
     }
+}
+
+/// The viewport has been measured (which is what starts the first sharper drawing of an SVG) and no drawing is running.
+fn quiet(view: &gpui::Entity<LargeFileView>, cx: &mut gpui::VisualTestContext) {
+    settle(view, cx, |v| v.pic.viewport.size.width > px(0.) && v.pic.vector_pending.is_none());
 }
 
 #[gpui::test]
 fn an_svg_is_drawn_again_sharper_when_zoomed_in_and_the_blurrier_one_is_released(cx: &mut gpui::TestAppContext) {
     let (view, cx) = open(cx, &file("sharp", "a.svg", SVG_400X300.as_bytes()), ImageFormat::Svg);
-    settle(&view, cx, |v| v.pic.vector_pending.is_none());
+    quiet(&view, cx);
     let first = view.read_with(cx, |v, _| v.pic.vector_step);
-    let before = view.read_with(cx, |v, _| v.pic.loaded.as_ref().map(|l| Arc::as_ptr(&l.picture) as usize));
+    // A Weak keeps the old picture's allocation (and so its address) reserved, so the new one cannot be given the same address, and
+    // tells when the old one has really been released.
+    let old = view.read_with(cx, |v, _| v.pic.loaded.as_ref().map(|l| Arc::downgrade(&l.picture))).expect("loaded");
     for _ in 0..3 {
         view.update_in(cx, |v, w, cx| v.image_zoom_in(&ImageZoomIn, w, cx));
     }
     settle(&view, cx, |v| v.pic.vector_step > first && v.pic.vector_pending.is_none());
-    let (step, after) = view.read_with(cx, |v, _| (v.pic.vector_step, v.pic.loaded.as_ref().map(|l| Arc::as_ptr(&l.picture) as usize)));
+    let (step, new) = view.read_with(cx, |v, _| (v.pic.vector_step, v.pic.loaded.as_ref().map(|l| Arc::as_ptr(&l.picture)).expect("loaded")));
     assert!(step > first && step >= 4, "{first} -> {step}");
-    assert_ne!(before, after, "the new drawing replaced the old one, which nothing holds any more");
+    assert!(!std::ptr::eq(new, old.as_ptr()), "the new drawing is a different allocation from the old one");
+    // The old picture is released: the view and the window let go of it (the window may hold it until the next frame).
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while old.upgrade().is_some() {
+        assert!(std::time::Instant::now() < deadline, "the blurrier picture is still held 30 s after the sharper one replaced it");
+        cx.run_until_parked();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
     // Zooming back out keeps the sharper drawing rather than drawing a blurrier one.
     view.update_in(cx, |v, w, cx| v.image_fit(&ImageFit, w, cx));
     cx.run_until_parked();
@@ -200,7 +213,7 @@ fn an_svg_is_drawn_again_sharper_when_zoomed_in_and_the_blurrier_one_is_released
 #[gpui::test]
 fn a_burst_of_zoom_events_draws_an_svg_once_at_a_time(cx: &mut gpui::TestAppContext) {
     let (view, cx) = open(cx, &file("burst", "a.svg", SVG_400X300.as_bytes()), ImageFormat::Svg);
-    settle(&view, cx, |v| v.pic.vector_pending.is_none());
+    quiet(&view, cx);
     let spawned = view.read_with(cx, |v, _| v.pic.vector_spawned);
     view.update_in(cx, |v, w, cx| {
         for _ in 0..4 {
