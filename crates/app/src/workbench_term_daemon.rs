@@ -302,8 +302,10 @@ impl Workbench {
             None => SavedTerminals::default(),
             Some(Some(saved)) => saved,
             Some(None) => {
-                self.notice =
-                    Some(Notice::Error(crate::i18n::tf("Terminal session could not be restored: {}", &[&crate::i18n::t("the saved state is damaged")]).into()));
+                self.notify(
+                    NoticeSource::Terminal,
+                    Notice::Error(crate::i18n::tf("Terminal session could not be restored: {}", &[&crate::i18n::t("the saved state is damaged")]).into()),
+                );
                 cx.notify();
                 SavedTerminals::default()
             }
@@ -386,11 +388,11 @@ impl Workbench {
                     None => this.persist.moved_back = moved_back,
                 }
                 if reconnected > 0 {
-                    this.notice = Some(Notice::Info(crate::i18n::t("Reconnected to terminal session").into()));
+                    this.notify(NoticeSource::Terminal, Notice::Info(crate::i18n::t("Reconnected to terminal session").into()));
                 }
                 if in_use {
                     let why = crate::i18n::t("another Codeyard window has them; started new shells");
-                    this.notice = Some(Notice::Info(crate::i18n::tf("Terminal session could not be restored: {}", &[&why]).into()));
+                    this.notify(NoticeSource::Terminal, Notice::Info(crate::i18n::tf("Terminal session could not be restored: {}", &[&why]).into()));
                 }
                 this.open_wanted_terminal(window, cx);
                 cx.notify();
@@ -492,7 +494,7 @@ impl Workbench {
                 let _ = s.set(&saved_terminals_key(ws), &json);
             }
         }
-        self.notice = Some(Notice::Info(crate::i18n::t("Saved terminal history cleared").into()));
+        self.notify(NoticeSource::Terminal, Notice::Info(crate::i18n::t("Saved terminal history cleared").into()));
         cx.notify();
     }
 

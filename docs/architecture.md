@@ -69,6 +69,11 @@ musl binary of about 1.5 MB.
    state. The `Workbench` struct stays under 80 lines.
 3. **Large enums** (`OverlayKind`, `InputPurpose`, `MenuCmd`) live in `workbench_types.rs`.
 
+Notifications are `notifications.rs` (the bounded log: severity, source, collapsing of repeats, unread counts; no UI and no
+clock) and `workbench_notifications.rs` (a child of `workbench_panels.rs`: `Workbench::notify` / `notify_with` are the only way a
+message reaches the user; the toast, Do Not Disturb, the list's keyboard and commands) with `workbench_notifications_view.rs` (the bell and
+the list). Nothing assigns a toast directly, and the history is never persisted.
+
 Compare Folders is three files: `compare_logic.rs` (matching two `HashTree` scans, plans, report; no UI), `compare_folders.rs` (the tab) and `workbench_compare.rs` (picker, trust gate, copies and deletes checked against the scan).
 
 The Explorer's tree (`tree.rs`) keeps its rows and events; the filter and file nesting hang off it as `#[path]` children:

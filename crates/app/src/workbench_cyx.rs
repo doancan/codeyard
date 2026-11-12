@@ -64,8 +64,10 @@ fn kind_label(kind: &str) -> &'static str {
 impl Workbench {
     pub(super) fn new_extension(&mut self, _: &NewExtension, window: &mut Window, cx: &mut Context<Self>) {
         if bundled_cyx().is_none() {
-            self.notice =
-                Some(Notice::Error(crate::i18n::t("cyx is not next to Codeyard in this build; install it with cargo install --path crates/cyx").into()));
+            self.notify(
+                NoticeSource::Extensions,
+                Notice::Error(crate::i18n::t("cyx is not next to Codeyard in this build; install it with cargo install --path crates/cyx").into()),
+            );
             return cx.notify();
         }
         let items = KINDS.iter().map(|k| PickItem { label: kind_label(k).into(), detail: None, keys: None }).collect();
@@ -108,14 +110,16 @@ impl Workbench {
                 crate::ext::set_dev(Some(dir.clone()));
                 self.reload_config(window, cx);
                 self.open_path(&dir.join(ext_manifest::FILE_NAME).to_string_lossy(), window, cx);
-                self.notice =
-                    Some(Notice::Info(crate::i18n::tf("{} is loaded as an extension in development: save a file to reload it", &[&dir.display()]).into()));
+                self.notify(
+                    NoticeSource::Extensions,
+                    Notice::Info(crate::i18n::tf("{} is loaded as an extension in development: save a file to reload it", &[&dir.display()]).into()),
+                );
             }
             Ok(out) => {
                 let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-                self.notice = Some(Notice::Error(crate::i18n::tf("Could not create the extension: {}", &[&err]).into()));
+                self.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("Could not create the extension: {}", &[&err]).into()));
             }
-            Err(e) => self.notice = Some(Notice::Error(crate::i18n::tf("Could not create the extension: {}", &[&e]).into())),
+            Err(e) => self.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("Could not create the extension: {}", &[&e]).into())),
         }
         cx.notify();
     }
@@ -125,7 +129,7 @@ impl Workbench {
             None => Notice::Error(crate::i18n::t("cyx is not next to Codeyard in this build; install it with cargo install --path crates/cyx").into()),
             Some(cyx) => Self::link_cyx(&cyx),
         };
-        self.notice = Some(notice);
+        self.notify(NoticeSource::Extensions, notice);
         cx.notify();
     }
 

@@ -7,7 +7,7 @@
 use gpui::{AppContext as _, Context, Window};
 use serde_json::Value;
 
-use super::{Notice, OverlayKind, Workbench};
+use super::{Notice, NoticeSource, OverlayKind, Workbench};
 use crate::picker::{PickItem, Picker, Source as PickSource};
 use crate::ui;
 
@@ -280,8 +280,10 @@ impl Workbench {
     /// Find the project's tasks (in the background), then continue with `then`.
     pub(super) fn detect_tasks(&mut self, cx: &mut Context<Self>, then: impl FnOnce(&mut Self, Vec<Task>, &mut Window, &mut Context<Self>) + 'static) {
         let Some(root) = self.active_root(cx) else {
-            self.notice =
-                Some(Notice::Info(crate::i18n::t("Open a folder first: tasks come from its package.json, Makefile, Cargo.toml or tasks.jsonc.").into()));
+            self.notify(
+                NoticeSource::Tasks,
+                Notice::Info(crate::i18n::t("Open a folder first: tasks come from its package.json, Makefile, Cargo.toml or tasks.jsonc.").into()),
+            );
             cx.notify();
             return;
         };
@@ -353,7 +355,7 @@ impl Workbench {
     /// The task list: the folder's tasks and those code extensions provide.
     fn pick_task(&mut self, tasks: Vec<Task>, window: &mut Window, cx: &mut Context<Self>) {
         if tasks.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.").into()));
+            self.notify(NoticeSource::Tasks, Notice::Info(crate::i18n::t("No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.").into()));
             cx.notify();
             return;
         }
@@ -377,7 +379,7 @@ impl Workbench {
     /// terminal ("Rerun Last Task" repeats the same test, errors land in Problems).
     pub(super) fn run_test(&mut self, whole_file: bool, cx: &mut Context<Self>) {
         let (Some(ed), Some(root)) = (self.active_editor().cloned(), self.active_root(cx)) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a file inside a folder to run its tests.").into()));
+            self.notify(NoticeSource::Tasks, Notice::Info(crate::i18n::t("Open a file inside a folder to run its tests.").into()));
             cx.notify();
             return;
         };
@@ -386,7 +388,7 @@ impl Workbench {
             (e.path.clone(), e.text_lines().join("\n"), e.cursor_position().0 - 1)
         };
         let Some(rel) = path.strip_prefix(&format!("{}/", root.trim_end_matches('/'))).map(str::to_string) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("This file is outside the open folder.").into()));
+            self.notify(NoticeSource::Tasks, Notice::Info(crate::i18n::t("This file is outside the open folder.").into()));
             cx.notify();
             return;
         };
@@ -419,21 +421,24 @@ impl Workbench {
                                     run.command
                                 };
                                 if command.starts_with("cargo nextest ") {
-                                    this.notice = Some(Notice::Info(crate::rust_toolchain::nextest::notice().into()));
+                                    this.notify(NoticeSource::Tasks, Notice::Info(crate::rust_toolchain::nextest::notice().into()));
                                 }
                                 this.run_task(Task::shell(run.label, command, "test"), window, cx);
                             });
                         }
                         Some(run) => this.run_task(Task::shell(run.label, run.command, "test"), window, cx),
                         None => {
-                            this.notice = Some(Notice::Info(
-                                if whole_file {
-                                    crate::i18n::t("No tests found for this file type.")
-                                } else {
-                                    crate::i18n::t("No test at the cursor: put it inside a test function.")
-                                }
-                                .into(),
-                            ));
+                            this.notify(
+                                NoticeSource::Tasks,
+                                Notice::Info(
+                                    if whole_file {
+                                        crate::i18n::t("No tests found for this file type.")
+                                    } else {
+                                        crate::i18n::t("No test at the cursor: put it inside a test function.")
+                                    }
+                                    .into(),
+                                ),
+                            );
                             cx.notify();
                         }
                     }
@@ -580,7 +585,7 @@ impl Workbench {
             this.update_in(cx, |this, window, cx| match result {
                 Ok(()) => this.open_file(path, window, cx),
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not create {0}: {1}", &[&TASKS_FILE, &e]).into()));
+                    this.notify(NoticeSource::Tasks, Notice::Error(crate::i18n::tf("Could not create {0}: {1}", &[&TASKS_FILE, &e]).into()));
                     cx.notify();
                 }
             })

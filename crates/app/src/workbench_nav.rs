@@ -79,7 +79,7 @@ impl Workbench {
     /// ⌘N: new file in the active file's folder (or the open folder if there is none).
     pub(super) fn new_file(&mut self, _: &NewFile, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.root(cx) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a folder first (⌘O), then create files in it.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a folder first (⌘O), then create files in it.").into()));
             cx.notify();
             return;
         };
@@ -128,7 +128,7 @@ impl Workbench {
         let data = match ed.read(cx).encoded_bytes() {
             Ok(d) => d,
             Err(msg) => {
-                self.notice = Some(Notice::Error(msg.into()));
+                self.notify(NoticeSource::App, Notice::Error(msg.into()));
                 cx.notify();
                 return;
             }
@@ -161,11 +161,11 @@ impl Workbench {
                                 "Saved as {}. You kept typing while it was saving, so the original tab stays open with your latest changes.",
                                 &[&target],
                             );
-                            this.notice = Some(Notice::Info(note.into()));
+                            this.notify(NoticeSource::App, Notice::Info(note.into()));
                         }
                     }
                     Err(e) => {
-                        this.notice = Some(Notice::Error(e.into()));
+                        this.notify(NoticeSource::App, Notice::Error(e.into()));
                         cx.notify();
                     }
                 }
@@ -179,7 +179,7 @@ impl Workbench {
     pub(super) fn save_local_copy(&mut self, _: &SaveLocalCopy, window: &mut Window, cx: &mut Context<Self>) {
         let Some(ed) = self.active_editor() else { return };
         if !self.remote.host.is_remote() {
-            self.notice = Some(Notice::Info(crate::i18n::t("This file is already on this computer. Use Save As instead.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("This file is already on this computer. Use Save As instead.").into()));
             cx.notify();
             return;
         }
@@ -202,7 +202,7 @@ impl Workbench {
         let target = match local_copy_target(&name, dirs::home_dir().as_deref()) {
             Ok(t) => t,
             Err(msg) => {
-                self.notice = Some(Notice::Error(msg.into()));
+                self.notify(NoticeSource::App, Notice::Error(msg.into()));
                 cx.notify();
                 return;
             }
@@ -210,7 +210,7 @@ impl Workbench {
         let data = match ed.read(cx).encoded_bytes() {
             Ok(d) => d,
             Err(msg) => {
-                self.notice = Some(Notice::Error(msg.into()));
+                self.notify(NoticeSource::App, Notice::Error(msg.into()));
                 cx.notify();
                 return;
             }
@@ -225,10 +225,13 @@ impl Workbench {
                 if !context.matches(this, cx) {
                     return;
                 }
-                this.notice = Some(match result {
-                    Ok(()) => Notice::Info(crate::i18n::tf("Saved a copy to {}", &[&target]).into()),
-                    Err(e) => Notice::Error(e.into()),
-                });
+                this.notify(
+                    NoticeSource::App,
+                    match result {
+                        Ok(()) => Notice::Info(crate::i18n::tf("Saved a copy to {}", &[&target]).into()),
+                        Err(e) => Notice::Error(e.into()),
+                    },
+                );
                 cx.notify();
             })
             .ok();

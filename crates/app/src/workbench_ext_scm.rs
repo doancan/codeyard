@@ -543,7 +543,10 @@ impl Workbench {
         let ext = active.id().to_string();
         let (tx, out) = oneshot::channel();
         if self.cfg.exts.code.disabled.contains(&ext) {
-            self.notice = Some(Notice::Error(crate::i18n::tf("{} crashed three times and is turned off until Codeyard restarts.", &[&ext]).into()));
+            self.notify(
+                NoticeSource::Extensions,
+                Notice::Error(crate::i18n::tf("{} crashed three times and is turned off until Codeyard restarts.", &[&ext]).into()),
+            );
             let _ = tx.send(Err(v::Error::Cancelled));
             return out;
         }
@@ -565,7 +568,7 @@ impl Workbench {
                 if let Err(e) = &result
                     && !this.cfg.exts.code.disabled.contains(&ext)
                 {
-                    this.notice = Some(Notice::Error(format!("{ext}: {}", super::code_glue::explain(e)).into()));
+                    this.notify(NoticeSource::Extensions, Notice::Error(format!("{ext}: {}", super::code_glue::explain(e)).into()));
                     cx.notify();
                 }
             })

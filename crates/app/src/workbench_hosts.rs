@@ -70,7 +70,7 @@ impl Workbench {
                 .detach();
             }
             Err(e) => {
-                self.notice = Some(Notice::Error(e.into()));
+                self.notify(NoticeSource::Remote, Notice::Error(e.into()));
                 cx.notify();
             }
         }
@@ -120,7 +120,7 @@ impl Workbench {
     fn pick_ssh_host(&mut self, op: HostOp, title: &str, window: &mut Window, cx: &mut Context<Self>) {
         let hosts = host::ssh::list_hosts();
         if hosts.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No SSH hosts yet. Use Remote: Add SSH Host…").into()));
+            self.notify(NoticeSource::Remote, Notice::Info(crate::i18n::t("No SSH hosts yet. Use Remote: Add SSH Host…").into()));
             cx.notify();
             return;
         }
@@ -151,7 +151,7 @@ impl Workbench {
                     _ => false,
                 };
                 if in_use {
-                    self.notice = Some(Notice::Error(crate::i18n::tf("You are connected to “{}”. Disconnect first.", &[&alias]).into()));
+                    self.notify(NoticeSource::Remote, Notice::Error(crate::i18n::tf("You are connected to “{}”. Disconnect first.", &[&alias]).into()));
                     cx.notify();
                     return;
                 }
@@ -164,11 +164,14 @@ impl Workbench {
                         let result = sshcfg::config_path()
                             .ok_or_else(|| crate::i18n::t("Could not find your home folder").to_string())
                             .and_then(|p| sshcfg::remove_host(&p, &alias));
-                        this.notice = Some(match result {
-                            Ok(true) => Notice::Info(crate::i18n::tf("Removed “{}” from ~/.ssh/config", &[&alias]).into()),
-                            Ok(false) => Notice::Info(crate::i18n::tf("“{}” was not found in ~/.ssh/config", &[&alias]).into()),
-                            Err(e) => Notice::Error(e.into()),
-                        });
+                        this.notify(
+                            NoticeSource::Remote,
+                            match result {
+                                Ok(true) => Notice::Info(crate::i18n::tf("Removed “{}” from ~/.ssh/config", &[&alias]).into()),
+                                Ok(false) => Notice::Info(crate::i18n::tf("“{}” was not found in ~/.ssh/config", &[&alias]).into()),
+                                Err(e) => Notice::Error(e.into()),
+                            },
+                        );
                         cx.notify();
                     })
                     .ok();
@@ -180,7 +183,7 @@ impl Workbench {
 
     /// Test the connection: auth + architecture + agent package present. Result goes to the status bar and error card.
     fn probe_host(&mut self, alias: String, cx: &mut Context<Self>) {
-        self.notice = Some(Notice::Info(crate::i18n::tf("Testing {}…", &[&alias]).into()));
+        self.notify(NoticeSource::Remote, Notice::Info(crate::i18n::tf("Testing {}…", &[&alias]).into()));
         cx.notify();
         let bundle = self.remote.bundle.clone();
         let a = alias.clone();
@@ -195,17 +198,20 @@ impl Workbench {
                     Err(e) => Err(e.to_string()),
                 };
                 this.remote.view.probes.insert(alias.clone(), reachable);
-                this.notice = Some(match result {
-                    Ok(p) if p.agent_bundled => Notice::Info(crate::i18n::tf("{}: reachable in {} ms · {} · ready", &[&alias, &p.millis, &p.uname]).into()),
-                    Ok(p) => Notice::Error(
-                        match p.triple {
-                            Some(t) => crate::i18n::tf("{}: reachable ({}), but this app has no agent for {}", &[&alias, &p.uname, &t]),
-                            None => crate::i18n::tf("{}: reachable, but {} is not a supported server", &[&alias, &p.uname]),
-                        }
-                        .into(),
-                    ),
-                    Err(e) => Notice::Error(crate::i18n::tf("{}: {}", &[&alias, &e]).into()),
-                });
+                this.notify(
+                    NoticeSource::Remote,
+                    match result {
+                        Ok(p) if p.agent_bundled => Notice::Info(crate::i18n::tf("{}: reachable in {} ms · {} · ready", &[&alias, &p.millis, &p.uname]).into()),
+                        Ok(p) => Notice::Error(
+                            match p.triple {
+                                Some(t) => crate::i18n::tf("{}: reachable ({}), but this app has no agent for {}", &[&alias, &p.uname, &t]),
+                                None => crate::i18n::tf("{}: reachable, but {} is not a supported server", &[&alias, &p.uname]),
+                            }
+                            .into(),
+                        ),
+                        Err(e) => Notice::Error(crate::i18n::tf("{}: {}", &[&alias, &e]).into()),
+                    },
+                );
                 cx.notify();
             })
             .ok();
@@ -216,12 +222,12 @@ impl Workbench {
     /// Open `~/.ssh/config` on this machine (also while connected over SSH).
     pub(super) fn edit_ssh_config(&mut self, _: &EditSshConfig, window: &mut Window, cx: &mut Context<Self>) {
         let Some(path) = sshcfg::config_path() else {
-            self.notice = Some(Notice::Error(crate::i18n::t("Could not find your home folder").into()));
+            self.notify(NoticeSource::Remote, Notice::Error(crate::i18n::t("Could not find your home folder").into()));
             cx.notify();
             return;
         };
         if let Err(e) = sshcfg::ensure_exists(&path) {
-            self.notice = Some(Notice::Error(e.into()));
+            self.notify(NoticeSource::Remote, Notice::Error(e.into()));
             cx.notify();
             return;
         }
@@ -233,9 +239,10 @@ impl Workbench {
     fn pick_host_field(&mut self, alias: String, window: &mut Window, cx: &mut Context<Self>) {
         let Some(path) = sshcfg::config_path() else { return };
         let Some(d) = sshcfg::details(&path, &alias) else {
-            self.notice = Some(Notice::Error(
-                crate::i18n::tf("“{}” is not in the SSH config (or shares a Host line with other names: edit the file).", &[&alias]).into(),
-            ));
+            self.notify(
+                NoticeSource::Remote,
+                Notice::Error(crate::i18n::tf("“{}” is not in the SSH config (or shares a Host line with other names: edit the file).", &[&alias]).into()),
+            );
             cx.notify();
             return;
         };
@@ -269,11 +276,14 @@ impl Workbench {
         let result = sshcfg::config_path()
             .ok_or_else(|| crate::i18n::t("Could not find your home folder").to_string())
             .and_then(|p| sshcfg::set_field(&p, &alias, field, Some(&value)));
-        self.notice = Some(match result {
-            Ok(()) if value.is_empty() => Notice::Info(crate::i18n::tf("Removed {} from “{}”.", &[&field.key(), &alias]).into()),
-            Ok(()) => Notice::Info(crate::i18n::tf("“{}”: {} = {}", &[&alias, &field.key(), &value]).into()),
-            Err(e) => Notice::Error(e.into()),
-        });
+        self.notify(
+            NoticeSource::Remote,
+            match result {
+                Ok(()) if value.is_empty() => Notice::Info(crate::i18n::tf("Removed {} from “{}”.", &[&field.key(), &alias]).into()),
+                Ok(()) => Notice::Info(crate::i18n::tf("“{}”: {} = {}", &[&alias, &field.key(), &value]).into()),
+                Err(e) => Notice::Error(e.into()),
+            },
+        );
         cx.notify();
     }
 
@@ -294,11 +304,11 @@ impl Workbench {
     /// Find/generate the key and copy it to the server (in the background). `authorized_keys`: path on the server, for tests.
     pub(super) fn run_key_setup(&mut self, alias: String, ssh_dir: Option<std::path::PathBuf>, authorized_keys: Option<String>, cx: &mut Context<Self>) {
         let Some(dir) = ssh_dir else {
-            self.notice = Some(Notice::Error(crate::i18n::t("Could not find your home folder").into()));
+            self.notify(NoticeSource::Remote, Notice::Error(crate::i18n::t("Could not find your home folder").into()));
             cx.notify();
             return;
         };
-        self.notice = Some(Notice::Info(crate::i18n::tf("Setting up key login for {}…", &[&alias]).into()));
+        self.notify(NoticeSource::Remote, Notice::Info(crate::i18n::tf("Setting up key login for {}…", &[&alias]).into()));
         cx.notify();
         let a = alias.clone();
         let task = cx.background_executor().spawn(async move {
@@ -309,28 +319,33 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
-                this.notice = Some(match result {
-                    Ok((path, generated, added)) => {
-                        let shown = path.display();
-                        Notice::Info(
-                            match (added, generated) {
-                                (true, true) => {
-                                    crate::i18n::tf("Key login is set up for “{}” (created {}). The next connection needs no password.", &[&alias, &shown])
+                this.notify(
+                    NoticeSource::Remote,
+                    match result {
+                        Ok((path, generated, added)) => {
+                            let shown = path.display();
+                            Notice::Info(
+                                match (added, generated) {
+                                    (true, true) => {
+                                        crate::i18n::tf("Key login is set up for “{}” (created {}). The next connection needs no password.", &[&alias, &shown])
+                                    }
+                                    (true, false) => crate::i18n::tf("Key login is set up for “{}”. The next connection needs no password.", &[&alias]),
+                                    (false, true) => crate::i18n::tf(
+                                        "Key login was already set up for “{}” (created {}). The next connection needs no password.",
+                                        &[&alias, &shown],
+                                    ),
+                                    (false, false) => {
+                                        crate::i18n::tf("Key login was already set up for “{}”. The next connection needs no password.", &[&alias])
+                                    }
                                 }
-                                (true, false) => crate::i18n::tf("Key login is set up for “{}”. The next connection needs no password.", &[&alias]),
-                                (false, true) => crate::i18n::tf(
-                                    "Key login was already set up for “{}” (created {}). The next connection needs no password.",
-                                    &[&alias, &shown],
-                                ),
-                                (false, false) => crate::i18n::tf("Key login was already set up for “{}”. The next connection needs no password.", &[&alias]),
-                            }
-                            .into(),
-                        )
-                    }
-                    Err(e) => Notice::Error(
-                        crate::i18n::tf("Could not set up key login for {}: {}", &[&alias, &e.lines().last().unwrap_or(crate::i18n::t("failed"))]).into(),
-                    ),
-                });
+                                .into(),
+                            )
+                        }
+                        Err(e) => Notice::Error(
+                            crate::i18n::tf("Could not set up key login for {}: {}", &[&alias, &e.lines().last().unwrap_or(crate::i18n::t("failed"))]).into(),
+                        ),
+                    },
+                );
                 cx.notify();
             })
             .ok();

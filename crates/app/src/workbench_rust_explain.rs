@@ -17,7 +17,7 @@ impl Workbench {
         match plan {
             Some(plan) => self.explain(plan, window, cx),
             None => {
-                self.notice = Some(Notice::Info(t("No rustc error code at the cursor").into()));
+                self.notify(NoticeSource::Language, Notice::Info(t("No rustc error code at the cursor").into()));
                 cx.notify();
             }
         }
@@ -70,7 +70,7 @@ impl Workbench {
     /// `rustc --explain` on the machine that builds, without waiting for it on the UI thread. It runs in no project
     /// folder, so a project's pinned toolchain is not started for it.
     fn explain_with_rustc(&mut self, code: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.notice = Some(Notice::Info(tf("Looking up {}…", &[&code]).into()));
+        self.notify(NoticeSource::Language, Notice::Info(tf("Looking up {}…", &[&code]).into()));
         cx.notify();
         let host = self.remote.host.clone();
         let asked = code.clone();
@@ -79,18 +79,23 @@ impl Workbench {
             let output = output.await;
             this.update_in(cx, |this, window, cx| match output {
                 Ok(out) if out.ok() && !out.stdout_str().trim().is_empty() => {
-                    this.notice = None;
+                    this.dismiss_notice();
                     let name = format!("{}.md", tf("Error code {}", &[&code]));
                     this.show_pull_page(name, &explain::explanation_page(&code, &out.stdout_str()), window, cx);
                 }
                 Ok(out) => {
                     let why = format!("{}{}", out.stdout_str(), out.stderr_str());
-                    this.notice = Some(Notice::Error(tf("Could not explain {0}: {1}", &[&code, &crate::cargo_project::explain_failure(&why)]).into()));
+                    this.notify(
+                        NoticeSource::Language,
+                        Notice::Error(tf("Could not explain {0}: {1}", &[&code, &crate::cargo_project::explain_failure(&why)]).into()),
+                    );
                     cx.notify();
                 }
                 Err(e) => {
-                    this.notice =
-                        Some(Notice::Error(tf("Could not explain {0}: {1}", &[&code, &crate::cargo_project::explain_failure(&e.to_string())]).into()));
+                    this.notify(
+                        NoticeSource::Language,
+                        Notice::Error(tf("Could not explain {0}: {1}", &[&code, &crate::cargo_project::explain_failure(&e.to_string())]).into()),
+                    );
                     cx.notify();
                 }
             })

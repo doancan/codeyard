@@ -6,7 +6,10 @@ use std::sync::{Arc, mpsc};
 
 use gpui::{AppContext as _, Context, Entity, SharedString, WeakEntity, Window};
 
-use super::{CodeActions, FindReferences, FormatDocument, FormatSelection, GoToSymbol, InputPurpose, Notice, OverlayKind, RenameSymbol, SaveAll, Workbench};
+use super::notifications_glue::model::{Action, Notification, Severity};
+use super::{
+    CodeActions, FindReferences, FormatDocument, FormatSelection, GoToSymbol, InputPurpose, Notice, NoticeSource, OverlayKind, RenameSymbol, SaveAll, Workbench,
+};
 use crate::editor::EditorView;
 use crate::i18n::{t, tf, tn};
 use crate::lsp::{self, Client, ServerEvent};
@@ -111,7 +114,7 @@ impl Workbench {
         // Not started in an untrusted folder (like VS Code's restricted mode); `trust_root` restarts them once trusted.
         if !self.is_trusted_root(&root, cx) {
             if self.lsp.restricted_notified.insert(root.clone()) {
-                self.notice = Some(Notice::Info(
+                self.notify(NoticeSource::Language, Notice::Info(
                     tf(
                         "Language servers are off in “{}” until you trust it: they can run the project's build scripts. Run “Workspace: Trust This Folder”.",
                         &[&ui::file_name(&root)],
@@ -218,7 +221,7 @@ impl Workbench {
                 } else {
                     format!("{command}: {e}")
                 };
-                self.notice = Some(Notice::Info(msg.into()));
+                self.notify(NoticeSource::Language, Notice::Info(msg.into()));
             }
         }
         cx.notify();
@@ -266,7 +269,7 @@ impl Workbench {
             ServerEvent::Status(_) | ServerEvent::Flycheck { .. } => return self.on_rust_server_event(key, ev, cx),
             ServerEvent::Message(m) => {
                 self.log_output(format!("[{key}] {}", m.chars().take(2000).collect::<String>()));
-                self.notice = Some(Notice::Info(m.into()));
+                self.notify(NoticeSource::Language, Notice::Info(m.into()));
             }
             ServerEvent::Log { level, text } => {
                 let tag = match level {
@@ -288,7 +291,7 @@ impl Workbench {
                 };
                 if actions.is_empty() {
                     // With no options it is an informational message: show it and reply immediately.
-                    self.notice = Some(Notice::Info(message.into()));
+                    self.notify(NoticeSource::Language, Notice::Info(message.into()));
                     client.respond(id, serde_json::Value::Null);
                 } else {
                     let handle = self.window_handle;
@@ -353,7 +356,15 @@ impl Workbench {
                     })
                     .detach();
                 } else {
-                    self.notice = Some(Notice::Error(tf("{} keeps crashing; restart the folder to try again.", &[&client.config.command]).into()));
+                    self.notify_with(
+                        Notification::new(
+                            Severity::Error,
+                            NoticeSource::Language,
+                            tf("{} keeps crashing; restart the folder to try again.", &[&client.config.command]),
+                        )
+                        .id(format!("lsp-crash:{key}"))
+                        .action(Action { label: crate::i18n::tr("Language Services"), command: "Languages: Manage Language Services" }),
+                    );
                 }
             }
         }
@@ -422,7 +433,7 @@ impl Workbench {
             }
             None => t("No problem at the cursor"),
         };
-        self.notice = Some(Notice::Info(notice.into()));
+        self.notify(NoticeSource::Language, Notice::Info(notice.into()));
         cx.notify();
     }
 
@@ -509,7 +520,7 @@ impl Workbench {
         match ed.update(cx, |e, _| e.lsp_context()) {
             Some((client, pos, range, word)) => Some((ed, client, path, pos, range, word)),
             None => {
-                self.notice = Some(Notice::Info(t("No language server for this file").into()));
+                self.notify(NoticeSource::Language, Notice::Info(t("No language server for this file").into()));
                 cx.notify();
                 None
             }
@@ -532,7 +543,7 @@ impl Workbench {
             this.update_in(cx, |this, window, cx| match result {
                 Ok(v) => then(this, v, window, cx),
                 Err(e) => {
-                    this.notice = Some(Notice::Error(e.into()));
+                    this.notify(NoticeSource::Language, Notice::Error(e.into()));
                     cx.notify();
                 }
             })
@@ -544,7 +555,7 @@ impl Workbench {
     pub(super) fn rename_symbol(&mut self, _: &RenameSymbol, window: &mut Window, cx: &mut Context<Self>) {
         let Some((_, client, path, pos, _, word)) = self.active_lsp(cx) else { return };
         let Some(word) = word else {
-            self.notice = Some(Notice::Info(t("Put the cursor on a symbol to rename it").into()));
+            self.notify(NoticeSource::Language, Notice::Info(t("Put the cursor on a symbol to rename it").into()));
             cx.notify();
             return;
         };
@@ -561,7 +572,7 @@ impl Workbench {
             cx,
             move |this, v, window, cx| match lsp::parse_prepare_rename(&v) {
                 None => {
-                    this.notice = Some(Notice::Info(t("The element can't be renamed.").into()));
+                    this.notify(NoticeSource::Language, Notice::Info(t("The element can't be renamed.").into()));
                     cx.notify();
                 }
                 Some(range) => {
@@ -592,8 +603,8 @@ impl Workbench {
                 Ok(v) if !v.is_null() => {
                     this.apply_workspace_edit(&v, cx);
                 }
-                Ok(_) => this.notice = Some(Notice::Info(t("Nothing to rename here").into())),
-                Err(e) => this.notice = Some(Notice::Error(e.into())),
+                Ok(_) => this.notify(NoticeSource::Language, Notice::Info(t("Nothing to rename here").into())),
+                Err(e) => this.notify(NoticeSource::Language, Notice::Error(e.into())),
             })
             .ok();
         })
@@ -647,7 +658,7 @@ impl Workbench {
                 let errors = task.await;
                 this.update(cx, |this, cx| {
                     if !errors.is_empty() {
-                        this.notice = Some(Notice::Error(tf("Could not change {}", &[&errors.join(", ")]).into()));
+                        this.notify(NoticeSource::Language, Notice::Error(tf("Could not change {}", &[&errors.join(", ")]).into()));
                         cx.notify();
                     }
                     // Closed files changed on disk: the servers must not keep their old state.
@@ -663,19 +674,22 @@ impl Workbench {
         } else {
             tn("Changed {} file", "Changed {} files", n, &[])
         };
-        self.notice = Some(if outside > 0 {
-            Notice::Error(
-                tn(
-                    "Ignored the language server's edit to {} file outside the open folders",
-                    "Ignored the language server's edit to {} files outside the open folders",
-                    outside,
-                    &[],
+        self.notify(
+            NoticeSource::Language,
+            if outside > 0 {
+                Notice::Error(
+                    tn(
+                        "Ignored the language server's edit to {} file outside the open folders",
+                        "Ignored the language server's edit to {} files outside the open folders",
+                        outside,
+                        &[],
+                    )
+                    .into(),
                 )
-                .into(),
-            )
-        } else {
-            Notice::Info(msg.into())
-        });
+            } else {
+                Notice::Info(msg.into())
+            },
+        );
         cx.notify();
         // Refusing everything is a failure for the server; a partly applied edit still counts as applied.
         n > 0 || outside == 0
@@ -705,7 +719,7 @@ impl Workbench {
             |this, v, window, cx| {
                 let locs = lsp::parse_locations(&v);
                 if locs.is_empty() {
-                    this.notice = Some(Notice::Info(t("No references found").into()));
+                    this.notify(NoticeSource::Language, Notice::Info(t("No references found").into()));
                     cx.notify();
                     return;
                 }
@@ -776,7 +790,7 @@ impl Workbench {
             |this, v, window, cx| {
                 let syms = lsp::parse_symbols(&v);
                 if syms.is_empty() {
-                    this.notice = Some(Notice::Info(t("No symbols in this file").into()));
+                    this.notify(NoticeSource::Language, Notice::Info(t("No symbols in this file").into()));
                     cx.notify();
                     return;
                 }
@@ -892,7 +906,7 @@ impl Workbench {
             move |this, v, window, cx| {
                 let actions = lsp::parse_code_actions(&v);
                 if actions.is_empty() {
-                    this.notice = Some(Notice::Info(t("No quick fixes here").into()));
+                    this.notify(NoticeSource::Language, Notice::Info(t("No quick fixes here").into()));
                     cx.notify();
                     return;
                 }
@@ -953,22 +967,25 @@ impl Workbench {
         let request = ed.update(cx, |e, _| if selection { e.format_selection_request() } else { e.format_request() });
         let Some((client, params)) = request else {
             if selection {
-                self.notice = Some(Notice::Info(t("No language server for this file").into()));
+                self.notify(NoticeSource::Language, Notice::Info(t("No language server for this file").into()));
                 cx.notify();
                 return;
             }
             // No server: we format JSON/JSONC ourselves.
             let is_json =
                 ed.read(cx).path.rsplit_once('.').is_some_and(|(_, e)| matches!(e.to_ascii_lowercase().as_str(), "json" | "jsonc" | "geojson" | "webmanifest"));
-            self.notice = Some(if is_json {
-                match ed.update(cx, |e, cx| e.format_json(false, cx)) {
-                    Ok(true) => Notice::Info(t("Formatted").into()),
-                    Ok(false) => Notice::Info(t("Already formatted").into()),
-                    Err(e) => Notice::Error(tf("Could not format: {}", &[&e]).into()),
-                }
-            } else {
-                Notice::Info(t("No language server for this file").into())
-            });
+            self.notify(
+                NoticeSource::Language,
+                if is_json {
+                    match ed.update(cx, |e, cx| e.format_json(false, cx)) {
+                        Ok(true) => Notice::Info(t("Formatted").into()),
+                        Ok(false) => Notice::Info(t("Already formatted").into()),
+                        Err(e) => Notice::Error(tf("Could not format: {}", &[&e]).into()),
+                    }
+                } else {
+                    Notice::Info(t("No language server for this file").into())
+                },
+            );
             cx.notify();
             return;
         };
@@ -984,7 +1001,7 @@ impl Workbench {
                     .map(|a| a.iter().map(|e| (lsp::parse_range(&e["range"]), e["newText"].as_str().unwrap_or_default().to_string())).collect())
                     .unwrap_or_default();
                 if edits.is_empty() {
-                    this.notice = Some(Notice::Info(t("Already formatted").into()));
+                    this.notify(NoticeSource::Language, Notice::Info(t("Already formatted").into()));
                     cx.notify();
                 } else {
                     ed.update(cx, |e, cx| e.apply_lsp_edits(&edits, cx));
@@ -997,11 +1014,14 @@ impl Workbench {
     /// "JSON: Minify Document".
     pub(super) fn minify_json(&mut self, _: &super::MinifyJson, _: &mut Window, cx: &mut Context<Self>) {
         let Some(ed) = self.active_editor().cloned() else { return };
-        self.notice = Some(match ed.update(cx, |e, cx| e.format_json(true, cx)) {
-            Ok(true) => Notice::Info(t("Minified").into()),
-            Ok(false) => Notice::Info(t("Already minified").into()),
-            Err(e) => Notice::Error(tf("Could not minify: {}", &[&e]).into()),
-        });
+        self.notify(
+            NoticeSource::Language,
+            match ed.update(cx, |e, cx| e.format_json(true, cx)) {
+                Ok(true) => Notice::Info(t("Minified").into()),
+                Ok(false) => Notice::Info(t("Already minified").into()),
+                Err(e) => Notice::Error(tf("Could not minify: {}", &[&e]).into()),
+            },
+        );
         cx.notify();
     }
 

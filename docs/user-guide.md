@@ -11,6 +11,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Settings and keyboard shortcuts](#settings-and-keyboard-shortcuts)
 - [Interface scale](#interface-scale)
 - [Interface language](#interface-language)
+- [Notifications](#notifications)
 - [Updates](#updates)
 - [Themes](#themes)
 - [Extensions](#extensions)
@@ -735,6 +736,33 @@ text arrives translated (see [translating.md](translating.md)).
 dependency). The format, plurals, quality bar, the template file and the commands that show coverage are in
 [translating.md](translating.md). A missing entry is never an error at run time: that string simply stays English.
 
+## Notifications
+
+Messages from the app (a language server that did not start, a failed update, a Git error, a file that could not be
+saved) used to replace each other and vanish. Now every one is kept.
+
+- **Toasts.** An information message or a warning shows in the status bar for a few seconds; an error shows as a card at
+  the bottom right until you close it.
+- **The bell** at the right end of the status bar counts the warnings and errors you have not looked at yet, in red when
+  one of them is an error. Information messages ("Copied", "Pushed") are kept in the list but never counted. Click the
+  bell, or run *Notifications: Show*, to open the list.
+- **The list** shows the newest first: an icon for the severity, where it came from (Git, Tasks, Language, Update…),
+  how long ago, the message, and a button when there is something to do about it. A message that repeats is one row with
+  a counter (`×3`) that moves to the top. Each row has **Copy** (the message and its details, such as a command's error
+  output) and **Dismiss**; the header has **Do Not Disturb**, **Clear all** and **Close**. The list keeps the last 200
+  messages and is empty again when you restart: nothing is saved to disk.
+- **Keyboard.** In the open list, Up, Down, Home and End move between rows, Enter runs the row's button, Delete
+  dismisses the row, ⌘C (Ctrl+C) copies it and Escape closes the list and puts the focus back where it was (or on the
+  editor when that is gone). Tab and Shift+Tab walk the buttons (each row's action, Copy and Dismiss, then Do Not
+  Disturb, Clear all and Close); Enter or Space presses the one that has the keyboard. The list closes when the
+  focus moves elsewhere, for example when you click in the editor. It counts what it shows as seen only while it has the
+  keyboard, so a failure that arrives after you left stays on the bell.
+- **Do Not Disturb** hides information and warning toasts. **Errors still show their card** and are still announced to a
+  screen reader, as in VS Code, so a failure is never missed. Everything is still recorded, and warnings and errors
+  still count on the bell (shown with a crossed bell). It lasts until you turn it off or close the window. Messages that
+  only report progress (an extension's "Indexing… 40%") are shown as they tick but are not kept in the list. The
+  palette has *Notifications: Show*, *Notifications: Clear* and *Notifications: Toggle Do Not Disturb*.
+
 ## Updates
 
 Codeyard can tell you when a new version is out and install it for you. It never looks on its own unless you said so.
@@ -1219,11 +1247,30 @@ server):
   every running task and everything it started; "Tasks: Restart Running Task" starts it again, and running
   a task that is still running restarts it. Closing a task's terminal stops it too.
 
-`problemMatcher` (a built-in name such as `$tsc`, `$gcc`, `$rustc`, `$eslint-stylish`, or your own
-`pattern`, including multi-line ones) turns output lines into entries in the Problems panel and
-underlines in the editor; a watcher's `beginsPattern` clears the previous build's problems. Tasks without
-a matcher still get their compiler messages (gcc / clang, Go, javac, rustc / cargo, tsc / MSBuild, eslint
-stylish) found automatically. Running another task clears them. Click a problem to jump to it.
+`problemMatcher` turns output lines into entries in the Problems panel and underlines in the editor. It is read
+like VS Code's, so a `tasks.json` you bring along keeps working:
+
+- A built-in name: `$gcc` (also clang), `$go`, `$tsc`, `$tsc-watch`, `$eslint-stylish`, `$eslint-compact`,
+  `$msCompile`, `$jshint`, `$lessCompile`, `$rustc` and `$rustc-watch`. A list can mix names and objects. `$jshint`
+  reads the plain `file: line N, col N, message` format as a warning, without VS Code's severity and code suffix.
+- Your own object: `owner`, `severity` (the default for a pattern with no severity group), `fileLocation`
+  (`"absolute"`, or `["relative", "${workspaceFolder}/sub"]`) and a `pattern` with `regexp` and the groups `file`,
+  `line`, `column`, `endLine`, `endColumn`, `location`, `severity`, `code` and `message`. A list of patterns matches
+  consecutive lines (a file line, then the message under it); `"loop": true` on the last one keeps reading
+  problems that share the first lines. `"base": "$tsc"` starts from a built-in and changes some fields.
+- `background` with `beginsPattern` and `endsPattern` (and `activeOnStart`) for watchers: each new
+  begin clears the problems of the previous cycle, and the end pattern is what makes the task "ready".
+
+Patterns are regular expressions checked against one output line at a time. A line over 64 KiB, or a pattern that
+needs too many steps on a line (nested repetition with a back-reference, for example), is skipped; the task's
+problems may then be incomplete and a notification says so once per run. A pattern that does not compile, or a group
+number it does not have, stops the task before it starts and says which task and why. A task keeps at most 1,000
+problems; when more are found, a notification says once per run that only the first 1,000 are shown. Problem paths are resolved on the machine the task runs on, relative to the folder (or the
+`fileLocation` base). The matchers only read output; they never run anything, and the task itself still waits for
+Workspace Trust.
+
+Tasks without a matcher still get their compiler messages (gcc / clang, Go, javac, rustc / cargo, tsc / MSBuild,
+eslint stylish) found automatically. Running another task clears them. Click a problem to jump to it.
 
 A debug configuration's `preLaunchTask` runs the same way, and the debugger starts only after it
 succeeds (or, for a background task, becomes ready). If it fails, debugging does not start and the

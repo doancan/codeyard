@@ -66,9 +66,9 @@ impl Workbench {
                 }
                 this.refresh_extension_list();
                 if !report.stopped.is_empty() {
-                    this.notice = Some(Notice::Error(report.stopped.join(" ").into()));
+                    this.notify(NoticeSource::Extensions, Notice::Error(report.stopped.join(" ").into()));
                 } else if !report.done.is_empty() || !ask.is_empty() {
-                    this.notice = Some(Notice::Info(report.done.into_iter().chain(ask).collect::<Vec<_>>().join(" ").into()));
+                    this.notify(NoticeSource::Extensions, Notice::Info(report.done.into_iter().chain(ask).collect::<Vec<_>>().join(" ").into()));
                 }
                 if again {
                     this.check_extension_updates(window, cx);
@@ -115,7 +115,7 @@ impl Workbench {
         }
         let registries = crate::ext_registry::registries(cx.global::<Settings>());
         self.cfg.exts.updates.busy = Some(id.clone());
-        self.notice = Some(Notice::Info(crate::i18n::tf("Updating {}…", &[&id]).into()));
+        self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::tf("Updating {}…", &[&id]).into()));
         cx.notify();
         let task = cx.background_executor().spawn({
             let id = id.clone();
@@ -125,7 +125,7 @@ impl Workbench {
             let result = task.await;
             this.update_in(cx, |this, window, cx| {
                 this.cfg.exts.updates.busy = None;
-                this.notice = None;
+                this.dismiss_notice();
                 let registry = this.cfg.exts.updates.status.get(&id).map(|s| s.registry.clone());
                 match result {
                     Ok(None) => {
@@ -145,7 +145,7 @@ impl Workbench {
                         cx.notify();
                     }
                     Err(e) => {
-                        this.notice = Some(Notice::Error(crate::i18n::tf("Cannot update {0}: {1}", &[&id, &e]).into()));
+                        this.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("Cannot update {0}: {1}", &[&id, &e]).into()));
                         cx.notify();
                     }
                 }
@@ -174,7 +174,7 @@ impl Workbench {
                 self.after_extension_change(done, window, cx);
             }
             Err(e) => {
-                self.notice = Some(Notice::Error(e.to_string().into()));
+                self.notify(NoticeSource::Extensions, Notice::Error(e.to_string().into()));
                 cx.notify();
             }
         }

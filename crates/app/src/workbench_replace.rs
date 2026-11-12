@@ -58,11 +58,14 @@ impl Workbench {
             let (done, errors, written) = task.await;
             this.update(cx, |this, cx| {
                 let total = changed + done;
-                this.notice = Some(if errors.is_empty() {
-                    Notice::Info(crate::i18n::tn("Replaced {} match", "Replaced {} matches", total, &[]).into())
-                } else {
-                    Notice::Error(crate::i18n::tf("Replaced {0}; could not change {1}", &[&total, &errors.join(", ")]).into())
-                });
+                this.notify(
+                    NoticeSource::App,
+                    if errors.is_empty() {
+                        Notice::Info(crate::i18n::tn("Replaced {} match", "Replaced {} matches", total, &[]).into())
+                    } else {
+                        Notice::Error(crate::i18n::tf("Replaced {0}; could not change {1}", &[&total, &errors.join(", ")]).into())
+                    },
+                );
                 this.notify_files_changed(&written);
                 this.refresh_git(300, cx);
                 this.search.update(cx, |s, cx| s.rerun(cx));

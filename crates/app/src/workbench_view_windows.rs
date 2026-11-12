@@ -296,14 +296,14 @@ impl Workbench {
             (Some(v), _) if windowable(&v) => (v, false),
             (_, Some(v)) if windowable(&v) => (v, true),
             _ => {
-                self.notice = Some(Notice::Info(crate::i18n::t("Open a view in a side bar first.").into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a view in a side bar first.").into()));
                 return cx.notify();
             }
         };
         let at = window.bounds();
         let bounds = Bounds::new(at.origin + gpui::point(px(40.), px(40.)), SIZE);
         if let Err(e) = self.show_in_view_window(self.view_ref(panel), secondary, bounds, cx) {
-            self.notice = Some(Notice::Error(e.into()));
+            self.notify(NoticeSource::App, Notice::Error(e.into()));
         }
         // The keyboard stays with the main window's editor (the view's own target is in the new window now).
         if let Some(ed) = self.tab_editor() {
@@ -441,7 +441,7 @@ impl Workbench {
     /// "View: Move View Back to Side Bar" in the main window: every view window's view goes back.
     pub(super) fn return_view_windows(&mut self, cx: &mut Context<Self>) {
         if self.chrome.view_windows.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No view is in a window of its own.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("No view is in a window of its own.").into()));
             return cx.notify();
         }
         let handles: Vec<gpui::AnyWindowHandle> = self.chrome.view_windows.iter().map(|w| w.window.into()).collect();

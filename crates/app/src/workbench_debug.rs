@@ -12,7 +12,7 @@ use std::sync::{Arc, mpsc};
 use futures::StreamExt;
 use gpui::{AnyElement, Context, Entity, Window, div, prelude::*, px};
 
-use super::{Bottom, Notice, OverlayKind, Workbench};
+use super::{Bottom, Notice, NoticeSource, OverlayKind, Workbench};
 use crate::dap::{self, DapEvent, Frame, Scope, Variable};
 use crate::debug_config::{self, LaunchConfig};
 use crate::input::{FieldEvent, TextField};
@@ -440,14 +440,14 @@ impl Workbench {
         match self.dbg.cur().map(|d| d.status.clone()) {
             Some(DebugStatus::Stopped(_)) => return self.debug_control("continue", cx),
             Some(DebugStatus::Starting | DebugStatus::Running) => {
-                self.notice = Some(Notice::Info(crate::i18n::t("Already debugging: Shift+F5 stops the session.").into()));
+                self.notify(NoticeSource::Debug, Notice::Info(crate::i18n::t("Already debugging: Shift+F5 stops the session.").into()));
                 cx.notify();
                 return;
             }
             _ => {}
         }
         if self.active_root(cx).is_none() {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a folder to debug it.").into()));
+            self.notify(NoticeSource::Debug, Notice::Info(crate::i18n::t("Open a folder to debug it.").into()));
             cx.notify();
             return;
         }
@@ -518,9 +518,10 @@ impl Workbench {
     pub(super) fn choose_debug_config_trusted(&mut self, mut configs: Vec<LaunchConfig>, window: &mut Window, cx: &mut Context<Self>) {
         match configs.len() {
             0 => {
-                self.notice = Some(Notice::Info(
-                    crate::i18n::t("No debug configuration: add .vscode/launch.json, or open a Cargo / Go project or a Python file.").into(),
-                ));
+                self.notify(
+                    NoticeSource::Debug,
+                    Notice::Info(crate::i18n::t("No debug configuration: add .vscode/launch.json, or open a Cargo / Go project or a Python file.").into()),
+                );
                 cx.notify();
             }
             1 => self.launch_with_inputs(configs.remove(0), window, cx),
@@ -721,7 +722,7 @@ impl Workbench {
                 }
             }
         }
-        self.notice = Some(Notice::Error(message.clone().into()));
+        self.notify(NoticeSource::Debug, Notice::Error(message.clone().into()));
         self.end_debug(sid, message, cx);
     }
 
@@ -876,7 +877,7 @@ impl Workbench {
         let Some(d) = self.dbg.cur_mut() else { return };
         let (Some(frame), Some(session)) = (d.frames.get(index).cloned(), d.session.clone()) else { return };
         if !(frame.can_restart && session.supports("supportsRestartFrame")) {
-            self.notice = Some(Notice::Info(crate::i18n::t("This frame cannot be restarted.").into()));
+            self.notify(NoticeSource::Debug, Notice::Info(crate::i18n::t("This frame cannot be restarted.").into()));
             cx.notify();
             return;
         }
@@ -1048,7 +1049,7 @@ impl Workbench {
                         }
                         this.refresh_watches(cx);
                     }
-                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not set {}: {}", &[&name, &e]).into())),
+                    Err(e) => this.notify(NoticeSource::Debug, Notice::Error(crate::i18n::tf("Could not set {}: {}", &[&name, &e]).into())),
                 }
                 cx.notify();
             })

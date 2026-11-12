@@ -280,14 +280,14 @@ impl Workbench {
         if let Err(e) = scope.may_execute(&full) {
             let why = super::super::code_glue::explain(&e);
             self.log_extension(&ext, LogLevel::Warn, format!("code lens \"{}\": {full} refused: {why}", lens.title));
-            self.notice = Some(Notice::Error(format!("{ext}: {why}").into()));
+            self.notify(NoticeSource::Extensions, Notice::Error(format!("{ext}: {why}").into()));
             cx.notify();
             return;
         }
         if full.starts_with("core:") {
             let done: super::super::core_commands_glue::CoreDone = Box::new(move |this, c, cx| {
                 if let v::Completion::Failed(e) = c {
-                    this.notice = Some(Notice::Error(format!("{ext}: {}", super::super::code_glue::explain(&e)).into()));
+                    this.notify(NoticeSource::Extensions, Notice::Error(format!("{ext}: {}", super::super::code_glue::explain(&e)).into()));
                     cx.notify();
                 }
             });

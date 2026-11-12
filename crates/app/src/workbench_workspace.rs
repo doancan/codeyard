@@ -10,7 +10,7 @@ use std::sync::Arc;
 use gpui::{AppContext as _, Context, Window};
 use host::Host;
 
-use super::{Notice, Workbench};
+use super::{Notice, NoticeSource, Workbench};
 use crate::ui;
 use crate::workspace_file::{Document, Edit, Target};
 
@@ -132,7 +132,7 @@ impl Workbench {
                 }
                 match loaded {
                     Err(e) => {
-                        this.notice = Some(Notice::Error(crate::i18n::tf("Workspace file could not be read: {}", &[&e]).into()));
+                        this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Workspace file could not be read: {}", &[&e]).into()));
                         // Shown so it can be repaired; the file is not touched.
                         if this.root(cx).is_none() && host.stat(&path).is_ok() {
                             this.open_file_on(host, path, window, cx);
@@ -148,7 +148,7 @@ impl Workbench {
 
     fn open_loaded_workspace(&mut self, path: String, host: Arc<dyn Host>, loaded: Loaded, window: &mut Window, cx: &mut Context<Self>) {
         let Some((_, first)) = loaded.available.first().cloned() else {
-            self.notice = Some(Notice::Error(crate::i18n::t("The workspace file lists no folder that exists on this computer.").into()));
+            self.notify(NoticeSource::App, Notice::Error(crate::i18n::t("The workspace file lists no folder that exists on this computer.").into()));
             cx.notify();
             return;
         };
@@ -229,7 +229,7 @@ impl Workbench {
         self.after_workspace_change(report, window, cx);
         if over_limit {
             let limit = crate::i18n::tf("At most {} extra folders fit in one workspace.", &[&super::folder_glue::MAX_EXTRA_ROOTS]);
-            self.notice = Some(Notice::Error(format!("{limit} {}", self.notice_text().unwrap_or_default()).trim().to_string().into()));
+            self.notify(NoticeSource::App, Notice::Error(format!("{limit} {}", self.notice_text().unwrap_or_default()).trim().to_string().into()));
         }
     }
 
@@ -237,22 +237,23 @@ impl Workbench {
     fn after_workspace_change(&mut self, report: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.sync_search_roots(cx);
         // Reloading settings replaces the notice with its own warnings: an earlier message (a conflict) stays otherwise.
-        let earlier = self.notice.take();
+        let earlier = self.take_toast();
         self.reload_config(window, cx);
-        if self.notice.is_none() {
-            self.notice = earlier;
+        if self.toast_is_none() {
+            self.restore_toast(earlier);
         }
         self.resolve_folder_settings(cx);
         if let Some(ws) = self.roots.workspace.as_ref()
             && report
         {
-            self.notice = if !ws.unavailable.is_empty() {
+            let notice = if !ws.unavailable.is_empty() {
                 let names: Vec<String> = ws.unavailable.iter().map(|u| u.label.clone()).collect();
-                Some(Notice::Error(crate::i18n::tf("Workspace folder is unavailable: {}", &[&names.join(", ")]).into()))
+                Notice::Error(crate::i18n::tf("Workspace folder is unavailable: {}", &[&names.join(", ")]).into())
             } else {
                 let n = ws.opened.len();
-                Some(Notice::Info(crate::i18n::tn("Workspace: {} folder in the Explorer.", "Workspace: {} folders in the Explorer.", n, &[]).into()))
+                Notice::Info(crate::i18n::tn("Workspace: {} folder in the Explorer.", "Workspace: {} folders in the Explorer.", n, &[]).into())
             };
+            self.notify(NoticeSource::Files, notice);
         }
         cx.notify();
     }
@@ -278,7 +279,7 @@ impl Workbench {
         let bumped = self.roots.workspace_generation + 1;
         let Some(ws) = self.roots.workspace.as_mut() else {
             if !quiet {
-                self.notice = Some(Notice::Info(crate::i18n::t("No workspace file is open.").into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("No workspace file is open.").into()));
                 cx.notify();
             }
             return;
@@ -315,7 +316,7 @@ impl Workbench {
                 match loaded {
                     Err(e) => {
                         ws.error = Some(e.clone());
-                        this.notice = Some(Notice::Error(crate::i18n::tf("Workspace file could not be read: {}", &[&e]).into()));
+                        this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Workspace file could not be read: {}", &[&e]).into()));
                         cx.notify();
                     }
                     // What this window wrote, or is writing: nothing changed.
@@ -327,7 +328,7 @@ impl Workbench {
                         this.attach_workspace(path, host, loaded, !quiet, window, cx);
                         if dropped_primary {
                             // It stays open (closing it closes the editors); saving does not add it back.
-                            this.notice = Some(Notice::Info(crate::i18n::t("The open folder is no longer listed in the workspace file.").into()));
+                            this.notify(NoticeSource::App, Notice::Info(crate::i18n::t("The open folder is no longer listed in the workspace file.").into()));
                         }
                     }
                 }
@@ -358,8 +359,8 @@ impl Workbench {
         if ws.applying {
             return;
         }
-        if let Some(e) = &ws.error {
-            self.notice = Some(Notice::Error(crate::i18n::tf("Workspace file could not be read: {}", &[e]).into()));
+        if let Some(e) = ws.error.clone() {
+            self.notify(NoticeSource::Files, Notice::Error(crate::i18n::tf("Workspace file could not be read: {}", &[&e]).into()));
             cx.notify();
             return;
         }
@@ -370,7 +371,7 @@ impl Workbench {
         let next = match ws.doc.with_folders(&edits) {
             Ok(d) => d,
             Err(e) => {
-                self.notice = Some(Notice::Error(crate::i18n::tf("Workspace file could not be read: {}", &[&e]).into()));
+                self.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Workspace file could not be read: {}", &[&e]).into()));
                 cx.notify();
                 return;
             }
@@ -430,10 +431,10 @@ impl Workbench {
                     // expects the right content instead of reporting a conflict with itself.
                     Ok(_) => this.reload_workspace(true, cx),
                     Err(host::HostError::Op(proto::Error::Conflict { .. })) => {
-                        this.notice = Some(Notice::Error(crate::i18n::t("Workspace changed on disk. Reload before saving.").into()));
+                        this.notify(NoticeSource::App, Notice::Error(crate::i18n::t("Workspace changed on disk. Reload before saving.").into()));
                     }
                     Err(e) => {
-                        this.notice = Some(Notice::Error(crate::i18n::tf("Could not save the workspace file: {}", &[&e]).into()));
+                        this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not save the workspace file: {}", &[&e]).into()));
                     }
                 }
                 if again {
@@ -460,7 +461,7 @@ impl Workbench {
         match active {
             Some((path, true)) if crate::workspace_file::is_workspace_file(&path) => self.open_workspace_file(&path, window, cx),
             _ => {
-                self.notice = Some(Notice::Info(crate::i18n::t("Open a .code-workspace file in the editor first.").into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a .code-workspace file in the editor first.").into()));
                 cx.notify();
             }
         }
@@ -469,7 +470,7 @@ impl Workbench {
     /// "File: Save Workspace".
     pub(super) fn save_workspace_now(&mut self, cx: &mut Context<Self>) {
         if self.roots.workspace.is_none() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No workspace file is open. Use File: Save Workspace As… to create one.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("No workspace file is open. Use File: Save Workspace As… to create one.").into()));
             cx.notify();
             return;
         }
@@ -480,7 +481,7 @@ impl Workbench {
     /// window's host: relative folder paths are rewritten for the new place. Without an open workspace file, a new one is made.
     pub(super) fn save_workspace_as(&mut self, target: String, cx: &mut Context<Self>) {
         if self.root(cx).is_none() {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a folder first; folders are added to it.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a folder first; folders are added to it.").into()));
             cx.notify();
             return;
         }
@@ -511,7 +512,7 @@ impl Workbench {
         let (doc, opened, unavailable) = match built {
             Ok(d) => d,
             Err(e) => {
-                self.notice = Some(Notice::Error(crate::i18n::tf("Workspace file could not be read: {}", &[&e]).into()));
+                self.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Workspace file could not be read: {}", &[&e]).into()));
                 cx.notify();
                 return;
             }
@@ -551,14 +552,14 @@ impl Workbench {
                             applying: false,
                         });
                         this.remember_workspace_file(cx);
-                        this.notice = Some(Notice::Info(crate::i18n::tf("Workspace saved as {}", &[&ui::file_name(&target)]).into()));
+                        this.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("Workspace saved as {}", &[&ui::file_name(&target)]).into()));
                     }
                     // Written, but the window shows something else now: the new file is left as written, not attached.
                     Ok(_) => {}
                     Err(host::HostError::Op(proto::Error::Conflict { .. })) => {
-                        this.notice = Some(Notice::Error(crate::i18n::t("Workspace changed on disk. Reload before saving.").into()));
+                        this.notify(NoticeSource::App, Notice::Error(crate::i18n::t("Workspace changed on disk. Reload before saving.").into()));
                     }
-                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not save the workspace file: {}", &[&e]).into())),
+                    Err(e) => this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not save the workspace file: {}", &[&e]).into())),
                 }
                 cx.notify();
             })
@@ -570,12 +571,12 @@ impl Workbench {
     /// "File: Save Workspace As…": a native save dialog (this computer only).
     pub(super) fn pick_save_workspace_as(&mut self, _: &super::SaveWorkspaceAs, _: &mut Window, cx: &mut Context<Self>) {
         if self.remote.host.is_remote() {
-            self.notice = Some(Notice::Info(crate::i18n::t("Save Workspace As… needs a folder on this computer.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Save Workspace As… needs a folder on this computer.").into()));
             cx.notify();
             return;
         }
         let Some(root) = self.root(cx) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a folder first; folders are added to it.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a folder first; folders are added to it.").into()));
             cx.notify();
             return;
         };

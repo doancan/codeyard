@@ -73,7 +73,7 @@ impl Workbench {
             }
             let reason = crate::ext_memory::reason(bytes, cap);
             self.log_extension(&id, LogLevel::Error, format!("memory: {} bytes resident, over the cap of {cap} bytes; killed", bytes));
-            self.notice = Some(Notice::Error(format!("{id}: {reason}").into()));
+            self.notify(NoticeSource::Extensions, Notice::Error(format!("{id}: {reason}").into()));
             std::thread::spawn(move || p.kill_as_crash(reason));
         }
         cx.notify();

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use gpui::{AppContext as _, Context, Focusable, Window};
 use host::Host;
 
-use super::{EditorOpt, Notice, OpenWithKind, OverlayKind, PickItem, PickSource, Picker, Settings, Workbench, editor, parent_of};
+use super::{EditorOpt, Notice, NoticeSource, OpenWithKind, OverlayKind, PickItem, PickSource, Picker, Settings, Workbench, editor, parent_of};
 use crate::ui;
 
 impl Workbench {
@@ -111,13 +111,16 @@ impl Workbench {
                         // Mixed line endings collapse to one style on save (can cause a big git diff): warn beforehand.
                         let (mixed, name) = ed.read_with(cx, |e, _| (e.has_mixed_line_endings(), e.line_ending_name()));
                         if mixed {
-                            this.notice = Some(Notice::Info(
-                                crate::i18n::tf(
-                                    "This file mixes line endings; saving writes all of them as {}, like its first line. Change it in the status bar.",
-                                    &[&name],
-                                )
-                                .into(),
-                            ));
+                            this.notify(
+                                NoticeSource::App,
+                                Notice::Info(
+                                    crate::i18n::tf(
+                                        "This file mixes line endings; saving writes all of them as {}, like its first line. Change it in the status bar.",
+                                        &[&name],
+                                    )
+                                    .into(),
+                                ),
+                            );
                         }
                         let ix = match reuse {
                             Some(old) => {
@@ -184,7 +187,7 @@ impl Workbench {
         let Some(path) = self.active_editor().map(|e| e.read(cx).path.clone()) else { return };
         let text = if relative { self.rel_in_roots(&path, cx).unwrap_or(path) } else { path };
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.clone()));
-        self.notice = Some(Notice::Info(crate::i18n::tf("Copied {}", &[&text]).into()));
+        self.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("Copied {}", &[&text]).into()));
         cx.notify();
     }
 
@@ -213,7 +216,7 @@ impl Workbench {
                     cx.notify();
                 }
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not read {0}: {1}", &[&other, &e]).into()));
+                    this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not read {0}: {1}", &[&other, &e]).into()));
                     cx.notify();
                 }
             })
@@ -245,7 +248,7 @@ impl Workbench {
                     cx.notify();
                 }
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not compare: {}", &[&e]).into()));
+                    this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not compare: {}", &[&e]).into()));
                     cx.notify();
                 }
             })
@@ -379,7 +382,7 @@ impl Workbench {
         let front = self.active_editor().map(|e| e.read(cx).path.clone());
         let paths: Vec<String> = self.nav.recent_files.iter().filter(|p| front.as_deref() != Some(p.as_str())).take(50).cloned().collect();
         if paths.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No recently opened files").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("No recently opened files").into()));
             return cx.notify();
         }
         if self.overlay.is_some() {

@@ -58,7 +58,7 @@ impl Workbench {
             None => {
                 let bounds = Bounds::new(screen - gpui::point(px(40.), px(12.)), gpui::size(px(820.), px(620.)));
                 if let Err(e) = self.show_in_editor_window(editor.clone(), bounds, None, cx) {
-                    self.notice = Some(Notice::Error(e.into()));
+                    self.notify(NoticeSource::App, Notice::Error(e.into()));
                     return cx.notify();
                 }
                 self.take_tab(&editor, from, window, cx);
@@ -93,7 +93,7 @@ impl Workbench {
             None
         };
         if let Some(why) = refusal {
-            self.notice = Some(Notice::Info(why.into()));
+            self.notify(NoticeSource::App, Notice::Info(why.into()));
             return cx.notify();
         }
         let opened = target.update(cx, |wb, window, cx| {
@@ -102,7 +102,7 @@ impl Workbench {
             wb.open_file_on(host, path, window, cx);
         });
         if opened.is_err() {
-            self.notice = Some(Notice::Info(crate::i18n::t("The destination window is no longer available.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("The destination window is no longer available.").into()));
             return cx.notify();
         }
         self.take_tab(&editor, from, window, cx);

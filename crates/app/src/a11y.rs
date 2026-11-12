@@ -793,10 +793,10 @@ impl Workbench {
         if !geometry.editor_painted() {
             editor.iter_mut().flat_map(|e| e.runs.iter_mut()).for_each(|r| r.frame = None);
         }
-        let notice = match (&self.notice, &self.tabs.open_error) {
+        let notice = match (&self.notice(), &self.tabs.open_error) {
             (Some(Notice::Error(m)), _) => Some(NoticeSnap { text: m.to_string(), error: true }),
             (_, Some((_, m))) => Some(NoticeSnap { text: m.to_string(), error: true }),
-            (Some(Notice::Info(m)), _) => Some(NoticeSnap { text: m.to_string(), error: false }),
+            (Some(Notice::Info(m) | Notice::Warning(m)), _) => Some(NoticeSnap { text: m.to_string(), error: false }),
             (None, None) => None,
         };
         let tabs = self.tabs.editors.iter().map(|e| e.read(cx)).map(|e| TabSnap { name: e.name.to_string(), dirty: e.is_dirty() }).collect();

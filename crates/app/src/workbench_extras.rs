@@ -5,8 +5,8 @@ use gpui::{AppContext as _, Context, Focusable as _, Window};
 use std::io::Write as _;
 
 use super::{
-    CompareWithClipboard, CompareWithSaved, ConfigureSnippets, GoToLastEdit, InsertSnippet, NewScratchFile, NewTerminal, Notice, OpenThemesFolder,
-    RunSelectedText, SaveThemeAs, Workbench,
+    CompareWithClipboard, CompareWithSaved, ConfigureSnippets, GoToLastEdit, InsertSnippet, NewScratchFile, NewTerminal, Notice, NoticeSource,
+    OpenThemesFolder, RunSelectedText, SaveThemeAs, Workbench,
 };
 use crate::ui;
 
@@ -33,7 +33,7 @@ impl Workbench {
     pub(super) fn compare_with_clipboard(&mut self, _: &CompareWithClipboard, window: &mut Window, cx: &mut Context<Self>) {
         let Some((path, current)) = self.active_text(cx) else { return };
         let Some(clip) = cx.read_from_clipboard().and_then(|c| c.text()) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("The clipboard has no text.").into()));
+            self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::t("The clipboard has no text.").into()));
             cx.notify();
             return;
         };
@@ -46,11 +46,11 @@ impl Workbench {
         let Some(ed) = self.active_editor().cloned() else { return };
         let selected = ed.read(cx).selected_text_all().join("\n");
         if selected.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("Select some text first.").into()));
+            self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::t("Select some text first.").into()));
             return cx.notify();
         }
         let Some(clip) = cx.read_from_clipboard().and_then(|c| c.text()) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("The clipboard has no text.").into()));
+            self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::t("The clipboard has no text.").into()));
             return cx.notify();
         };
         let title = crate::i18n::tf("{} (selection) ↔ Clipboard", &[&ui::file_name(&ed.read(cx).path)]);
@@ -67,7 +67,7 @@ impl Workbench {
             let result = task.await;
             this.update_in(cx, |this, window, cx| match result {
                 Ok(saved) if saved == current => {
-                    this.notice = Some(Notice::Info(crate::i18n::t("No unsaved changes: the file matches what is on disk.").into()));
+                    this.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::t("No unsaved changes: the file matches what is on disk.").into()));
                     cx.notify();
                 }
                 Ok(saved) => {
@@ -75,7 +75,7 @@ impl Workbench {
                     this.open_compare(title, crate::i18n::t("Compare"), &saved, &current, window, cx);
                 }
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not read {}: {}", &[&path, &e]).into()));
+                    this.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("Could not read {}: {}", &[&path, &e]).into()));
                     cx.notify();
                 }
             })
@@ -96,7 +96,7 @@ impl Workbench {
         };
         let text = text.trim_end_matches('\n').to_string();
         if text.trim().is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("Nothing to run: select some text or put the cursor on a line.").into()));
+            self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::t("Nothing to run: select some text or put the cursor on a line.").into()));
             cx.notify();
             return;
         }
@@ -128,7 +128,7 @@ impl Workbench {
                 self.navigate_to(pos, window, cx);
             }
             None => {
-                self.notice = Some(Notice::Info(crate::i18n::t("No edits yet in this session.").into()));
+                self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::t("No edits yet in this session.").into()));
                 cx.notify();
             }
         }
@@ -169,7 +169,7 @@ impl Workbench {
             .collect::<Vec<_>>()
             .join("-");
         let Some(dir) = self.theme_dir().filter(|_| !slug.is_empty()) else {
-            self.notice = Some(Notice::Error(crate::i18n::t("Give the theme a name.").into()));
+            self.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::t("Give the theme a name.").into()));
             cx.notify();
             return;
         };
@@ -189,9 +189,9 @@ impl Workbench {
                     self.persist_theme(&id);
                     self.apply_theme(&id, window, cx);
                 }
-                self.notice = Some(Notice::Info(crate::i18n::tf("Saved {} (edit the colors in that file)", &[&path.display()]).into()));
+                self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::tf("Saved {} (edit the colors in that file)", &[&path.display()]).into()));
             }
-            Err(e) => self.notice = Some(Notice::Error(crate::i18n::tf("Could not write {}: {}", &[&path.display(), &e]).into())),
+            Err(e) => self.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("Could not write {}: {}", &[&path.display(), &e]).into())),
         }
         cx.notify();
     }
@@ -201,7 +201,7 @@ impl Workbench {
         let _ = std::fs::create_dir_all(&dir);
         #[cfg(all(target_os = "macos", not(test)))]
         let _ = std::process::Command::new("open").arg(&dir).spawn();
-        self.notice = Some(Notice::Info(crate::i18n::tf("Themes live in {}: drop theme .json files there", &[&dir.display()]).into()));
+        self.notify(NoticeSource::Extensions, Notice::Info(crate::i18n::tf("Themes live in {}: drop theme .json files there", &[&dir.display()]).into()));
         cx.notify();
     }
 
@@ -245,10 +245,13 @@ impl Workbench {
             return;
         }
         let warnings = self.reload_snippets();
-        self.notice = Some(match warnings.first() {
-            Some(w) => Notice::Error(w.clone().into()),
-            None => Notice::Info(crate::i18n::t("Snippets reloaded").into()),
-        });
+        self.notify(
+            NoticeSource::Extensions,
+            match warnings.first() {
+                Some(w) => Notice::Error(w.clone().into()),
+                None => Notice::Info(crate::i18n::t("Snippets reloaded").into()),
+            },
+        );
         cx.notify();
     }
 
@@ -297,7 +300,7 @@ impl Workbench {
                 self.open_file_on(host, path.to_string_lossy().into_owned(), window, cx);
             }
             Err(e) => {
-                self.notice = Some(Notice::Error(crate::i18n::tf("Could not create {}: {}", &[&path.display(), &e]).into()));
+                self.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("Could not create {}: {}", &[&path.display(), &e]).into()));
                 cx.notify();
             }
         }
@@ -338,7 +341,7 @@ impl Workbench {
                     this.create_scratch_with(name, &crate::hexdump::dump(&data), window, cx);
                 }
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not read the file: {}", &[&e]).into()));
+                    this.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("Could not read the file: {}", &[&e]).into()));
                     cx.notify();
                 }
             })
@@ -382,7 +385,7 @@ impl Workbench {
         match result.and_then(|p| crate::fsutil::create_private(&p)?.write_all(content.as_bytes()).map(|_| p)) {
             Ok(path) => Some(ui::local_path(&path)),
             Err(e) => {
-                self.notice = Some(Notice::Error(crate::i18n::tf("Could not create the scratch file: {}", &[&e]).into()));
+                self.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("Could not create the scratch file: {}", &[&e]).into()));
                 cx.notify();
                 None
             }

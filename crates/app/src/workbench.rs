@@ -138,10 +138,13 @@ mod palette_glue;
 use outline_glue::OutlineState;
 #[path = "workbench_panels.rs"]
 pub(crate) mod panels_glue;
+pub(crate) use notifications_glue::Notice;
+pub(crate) use notifications_glue::model::NoticeSource;
 #[cfg(test)]
 pub use panels_glue::ProblemRow;
 #[cfg(test)]
 pub(crate) use panels_glue::interface_scale_notice;
+pub(crate) use panels_glue::notifications_panel as notifications_glue;
 #[path = "workbench_cyx.rs"]
 mod cyx_glue;
 #[path = "workbench_ext_pulls.rs"]
@@ -799,11 +802,6 @@ enum Conn {
     },
 }
 
-enum Notice {
-    Info(SharedString),
-    Error(SharedString),
-}
-
 pub struct Workbench {
     /// Watch set last sent to the agent, and the task listening for events.
     watched: Vec<String>,
@@ -831,12 +829,9 @@ pub struct Workbench {
     active_terminal: usize,
     /// A specific shell in tests; the user's shell otherwise.
     shell: Option<String>,
-    notice: Option<Notice>,
+    /// Everything told to the user: history, toast, bell, Do Not Disturb (see `workbench_notifications.rs`).
+    notices: notifications_glue::NoticeCenter,
     title: String,
-    /// Last seen notice: on change, a clear timer is set up for info messages.
-    /// Message identity (string address and length): the same text arriving again is still a new message.
-    notice_seen: Option<(usize, usize)>,
-    notice_task: Option<gpui::Task<()>>,
     dev: bool,
     themes: Vec<Theme>,
     theme_choice: String,
@@ -1234,10 +1229,8 @@ impl Workbench {
             ports: ports_glue::PortsState::new(port_field),
             folder_task: None,
             window_handle: window.window_handle(),
-            notice,
+            notices: notifications_glue::NoticeCenter::with_startup(notice),
             title: String::new(),
-            notice_seen: None,
-            notice_task: None,
             dev,
             themes,
             theme_choice: theme_choice.clone(),
@@ -1452,7 +1445,7 @@ impl Workbench {
         let Some((spath, kpath)) = self.config_paths() else { return };
         let (path, template) = if settings_file { (spath, settings::TEMPLATE) } else { (kpath, settings::KEYBINDINGS_TEMPLATE) };
         if let Err(e) = settings::ensure_file(&path, template) {
-            self.notice = Some(Notice::Error(crate::i18n::tf("Could not create {0}: {1}", &[&path.display(), &e]).into()));
+            self.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not create {0}: {1}", &[&path.display(), &e]).into()));
             cx.notify();
             return;
         }
@@ -1464,17 +1457,17 @@ impl Workbench {
     /// are left alone). If the theme isn't here, copy it from the installed VS Code theme.
     fn import_vscode(&mut self, _: &ImportVsCode, window: &mut Window, cx: &mut Context<Self>) {
         let Some(dir) = crate::vscode::user_dir() else {
-            self.notice = Some(Notice::Info(crate::i18n::t("No settings from another editor found on this machine").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("No settings from another editor found on this machine").into()));
             cx.notify();
             return;
         };
         match self.import_vscode_from(&dir) {
             Ok(msg) => {
                 self.reload_user_themes();
-                self.notice = Some(Notice::Info(msg.into()));
+                self.notify(NoticeSource::App, Notice::Info(msg.into()));
                 self.reload_config(window, cx);
             }
-            Err(e) => self.notice = Some(Notice::Error(e.into())),
+            Err(e) => self.notify(NoticeSource::App, Notice::Error(e.into())),
         }
         cx.notify();
     }
@@ -1583,12 +1576,6 @@ impl Workbench {
         let prefill = self.active_editor().and_then(|e| e.read(cx).selected_text());
         self.search.update(cx, |s, cx| s.focus_query(prefill, window, cx));
         cx.notify();
-    }
-
-    pub fn notice_text(&self) -> Option<String> {
-        self.notice.as_ref().map(|n| match n {
-            Notice::Info(m) | Notice::Error(m) => m.to_string(),
-        })
     }
 
     fn panel(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1845,7 +1832,7 @@ impl Workbench {
         if self.any_dirty(cx) {
             // Can't save while disconnected: saying "save first" would be a dead end, so point the way.
             let down = matches!(self.remote.conn, Conn::Failed { .. } | Conn::Reconnecting { .. });
-            self.notice = Some(Notice::Error(
+            self.notify(NoticeSource::App, Notice::Error(
                 if down {
                     crate::i18n::t("The connection is down, so files with unsaved changes cannot be saved. Use File: Save a Copy to This Computer… to keep them, or close them, then reconnect.")
                 } else {
@@ -1900,7 +1887,7 @@ impl Workbench {
         self.tabs.active = None;
         self.tabs.open_error = None;
         self.tabs.opening = None;
-        self.notice = None;
+        self.dismiss_notice();
         self.roots.file_index = None;
         self.load_git_branch(&path, cx);
         self.vcs.status = None;
@@ -1991,7 +1978,7 @@ impl Workbench {
     /// "Preferences: Open Workspace Settings": `.codeyard/settings.jsonc` (created if missing).
     fn open_workspace_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.root(cx) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a folder first: project settings live in it.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a folder first: project settings live in it.").into()));
             cx.notify();
             return;
         };
@@ -2010,7 +1997,7 @@ impl Workbench {
             this.update_in(cx, |this, window, cx| match result {
                 Ok(()) => this.open_file(path, window, cx),
                 Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not create {0}: {1}", &[&PROJECT_SETTINGS, &e]).into()));
+                    this.notify(NoticeSource::App, Notice::Error(crate::i18n::tf("Could not create {0}: {1}", &[&PROJECT_SETTINGS, &e]).into()));
                     cx.notify();
                 }
             })
@@ -2284,7 +2271,7 @@ impl Workbench {
         let re = match agent::search::compile(&query) {
             Ok(re) => re,
             Err(e) => {
-                self.notice = Some(Notice::Error(e.to_string().into()));
+                self.notify(NoticeSource::App, Notice::Error(e.to_string().into()));
                 cx.notify();
                 return;
             }
@@ -2413,33 +2400,6 @@ impl Workbench {
         (!parts.is_empty()).then(|| parts.join(" — "))
     }
 
-    /// Info messages stay in the status bar a few seconds; errors stay as a card until dismissed.
-    fn track_notice(&mut self, cx: &mut Context<Self>) {
-        const INFO_FOR: Duration = Duration::from_secs(8);
-        let current = self.notice.as_ref().map(|n| match n {
-            Notice::Info(m) | Notice::Error(m) => m.clone(),
-        });
-        let id = current.as_ref().map(|m| (m.as_ptr() as usize, m.len()));
-        if id == self.notice_seen {
-            return;
-        }
-        self.notice_seen = id;
-        self.notice_task = match (&self.notice, current) {
-            (Some(Notice::Info(_)), Some(text)) => Some(cx.spawn(async move |this, cx| {
-                cx.background_executor().timer(INFO_FOR).await;
-                this.update(cx, |this, cx| {
-                    // If another message arrived meanwhile, leave it alone.
-                    if matches!(&this.notice, Some(Notice::Info(m)) if *m == text) {
-                        this.notice = None;
-                        cx.notify();
-                    }
-                })
-                .ok();
-            })),
-            _ => None,
-        };
-    }
-
     /// Title layout: `● file — folder — ssh-host` (● unsaved).
     fn update_title(&mut self, window: &mut Window, cx: &mut App) {
         let remote = self.remote.host.is_remote().then(|| self.remote.host.label());
@@ -2501,7 +2461,7 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 return;
             }
             EditorEvent::Message(m) => {
-                this.notice = Some(Notice::Info(m.clone().into()));
+                this.notify(NoticeSource::App, Notice::Info(m.clone().into()));
                 cx.notify();
                 return;
             }

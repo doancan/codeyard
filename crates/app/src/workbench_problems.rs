@@ -135,7 +135,7 @@ impl Workbench {
             return;
         }
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
-        self.notice = Some(Notice::Info(crate::i18n::tn("Copied {} problem", "Copied {} problems", n, &[]).into()));
+        self.notify(NoticeSource::App, Notice::Info(crate::i18n::tn("Copied {} problem", "Copied {} problems", n, &[]).into()));
         cx.notify();
     }
 

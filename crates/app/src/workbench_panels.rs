@@ -9,6 +9,8 @@ pub(super) const PANEL_ANIM_FOR_TEST: std::time::Duration = PANEL_ANIM;
 
 #[path = "problems_filter.rs"]
 pub mod filter;
+#[path = "workbench_notifications.rs"]
+pub(crate) mod notifications_panel;
 #[cfg(test)]
 #[path = "workbench_panel_tests.rs"]
 mod panel_tests;
@@ -18,6 +20,7 @@ mod problems_panel;
 #[path = "problem_rows_tests.rs"]
 mod rows_tests;
 use filter::{Counts, ProblemFilter, Sort};
+pub use notifications_panel::{ClearNotifications, ShowNotifications, ToggleDoNotDisturb};
 pub use problems_panel::{CopyAllProblems, ProblemsView, ToggleProblemsActiveFile};
 
 /// "Interface scale: 110%" in the interface language (Turkish puts the sign first: "%110").
@@ -111,8 +114,8 @@ impl Workbench {
             }
             cx.set_ui_scale(scale);
         }
-        if !matches!(self.notice, Some(Notice::Error(_))) {
-            self.notice = Some(Notice::Info(interface_scale_notice(scale).into()));
+        if !matches!(self.notice(), Some(Notice::Error(_))) {
+            self.notify(NoticeSource::App, Notice::Info(interface_scale_notice(scale).into()));
         }
         cx.notify();
     }
@@ -453,7 +456,7 @@ impl Workbench {
             return;
         }
         let Some(path) = self.active_editor().map(|e| e.read(cx).path.clone()).filter(|p| !p.is_empty()) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a file first.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a file first.").into()));
             cx.notify();
             return;
         };
@@ -477,7 +480,7 @@ impl Workbench {
             .or_else(|| self.active_editor().map(|e| e.read(cx).path.clone()))
             .filter(|p| !p.is_empty());
         let Some(path) = path else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a file first.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a file first.").into()));
             cx.notify();
             return;
         };
@@ -497,7 +500,7 @@ impl Workbench {
             return;
         }
         let host = self.remote.host.clone();
-        self.notice = Some(Notice::Info(crate::i18n::tf("Filtering {0} for “{1}”…", &[&ui::file_name(&path), &pattern]).into()));
+        self.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("Filtering {0} for “{1}”…", &[&ui::file_name(&path), &pattern]).into()));
         cx.notify();
         let (p, pat) = (path.clone(), pattern.clone());
         let task = cx.background_executor().spawn(async move {
@@ -534,7 +537,7 @@ impl Workbench {
             let result = task.await;
             this.update_in(cx, |this, window, cx| match result {
                 Ok(text) if text.is_empty() => {
-                    this.notice = Some(Notice::Info(crate::i18n::tf("No lines match “{}”.", &[&pattern]).into()));
+                    this.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("No lines match “{}”.", &[&pattern]).into()));
                     cx.notify();
                 }
                 Ok(text) => {
@@ -546,11 +549,11 @@ impl Workbench {
                     } else {
                         crate::i18n::tn("{0} line matches “{1}”.", "{0} lines match “{1}”.", n, &[&pattern])
                     };
-                    this.notice = Some(Notice::Info(msg.into()));
+                    this.notify(NoticeSource::App, Notice::Info(msg.into()));
                     cx.notify();
                 }
                 Err(e) => {
-                    this.notice = Some(Notice::Error(e.into()));
+                    this.notify(NoticeSource::App, Notice::Error(e.into()));
                     cx.notify();
                 }
             })

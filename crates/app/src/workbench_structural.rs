@@ -94,7 +94,7 @@ impl Workbench {
         let compiled = match st::compile(family.language(), &pattern) {
             Ok(p) => Arc::new(p),
             Err(e) => {
-                self.notice = Some(Notice::Error(crate::search::describe_pattern_error(&pattern, &e).into()));
+                self.notify(NoticeSource::App, Notice::Error(crate::search::describe_pattern_error(&pattern, &e).into()));
                 cx.notify();
                 return;
             }

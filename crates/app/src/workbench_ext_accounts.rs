@@ -379,7 +379,10 @@ impl Workbench {
                 });
                 ensure_callback_listener(cx);
                 cx.open_url(&url);
-                this.notice = Some(Notice::Info(crate::i18n::tf("{0}: finish signing in to {1} in your browser.", &[&ask.id, &ask.provider.name]).into()));
+                this.notify(
+                    NoticeSource::Extensions,
+                    Notice::Info(crate::i18n::tf("{0}: finish signing in to {1} in your browser.", &[&ask.id, &ask.provider.name]).into()),
+                );
                 cx.notify();
             });
         })
@@ -415,7 +418,7 @@ impl Workbench {
             Err(acc::Refused::Unknown) => return false,
             Err(acc::Refused::OtherExtension { owner }) => {
                 let msg = crate::i18n::tf("A sign-in answer for {0} carried the code of {1}'s sign-in; it was ignored.", &[&cb.extension, &owner]);
-                self.notice = Some(Notice::Error(msg.into()));
+                self.notify(NoticeSource::Extensions, Notice::Error(msg.into()));
                 cx.notify();
                 return true;
             }
@@ -454,7 +457,10 @@ impl Workbench {
             let traded = traded.await;
             let _ = this.update(cx, |this, cx| match traded {
                 Ok(t) => {
-                    this.notice = Some(Notice::Info(crate::i18n::tf("{0} is signed in to {1} as {2}.", &[&ask.id, &ask.provider.name, &t.label]).into()));
+                    this.notify(
+                        NoticeSource::Extensions,
+                        Notice::Info(crate::i18n::tf("{0} is signed in to {1} as {2}.", &[&ask.id, &ask.provider.name, &t.label]).into()),
+                    );
                     this.save_account(ask, t, complete, cx);
                 }
                 Err(e) => complete(Completion::Failed(v::Error::Other(e))),
@@ -521,13 +527,14 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let done = done.await.unwrap_or_else(|| Err(crate::i18n::t("the keychain did not answer").to_string()));
             let _ = this.update(cx, |this, cx| {
-                this.notice = Some(match done {
+                let notice = match done {
                     Ok(()) => {
                         this.cfg.exts.accounts.known.remove(&(ext.clone(), provider));
                         Notice::Info(crate::i18n::tf("{0} is signed out of {1}.", &[&ext, &name]).into())
                     }
                     Err(e) => Notice::Error(crate::i18n::tf("Could not sign out: {}", &[&e]).into()),
-                });
+                };
+                this.notify(NoticeSource::Extensions, notice);
                 cx.notify();
             });
         })
@@ -611,7 +618,7 @@ impl Workbench {
         let (source, instance) = match checked {
             Ok(x) => x,
             Err(e) => {
-                self.notice = Some(Notice::Error(e.into()));
+                self.notify(NoticeSource::Extensions, Notice::Error(e.into()));
                 cx.notify();
                 return;
             }
@@ -625,13 +632,16 @@ impl Workbench {
             let _ = this.update(cx, |this, cx| {
                 let Some(dir) = this.cfg.dir.clone() else { return };
                 let Ok(id) = ext_manifest::ExtId::parse(&ask.id) else { return };
-                this.notice = Some(match crate::ext::store(&dir).add_instance(&id, &source, ask.instance.clone()) {
-                    Ok(()) => {
-                        *this.cfg.exts.accounts.instances.borrow_mut() = None;
-                        Notice::Info(crate::i18n::tf("{0} can now sign in to {1}.", &[&ask.id, &ask.instance.host]).into())
-                    }
-                    Err(e) => Notice::Error(crate::i18n::tf("Could not add the instance: {}", &[&e]).into()),
-                });
+                this.notify(
+                    NoticeSource::Extensions,
+                    match crate::ext::store(&dir).add_instance(&id, &source, ask.instance.clone()) {
+                        Ok(()) => {
+                            *this.cfg.exts.accounts.instances.borrow_mut() = None;
+                            Notice::Info(crate::i18n::tf("{0} can now sign in to {1}.", &[&ask.id, &ask.instance.host]).into())
+                        }
+                        Err(e) => Notice::Error(crate::i18n::tf("Could not add the instance: {}", &[&e]).into()),
+                    },
+                );
                 cx.notify();
             });
         })
@@ -643,7 +653,7 @@ impl Workbench {
         let (Some(dir), Ok(id)) = (self.cfg.dir.clone(), ext_manifest::ExtId::parse(&extension)) else { return };
         self.sign_out_extension_account(extension.clone(), account.clone(), cx);
         if let Err(e) = crate::ext::store(&dir).remove_instance(&id, &account) {
-            self.notice = Some(Notice::Error(crate::i18n::tf("Could not remove the instance: {}", &[&e]).into()));
+            self.notify(NoticeSource::Extensions, Notice::Error(crate::i18n::tf("Could not remove the instance: {}", &[&e]).into()));
         }
         *self.cfg.exts.accounts.instances.borrow_mut() = None;
         cx.notify();

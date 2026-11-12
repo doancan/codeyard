@@ -9,7 +9,7 @@ impl Workbench {
         match self.git_status() {
             Some(status) => Some((self.remote.host.clone(), status.root.clone())),
             None => {
-                self.notice = Some(Notice::Info(crate::i18n::t("Open a folder that is a Git repository first.").into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open a folder that is a Git repository first.").into()));
                 cx.notify();
                 None
             }
@@ -26,14 +26,17 @@ impl Workbench {
                 if !this.git_context_matches(&source_host, &source_root) {
                     return;
                 }
-                this.notice = Some(match result {
-                    Ok(patch) if patch.is_empty() => Notice::Info(crate::i18n::t("There are no changes to put in a patch.").into()),
-                    Ok(patch) => {
-                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(patch));
-                        Notice::Info(crate::i18n::t("Patch copied. Untracked files are not part of it.").into())
-                    }
-                    Err(e) => Notice::Error(e.into()),
-                });
+                this.notify(
+                    NoticeSource::App,
+                    match result {
+                        Ok(patch) if patch.is_empty() => Notice::Info(crate::i18n::t("There are no changes to put in a patch.").into()),
+                        Ok(patch) => {
+                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(patch));
+                            Notice::Info(crate::i18n::t("Patch copied. Untracked files are not part of it.").into())
+                        }
+                        Err(e) => Notice::Error(e.into()),
+                    },
+                );
                 cx.notify();
             })
             .ok();
@@ -44,7 +47,7 @@ impl Workbench {
     pub(super) fn apply_patch_from_clipboard(&mut self, _: &ApplyPatchFromClipboard, window: &mut Window, cx: &mut Context<Self>) {
         let Some((host, root)) = self.patch_target(cx) else { return };
         let Some(patch) = cx.read_from_clipboard().and_then(|c| c.text()) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("The clipboard has no text.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("The clipboard has no text.").into()));
             return cx.notify();
         };
         let (source_host, source_root) = (host.clone(), root.clone());
@@ -55,10 +58,13 @@ impl Workbench {
                 if !this.git_context_matches(&source_host, &source_root) {
                     return;
                 }
-                this.notice = Some(match result {
-                    Ok(()) => Notice::Info(crate::i18n::t("Patch applied to the working tree.").into()),
-                    Err(e) => Notice::Error(crate::i18n::tf("The patch was not applied: {}", &[&e]).into()),
-                });
+                this.notify(
+                    NoticeSource::App,
+                    match result {
+                        Ok(()) => Notice::Info(crate::i18n::t("Patch applied to the working tree.").into()),
+                        Err(e) => Notice::Error(crate::i18n::tf("The patch was not applied: {}", &[&e]).into()),
+                    },
+                );
                 this.refresh_git(0, cx);
                 cx.notify();
             })

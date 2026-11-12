@@ -136,7 +136,7 @@ impl Workbench {
     /// Context menu: "Download…" (file or folder) → pick a local folder.
     pub(super) fn start_download(&mut self, remote: String, is_dir: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(alias) = self.remote_alias() else {
-            self.notice = Some(Notice::Info(self.not_connected_hint(0).into()));
+            self.notify(NoticeSource::Files, Notice::Info(self.not_connected_hint(0).into()));
             cx.notify();
             return;
         };
@@ -165,7 +165,7 @@ impl Workbench {
     /// "Upload Files Here…" and the palette: pick local files/folders, upload to `remote_dir` on the server.
     pub(super) fn start_upload(&mut self, remote_dir: String, window: &mut Window, cx: &mut Context<Self>) {
         let Some(alias) = self.remote_alias() else {
-            self.notice = Some(Notice::Info(self.not_connected_hint(1).into()));
+            self.notify(NoticeSource::Files, Notice::Info(self.not_connected_hint(1).into()));
             cx.notify();
             return;
         };
@@ -195,7 +195,7 @@ impl Workbench {
             Some(alias) => Job::Upload { alias, items, remote_dir: to_dir },
             None if !self.remote.host.is_remote() => Job::CopyIn { items, dest_dir: to_dir },
             None => {
-                self.notice = Some(Notice::Error(self.not_connected_hint(2).into()));
+                self.notify(NoticeSource::Files, Notice::Error(self.not_connected_hint(2).into()));
                 cx.notify();
                 return;
             }
@@ -206,7 +206,7 @@ impl Workbench {
     /// Palette: "Remote: Upload Files to This Folder…" (folder selected in the explorer, or the root).
     pub(super) fn upload_here(&mut self, _: &UploadHere, window: &mut Window, cx: &mut Context<Self>) {
         let Some(dir) = self.explorer_target_dir(cx) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a folder first.").into()));
+            self.notify(NoticeSource::Files, Notice::Info(crate::i18n::t("Open a folder first.").into()));
             cx.notify();
             return;
         };
@@ -216,7 +216,7 @@ impl Workbench {
     /// Palette: "Remote: Download Active File…".
     pub(super) fn download_active(&mut self, _: &DownloadActive, window: &mut Window, cx: &mut Context<Self>) {
         let Some(path) = self.active_editor().map(|e| e.read(cx).path.clone()).filter(|p| !p.is_empty()) else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open a file first.").into()));
+            self.notify(NoticeSource::Files, Notice::Info(crate::i18n::t("Open a file first.").into()));
             cx.notify();
             return;
         };
@@ -230,8 +230,10 @@ impl Workbench {
     /// Check for conflicts (in the background), ask if there are any, then start.
     pub(super) fn begin(&mut self, job: Job, window: &mut Window, cx: &mut Context<Self>) {
         if self.remote.transfer.is_some() {
-            self.notice =
-                Some(Notice::Info(crate::i18n::t("A transfer is already running. Wait for it to finish or click it in the status bar to cancel.").into()));
+            self.notify(
+                NoticeSource::Files,
+                Notice::Info(crate::i18n::t("A transfer is already running. Wait for it to finish or click it in the status bar to cancel.").into()),
+            );
             cx.notify();
             return;
         }
@@ -277,7 +279,7 @@ impl Workbench {
                 let (existing, mismatch) = match result {
                     Ok(probe) => probe,
                     Err(error) => {
-                        this.notice = Some(Notice::Error(crate::i18n::tf("Cannot inspect the transfer destination: {}", &[&error]).into()));
+                        this.notify(NoticeSource::Files, Notice::Error(crate::i18n::tf("Cannot inspect the transfer destination: {}", &[&error]).into()));
                         cx.notify();
                         return;
                     }
@@ -288,7 +290,7 @@ impl Workbench {
                     } else {
                         crate::i18n::tf("A file named “{}” is already there; a folder cannot replace it. Rename or remove it first.", &[&name])
                     };
-                    this.notice = Some(Notice::Error(m.into()));
+                    this.notify(NoticeSource::Files, Notice::Error(m.into()));
                     cx.notify();
                     return;
                 }
@@ -316,8 +318,10 @@ impl Workbench {
             return;
         }
         if self.remote.transfer.is_some() {
-            self.notice =
-                Some(Notice::Info(crate::i18n::t("A transfer is already running. Wait for it to finish or click it in the status bar to cancel.").into()));
+            self.notify(
+                NoticeSource::Files,
+                Notice::Info(crate::i18n::t("A transfer is already running. Wait for it to finish or click it in the status bar to cancel.").into()),
+            );
             cx.notify();
             return;
         }
@@ -385,9 +389,9 @@ impl Workbench {
                     self.roots.primary.update(cx, |t, cx| t.reload(&dir, cx));
                     self.roots.file_index = None;
                 }
-                self.notice = Some(Notice::Info(msg.into()));
+                self.notify(NoticeSource::Files, Notice::Info(msg.into()));
             }
-            Err(e) if e.cancelled => self.notice = Some(Notice::Info(crate::i18n::t("Transfer cancelled.").into())),
+            Err(e) if e.cancelled => self.notify(NoticeSource::Files, Notice::Info(crate::i18n::t("Transfer cancelled.").into())),
             Err(e) => {
                 let reason = match e.partial {
                     Some((name, done, total)) => {
@@ -395,7 +399,7 @@ impl Workbench {
                     }
                     None => e.reason,
                 };
-                self.notice = Some(Notice::Error(crate::i18n::tf("Transfer failed: {}", &[&reason]).into()));
+                self.notify(NoticeSource::Files, Notice::Error(crate::i18n::tf("Transfer failed: {}", &[&reason]).into()));
             }
         }
     }

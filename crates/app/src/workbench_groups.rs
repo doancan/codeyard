@@ -320,7 +320,7 @@ impl Workbench {
         let key = match self.tabs.split(direction) {
             Ok(key) => key,
             Err(_) => {
-                self.notice = Some(Notice::Info(crate::i18n::tf("A window supports up to {} editor groups.", &[&MAX_GROUPS.to_string()]).into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("A window supports up to {} editor groups.", &[&MAX_GROUPS.to_string()]).into()));
                 cx.notify();
                 return;
             }
@@ -346,7 +346,7 @@ impl Workbench {
                 self.open_file(path, window, cx);
             }
             Err(_) => {
-                self.notice = Some(Notice::Info(crate::i18n::tf("A window supports up to {} editor groups.", &[&MAX_GROUPS.to_string()]).into()));
+                self.notify(NoticeSource::App, Notice::Info(crate::i18n::tf("A window supports up to {} editor groups.", &[&MAX_GROUPS.to_string()]).into()));
                 cx.notify();
             }
         }

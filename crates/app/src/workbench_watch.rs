@@ -166,7 +166,7 @@ impl Workbench {
             Err(e) => {
                 let mut warnings = vec![e];
                 warnings.extend(crate::apply_keymap(cx, kpath.as_deref()));
-                self.notice = Some(Notice::Error(warnings.join(" · ").into()));
+                self.notify(NoticeSource::App, Notice::Error(warnings.join(" · ").into()));
                 cx.notify();
                 return;
             }
@@ -289,13 +289,16 @@ impl Workbench {
         for t in self.all_trees() {
             t.update(cx, |t, cx| t.set_options(view.clone(), cx));
         }
-        self.notice = warnings.first().map(|w| {
-            let more = if warnings.len() > 1 { format!(" {}", crate::i18n::tf("(+{} more)", &[&(warnings.len() - 1)])) } else { String::new() };
-            Notice::Error(format!("{w}{more}").into())
-        });
+        match warnings.first() {
+            Some(w) => {
+                let more = if warnings.len() > 1 { format!(" {}", crate::i18n::tf("(+{} more)", &[&(warnings.len() - 1)])) } else { String::new() };
+                self.notify(NoticeSource::Settings, Notice::Error(format!("{w}{more}").into()));
+            }
+            None => self.dismiss_notice(),
+        }
         crate::system_prefs::sync(cx);
         // A broken setting is the more urgent notice.
-        if colours_changed && self.notice.is_none() {
+        if colours_changed && self.toast_is_none() {
             self.warn_low_contrast(window, cx);
         }
         self.sync_settings_page(cx);

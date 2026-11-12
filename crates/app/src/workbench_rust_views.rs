@@ -81,7 +81,7 @@ impl Workbench {
     /// The active Rust file with its server, or a notice that says why not.
     fn rust_asked(&mut self, cx: &mut Context<Self>) -> Option<Asked> {
         let Some(editor) = self.active_editor().cloned().filter(|ed| ed.read(cx).language() == "Rust") else {
-            self.notice = Some(Notice::Info(t("Open a Rust file first").into()));
+            self.notify(NoticeSource::Language, Notice::Info(t("Open a Rust file first").into()));
             cx.notify();
             return None;
         };
@@ -91,7 +91,7 @@ impl Workbench {
             Some((client, position, path, text)) => Some(Asked { client, position, path, text }),
             None => {
                 let path = editor.read(cx).path.clone();
-                self.notice = Some(Notice::Info(self.rust_unavailable_message(&path, cx).into()));
+                self.notify(NoticeSource::Language, Notice::Info(self.rust_unavailable_message(&path, cx).into()));
                 cx.notify();
                 None
             }
@@ -123,7 +123,7 @@ impl Workbench {
                     Err(e) => {
                         let message =
                             if e.code == Some(METHOD_NOT_FOUND) { t("The Rust language server does not support this command").into() } else { e.message };
-                        this.notice = Some(Notice::Info(message.into()));
+                        this.notify(NoticeSource::Language, Notice::Info(message.into()));
                         cx.notify();
                     }
                 }
@@ -139,7 +139,7 @@ impl Workbench {
             return self.open_rust_docs(lsp::parse_external_docs(answer), local, cx);
         }
         let Some(shown) = answer.as_str().filter(|s| !s.trim().is_empty()) else {
-            self.notice = Some(Notice::Info(t("Nothing to show for the item at the cursor").into()));
+            self.notify(NoticeSource::Language, Notice::Info(t("Nothing to show for the item at the cursor").into()));
             return cx.notify();
         };
         let file = ui::file_name(path);
@@ -157,13 +157,14 @@ impl Workbench {
         match local_copy.or(links.web.as_deref()) {
             Some(url) => cx.open_url(url),
             None if links.rejected => {
-                self.notice = Some(Notice::Error(
-                    t("The language server sent a documentation link that is not a web page or a local HTML file, so it was not opened").into(),
-                ));
+                self.notify(
+                    NoticeSource::Language,
+                    Notice::Error(t("The language server sent a documentation link that is not a web page or a local HTML file, so it was not opened").into()),
+                );
                 cx.notify();
             }
             None => {
-                self.notice = Some(Notice::Info(t("No documentation found for the item at the cursor").into()));
+                self.notify(NoticeSource::Language, Notice::Info(t("No documentation found for the item at the cursor").into()));
                 cx.notify();
             }
         }

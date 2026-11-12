@@ -44,7 +44,7 @@ pub(in super::super) async fn use_nextest(this: &gpui::WeakEntity<Workbench>, cx
         } else if let Some(found) = this.lsp.rust.nextest.known(&asked, std::time::Instant::now()) {
             Plan::Known(found)
         } else {
-            this.notice = Some(Notice::Info(t("Looking for cargo-nextest…").into()));
+            this.notify(NoticeSource::Language, Notice::Info(t("Looking for cargo-nextest…").into()));
             cx.notify();
             let host = this.remote.host.clone();
             Plan::Ask(cx.background_executor().spawn(async move { probe(host, &asked) }))
@@ -62,11 +62,13 @@ pub(in super::super) async fn use_nextest(this: &gpui::WeakEntity<Workbench>, cx
     this.update(cx, |this, cx| {
         if probed {
             this.lsp.rust.nextest.remember(&remembered, found, std::time::Instant::now());
-            this.notice = None;
+            this.dismiss_notice();
         }
         if !found && runner.insists() {
-            this.notice =
-                Some(Notice::Info(t("cargo-nextest was not found, so the tests run with cargo test. Install it with `cargo install cargo-nextest`.").into()));
+            this.notify(
+                NoticeSource::Language,
+                Notice::Info(t("cargo-nextest was not found, so the tests run with cargo test. Install it with `cargo install cargo-nextest`.").into()),
+            );
         }
         cx.notify();
     })

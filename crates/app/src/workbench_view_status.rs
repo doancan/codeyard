@@ -6,6 +6,10 @@ use super::*;
 const SB_ICON: f32 = 16.;
 const SB_GAP: f32 = 5.;
 const SB_PAD: f32 = 8.;
+/// Room the notification bell takes: its icon, padding and a count of up to "99+".
+const BELL_RESERVE: f32 = 64.;
+/// The notice never gets less than this, so a short word still shows; the ellipsis does the rest.
+const NOTICE_MIN: f32 = 48.;
 
 impl Workbench {
     pub(super) fn status_bar(&self, p: &Palette, width: f32, cx: &mut Context<Self>) -> impl IntoElement {
@@ -56,12 +60,14 @@ impl Workbench {
         let labels = width >= 1100.;
         // What the notice can have: the bar without the items beside it (left ones, the resources button, and the editor's details
         // that show from these widths on).
-        let notice_max = (width - 400. - if detail_width >= 720. { 120. } else { 0. } - if detail_width >= 1100. { 200. } else { 0. }).max(140.);
+        let notice_max =
+            (width - 400. - BELL_RESERVE - if detail_width >= 720. { 120. } else { 0. } - if detail_width >= 1100. { 200. } else { 0. }).max(NOTICE_MIN);
         let branch = self.vcs.branch.clone();
         let restricted = self.restricted_root(cx).is_some();
         // Errors go in the card at bottom right (error_toast); only info here.
-        let notice = match &self.notice {
+        let notice = match &self.notice() {
             Some(Notice::Info(m)) => Some((m.clone(), p.text_muted)),
+            Some(Notice::Warning(m)) => Some((m.clone(), p.warning)),
             _ => None,
         };
 
@@ -293,16 +299,18 @@ impl Workbench {
             .children(self.rust_status_item(p, width, cx))
             .child(
                 div()
+                    .debug_selector(|| "status-notice-area".into())
                     .flex_1()
                     .min_w_0()
                     .overflow_hidden()
                     .whitespace_nowrap()
                     // `w`, not `max_w`: the text is cut with an ellipsis only when its width is known as it is measured; a maximum is applied
                     // after the text was measured as wide as it is, and the box would just cut it off at its edge.
-                    .when_some(notice, |d, (m, color)| d.child(div().w(px(notice_max)).px(px(SB_PAD)).text_color(c(color)).truncate().child(m))),
+                    .when_some(notice, |d, (m, color)| d.child(div().debug_selector(|| "status-notice".into()).w(px(notice_max)).px(px(SB_PAD)).text_color(c(color)).truncate().child(m))),
             )
             .children(self.web_preview_status(p, cx))
             .children(self.extension_status_items(p, cx))
+            .child(self.notifications_bell(p, cx))
             .child(self.chrome.resources.clone())
             // macOS has the switches in its title bar; Windows and Linux have none there, so the panel's own button stays here.
             .when(!cfg!(target_os = "macos"), |d| {

@@ -17,6 +17,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures::StreamExt as _;
 
+use super::notifications_glue::model::{Action, Notification, Severity};
 use super::*;
 use crate::i18n::{t, tf};
 use crate::markdown;
@@ -932,7 +933,7 @@ impl Workbench {
         self.update.state = UpdateState::Available(release);
         if !manual && self.stored(NOTIFIED).as_deref() != Some(version.as_str()) {
             self.remember(NOTIFIED, &version);
-            self.notice = Some(Notice::Info(tf("Codeyard {} is available.", &[&version]).into()));
+            self.notify(NoticeSource::Update, Notice::Info(tf("Codeyard {} is available.", &[&version]).into()));
         }
         cx.notify();
     }
@@ -1025,7 +1026,7 @@ impl Workbench {
                     // The setup program is running and closes this app itself; leave through the normal quit path first.
                     self.restart_now(window, cx);
                 } else if self.update.dialog != Dialog::Update {
-                    self.notice = Some(Notice::Info(t("Update installed. Restart Codeyard to finish.").into()));
+                    self.notify(NoticeSource::Update, Notice::Info(t("Update installed. Restart Codeyard to finish.").into()));
                 }
             }
             (Err(e), Some(release)) if e.kind() == ErrorKind::Cancelled => self.update.state = UpdateState::Available(release),
@@ -1051,7 +1052,12 @@ impl Workbench {
         } else if phase == Phase::Check {
             self.update.state = UpdateState::Idle;
         } else {
-            self.notice = Some(Notice::Error(failure.title().into()));
+            self.notify_with(
+                Notification::new(Severity::Error, NoticeSource::Update, failure.title())
+                    .id("update-failure")
+                    .detail(failure.detail.clone())
+                    .action(Action { label: crate::i18n::tr("Check for Updates…"), command: "Help: Check for Updates…" }),
+            );
             self.update.state = UpdateState::Error(failure);
         }
         self.focus_update_primary(window, cx);
@@ -1148,8 +1154,10 @@ impl Workbench {
             if handed_over && let Some(dir) = &self.persist.data_dir {
                 update_restart::discard(dir);
             }
-            self.notice =
-                Some(Notice::Error(tf("Codeyard could not start the new version: {}. The update is installed; open Codeyard again to use it.", &[&e]).into()));
+            self.notify(
+                NoticeSource::Update,
+                Notice::Error(tf("Codeyard could not start the new version: {}. The update is installed; open Codeyard again to use it.", &[&e]).into()),
+            );
             cx.notify();
             return;
         }
@@ -1230,7 +1238,7 @@ impl Workbench {
         if !matches!(self.update.state, UpdateState::Installing { .. }) {
             return false;
         }
-        self.notice = Some(Notice::Info(t("This window is installing an update. You can close it in a few seconds.").into()));
+        self.notify(NoticeSource::Update, Notice::Info(t("This window is installing an update. You can close it in a few seconds.").into()));
         cx.notify();
         true
     }

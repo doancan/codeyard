@@ -13,7 +13,7 @@ pub(super) struct State {
 impl Workbench {
     pub(super) fn copy_web_preview_url(&mut self, cx: &mut Context<Self>) {
         let Some(server) = self.chrome.web_preview.server.as_ref() else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Start Web Preview before copying its URL.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Start Web Preview before copying its URL.").into()));
             cx.notify();
             return;
         };
@@ -24,7 +24,7 @@ impl Workbench {
                 .flatten()
         });
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(server.url(relative.as_deref().unwrap_or(""))));
-        self.notice = Some(Notice::Info(crate::i18n::t("Preview URL copied.").into()));
+        self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Preview URL copied.").into()));
         cx.notify();
     }
 
@@ -47,7 +47,7 @@ impl Workbench {
 
     pub(super) fn open_web_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !cx.global::<Settings>().web_preview_enabled {
-            self.notice = Some(Notice::Info(crate::i18n::t("Enable Web Preview in Settings > Modules to preview HTML files.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Enable Web Preview in Settings > Modules to preview HTML files.").into()));
             cx.notify();
             return;
         }
@@ -65,7 +65,7 @@ impl Workbench {
         let info = self.remote.host.info();
         let root = config.resolve_root(base.as_deref(), &info.home, &info.os);
         let Some(root) = root else {
-            self.notice = Some(Notice::Info(crate::i18n::t("Open an HTML file or a project folder to start Web Preview.").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Open an HTML file or a project folder to start Web Preview.").into()));
             cx.notify();
             return;
         };
@@ -148,7 +148,7 @@ impl Workbench {
                         this.chrome.web_preview.config = None;
                         let message = crate::i18n::tf("Could not start Web Preview: {}", &[&error]);
                         this.log_output(message.clone());
-                        this.notice = Some(Notice::Error(message.into()));
+                        this.notify(NoticeSource::App, Notice::Error(message.into()));
                     }
                 }
                 cx.notify();

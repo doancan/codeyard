@@ -86,7 +86,7 @@ impl Workbench {
     /// *Rust: Run Runnable at Cursor*.
     pub(in super::super) fn rust_run_runnable(&mut self, _: &RustRunRunnable, window: &mut Window, cx: &mut Context<Self>) {
         let Some(editor) = self.active_editor().cloned().filter(|ed| ed.read(cx).language() == "Rust") else {
-            self.notice = Some(Notice::Info(t("Open a Rust file first").into()));
+            self.notify(NoticeSource::Language, Notice::Info(t("Open a Rust file first").into()));
             cx.notify();
             return;
         };
@@ -101,7 +101,7 @@ impl Workbench {
     fn offer_runnables(&mut self, editor: Entity<EditorView>, place: Place, window: &mut Window, cx: &mut Context<Self>) {
         let path = editor.read(cx).path.clone();
         let Some(root) = self.root_of(&path, cx) else {
-            self.notice = Some(Notice::Info(t("Open a file inside a folder to run it.").into()));
+            self.notify(NoticeSource::Language, Notice::Info(t("Open a file inside a folder to run it.").into()));
             cx.notify();
             return;
         };
@@ -112,7 +112,7 @@ impl Workbench {
         let nextest_known = self.lsp.rust.nextest.known(&root, std::time::Instant::now());
         let asks = runner != crate::rust_toolchain::nextest::TestRunner::Cargo && trusted && nextest_known.is_none();
         if asks {
-            self.notice = Some(Notice::Info(t("Looking for cargo-nextest…").into()));
+            self.notify(NoticeSource::Language, Notice::Info(t("Looking for cargo-nextest…").into()));
             cx.notify();
         }
         let host = editor.read(cx).host_arc();
@@ -157,7 +157,7 @@ impl Workbench {
                 let options = run::Options { nextest, ..options };
                 if asked {
                     this.lsp.rust.nextest.remember(&root_key, found, std::time::Instant::now());
-                    this.notice = None;
+                    this.dismiss_notice();
                 }
                 let items = match (offer, place) {
                     (Offer::Server(list), Place::Cursor) => run::items_at(&list, cursor, &options),
@@ -178,7 +178,7 @@ impl Workbench {
                 Place::Cursor => t("Nothing to run at the cursor: put it inside a test or main."),
                 Place::Line(_) => t("Nothing to run on this line."),
             };
-            self.notice = Some(Notice::Info(message.into()));
+            self.notify(NoticeSource::Language, Notice::Info(message.into()));
             cx.notify();
             return;
         }
@@ -209,7 +209,7 @@ impl Workbench {
             Action::Run => {
                 // Tests record the command instead of starting Cargo.
                 if entry.item.command.starts_with("cargo nextest ") {
-                    self.notice = Some(Notice::Info(crate::rust_toolchain::nextest::notice().into()));
+                    self.notify(NoticeSource::Language, Notice::Info(crate::rust_toolchain::nextest::notice().into()));
                     cx.notify();
                 }
                 #[cfg(test)]
@@ -240,7 +240,7 @@ impl Workbench {
         }
         self.dbg.prepare_epoch = self.dbg.prepare_epoch.wrapping_add(1);
         let prepare_epoch = self.dbg.prepare_epoch;
-        self.notice = Some(Notice::Info(if plan.test { t("Building the tests…") } else { t("Building…") }.into()));
+        self.notify(NoticeSource::Language, Notice::Info(if plan.test { t("Building the tests…") } else { t("Building…") }.into()));
         cx.notify();
         let host = self.remote.host.clone();
         let (build_root, args) = (root.clone(), plan.build_args.clone());
@@ -266,7 +266,7 @@ impl Workbench {
                 let executables = match built {
                     Ok(list) if !list.is_empty() => list,
                     Ok(_) => {
-                        this.notice = Some(Notice::Error(t("Cargo did not report an executable to debug").into()));
+                        this.notify(NoticeSource::Language, Notice::Error(t("Cargo did not report an executable to debug").into()));
                         return cx.notify();
                     }
                     Err(output) => {
@@ -277,11 +277,11 @@ impl Workbench {
                             this.lsp.output.pop_front();
                         }
                         this.set_task_problems(crate::problems::parse_output(&output, &root), cx);
-                        this.notice = Some(Notice::Error(t("The build failed. See Output and Problems for the compiler errors.").into()));
+                        this.notify(NoticeSource::Language, Notice::Error(t("The build failed. See Output and Problems for the compiler errors.").into()));
                         return cx.notify();
                     }
                 };
-                this.notice = None;
+                this.dismiss_notice();
                 let title = tf("Debug {}", &[&entry.item.label]);
                 let plan = entry.item.debug.as_ref().expect("checked above");
                 let configs = run::launch_configs(&title, plan, &root, &executables);

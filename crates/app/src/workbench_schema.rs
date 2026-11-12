@@ -153,7 +153,7 @@ impl Workbench {
         for ed in self.all_editors() {
             self.schedule_schema(&ed, Duration::ZERO, cx);
         }
-        self.notice = Some(Notice::Info(crate::i18n::t("Schema cache cleared. Schemas are downloaded again when needed.").into()));
+        self.notify(NoticeSource::Language, Notice::Info(crate::i18n::t("Schema cache cleared. Schemas are downloaded again when needed.").into()));
         cx.notify();
     }
 }

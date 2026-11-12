@@ -3968,3 +3968,22 @@ Zoom level	Yakınlaştırma düzeyi
 {0} × {1} pixels, {2}, {3}	{0} × {1} piksel, {2}, {3}
 animated, {} frame|animated, {} frames	animasyonlu, {} kare
 animated PNG, first frame shown	animasyonlu PNG, ilk kare gösteriliyor
+Clear all notifications	Tüm bildirimleri temizle
+Copied the notification	Bildirim kopyalandı
+Copy notification	Bildirimi kopyala
+Dismiss notification	Bildirimi kapat
+Do Not Disturb is on: information and warning toasts are hidden. Click to turn it off	Rahatsız Etme açık: bilgi ve uyarı bildirimleri gizlenir. Kapatmak için tıklayın
+No notifications	Bildirim yok
+Notifications	Bildirimler
+Notifications, Do Not Disturb is on	Bildirimler, Rahatsız Etme açık
+Remote	Uzak
+Tasks	Görevler
+Turn on Do Not Disturb	Rahatsız Etme'yi aç
+Workspace Trust	Çalışma Alanı Güveni
+repeated {} times	{} kez tekrarlandı
+{} unread notification|{} unread notifications	{} okunmamış bildirim
+Notifications: Show	Bildirimler: Göster
+Notifications: Clear	Bildirimler: Temizle
+Notifications: Toggle Do Not Disturb	Bildirimler: Rahatsız Etme'yi Aç/Kapat
+The problem matcher of “{}” skipped a line it could not read (too long, or the pattern took too long). Problems from that task may be missing.	“{}” görevinin sorun eşleştiricisi okuyamadığı bir satırı atladı (çok uzun ya da desen çok uzun sürdü). Bu görevin bazı sorunları eksik olabilir.
+“{0}” found more than {1} problems: only the first {1} are shown.	“{0}” {1} sorundan fazlasını buldu: yalnızca ilk {1} gösteriliyor.

@@ -559,7 +559,7 @@ impl Workbench {
             None => self.outline.parents().iter().enumerate().filter(|(_, parent)| parent.is_none()).map(|(i, _)| i).collect(),
         };
         if ixs.is_empty() {
-            self.notice = Some(Notice::Info(crate::i18n::t("No symbols in this file").into()));
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("No symbols in this file").into()));
             cx.notify();
             return;
         }
