@@ -98,9 +98,12 @@ fn settings_rows_show_their_values_and_change_like_the_pointer_does(cx: &mut gpu
 }
 
 #[gpui::test]
-fn the_shortcuts_page_lists_commands_and_runs_only_a_listed_one(cx: &mut gpui::TestAppContext) {
+fn the_shortcuts_page_lists_commands_and_acts_only_on_a_listed_one(cx: &mut gpui::TestAppContext) {
     let dir = project("a11y-shortcuts");
-    let (wb, cx) = setup(cx);
+    let cfg = std::env::temp_dir().join(format!("codeyard-config-a11y-shortcuts-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&cfg);
+    std::fs::create_dir_all(&cfg).unwrap();
+    let (wb, cx) = setup_with_config(cx, &cfg);
     open(&wb, &dir, cx);
     open(&wb, &dir.join("README.md"), cx);
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Help: Keyboard Shortcuts Reference", window, cx));
@@ -112,19 +115,48 @@ fn the_shortcuts_page_lists_commands_and_runs_only_a_listed_one(cx: &mut gpui::T
     let (snap, tree) = nodes(&wb, cx);
     let (row, node) = find(&tree, Role::ListItem, "View: Toggle Zen Mode");
     assert_eq!(node.position_in_set(), Some(1));
-    assert!(node.description().is_some(), "the key, or that there is none");
+    let description = node.description().expect("the key, where it comes from, and who else uses it");
+    assert!(description.contains("Default"), "{description}");
     assert!(tree.iter().any(|(_, n)| n.role() == Role::List && n.label() == Some("1 command")));
 
-    // The list changed: the row is not listed any more, so its old node runs nothing.
+    // The list changed: the row is not listed any more, so its old node selects nothing.
     act(&wb, &snap, search, Action::SetValue, Some(ActionData::Value("block comment".into())), cx);
     act(&wb, &snap, row, Action::Click, None, cx);
-    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("shortcuts", true)), "an outdated row runs nothing");
+    let page = wb.read_with(cx, |wb, _| wb.shortcuts_page_for_test()).unwrap();
+    assert_eq!(page.read_with(cx, |p, _| p.selected_for_test()), None, "an outdated row selects nothing");
 
+    // A listed row is selected by a click, and then offers its buttons, each named for what it does.
     act(&wb, &snap, search, Action::SetValue, Some(ActionData::Value("zen mode".into())), cx);
     let (snap, tree) = nodes(&wb, cx);
     act(&wb, &snap, find(&tree, Role::ListItem, "View: Toggle Zen Mode").0, Action::Click, None, cx);
+    let (snap, tree) = nodes(&wb, cx);
+    assert!(find(&tree, Role::ListItem, "View: Toggle Zen Mode").1.is_selected() == Some(true));
+    for name in ["Change key", "Add another key", "Remove key", "Run command"] {
+        let (_, button) = find(&tree, Role::Button, name);
+        assert!(button.description().is_some_and(|d| d.contains("View: Toggle Zen Mode")), "{name} says which command it is for");
+    }
+
+    // Change key: the prompt is announced, the next keys are recorded (not run), and the file gets the entry.
+    act(&wb, &snap, find(&tree, Role::Button, "Change key").0, Action::Click, None, cx);
+    let (snap, tree) = nodes(&wb, cx);
+    let (_, prompt) = tree
+        .iter()
+        .find(|(_, n)| n.role() == Role::Status && n.label().is_some_and(|l| l.starts_with("Press the keys for")))
+        .cloned()
+        .expect("the prompt is a live region");
+    assert_eq!(prompt.live(), Some(accesskit::Live::Polite));
+    cx.simulate_keystrokes("ctrl-alt-shift-9 enter");
+    let (_, tree) = nodes(&wb, cx);
+    let (_, done) =
+        tree.iter().find(|(_, n)| n.role() == Role::Status && n.label().is_some_and(|l| l.contains("now uses"))).cloned().expect("the result is announced");
+    assert!(done.label().is_some_and(|l| l.contains("View: Toggle Zen Mode")), "{:?}", done.label());
+    assert!(std::fs::read_to_string(cfg.join("keybindings.jsonc")).unwrap().contains("ctrl-alt-shift-9"));
+
+    let (snap2, tree) = nodes(&wb, cx);
+    let _ = snap;
+    act(&wb, &snap2, find(&tree, Role::Button, "Run command").0, Action::Click, None, cx);
     cx.run_until_parked();
-    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), None, "the command runs as a click on the row runs it");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), None, "Run command runs it, as the reference page did");
 }
 
 #[gpui::test]

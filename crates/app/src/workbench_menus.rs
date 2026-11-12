@@ -250,7 +250,7 @@ impl Workbench {
         vec![
             (t("Command Palette…"), Box::new(CommandPalette), false),
             (t("Settings"), Box::new(OpenSettingsPage), true),
-            (t("Keyboard Shortcuts"), Box::new(OpenKeybindings), false),
+            (t("Keyboard Shortcuts"), Box::new(ShowKeyboardShortcuts), false),
             (t("Color Theme…"), Box::new(SelectTheme), false),
             (t("File Icon Theme…"), Box::new(SelectIconTheme), false),
             (t("About Codeyard"), Box::new(ShowAbout), true),

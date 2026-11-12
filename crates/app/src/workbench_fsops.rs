@@ -305,6 +305,7 @@ impl Workbench {
                 );
             }
             InputPurpose::Setting { key } => self.finish_setting_input(key, name, window, cx),
+            InputPurpose::Profile(purpose) => self.finish_profile_input(purpose, name, window, cx),
             InputPurpose::Rename { path } => {
                 let target = ui::join(&parent_of(&path), &name);
                 if target != path {

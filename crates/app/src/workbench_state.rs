@@ -211,7 +211,12 @@ pub(super) struct NavState {
 }
 
 /// Settings files, project settings and workspace trust (see workbench_settings.rs).
+#[derive(Default)]
 pub(super) struct ConfigState {
+    /// The active settings profile (`None`: the default one, the config folder itself); see workbench_profiles.rs.
+    pub(super) profile: Option<String>,
+    /// The profile whose temporary fall back was already reported (once per name, until it can be used again).
+    pub(super) profile_warned: Option<String>,
     /// Settings folder (`None` in tests: the user's files are left alone).
     pub(super) dir: Option<std::path::PathBuf>,
     /// Last modification times of (settings, keybindings, extensions lock) and the fingerprint of an extension in

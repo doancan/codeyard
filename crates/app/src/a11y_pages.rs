@@ -26,8 +26,10 @@ const PORTS_FIELD: NodeId = NodeId(66);
 const PORTS_EMPTY: NodeId = NodeId(67);
 /// A rejected setting value, as an assertive live region (said at once, as the field turns invalid).
 const SETTINGS_ERROR: NodeId = NodeId(118);
+/// The line under the Keyboard Shortcuts header (recording prompt, result of a change), a live region.
+const SHORTCUTS_STATUS: NodeId = NodeId(900);
 /// This module's fixed nodes, for the id layout check.
-pub(in crate::workbench) const FIXED: [NodeId; 16] = [
+pub(in crate::workbench) const FIXED: [NodeId; 17] = [
     SETTINGS,
     SETTINGS_SEARCH,
     SETTINGS_CATEGORIES,
@@ -44,6 +46,7 @@ pub(in crate::workbench) const FIXED: [NodeId; 16] = [
     PORTS_FIELD,
     PORTS_EMPTY,
     SETTINGS_ERROR,
+    SHORTCUTS_STATUS,
 ];
 
 /// The block of this module's rows; inside it: categories, settings (`ROW_IDS` ids each: the control, Reset, then one
@@ -78,11 +81,13 @@ pub(crate) struct SettingsSnap {
 pub(crate) struct ShortcutsSnap {
     entity: gpui::EntityId,
     query: String,
-    rows: Vec<(String, Option<String>)>,
+    rows: Vec<crate::shortcuts_page::AccessRow>,
     /// Each row's painted, visible bounds (none while scrolled out of view).
     bounds: Vec<Option<accesskit::Rect>>,
     total: usize,
     focused: bool,
+    /// What a screen reader is told now: the recording prompt or the result of the last change.
+    status: Option<crate::shortcuts_page::Status>,
 }
 
 /// A row of the Ports panel and the forward it shows (`None`: listening, not forwarded).
@@ -277,11 +282,12 @@ impl ShortcutsSnap {
         list.set_label(tn("{} command", "{} commands", self.total, &[]));
         list.set_size_of_set(self.total);
         let mut ids = Vec::new();
-        for (i, (label, keys)) in self.rows.iter().enumerate() {
+        for (i, row) in self.rows.iter().enumerate() {
             let id = NodeId(SHORTCUT_ROW + i as u64);
             let mut n = Node::new(Role::ListItem);
-            n.set_label(label.clone());
-            n.set_description(keys.clone().unwrap_or_else(|| t("No shortcut").to_string()));
+            n.set_label(row.label.clone());
+            n.set_description(row.description.clone());
+            n.set_selected(row.selected);
             n.set_position_in_set(i + 1);
             n.set_size_of_set(self.total);
             n.add_action(Action::Click);
@@ -293,9 +299,18 @@ impl ShortcutsSnap {
         }
         list.set_children(ids);
         nodes.push((SHORTCUTS_LIST, list));
+        let mut kids = vec![search];
+        if let Some(status) = &self.status {
+            let mut node = Node::new(Role::Status);
+            node.set_label(status.text.clone());
+            node.set_live(if status.problem { Live::Assertive } else { Live::Polite });
+            nodes.push((SHORTCUTS_STATUS, node));
+            kids.push(SHORTCUTS_STATUS);
+        }
+        kids.push(SHORTCUTS_LIST);
         let mut page = Node::new(Role::Group);
         page.set_label(t("Keyboard Shortcuts"));
-        page.set_children(vec![search, SHORTCUTS_LIST]);
+        page.set_children(kids);
         nodes.push((SHORTCUTS, page));
         SHORTCUTS
     }
@@ -428,9 +443,17 @@ impl Workbench {
         };
         let shortcuts = match page {
             Some(Page::Shortcuts(v)) => {
-                let (query, rows, total, focused) = v.read(cx).access_rows(MAX_SHORTCUTS, window, cx);
-                let bounds = v.read(cx).access_row_bounds(rows.len(), window);
-                Some(ShortcutsSnap { entity: v.entity_id(), query, rows, bounds, total, focused })
+                let view = v.read(cx).access_view(MAX_SHORTCUTS, window, cx);
+                let bounds = v.read(cx).access_row_bounds(view.rows.len(), window);
+                Some(ShortcutsSnap {
+                    entity: v.entity_id(),
+                    query: view.query,
+                    rows: view.rows,
+                    bounds,
+                    total: view.total,
+                    focused: view.search_focused,
+                    status: view.status,
+                })
             }
             _ => None,
         };
@@ -541,13 +564,13 @@ impl Workbench {
         match (req.action, req.target_node) {
             (Action::Focus, SHORTCUTS_SEARCH) => page.read(cx).focus_search(window, cx),
             (Action::SetValue, SHORTCUTS_SEARCH) if let Some(text) = text_of(req) => page.update(cx, |p, cx| p.set_query(text, cx)),
-            (Action::Click, id) if id.0 >= SHORTCUT_ROW => {
-                // Run only a command the page still lists (the same one, not whatever moved into its place).
-                let Some((label, _)) = last.rows.get((id.0 - SHORTCUT_ROW) as usize) else { return };
-                let (_, now, _, _) = page.read(cx).access_rows(usize::MAX, window, cx);
-                if now.iter().any(|(l, _)| l == label) {
-                    let label = label.clone();
-                    page.update(cx, |_, cx| cx.emit(crate::shortcuts_page::ShortcutsEvent::Run(label)));
+            (Action::Click, id) if id.0 >= SHORTCUT_ROW && id.0 < SHORTCUT_ROW + MAX_SHORTCUTS as u64 => {
+                // Select only a row the page still lists at that place (the same one, not whatever moved into its place).
+                let index = (id.0 - SHORTCUT_ROW) as usize;
+                let Some(old) = last.rows.get(index) else { return };
+                let now = page.read(cx).access_view(usize::MAX, window, cx);
+                if now.rows.get(index).is_some_and(|r| r.label == old.label && r.description == old.description) {
+                    page.update(cx, |p, cx| p.select_visible(index, window, cx));
                 }
             }
             _ => {}

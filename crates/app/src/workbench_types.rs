@@ -103,6 +103,11 @@ pub(super) enum OverlayKind {
     },
     /// Open editors, most recently used first: row -> index into `editors`.
     Switcher(Vec<usize>),
+    /// Profiles to switch to, rename or delete (`None`: the default profile).
+    Profile {
+        action: super::settings_ui::profiles_glue::ProfileAction,
+        names: Vec<Option<String>>,
+    },
     /// Files of the commit selected in the graph: (status, path, old path).
     CommitFiles {
         root: String,
@@ -126,7 +131,6 @@ pub(super) enum OverlayKind {
         key: &'static str,
         options: &'static [&'static str],
     },
-    Shortcuts,
     /// Active editor's setting from the status bar (line ending, indentation).
     EditorOption(Vec<EditorOpt>),
     /// Git branch picker (repo root, rows).
@@ -248,6 +252,8 @@ impl InputContext {
 }
 
 pub(super) enum InputPurpose {
+    /// A profile name: create, duplicate or rename.
+    Profile(super::settings_ui::profiles_glue::ProfileInput),
     /// `window.input-box` of a code extension: its ticket completes with the text.
     ExtInput {
         extension: String,

@@ -4465,7 +4465,7 @@ fn explorer_copy_cut_paste_and_drag_move(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn settings_and_shortcuts_pickers_write_the_files(cx: &mut TestAppContext) {
+fn settings_picker_writes_the_file_and_the_shortcuts_command_opens_the_page(cx: &mut TestAppContext) {
     let cfg = config_dir("settings-ui");
     std::fs::write(cfg.join("settings.jsonc"), "{\n  // benim yorumum\n  \"editor.fontSize\": 13,\n}\n").unwrap();
     let (wb, cx) = setup_with_config(cx, &cfg);
@@ -4527,15 +4527,10 @@ fn settings_and_shortcuts_pickers_write_the_files(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(settings(cx).auto_save, crate::settings::AutoSave::OnFocusChange);
 
-    // Shortcut: choosing the command adds a line to keybindings.jsonc and opens the file.
+    // Shortcuts: the page opens (recording and writing keybindings.jsonc are tested in shortcuts_page_tests.rs).
     run(cx, "Preferences: Keyboard Shortcuts");
     cx.run_until_parked();
-    cx.simulate_input("git.stashPopLatest");
-    cx.simulate_keystrokes("enter");
-    cx.run_until_parked();
-    let keys = std::fs::read_to_string(cfg.join("keybindings.jsonc")).unwrap();
-    assert!(keys.contains(r#"{ "key": "", "command": "git.stashPopLatest" },"#), "{keys}");
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_path(cx)), Some(crate::ui::local_path(&cfg.join("keybindings.jsonc"))));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("shortcuts", true)));
 }
 
 #[gpui::test]
