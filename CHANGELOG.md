@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Source Control: staging or unstaging lines in a file whose name contains wildcard characters reads only that file's index entry. A matching symlink or conflicted file no longer blocks it, and another file's executable bit is never copied onto it. A failed index lookup is reported instead of silently changing the file mode.
+- Search: cancelling a search in a huge single-line file stops while reading or skipping the line, instead of waiting for its end.
 - Ports: a port forwarded automatically is given back when its server stops listening, and forwarded again quietly when it comes back. Short-lived servers (language servers, test runners) used to leave a listener each in the shared SSH connection until it ran out of file descriptors, after which every new forward failed with "Port forwarding failed".
 - Explorer: a folder with a deleted file in it is no longer drawn struck through as if it were deleted; it shows the mark of what is left in it. A file removed from the index but still on disk (`git rm --cached`) shows as untracked, not deleted.
 

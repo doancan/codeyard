@@ -493,7 +493,7 @@ unchanged, so nothing you typed is lost.
 **Large files:** files over 32 MB open read-only, a few hundred lines at a time (the line
 index lives in the agent), so a 500 MB log opens in about the memory of a small one.
 ⌃G works there too, and ⌘F searches the file on the machine where it is (it is never copied
-over SSH); ↵ / ⇧↵ step through the matches.
+over SSH); ↵ / ⇧↵ step through the matches. Cancelling a search also stops while a very long line is being read or skipped.
 
 **Suggestions without a language server:** after two letters, words from the file are
 suggested (nearby words first); `"editor.wordBasedSuggestions": false` turns this off.
@@ -1178,7 +1178,8 @@ staged as you see it next to its old line: picking only the new line of a change
 line is added, a removed line is removed. Unstaging every line of a new file takes it out of the index; a rename and a
 deleted file are unstaged as a whole file from Source Control. The diff is read again after each step. If the file or
 the index changed after the diff was shown, nothing is written: the diff reloads and says so, and you pick again.
-Line endings and a byte order mark stay as the index has them.
+Line endings, a byte order mark and the file's executable bit stay as the index has them. File names containing
+wildcard characters are taken literally, including when reading the index for a line selection.
 
 In the editor, **Git: Stage Selected Lines** and **Git: Revert Selected Lines** (palette, and the editor's right-click
 menu on a changed line) do the same from the text: with a selection, only the selected lines (a removed line belongs to

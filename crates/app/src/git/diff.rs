@@ -144,10 +144,8 @@ fn join(marks: &mut Vec<Range<usize>>, r: Range<usize>, line: &str) {
 /// Make the file's index content `content` (empty if absent); file mode is preserved. Does not touch
 /// the working tree: only for "stage these blocks".
 pub fn write_index(host: &dyn Host, root: &str, rel: &str, content: &str) -> Result<(), String> {
-    let mode = git_ok(host, root, &["ls-files", "-s", "--", rel])
-        .ok()
-        .and_then(|o| o.split_whitespace().next().map(str::to_string))
-        .unwrap_or_else(|| "100644".into());
+    let entry = git_ok(host, root, &["--literal-pathspecs", "ls-files", "-s", "--", rel])?;
+    let mode = entry.split_whitespace().next().unwrap_or("100644");
     let out = host.exec("git", &["hash-object", "-w", "--stdin"], Some(root), Some(content.as_bytes().to_vec())).map_err(|e| e.to_string())?;
     if !out.ok() {
         return Err(out.stderr_str());
