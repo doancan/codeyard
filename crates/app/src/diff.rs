@@ -106,6 +106,11 @@ pub struct DiffView {
     /// The path was just copied (the button says so for a moment).
     pub(crate) copied: bool,
     pub(crate) scroll: UniformListScrollHandle,
+    /// How far the code of both sides is scrolled to the right (px), and the longest line in characters.
+    pub(crate) h_scroll: f32,
+    longest: usize,
+    /// Width of the list at the last paint: how much of a line fits.
+    view_w: std::rc::Rc<std::cell::Cell<f32>>,
     focus_handle: FocusHandle,
     /// Staging from this diff (Source Control's diffs only).
     pub(crate) stage: Option<crate::diff_stage::Stager>,
@@ -175,6 +180,17 @@ fn code_cell(text: Option<&String>, runs: Option<&Runs>, marks: Option<&Vec<Rang
     Some(StyledText::new(text).with_highlights(styled))
 }
 
+/// The farthest the code can scroll right: the longest line's end, plus a little room, reaches the right edge.
+/// Nothing scrolls before the list's width is known.
+pub(crate) fn h_scroll_max(longest: usize, char_w: f32, visible_w: f32) -> f32 {
+    if visible_w <= 0. { 0. } else { ((longest + 2) as f32 * char_w - visible_w).max(0.) }
+}
+
+/// The code column of a row: clipped, and moved by the shared horizontal scroll.
+fn code_column(text: Option<StyledText>, color: u32, h_scroll: f32) -> gpui::Div {
+    div().flex_1().min_w_0().whitespace_nowrap().overflow_hidden().text_color(c(color)).child(div().relative().left(px(-h_scroll)).children(text))
+}
+
 impl Focusable for DiffView {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
@@ -216,6 +232,9 @@ impl DiffView {
             ruler_drag: false,
             copied: false,
             scroll: UniformListScrollHandle::new(),
+            h_scroll: 0.,
+            longest: 0,
+            view_w: Default::default(),
             focus_handle: cx.focus_handle(),
             stage: None,
             picked: BTreeSet::new(),
@@ -249,6 +268,7 @@ impl DiffView {
         let language_path = self.path.split(" ↔ ").next().unwrap_or(&self.path);
         self.syn_left = if shown { colors::highlight(language_path, old).unwrap_or_default() } else { Vec::new() };
         self.syn_right = if shown { colors::highlight(language_path, new).unwrap_or_default() } else { Vec::new() };
+        self.longest = self.left.iter().chain(&self.right).map(|l| expand_tabs(l).chars().count()).max().unwrap_or(0);
         self.lay_out();
     }
 
@@ -417,6 +437,7 @@ pub(crate) struct RowStyle {
     pub(crate) font_size: f32,
     /// The diff has the keyboard: the change under F7 is marked.
     pub(crate) focused: bool,
+    pub(crate) h_scroll: f32,
 }
 
 impl DiffView {
@@ -568,8 +589,23 @@ impl DiffView {
             .into_any_element()
     }
 
-    fn num_cell(n: Option<usize>, st: RowStyle) -> gpui::Div {
-        div().w(px(st.num_w)).flex_none().flex().justify_end().pr(px(theme::SPACE[4])).text_color(c(st.p.line_number)).children(n.map(|n| (n + 1).to_string()))
+    /// A line number; on a changed line the gutter takes a stronger shade of the change's color.
+    fn num_cell(n: Option<usize>, tint: Option<u32>, st: RowStyle) -> gpui::Div {
+        div()
+            .w(px(st.num_w))
+            .h_full()
+            .flex_none()
+            .flex()
+            .justify_end()
+            .pr(px(theme::SPACE[4]))
+            .text_color(c(st.p.line_number))
+            .when_some(tint.filter(|_| n.is_some()), |d, t| d.bg(ca(t, 0.14)).text_color(c(ui::mix(st.p.line_number, t, 0.55))))
+            .children(n.map(|n| (n + 1).to_string()))
+    }
+
+    /// The `+` / `-` column.
+    fn sign_cell(sign: &'static str, tint: Option<u32>, st: RowStyle) -> gpui::Div {
+        div().w(px(st.font_size)).flex_none().flex().justify_center().text_color(c(tint.unwrap_or(st.p.text_muted))).child(sign)
     }
 
     fn inline_row(&self, ix: usize, st: RowStyle, cx: &mut Context<Self>) -> gpui::AnyElement {
@@ -590,14 +626,18 @@ impl DiffView {
             .relative()
             .child(heard)
             .when_some(tint, |d, t| d.bg(ca(t, if picked { 0.3 } else { 0.16 })))
-            .child(Self::num_cell(old_n, st))
-            .child(Self::num_cell(new_n, st))
-            .child(div().w(px(st.font_size)).flex_none().text_color(c(tint.unwrap_or(p.text_muted))).child(sign))
-            .child(div().flex_1().min_w_0().whitespace_nowrap().overflow_hidden().text_color(c(p.text)).children(match self.inline_rows[ix] {
-                git::InlineRow::Removed(a) => code_cell(text, self.syn_left.get(a), self.left_marks.get(&a), p.danger, &p),
-                git::InlineRow::Added(b) => code_cell(text, self.syn_right.get(b), self.right_marks.get(&b), p.success, &p),
-                git::InlineRow::Same(_, b) => code_cell(text, self.syn_right.get(b), None, p.text, &p),
-            }));
+            .child(Self::num_cell(old_n, tint, st))
+            .child(Self::num_cell(new_n, tint, st))
+            .child(Self::sign_cell(sign, tint, st))
+            .child(code_column(
+                match self.inline_rows[ix] {
+                    git::InlineRow::Removed(a) => code_cell(text, self.syn_left.get(a), self.left_marks.get(&a), p.danger, &p),
+                    git::InlineRow::Added(b) => code_cell(text, self.syn_right.get(b), self.right_marks.get(&b), p.success, &p),
+                    git::InlineRow::Same(_, b) => code_cell(text, self.syn_right.get(b), None, p.text, &p),
+                },
+                p.text,
+                st.h_scroll,
+            ));
         let first = self.block_of(src).filter(|&b| ix == 0 || !self.blocks[b].contains(&self.inline_src[ix - 1]));
         self.stage_row(SharedString::from(format!("diff-irow-{ix}")), src, &format!("i{ix}"), first, inner, st, cx)
     }
@@ -610,17 +650,18 @@ impl DiffView {
         };
         let picked = self.picked.contains(&ix);
         let side = |n: Option<usize>, lines: &Vec<String>, syn: &Vec<Runs>, marks: &HashMap<usize, Vec<Range<usize>>>, tint: u32| {
-            let sign = match (changed, tint == p.danger) {
-                (false, _) => " ",
-                (true, true) => "-",
-                (true, false) => "+",
+            let sign = match (changed, n, tint == p.danger) {
+                (false, ..) | (true, None, _) => " ",
+                (true, Some(_), true) => "-",
+                (true, Some(_), false) => "+",
             };
+            let row_tint = (changed && n.is_some()).then_some(tint);
             let key = format!("{}{ix}", if tint == p.danger { "l" } else { "r" });
             let heard = n.map(|n| crate::a11y_controls::said(self.path.clone(), key, accesskit::Role::ListItem, line_heard(sign, Some(n), lines.get(n))));
-            let bg = match (changed, n) {
-                (true, Some(_)) => Some(ca(tint, if picked { 0.3 } else { 0.16 })),
-                // Line with no counterpart: empty, muted like strikethrough.
-                (true, None) => Some(ca(p.text_muted, if picked { 0.12 } else { 0.06 })),
+            let bg: Option<gpui::Background> = match (changed, n) {
+                (true, Some(_)) => Some(ca(tint, if picked { 0.3 } else { 0.16 }).into()),
+                // No counterpart on this side: hatched, so it reads as "nothing here" and not as an empty line.
+                (true, None) => Some(gpui::pattern_slash(ca(p.text_muted, if picked { 0.22 } else { 0.12 }).into(), 1., 6.)),
                 _ => None,
             };
             div()
@@ -632,14 +673,13 @@ impl DiffView {
                 .relative()
                 .children(heard)
                 .when_some(bg, |d, bg| d.bg(bg))
-                .child(Self::num_cell(n, st))
-                .child(div().flex_1().min_w_0().whitespace_nowrap().overflow_hidden().text_color(c(p.text)).children(code_cell(
-                    n.and_then(|n| lines.get(n)),
-                    n.and_then(|n| syn.get(n)),
-                    n.and_then(|n| marks.get(&n)),
-                    tint,
-                    &p,
-                )))
+                .child(Self::num_cell(n, row_tint, st))
+                .child(Self::sign_cell(sign, row_tint, st))
+                .child(code_column(
+                    code_cell(n.and_then(|n| lines.get(n)), n.and_then(|n| syn.get(n)), n.and_then(|n| marks.get(&n)), tint, &p),
+                    p.text,
+                    st.h_scroll,
+                ))
         };
         let inner = div()
             .w_full()
@@ -740,6 +780,13 @@ impl DiffView {
 }
 
 impl DiffView {
+    /// How wide one side's code column is (the whole column in the inline view), from the list width last painted.
+    fn code_w(&self, num_w: f32, sign_w: f32) -> f32 {
+        let pick = if self.can_stage() { PICK_W } else { 0. };
+        let list = (self.view_w.get() - pick).max(0.);
+        if self.inline { list - 2. * num_w - sign_w } else { (list - 1.) / 2. - num_w - sign_w }
+    }
+
     /// List item `i`: a row of the current view, or a fold.
     fn list_item(&self, i: usize, st: RowStyle, cx: &mut Context<Self>) -> gpui::AnyElement {
         match self.items.get(i) {
@@ -759,7 +806,12 @@ impl Render for DiffView {
         let font: SharedString = settings.editor_font_family.clone().map_or(MONO_FONT.into(), Into::into);
         let digits = self.left.len().max(self.right.len()).to_string().len().max(3) as f32;
         let num_w = digits * font_size * 0.62 + theme::SPACE[5];
-        let st = RowStyle { p, line_h, num_w, font_size, focused: self.focus_handle.is_focused(window) };
+        let font_id = window.text_system().resolve_font(&gpui::font(font.clone()));
+        let char_w = window.text_system().advance(font_id, px(font_size), 'm').map_or(font_size * 0.6, |s| f32::from(s.width));
+        let h_max = h_scroll_max(self.longest, char_w, self.code_w(num_w, font_size));
+        // The window or the texts changed: what was scrolled past may now fit.
+        self.h_scroll = self.h_scroll.clamp(0., h_max);
+        let st = RowStyle { p, line_h, num_w, font_size, focused: self.focus_handle.is_focused(window), h_scroll: self.h_scroll };
         let empty = self.can_stage() && self.blocks.is_empty() && !self.busy;
         let status = self.stage_status(p, cx);
         let root = div()
@@ -806,11 +858,35 @@ impl Render for DiffView {
                             .font_family(font.clone())
                             .text_size(px(font_size))
                             .line_height(px(line_h))
-                            // The list scrolls first; the ruler's thumb follows once it has.
-                            .on_scroll_wheel(cx.listener(|_, _, _, cx| cx.notify()))
+                            // The list scrolls first; the ruler's thumb follows once it has. Sideways, both sides' code moves
+                            // together while the line numbers stay.
+                            .on_scroll_wheel(cx.listener(move |this, ev: &gpui::ScrollWheelEvent, _, cx| {
+                                let d = ev.delta.pixel_delta(px(line_h));
+                                let (dx, dy) = (f32::from(d.x), f32::from(d.y));
+                                // Only a mostly sideways move scrolls sideways: a vertical swipe carries a little x too.
+                                let dx = if ev.modifiers.shift && dx == 0. {
+                                    dy
+                                } else if dx.abs() > dy.abs() {
+                                    dx
+                                } else {
+                                    0.
+                                };
+                                this.h_scroll = (this.h_scroll - dx).clamp(0., h_max);
+                                cx.notify();
+                            }))
+                            .child({
+                                let view_w = self.view_w.clone();
+                                gpui::canvas(move |bounds, _, _| view_w.set(f32::from(bounds.size.width)), |_, _, _, _| {}).absolute().size_full()
+                            })
                             .when(empty, |d| d.child(self.empty_state(p)))
                             .when_some(self.unsupported, |d, why| d.child(self.unsupported_state(why, p)))
-                            .when(shows_list, |d| d.child(list.track_scroll(self.scroll.clone()).size_full())),
+                            .when(shows_list, |d| {
+                                d.child(list.track_scroll(self.scroll.clone()).size_full().map(|mut l| {
+                                    // A sideways swipe scrolls the code, not the list.
+                                    l.style().restrict_scroll_to_axis = Some(true);
+                                    l
+                                }))
+                            }),
                     )
                     .when(shows_list && !self.items.is_empty(), |d| d.child(self.ruler(line_h, p, cx))),
             )
