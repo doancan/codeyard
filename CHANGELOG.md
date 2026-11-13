@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-13
+
 ### Changed
 
 - Diff viewer: changes inside a line are marked by whole words (a renamed identifier is one mark, not the letters the names differ in), and changed words with only punctuation between them read as one change. Long lines scroll sideways, both sides together, while the line numbers stay; a sideways swipe no longer scrolls the list up or down. Changed lines have a tinted line-number gutter and a `+` / `-` column on both sides, the side without a line is hatched, and a fold row names the scope the next change sits in ("12 unchanged lines · fn area(&self) {").
@@ -1937,7 +1939,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/doancan/codeyard/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/doancan/codeyard/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/doancan/codeyard/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/doancan/codeyard/compare/v0.8.0...v0.9.0
