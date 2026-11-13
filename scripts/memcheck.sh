@@ -10,16 +10,13 @@ cargo build --release -q -p app -p agent
 APP=./target/release/codeyard
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-# Leave the user's state database (recent folders) and settings alone; this also keeps the
-# old-folder-name migration from running on first start.
-export CODEYARD_STATE_DIR="$TMP/state"
-export CODEYARD_CONFIG_DIR="$TMP/config"
-# Normal scenes measure the editor after update preferences have been chosen. Otherwise the first-run
-# question opens another native window and silently adds its screen buffers to every scene below.
-mkdir -p "$CODEYARD_CONFIG_DIR"
-printf '{"update.check":"manual"}\n' > "$CODEYARD_CONFIG_DIR/settings.jsonc"
 # The runtime Dock icon costs ~3 MB; the budgets are for the app itself.
 export CODEYARD_NO_DOCK_ICON=1
+# As in the performance gate, keep the measured window visible without taking the keyboard. A covered window can
+# retain an extra compositor surface (~16 MB at 2x), or stop drawing the scene this script means to measure.
+export CODEYARD_PERF_ON_TOP=1
+scene_no=0
+memcheck_first_run=0
 cp crates/app/testdata/big.rs "$TMP/big.txt"
 . scripts/perf/footprint.sh
 
@@ -35,6 +32,15 @@ check() { # name budget measured unit
 
 measure() { # name budget args...
   local name=$1 budget=$2; shift 2
+  scene_no=$((scene_no + 1))
+  # No recent folders, restored tabs, terminals or window geometry from a previous scene (or the user's profile).
+  export CODEYARD_STATE_DIR="$TMP/scene-$scene_no/state"
+  export CODEYARD_CONFIG_DIR="$TMP/scene-$scene_no/config"
+  mkdir -p "$CODEYARD_CONFIG_DIR"
+  # Normal scenes have already chosen update preferences; the undecided first-run profile is measured separately.
+  if [ "$memcheck_first_run" = 0 ]; then
+    printf '{"update.check":"manual"}\n' > "$CODEYARD_CONFIG_DIR/settings.jsonc"
+  fi
   "$APP" "$@" >/dev/null 2>&1 &
   local pid=$!
   check "$name" "$budget" "$(settled_mb $pid)"
@@ -64,7 +70,7 @@ measure "small Rust file (360 KB, in a repo)" 125 crates/app/src/workbench.rs
 measure "10k lines, plain text (507 KB)"      95 "$TMP/big.txt"
 measure "10k lines, syntax highlighting"     130 crates/app/testdata/big.rs
 # Keep the first-run window covered explicitly. A clean, undecided profile must never check the network.
-CODEYARD_CONFIG_DIR="$TMP/first-run-config" measure "first-run update question" 95
+memcheck_first_run=1 measure "first-run update question" 95
 
 # Measure an owned idle daemon. Looking up an arbitrary process can select another
 # test's or the user's persistent daemon, then kill it during cleanup.

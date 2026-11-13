@@ -105,7 +105,10 @@ Secrets. The signed dry run and six mocked notarization/credential-cleanup tests
 
 `scripts/memcheck.sh` starts the release app in a scripted window, lets it settle and measures `footprint`; see
 `architecture.md` for the budgets.
-Normal editor scenes use an isolated profile with `update.check: manual`, so the first-run update question's
+Each scene uses a fresh isolated profile, so recent folders, tabs, terminals and window geometry cannot carry over
+from a previous scene. The measured window stays above normal windows, as in the performance gate, so it keeps drawing
+and a covering window cannot add a retained compositor surface to its footprint.
+Normal editor scenes use `update.check: manual`, so the first-run update question's
 extra native window does not contaminate them. The undecided profile is measured separately as
 `first-run update question` (95 MB); all existing scene budgets are unchanged.
 
