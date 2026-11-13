@@ -127,11 +127,10 @@ impl Workbench {
             cx.set_global(settings::Sources::default());
             return;
         }
-        let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
         if let Some((spath, kpath)) = &paths {
             // Extensions are not part of a profile: their lock file and folder stay in the config folder.
             let root = self.cfg.dir.clone().unwrap_or_else(|| spath.parent().unwrap_or(spath).to_path_buf());
-            self.cfg.stamp = (mtime(spath), mtime(kpath), mtime(&root.join(crate::ext::LOCK_FILE)), crate::ext::watch_stamp(&root));
+            self.cfg.stamp = (file_mark(spath), file_mark(kpath), file_mark(&root.join(crate::ext::LOCK_FILE)), crate::ext::watch_stamp(&root));
         }
         let kpath = paths.as_ref().map(|(_, k)| k.clone());
         let file = paths.as_ref().and_then(|(s, _)| std::fs::read_to_string(s).ok());
@@ -380,10 +379,10 @@ impl Workbench {
                         }
                         let Some((spath, kpath)) = this.config_paths() else { return };
                         let root = this.cfg.dir.clone().unwrap_or_else(|| spath.parent().unwrap_or(&spath).to_path_buf());
-                        let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
                         if this.cfg.dirty
                             || this.profile_pointer_moved()
-                            || (mtime(&spath), mtime(&kpath), mtime(&root.join(crate::ext::LOCK_FILE)), crate::ext::watch_stamp(&root)) != this.cfg.stamp
+                            || (file_mark(&spath), file_mark(&kpath), file_mark(&root.join(crate::ext::LOCK_FILE)), crate::ext::watch_stamp(&root))
+                                != this.cfg.stamp
                         {
                             this.reload_config(window, cx);
                         }
@@ -395,5 +394,34 @@ impl Workbench {
             }
         })
         .detach();
+    }
+}
+
+/// What the config poll compares: modification time and size. The time alone misses a file written twice within one
+/// clock tick (Windows keeps time in steps of about 16 ms), and the second write is the one that counts.
+pub(super) type FileMark = Option<(std::time::SystemTime, u64)>;
+
+pub(super) fn file_mark(path: &std::path::Path) -> FileMark {
+    let meta = std::fs::metadata(path).ok()?;
+    Some((meta.modified().ok()?, meta.len()))
+}
+
+#[cfg(test)]
+mod mark_tests {
+    use super::file_mark;
+
+    #[test]
+    fn a_rewrite_within_the_same_clock_tick_changes_the_mark() {
+        let dir = std::env::temp_dir().join(format!("cy-file-mark-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.jsonc");
+        std::fs::write(&path, "{}").unwrap();
+        let first = file_mark(&path);
+        let stamp = std::fs::metadata(&path).unwrap().modified().unwrap();
+        std::fs::write(&path, "{ \"theme\": \"ember\" }").unwrap();
+        std::fs::OpenOptions::new().write(true).open(&path).unwrap().set_modified(stamp).unwrap();
+        assert_ne!(first, file_mark(&path), "same time, different size");
+        assert_eq!(file_mark(&dir.join("missing")), None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

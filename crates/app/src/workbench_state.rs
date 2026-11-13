@@ -221,9 +221,9 @@ pub(super) struct ConfigState {
     pub(super) profile_warned: Option<String>,
     /// Settings folder (`None` in tests: the user's files are left alone).
     pub(super) dir: Option<std::path::PathBuf>,
-    /// Last modification times of (settings, keybindings, extensions lock) and the fingerprint of an extension in
-    /// development (`cyx dev`): live reload.
-    pub(super) stamp: (Option<std::time::SystemTime>, Option<std::time::SystemTime>, Option<std::time::SystemTime>, u64),
+    /// Change marks of (settings, keybindings, extensions lock) and the fingerprint of an extension in development
+    /// (`cyx dev`): live reload.
+    pub(super) stamp: (super::watch_glue::FileMark, super::watch_glue::FileMark, super::watch_glue::FileMark, u64),
     /// `--theme` was given: the theme in the settings file isn't applied this session.
     pub(super) theme_override: bool,
     /// Project settings: (file name, text, unknown-key warning). Applied on top of the
