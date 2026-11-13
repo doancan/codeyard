@@ -103,21 +103,30 @@ impl Status {
         format!("{}/{rel}", self.root.trim_end_matches('/'))
     }
 
-    /// Absolute path → most important mark; folders take the most important mark among their contents.
+    /// Absolute path → most important mark; folders take the most important mark among their contents. A deletion marks
+    /// only the deleted path: the folders around it are still there and would otherwise be drawn struck through.
     pub fn marks(&self) -> HashMap<String, Mark> {
         let mut out: HashMap<String, Mark> = HashMap::new();
         let root = self.root.trim_end_matches('/');
+        let mut put = |at: &str, mark: Mark| {
+            let e = out.entry(at.to_string()).or_insert(mark);
+            // A path both deleted and present (`git rm --cached`: deleted in the index, untracked on disk) is there.
+            *e = match (*e == Mark::Deleted, mark == Mark::Deleted) {
+                (true, false) => mark,
+                (false, true) => *e,
+                _ => (*e).max(mark),
+            };
+        };
         for c in &self.changes {
             let Some(mark) = c.staged.max(c.unstaged) else { continue };
             let path = self.abs(&c.path);
+            put(&path, mark);
+            let kept = |m: Option<Mark>| m.filter(|m| *m != Mark::Deleted);
+            let Some(folder_mark) = kept(c.staged).max(kept(c.unstaged)) else { continue };
             let mut at = path.as_str();
-            loop {
-                let e = out.entry(at.to_string()).or_insert(mark);
-                *e = (*e).max(mark);
-                match at.rfind('/').filter(|i| *i > root.len()).and_then(|i| at.get(..i)) {
-                    Some(parent) => at = parent,
-                    None => break,
-                }
+            while let Some(parent) = at.rfind('/').filter(|i| *i > root.len()).and_then(|i| at.get(..i)) {
+                put(parent, folder_mark);
+                at = parent;
             }
         }
         out
@@ -516,6 +525,39 @@ mod tests {
             let _ = status(root, &[path]).marks();
         }
         assert!(Status::default().marks().is_empty());
+    }
+
+    #[test]
+    fn a_deleted_file_does_not_mark_its_folders_deleted() {
+        let change = |path: &str, staged, unstaged| Change { path: path.into(), orig: None, staged, unstaged };
+        let st = Status {
+            root: "/r".into(),
+            changes: vec![
+                change("only/gone.rs", None, Some(Mark::Deleted)),
+                change("mixed/gone.rs", Some(Mark::Deleted), None),
+                change("mixed/sub/kept.rs", None, Some(Mark::Modified)),
+                change("added/then-removed.rs", Some(Mark::Added), Some(Mark::Deleted)),
+                change("clash/both.rs", None, Some(Mark::Conflict)),
+            ],
+            ..Default::default()
+        };
+        let marks = st.marks();
+        assert_eq!(marks["/r/only/gone.rs"], Mark::Deleted, "the file itself is still marked");
+        assert!(!marks.contains_key("/r/only"), "a folder that still exists is not deleted: {marks:?}");
+        assert_eq!(marks["/r/mixed"], Mark::Modified, "the folder shows what is left in it");
+        assert_eq!(marks["/r/mixed/sub"], Mark::Modified);
+        assert_eq!(marks["/r/added/then-removed.rs"], Mark::Deleted);
+        assert_eq!(marks["/r/added"], Mark::Added, "the staged half still reaches the folder");
+        assert_eq!(marks["/r/clash"], Mark::Conflict);
+    }
+
+    #[test]
+    fn a_file_untracked_after_its_removal_from_the_index_is_not_struck_through() {
+        // `git rm --cached kept.rs`: deleted in the index, still on disk as an untracked file.
+        let st = parse_status("/r", b"## main\0D  src/kept.rs\0?? src/kept.rs\0");
+        let marks = st.marks();
+        assert_eq!(marks["/r/src/kept.rs"], Mark::Untracked, "the file is still there: {marks:?}");
+        assert_eq!(marks["/r/src"], Mark::Untracked);
     }
 
     #[test]
