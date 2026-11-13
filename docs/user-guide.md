@@ -1378,14 +1378,17 @@ Java, C#, Ruby, PHP, Swift, Kotlin, SQL, Lua, Shell, Dockerfile, Makefile, CSS, 
 Markdown; "Editor: Change Language Mode" sets it by hand for one file.
 
 **The diff view.** A changed file opens with the old text on the left and the new text on the right, line by line;
-the characters that changed inside a changed line are marked, and both sides have syntax colors (not for an unknown
-language, nor for a side over 512 KB). The header shows the file, what is compared ("HEAD ↔ Working Tree"), a counter
+the words that changed inside a changed line are marked (changed words with only punctuation between them as one mark),
+and both sides have syntax colors (not for an unknown language, nor for a side over 512 KB). A changed line has a tinted
+line number and a `+` or `-` sign; where one side has no line, that side is hatched. Long lines scroll sideways with a
+sideways swipe or Shift and the wheel: both sides move together and the line numbers stay. The header shows the file, what is compared ("HEAD ↔ Working Tree"), a counter
 ("3 of 12") with buttons for the previous and next change (⇧F7 / F7), the number of added and removed lines, and these
 options:
 
 - **Copy path** puts the file's path on the clipboard.
 - **Collapse unchanged lines** (⌘K ⌘O) is on by default: three lines of context stay around each change and the rest
-  folds into a row such as "83 unchanged lines". Click the row to open that part; the button shows the whole file.
+  folds into a row such as "83 unchanged lines · fn area(&self) {", which also names the function or block the next
+change sits in. Click the row to open that part; the button shows the whole file.
 - **Whitespace** (⌘K ⌘H) cycles between showing every difference, ignoring whitespace at the end of lines, and ignoring
   all whitespace. The diff is computed again. Staging lines is off while whitespace is ignored, because a staged line has
   to be the exact text you see.
@@ -2209,7 +2212,9 @@ the columns Port, Label, Forwarded Address, Running Process and Origin.
 
 - **Automatic forwards.** Ports that start listening after you connect (a dev server on :5173, say) are forwarded on their
   own and announced in the status bar. Ports that were already open (databases, ssh) are only listed, with a Forward
-  button. `"ports.autoForward": false` turns the automatic part off.
+  button. When the server stops listening, its automatic forward goes too; if it starts again (a dev server restarting),
+  it is forwarded again without another announcement. Forwards you made yourself stay until you stop them.
+  `"ports.autoForward": false` turns the automatic part off.
 - **Your own forwards.** Type a port number to forward it, or `3000:8080` to forward server port 3000 to local port 8080.
   If the port is busy on your computer, a free one is used.
 - **Row actions.** Each row can open the address in the browser, copy it or stop the forward. Its menu sets a label,

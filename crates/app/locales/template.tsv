@@ -2746,6 +2746,7 @@ The JavaScript debugger is already installed.
 The README is shortened here; the full one is in the package.	
 The Rust language server does not support this command	
 The SSH connection is gone: reconnect to forward again	
+The SSH connection refused this forward: reconnecting may help	
 The TLS/SSL handshake with {} failed (certificate or protocol problem): {}	
 The Timeline section of the explorer lists the commits of the open file; click one to see its diff.	
 The active file is not in the repository.	

@@ -2380,6 +2380,43 @@ fn ssh_ports_are_forwarded_automatically(cx: &mut TestAppContext) {
     assert!(!wb.read_with(cx, |wb, _| wb.forwards()).iter().any(|f| f.remote == remote), "a stopped port doesn't come back on its own");
 }
 
+/// Real ssh: a port forwarded automatically is given back when its server stops listening, so short-lived servers do
+/// not pile up listeners in the shared connection; when the server comes back, it is forwarded again.
+#[cfg(unix)]
+#[gpui::test]
+fn an_automatic_forward_goes_when_its_server_port_closes(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("ports-closed") else { return };
+    let (wb, cx) = setup(cx);
+    wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    let tick = |cx: &mut VisualTestContext| cx.executor().advance_clock(std::time::Duration::from_secs(5));
+    wait_for(cx, "connection and first scan", |cx| {
+        tick(cx);
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    let app = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let remote = app.local_addr().unwrap().port();
+    let forwarded = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.forwards().into_iter().find(|f| f.remote == remote));
+    wait_for(cx, "automatic forward", |cx| {
+        tick(cx);
+        forwarded(cx).is_some()
+    });
+    let local = forwarded(cx).unwrap().local;
+    assert_ne!(local, remote, "the server is this machine, so its own port is busy here");
+
+    drop(app);
+    wait_for(cx, "the forward is given back", |cx| {
+        tick(cx);
+        cx.run_until_parked();
+        forwarded(cx).is_none() && std::net::TcpStream::connect(("127.0.0.1", local)).is_err()
+    });
+
+    let _again = std::net::TcpListener::bind(("127.0.0.1", remote)).unwrap();
+    wait_for(cx, "forwarded again", |cx| {
+        tick(cx);
+        forwarded(cx).is_some()
+    });
+}
+
 /// A port the user forwarded in a project, with its label, is forwarded again when the project opens after a restart.
 #[cfg(unix)]
 #[gpui::test]

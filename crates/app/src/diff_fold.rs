@@ -58,6 +58,27 @@ pub fn items(len: usize, src_of: impl Fn(usize) -> usize, folds: &[Range<usize>]
     out
 }
 
+/// How far up a scope is looked for.
+const SCOPE_LOOKBACK: usize = 2000;
+
+/// The line that opens the scope line `at` sits in (`fn area(&self) {`): the nearest line above it that is indented less
+/// and reads like code, not a comment or a closing bracket. Shown on a fold so the change below it has its context.
+pub fn scope_of(lines: &[String], at: usize) -> Option<&str> {
+    let indent = |l: &str| (!l.trim().is_empty()).then(|| l.len() - l.trim_start().len());
+    // A blank line counts as indented like the code after it.
+    let depth = lines.get(at..)?.iter().take(50).find_map(|l| indent(l))?;
+    lines[..at]
+        .iter()
+        .rev()
+        .take(SCOPE_LOOKBACK)
+        .map(String::as_str)
+        .find(|l| {
+            let t = l.trim_start();
+            indent(l).is_some_and(|i| i < depth) && t.starts_with(|c: char| c.is_alphabetic() || c == '_' || c == '$') && !t.starts_with("else")
+        })
+        .map(str::trim)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,6 +123,31 @@ mod tests {
         assert_eq!(open.len(), 20 - 2 + 1);
         assert_eq!(open[0], Item::Row(0));
         assert!(!open.contains(&Item::Fold { start: 0, len: 7 }));
+    }
+
+    #[test]
+    fn a_fold_names_the_scope_the_next_change_sits_in() {
+        let file: Vec<String> = [
+            "use std::fmt;",        // 0
+            "",                     // 1
+            "impl Shape {",         // 2
+            "    // Area in m².",   // 3
+            "    fn area(&self) {", // 4
+            "        let w = 1;",   // 5
+            "",                     // 6
+            "        let h = 2;",   // 7
+            "    }",                // 8
+            "}",                    // 9
+            "fn main() {}",         // 10
+        ]
+        .map(String::from)
+        .to_vec();
+        assert_eq!(scope_of(&file, 7), Some("fn area(&self) {"), "comments and blank lines are not scopes");
+        assert_eq!(scope_of(&file, 6), Some("fn area(&self) {"), "a blank line takes the indent of the code after it");
+        assert_eq!(scope_of(&file, 4), Some("impl Shape {"));
+        assert_eq!(scope_of(&file, 8), Some("impl Shape {"), "a closing brace belongs to the scope it closes");
+        assert_eq!(scope_of(&file, 10), None, "nothing encloses top-level code");
+        assert_eq!(scope_of(&file, 99), None);
     }
 
     #[test]

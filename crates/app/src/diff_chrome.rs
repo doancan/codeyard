@@ -237,7 +237,15 @@ impl DiffView {
             .text_size(px(text::XS.0))
             .text_color(c(p.text_muted));
         let side = |name: SharedString, color: u32| {
-            div().flex_1().min_w_0().flex().items_center().gap(px(theme::SPACE[3])).pl(px(st.num_w)).child(dot(color)).child(div().truncate().child(name))
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .items_center()
+                .gap(px(theme::SPACE[3]))
+                .pl(px(st.num_w + st.font_size))
+                .child(dot(color))
+                .child(div().truncate().child(name))
         };
         Some(if self.inline {
             band.pl(px(theme::SPACE[6]))
@@ -312,8 +320,18 @@ impl DiffView {
     }
 
     /// "N unchanged lines": one list row that opens the fold it stands for.
+    /// The scope the change below fold `start..start + len` sits in, read on the side that has its line.
+    fn fold_scope(&self, start: usize, len: usize) -> Option<&str> {
+        match self.rows.get(start + len)? {
+            crate::git::DiffRow::Same(_, b) | crate::git::DiffRow::Changed(_, Some(b)) => crate::diff::fold::scope_of(&self.right, *b),
+            crate::git::DiffRow::Changed(Some(a), None) => crate::diff::fold::scope_of(&self.left, *a),
+            crate::git::DiffRow::Changed(None, None) => None,
+        }
+    }
+
     pub(crate) fn fold_row(&self, start: usize, len: usize, line_h: f32, p: ui::Palette, cx: &mut Context<Self>) -> AnyElement {
         let label = tn("{} unchanged line", "{} unchanged lines", len, &[]);
+        let scope: Option<String> = self.fold_scope(start, len).map(|s| s.chars().take(120).collect());
         let el = div()
             .id(SharedString::from(format!("diff-fold-{start}")))
             .w_full()
@@ -330,8 +348,17 @@ impl DiffView {
             .text_color(c(p.text_muted))
             .cursor_pointer()
             .hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text)))
+            .px(px(theme::SPACE[4]))
             .child(icon("chevrons-up-down", 12., p.text_muted))
-            .child(label.clone())
+            .child(div().flex_none().child(label.clone()))
+            .children(scope.map(|s| {
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .font_family(cx.global::<crate::settings::Settings>().editor_font_family.clone().map_or(ui::MONO_FONT.into(), SharedString::from))
+                    .text_color(ca(p.text_muted, 0.85))
+                    .child(format!("· {s}"))
+            }))
             .tooltip(tooltip(t("Show these lines").to_string()));
         a11y_controls::press_on(
             el,
