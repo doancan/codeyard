@@ -32,6 +32,9 @@ pub struct PortsState {
     pub ignored: BTreeSet<u16>,
     /// Ports whose rule says to open the browser, waiting for their forward (opened once per connection).
     pub open_when_ready: BTreeSet<u16>,
+    /// Ports forwarded automatically on this connection: one that comes back after its server restarted is forwarded
+    /// again without a notice.
+    pub auto_seen: BTreeSet<u16>,
     /// The project's saved forwards wait for the first scan, which tells where each port listens.
     pub restore_pending: bool,
     pub method: Option<ScanMethod>,
@@ -49,6 +52,7 @@ impl PortsState {
             baseline: None,
             ignored: BTreeSet::new(),
             open_when_ready: BTreeSet::new(),
+            auto_seen: BTreeSet::new(),
             restore_pending: false,
             method: None,
             scan_error: None,
@@ -171,6 +175,7 @@ impl Workbench {
         self.stop_ports();
         self.ports.ignored.clear();
         self.ports.open_when_ready.clear();
+        self.ports.auto_seen.clear();
         self.start_ports(cx);
     }
 
@@ -286,6 +291,13 @@ impl Workbench {
             }
         };
         let numbers: BTreeSet<u16> = found.iter().map(|p| p.port).collect();
+        if let Some(alias) = self.ssh_alias() {
+            let closed = self.ports.set.drop_closed(&alias, &numbers);
+            self.run_port_effects(closed, true, cx);
+            // A browser waits only for a forward that still exists.
+            let set = &self.ports.set;
+            self.ports.open_when_ready.retain(|p| set.by_remote(&alias, *p).is_some());
+        }
         let auto = cx.global::<crate::settings::Settings>().ports_auto_forward;
         match &self.ports.baseline {
             // First scan: ports already open (database, ssh) are the baseline and never auto-forwarded.
@@ -311,8 +323,10 @@ impl Workbench {
                     let mut r = ForwardRequest::user(&alias, p.port, ports::forward_target(&p.binds), self.port_bind(cx));
                     (r.origin, r.label, r.protocol) = (Origin::Auto, attrs.label, attrs.protocol);
                     let effects = self.ports.set.request(r).1;
+                    let again = !self.ports.auto_seen.insert(p.port);
                     match attrs.on_forward {
                         OnForward::Silent => quiet.extend(effects),
+                        _ if again => quiet.extend(effects),
                         OnForward::OpenBrowser => {
                             self.ports.open_when_ready.insert(p.port);
                             quiet.extend(effects);

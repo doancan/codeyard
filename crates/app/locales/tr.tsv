@@ -4205,3 +4205,4 @@ The folder is not empty and the server did not ask to delete what is in it.	Klas
 {0} and {1} more	{0} ve {1} tane daha
 {0} with {1}, {2}: {3}	{0}: {1}, {2}: {3}
 {} has unsaved changes: save or revert it first.	{} içinde kaydedilmemiş değişiklikler var: önce kaydedin ya da geri alın.
+The SSH connection refused this forward: reconnecting may help	SSH bağlantısı bu yönlendirmeyi reddetti: yeniden bağlanmak işe yarayabilir

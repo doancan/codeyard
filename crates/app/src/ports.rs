@@ -79,6 +79,12 @@ impl ScanMethod {
         }
     }
 
+    /// Whether the command listed the ports, even if there were none: `lsof` exits with 1 and prints nothing when nothing
+    /// listens, which is an answer and not a failure (taken for one, the forward of the last server that stopped would stay).
+    fn answered(self, out: &host::ExecOutput) -> bool {
+        out.ok() || (self == ScanMethod::Lsof && out.code == Some(1) && out.stdout.is_empty() && out.stderr.is_empty())
+    }
+
     fn parse(self, text: &str) -> Vec<ListeningPort> {
         match self {
             ScanMethod::Ss => parse_ss(text),
@@ -245,7 +251,7 @@ pub fn detect(host: &dyn Host, method: &mut Option<ScanMethod>) -> Result<Vec<Li
     for m in order {
         let (program, args) = m.command();
         match host.exec(program, args, None, None) {
-            Ok(out) if out.ok() => {
+            Ok(out) if m.answered(&out) => {
                 *method = Some(m);
                 return Ok(m.parse(&out.stdout_str()));
             }
@@ -318,6 +324,16 @@ LISTEN 0      5    *:8000 *:* users:((\"py,(\\\"x\",pid=7,fd=3))\n";
         assert_eq!(ports[0].process, None);
         assert_eq!(ports[1].binds, vec![BindAddr::Specific("127.0.0.53".parse().unwrap())]);
         assert!(ports[3].process.as_ref().is_some_and(|p| p.pid == 7), "odd program names still parse: {:?}", ports[3]);
+    }
+
+    #[test]
+    fn lsof_finding_nothing_is_an_empty_list_not_a_failure() {
+        let out = |code, stderr: &str| host::ExecOutput { code: Some(code), stdout: Vec::new(), stderr: stderr.as_bytes().to_vec() };
+        assert!(ScanMethod::Lsof.answered(&out(1, "")), "nothing listens");
+        assert!(!ScanMethod::Lsof.answered(&out(1, "lsof: WARNING: can't stat()")), "a real error");
+        assert!(!ScanMethod::Lsof.answered(&out(127, "")), "not installed");
+        assert!(!ScanMethod::Ss.answered(&out(1, "")), "only lsof says nothing this way");
+        assert!(ScanMethod::Ss.answered(&out(0, "")));
     }
 
     #[test]
