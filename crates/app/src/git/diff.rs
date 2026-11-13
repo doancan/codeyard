@@ -66,54 +66,86 @@ pub fn split_lines(text: &str) -> Vec<&str> {
     lines
 }
 
-/// Inline (character-level) diffs within a changed line pair: byte ranges in the old and new line.
-/// Returns empty if the two lines are only slightly similar or very long (piecemeal highlighting would be noise; the whole line
-/// is already painted).
+/// Inline diffs within a changed line pair: byte ranges in the old and new line. Words are compared whole (a renamed
+/// identifier is one mark, not the letters the names differ in), and marks with only punctuation or spaces between them
+/// join. Returns empty if the two lines are only slightly similar or very long (piecemeal highlighting would be noise;
+/// the whole line is already painted).
 pub fn intraline(old: &str, new: &str) -> (Vec<Range<usize>>, Vec<Range<usize>>) {
     const MAX_LEN: usize = 2000;
     const MIN_RATIO: f32 = 0.4;
     if old.len() > MAX_LEN || new.len() > MAX_LEN {
         return Default::default();
     }
-    let diff = similar::TextDiff::configure().algorithm(similar::Algorithm::Myers).timeout(std::time::Duration::from_millis(20)).diff_chars(old, new);
-    if diff.ratio() < MIN_RATIO {
-        return Default::default();
-    }
-    fn push(v: &mut Vec<Range<usize>>, r: Range<usize>) {
-        match v.last_mut() {
-            Some(last) if last.end == r.start => last.end = r.end,
-            _ => v.push(r),
-        }
-    }
-    let (mut o, mut n) = (0, 0);
+    let (old_tokens, new_tokens) = (tokens(old), tokens(new));
+    let diff =
+        similar::TextDiff::configure().algorithm(similar::Algorithm::Myers).timeout(std::time::Duration::from_millis(20)).diff_slices(&old_tokens, &new_tokens);
+    let ops = diff.ops();
+    // Offsets of each token, and one past the last: token range → byte range.
+    let starts =
+        |toks: &[&str]| toks.iter().scan(0, |at, t| Some(std::mem::replace(at, *at + t.len()))).chain([toks.iter().map(|t| t.len()).sum()]).collect::<Vec<_>>();
+    let (old_at, new_at) = (starts(&old_tokens), starts(&new_tokens));
+    let mut same = 0;
     let (mut old_marks, mut new_marks) = (Vec::new(), Vec::new());
-    for change in diff.iter_all_changes() {
-        let len = change.value().len();
-        match change.tag() {
-            similar::ChangeTag::Equal => {
-                o += len;
-                n += len;
-            }
-            similar::ChangeTag::Delete => {
-                push(&mut old_marks, o..o + len);
-                o += len;
-            }
-            similar::ChangeTag::Insert => {
-                push(&mut new_marks, n..n + len);
-                n += len;
+    for op in ops {
+        let (tag, o, n) = op.as_tag_tuple();
+        match tag {
+            similar::DiffTag::Equal => same += old_at[o.end] - old_at[o.start],
+            _ => {
+                join(&mut old_marks, old_at[o.start]..old_at[o.end], old);
+                join(&mut new_marks, new_at[n.start]..new_at[n.end], new);
             }
         }
     }
-    (old_marks, new_marks)
+    if (2 * same) as f32 / (old.len() + new.len()).max(1) as f32 > MIN_RATIO { (old_marks, new_marks) } else { Default::default() }
+}
+
+fn is_word(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// Words (letters, digits, `_`), runs of spaces, and every other character alone.
+fn tokens(line: &str) -> Vec<&str> {
+    // 0: a character that stands alone; equal non-zero classes run together.
+    let class = |c: char| {
+        if is_word(c) {
+            1
+        } else if c.is_whitespace() {
+            2
+        } else {
+            0
+        }
+    };
+    let mut out = Vec::new();
+    let mut start = 0;
+    let mut chars = line.char_indices().map(|(i, c)| (i, class(c))).peekable();
+    while let Some((_, k)) = chars.next() {
+        let next = chars.peek().copied();
+        if k == 0 || next.is_none_or(|(_, n)| n != k) {
+            let end = next.map_or(line.len(), |(j, _)| j);
+            out.push(&line[start..end]);
+            start = end;
+        }
+    }
+    out
+}
+
+/// Adds a mark, joined to the previous one when only a little punctuation or space separates them.
+fn join(marks: &mut Vec<Range<usize>>, r: Range<usize>, line: &str) {
+    const GAP: usize = 3;
+    if r.is_empty() {
+        return;
+    }
+    match marks.last_mut() {
+        Some(last) if r.start - last.end <= GAP && !line[last.end..r.start].chars().any(is_word) => last.end = r.end,
+        _ => marks.push(r),
+    }
 }
 
 /// Make the file's index content `content` (empty if absent); file mode is preserved. Does not touch
 /// the working tree: only for "stage these blocks".
 pub fn write_index(host: &dyn Host, root: &str, rel: &str, content: &str) -> Result<(), String> {
-    let mode = git_ok(host, root, &["ls-files", "-s", "--", rel])
-        .ok()
-        .and_then(|o| o.split_whitespace().next().map(str::to_string))
-        .unwrap_or_else(|| "100644".into());
+    let entry = git_ok(host, root, &["--literal-pathspecs", "ls-files", "-s", "--", rel])?;
+    let mode = entry.split_whitespace().next().unwrap_or("100644");
     let out = host.exec("git", &["hash-object", "-w", "--stdin"], Some(root), Some(content.as_bytes().to_vec())).map_err(|e| e.to_string())?;
     if !out.ok() {
         return Err(out.stderr_str());
@@ -311,6 +343,19 @@ mod tests {
         assert_eq!(intraline(&"a".repeat(3000), &"b".repeat(3000)), Default::default());
         let (_, n) = intraline("ğüş x", "ğüş y");
         assert_eq!(n, vec![7..8]);
+    }
+
+    #[test]
+    fn intraline_marks_whole_words_and_joins_close_ones() {
+        // A renamed word is marked whole, not as the scattered letters the two names happen to differ in.
+        assert_eq!(intraline("let count = items.len();", "let amount = items.len();"), (vec![4..9], vec![4..10]));
+        assert_eq!(intraline("const değer = 1;", "const sayı = 1;"), (vec![6..12], vec![6..11]));
+        // Two changed words with only a comma and a space between them read as one change.
+        assert_eq!(intraline("foo(bar, baz)", "foo(qux, quux)"), (vec![4..12], vec![4..13]));
+        // A real word in between keeps them apart.
+        assert_eq!(intraline("a(bar, keep, baz)", "a(qux, keep, quux)"), (vec![2..5, 13..16], vec![2..5, 13..17]));
+        // Lines that share only their spaces are not marked piecemeal.
+        assert_eq!(intraline("alpha beta", "gamma delta"), Default::default());
     }
 
     #[test]

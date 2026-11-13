@@ -427,3 +427,15 @@ fn the_ruler_slider_runs_from_the_top_to_the_end_and_nudges_from_either(cx: &mut
     cx.run_until_parked();
     assert!((progress(&view, cx) - 0.1).abs() < 0.01);
 }
+
+#[test]
+fn the_code_scrolls_sideways_only_as_far_as_the_longest_line_needs() {
+    use crate::diff::h_scroll_max;
+    // 100 characters of 8 px, with two characters of room after the end, in a 400 px column.
+    assert_eq!(h_scroll_max(100, 8., 400.), 102. * 8. - 400.);
+    // Everything fits: no scrolling at all.
+    assert_eq!(h_scroll_max(20, 8., 400.), 0.);
+    // Before the first paint the column has no width yet: nothing scrolls.
+    assert_eq!(h_scroll_max(500, 8., 0.), 0.);
+    assert_eq!(h_scroll_max(500, 8., -50.), 0.);
+}

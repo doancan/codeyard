@@ -203,7 +203,7 @@ impl IndexText {
 
 /// The index entry of `rel`, refused when it is conflicted, a symlink or a submodule, not UTF-8 or uses CR-only lines.
 fn read_index(host: &dyn Host, root: &str, rel: &str) -> Result<Option<IndexText>, String> {
-    let entries = super::git_ok(host, root, &["ls-files", "-s", "--", rel])?;
+    let entries = super::git_ok(host, root, &["--literal-pathspecs", "ls-files", "-s", "--", rel])?;
     let mut exists = false;
     for line in entries.lines() {
         let mut f = line.split_whitespace();

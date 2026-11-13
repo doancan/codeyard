@@ -193,7 +193,11 @@ fn a_forwarded_port_comes_back_on_the_same_local_port_after_a_reconnect(cx: &mut
         local(&wb, cx).is_some()
     });
     assert_eq!(local(&wb, cx), Some(before), "the same local port");
-    assert_eq!(wb.read_with(cx, |w, _| w.forwards().len()), 1, "no second forward");
+    // Other programs and parallel tests open ports on this machine (the server here), and those are rightly forwarded:
+    // only a second copy of this port, or its local end forwarded back, would be wrong.
+    let all = wb.read_with(cx, |w, _| w.forwards());
+    assert_eq!(all.iter().filter(|f| f.remote == remote).count(), 1, "no second forward: {all:?}");
+    assert!(!all.iter().any(|f| f.remote == before), "the local end was forwarded back: {all:?}");
     let mut got = String::new();
     std::net::TcpStream::connect(("127.0.0.1", before)).unwrap().read_to_string(&mut got).unwrap();
     assert_eq!(got, "still-here");

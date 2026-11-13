@@ -5,6 +5,54 @@ fn set(rows: &[usize]) -> Picked {
     rows.iter().copied().collect()
 }
 
+#[test]
+fn staging_lines_in_a_new_file_with_brackets_ignores_matching_tracked_files() {
+    let (dir, run) = repo("stage-new-literal").expect("git fixture");
+    std::fs::write(dir.join("a.txt"), "other\n").unwrap();
+    run(&["add", "a.txt"]).unwrap();
+    let host = host::local();
+    let root = dir.to_str().unwrap();
+    let taken = stage_lines(&host, root, "[ab].txt", "new\n", Some(""), |rows| blocks(rows).into_iter().flatten().collect()).unwrap();
+    assert_eq!(taken.lines, 1);
+    assert_eq!(run(&["show", ":[ab].txt"]).unwrap(), "new\n");
+    assert_eq!(run(&["show", ":a.txt"]).unwrap(), "other\n");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn staging_and_unstaging_literal_file_names_preserve_their_own_executable_mode() {
+    let (dir, run) = repo("stage-literal-mode").expect("git fixture");
+    for name in ["a[0].sh", "a0.sh"] {
+        std::fs::write(dir.join(name), "base\n").unwrap();
+    }
+    run(&["add", "-A"]).unwrap();
+    run(&["update-index", "--chmod=+x", "--", "a[0].sh"]).unwrap();
+    run(&["commit", "-q", "-m", "scripts"]).unwrap();
+    let host = host::local();
+    let root = dir.to_str().unwrap();
+    stage_lines(&host, root, "a[0].sh", "changed\n", Some("base\n"), |rows| blocks(rows).into_iter().flatten().collect()).unwrap();
+    let mode = || run(&["--literal-pathspecs", "ls-files", "-s", "--", "a[0].sh"]).unwrap().split_whitespace().next().unwrap().to_string();
+    assert_eq!(mode(), "100755");
+    unstage_lines(&host, root, "a[0].sh", "base\n", "changed\n", &set(&[0])).unwrap();
+    assert_eq!(mode(), "100755");
+    assert_eq!(run(&["show", ":a[0].sh"]).unwrap(), "base\n");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_matching_symlink_in_the_index_does_not_block_staging_a_regular_file() {
+    let (dir, run) = repo("stage-literal-symlink").expect("git fixture");
+    std::fs::write(dir.join("[ab].txt"), "base\n").unwrap();
+    run(&["add", "-A"]).unwrap();
+    let sha = run(&["rev-parse", ":[ab].txt"]).unwrap();
+    run(&["update-index", "--add", "--cacheinfo", &format!("120000,{},a.txt", sha.trim())]).unwrap();
+    let host = host::local();
+    stage_lines(&host, dir.to_str().unwrap(), "[ab].txt", "changed\n", Some("base\n"), |rows| blocks(rows).into_iter().flatten().collect()).unwrap();
+    assert_eq!(run(&["show", ":[ab].txt"]).unwrap(), "changed\n");
+    assert!(run(&["ls-files", "-s", "--", "a.txt"]).unwrap().starts_with("120000 "));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Rows picked by a selection of new lines, then the staged text.
 fn stage_sel(base: &str, current: &str, lo: usize, hi: usize, whole: bool) -> String {
     let rows = side_by_side(base, current);

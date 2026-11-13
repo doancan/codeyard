@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-13
+
+### Changed
+
+- Diff viewer: changes inside a line are marked by whole words (a renamed identifier is one mark, not the letters the names differ in), and changed words with only punctuation between them read as one change. Long lines scroll sideways, both sides together, while the line numbers stay; a sideways swipe no longer scrolls the list up or down. Changed lines have a tinted line-number gutter and a `+` / `-` column on both sides, the side without a line is hatched, and a fold row names the scope the next change sits in ("12 unchanged lines · fn area(&self) {").
+- Ports: a forward that fails because the SSH connection refuses it says so in plain words instead of ssh's internal message.
+
+### Fixed
+
+- Release memory checks keep the measured window visible and give each scene a fresh profile, so covering windows and state left by an earlier scene cannot contaminate the measurement. All memory budgets are unchanged. The performance comparator can be run directly as documented.
+- Source Control: staging or unstaging lines in a file whose name contains wildcard characters reads only that file's index entry. A matching symlink or conflicted file no longer blocks it, and another file's executable bit is never copied onto it. A failed index lookup is reported instead of silently changing the file mode.
+- Search: cancelling a search in a huge single-line file stops while reading or skipping the line, instead of waiting for its end.
+- Ports: a port forwarded automatically is given back when its server stops listening, and forwarded again quietly when it comes back. Short-lived servers (language servers, test runners) used to leave a listener each in the shared SSH connection until it ran out of file descriptors, after which every new forward failed with "Port forwarding failed".
+- Explorer: a folder with a deleted file in it is no longer drawn struck through as if it were deleted; it shows the mark of what is left in it. A file removed from the index but still on disk (`git rm --cached`) shows as untracked, not deleted.
+
 ## [0.10.0] - 2026-11-12
 
 ### Added
@@ -1925,7 +1940,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/doancan/codeyard/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/doancan/codeyard/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/doancan/codeyard/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/doancan/codeyard/compare/v0.8.0...v0.9.0

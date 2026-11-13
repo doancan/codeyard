@@ -167,7 +167,7 @@ fn search_one_file(re: &Regex, path: &Path, max: u32, cancel: &AtomicBool, mut e
             break;
         }
         line.clear();
-        if read_line_capped(&mut reader, &mut line, MAX_LINE_BYTES).map_err(|e| Error::Other(e.to_string()))? == 0 {
+        if read_line_capped(&mut reader, &mut line, MAX_LINE_BYTES, cancel).map_err(|e| Error::Other(e.to_string()))? == 0 {
             break;
         }
         line_no += 1;
@@ -192,10 +192,13 @@ fn search_one_file(re: &Regex, path: &Path, max: u32, cancel: &AtomicBool, mut e
 }
 
 /// Reads one line (up to and including `\n`) into `line`, keeping at most `cap` bytes of it; the rest of a longer line is
-/// consumed and dropped. Returns the bytes consumed, 0 at the end of the file.
-fn read_line_capped(reader: &mut impl std::io::BufRead, line: &mut Vec<u8>, cap: usize) -> std::io::Result<usize> {
+/// consumed and dropped. Returns the bytes consumed, 0 at EOF or cancellation (a partial line is not searched).
+fn read_line_capped(reader: &mut impl std::io::BufRead, line: &mut Vec<u8>, cap: usize, cancel: &AtomicBool) -> std::io::Result<usize> {
     let mut consumed = 0;
     loop {
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(0);
+        }
         let buf = reader.fill_buf()?;
         if buf.is_empty() {
             return Ok(consumed);
@@ -372,8 +375,37 @@ mod tests {
         assert_eq!(got[0].matches[0].line, 2);
         let mut line = Vec::new();
         let mut reader = std::io::Cursor::new(text.into_bytes());
-        read_line_capped(&mut reader, &mut line, MAX_LINE_BYTES).unwrap();
+        read_line_capped(&mut reader, &mut line, MAX_LINE_BYTES, &AtomicBool::new(false)).unwrap();
         assert_eq!(line.len(), MAX_LINE_BYTES);
+    }
+
+    #[test]
+    fn cancelling_while_skipping_a_huge_line_stops_before_its_end() {
+        struct CancelDuringRead<'a> {
+            cancel: &'a AtomicBool,
+            reads: usize,
+        }
+        impl std::io::Read for CancelDuringRead<'_> {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                self.reads += 1;
+                if self.reads == 64 {
+                    return Ok(0);
+                }
+                buf.fill(b'x');
+                if self.reads == 3 {
+                    self.cancel.store(true, Ordering::Relaxed);
+                }
+                Ok(buf.len())
+            }
+        }
+        for cap in [16, MAX_LINE_BYTES] {
+            let cancel = AtomicBool::new(false);
+            let mut reader = std::io::BufReader::with_capacity(16, CancelDuringRead { cancel: &cancel, reads: 0 });
+            let mut line = Vec::new();
+            let n = read_line_capped(&mut reader, &mut line, cap, &cancel).unwrap();
+            assert_eq!(reader.get_ref().reads, 3, "cancellation stops both buffering and discarding a line");
+            assert_eq!(n, 0, "a partial line must not become a search result");
+        }
     }
 
     #[test]

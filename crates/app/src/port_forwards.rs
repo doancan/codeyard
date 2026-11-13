@@ -92,6 +92,8 @@ pub struct PortForward {
     pub origin: Origin,
     pub state: ForwardState,
     seq: u64,
+    /// Scans in a row that did not find the server port (automatic forwards go after `CLOSED_AFTER`).
+    missed: u8,
     /// While a changed local port opens: how to go back to the working one if the new one cannot be opened.
     revert: Option<Option<u16>>,
     /// Why the last change of the local port failed and the old port was put back (shown once).
@@ -149,6 +151,9 @@ pub struct Forward {
     pub remote: u16,
     pub local: u16,
 }
+
+/// Scans in a row without its server port before an automatic forward goes.
+const CLOSED_AFTER: u8 = 2;
 
 /// Longest label kept.
 pub const MAX_LABEL: usize = 64;
@@ -307,7 +312,11 @@ impl ForwardSet {
 
     /// Adds a forward, or returns the existing one for this port (opened again when it had failed or was waiting).
     pub fn request(&mut self, r: ForwardRequest) -> (ForwardId, Vec<Effect>) {
-        if let Some(f) = self.items.iter().find(|f| f.alias == r.alias && f.remote == r.remote) {
+        if let Some(f) = self.items.iter_mut().find(|f| f.alias == r.alias && f.remote == r.remote) {
+            // Asked for by the user: the forward is theirs now, and stays when its server stops.
+            if r.origin == Origin::User {
+                f.origin = Origin::User;
+            }
             let id = f.id;
             return match f.state {
                 ForwardState::Pending | ForwardState::Active => (id, Vec::new()),
@@ -332,6 +341,7 @@ impl ForwardSet {
             origin: r.origin,
             state: ForwardState::Pending,
             seq: 0,
+            missed: 0,
             revert: None,
             reverted: None,
         });
@@ -371,8 +381,25 @@ impl ForwardSet {
     }
 
     /// Cancel for a successful open whose forward no longer exists (the caller knows the alias it opened on).
+    /// A live forward with the same spec is that listener (ssh opens a spec once): cancelling would close it.
     pub fn orphan_cancel(&self, id: ForwardId, alias: &str, opened: &Opened) -> Option<Effect> {
-        self.get(id).is_none().then(|| Effect::Cancel { alias: alias.into(), spec: opened.spec.clone() })
+        let live = self.items.iter().any(|f| f.alias == alias && f.spec.as_deref() == Some(opened.spec.as_str()));
+        (self.get(id).is_none() && !live).then(|| Effect::Cancel { alias: alias.into(), spec: opened.spec.clone() })
+    }
+
+    /// Automatic forwards whose server port no longer listens: removed, and the open ones cancelled. Short-lived servers
+    /// (language servers, test runners) would otherwise leave a listener each in the shared connection until it runs
+    /// out of file descriptors and refuses every new forward. The user's own forwards stay until the user stops them.
+    /// One scan without the port is not enough: a dev server restarting between two scans keeps its forward.
+    pub fn drop_closed(&mut self, alias: &str, listening: &std::collections::BTreeSet<u16>) -> Vec<Effect> {
+        let mut closed = Vec::new();
+        for f in self.items.iter_mut().filter(|f| f.origin == Origin::Auto && f.alias == alias) {
+            f.missed = if listening.contains(&f.remote) { 0 } else { f.missed.saturating_add(1) };
+            if f.missed >= CLOSED_AFTER {
+                closed.push(f.id);
+            }
+        }
+        closed.into_iter().flat_map(|id| self.stop(id)).collect()
     }
 
     /// Removes a forward; an active one is cancelled, an opening one is cancelled when its result arrives.
@@ -398,15 +425,19 @@ impl ForwardSet {
         }
     }
 
+    /// A label, a protocol or a local port the user set makes an automatic forward theirs: it is saved with the project
+    /// and stays when its server stops.
     pub fn set_label(&mut self, id: ForwardId, label: &str) {
         if let Some(f) = self.get_mut(id) {
             f.label = clean_label(label);
+            f.origin = Origin::User;
         }
     }
 
     pub fn set_protocol(&mut self, id: ForwardId, protocol: Protocol) {
         if let Some(f) = self.get_mut(id) {
             f.protocol = protocol;
+            f.origin = Origin::User;
         }
     }
 
@@ -414,6 +445,7 @@ impl ForwardSet {
     pub fn change_local(&mut self, id: ForwardId, port: u16) -> Vec<Effect> {
         let Some(f) = self.get_mut(id) else { return Vec::new() };
         let mut out = Vec::new();
+        f.origin = Origin::User;
         f.revert = None;
         if let (ForwardState::Active, Some(spec)) = (&f.state, f.spec.take()) {
             out.push(Effect::Cancel { alias: f.alias.clone(), spec });
@@ -500,6 +532,8 @@ pub fn failure_text(e: &ForwardError, local: Option<u16>) -> String {
         },
         FailKind::Privileged => crate::i18n::t("Ports below 1024 need extra privileges on this computer").to_string(),
         FailKind::MasterGone => crate::i18n::t("The SSH connection is gone: reconnect to forward again").to_string(),
+        // ssh's own words here ("mux_client_forward: forwarding request failed") say nothing a user can act on.
+        FailKind::Rejected => crate::i18n::t("The SSH connection refused this forward: reconnecting may help").to_string(),
         _ => e.message.clone(),
     }
 }
@@ -544,6 +578,83 @@ mod tests {
         assert_eq!(set.active(), vec![Forward { remote: 3000, local: 3001 }]);
         assert_eq!(set.stop(id), vec![Effect::Cancel { alias: "box".into(), spec: "localhost:3001:localhost:3001".into() }]);
         assert!(set.is_empty());
+    }
+
+    #[test]
+    fn automatic_forwards_go_when_their_server_port_closes() {
+        let mut set = ForwardSet::default();
+        let auto = |remote| ForwardRequest { origin: Origin::Auto, ..req(remote) };
+        let (active, e) = set.request(auto(46693));
+        let (_, seq) = open_of(&e);
+        set.on_result(active, seq, opened(46693));
+        let (failed, e) = set.request(auto(46694));
+        let (_, seq) = open_of(&e);
+        set.on_result(failed, seq, Err(ForwardError { kind: FailKind::Rejected, message: "no".into() }));
+        let (pending, e) = set.request(auto(46695));
+        let (_, pending_seq) = open_of(&e);
+        let (still, e) = set.request(auto(5173));
+        let (_, seq) = open_of(&e);
+        set.on_result(still, seq, opened(5173));
+        let (user, e) = set.request(req(3000));
+        let (_, seq) = open_of(&e);
+        set.on_result(user, seq, opened(3000));
+
+        let listening = [5173].into_iter().collect();
+        assert!(set.drop_closed("box", &listening).is_empty(), "one scan without the port could be a restart");
+        assert!(set.get(active).is_some() && set.get(pending).is_some());
+        assert_eq!(set.drop_closed("box", &listening), vec![Effect::Cancel { alias: "box".into(), spec: "localhost:46693:localhost:46693".into() }]);
+        assert!(set.get(active).is_none() && set.get(failed).is_none() && set.get(pending).is_none());
+        assert!(set.get(still).is_some_and(PortForward::is_active), "a port still listening keeps its forward");
+        assert!(set.get(user).is_some_and(PortForward::is_active), "the user's own forward stays until the user stops it");
+        // The open that was in flight gives its port back when it lands.
+        let late = opened(46695).unwrap();
+        assert!(set.on_result(pending, pending_seq, Ok(late.clone())).is_empty());
+        assert!(set.orphan_cancel(pending, "box", &late).is_some());
+        assert!(set.drop_closed("box", &listening).is_empty(), "nothing left to drop");
+    }
+
+    #[test]
+    fn a_server_back_within_a_scan_keeps_its_forward() {
+        let mut set = ForwardSet::default();
+        let (id, e) = set.request(ForwardRequest { origin: Origin::Auto, ..req(5173) });
+        let (_, seq) = open_of(&e);
+        set.on_result(id, seq, opened(5173));
+        let (gone, back) = (Default::default(), [5173].into_iter().collect());
+        assert!(set.drop_closed("box", &gone).is_empty());
+        assert!(set.drop_closed("box", &back).is_empty());
+        assert!(set.drop_closed("box", &gone).is_empty(), "the count starts again once the port is back");
+        assert!(set.get(id).is_some_and(PortForward::is_active));
+    }
+
+    #[test]
+    fn an_automatic_forward_the_user_touches_becomes_theirs() {
+        let auto = |remote| ForwardRequest { origin: Origin::Auto, ..req(remote) };
+        let mut set = ForwardSet::default();
+        let ids: Vec<ForwardId> = [3000, 3001, 3002, 3003].map(|p| set.request(auto(p)).0).to_vec();
+        set.set_label(ids[0], "web");
+        set.set_protocol(ids[1], Protocol::Https);
+        set.change_local(ids[2], 9000);
+        set.request(req(3003));
+        assert!(ids.iter().all(|id| set.get(*id).unwrap().origin == Origin::User));
+        let none = Default::default();
+        set.drop_closed("box", &none);
+        set.drop_closed("box", &none);
+        assert!(ids.iter().all(|id| set.get(*id).is_some()), "the user's forwards stay");
+    }
+
+    #[test]
+    fn a_late_open_never_cancels_a_live_forward_with_the_same_spec() {
+        let mut set = ForwardSet::default();
+        let (old, e) = set.request(ForwardRequest { origin: Origin::Auto, ..req(3000) });
+        let (_, old_seq) = open_of(&e);
+        set.stop(old);
+        let (new, e) = set.request(req(3000));
+        let (_, seq) = open_of(&e);
+        set.on_result(new, seq, opened(3000));
+        let late = opened(3000).unwrap();
+        assert!(set.on_result(old, old_seq, Ok(late.clone())).is_empty());
+        assert_eq!(set.orphan_cancel(old, "box", &late), None, "the new forward holds that listener");
+        assert!(set.get(new).is_some_and(PortForward::is_active));
     }
 
     #[test]
