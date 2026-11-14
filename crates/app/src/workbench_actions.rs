@@ -399,6 +399,7 @@ impl Workbench {
             .on_action(cx.listener(Self::add_ssh_host))
             .on_action(cx.listener(Self::remove_ssh_host))
             .on_action(cx.listener(Self::test_ssh_host))
+            .on_action(cx.listener(Self::reconnect_host))
             .on_action(cx.listener(Self::edit_ssh_config))
             .on_action(cx.listener(Self::edit_ssh_host))
             .on_action(cx.listener(|this, _: &ManageSshHosts, window, cx| this.show_host_menu(window, cx)))

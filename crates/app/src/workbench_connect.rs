@@ -74,7 +74,7 @@ impl Workbench {
             self.persist.opening_recent = None;
             return;
         }
-        if matches!(self.remote.conn, Conn::Connecting { .. }) || self.refuse_if_dirty(cx) {
+        if matches!(self.remote.conn, Conn::Connecting { .. }) || self.refuse_switch_if_dirty(cx) {
             return;
         }
         let return_workspace = if crate::docker::is_target(&alias)
@@ -126,7 +126,7 @@ impl Workbench {
                     return;
                 }
                 // Files can become dirty while the network request is in flight.
-                if result.is_ok() && this.refuse_if_dirty(cx) {
+                if result.is_ok() && this.refuse_switch_if_dirty(cx) {
                     this.cancel_pending_connection();
                     cx.notify();
                     return;
@@ -328,6 +328,31 @@ impl Workbench {
         let alias = alias.clone();
         self.remote.pending_path = self.root(cx);
         self.connect(alias, window, cx);
+    }
+
+    /// `Remote: Reconnect` / `Developer: Reload Window`: connect to this window's server again and come back to where the
+    /// window was. The folder and its tabs return (files with unsaved changes through their hot-exit backups), the
+    /// terminals that kept running on the server are taken back from the window's session, and the forwards open again
+    /// on the same local ports. It works while the connection is up (a stuck one), reconnecting, or given up on.
+    pub(super) fn reconnect_host(&mut self, _: &ReconnectHost, window: &mut Window, cx: &mut Context<Self>) {
+        let alias = match &self.remote.conn {
+            Conn::Connected { alias } | Conn::Reconnecting { alias, .. } | Conn::Failed { alias, .. } if alias != LOCAL_AGENT_ALIAS => alias.clone(),
+            Conn::Connecting { .. } => return,
+            _ => {
+                self.notify(NoticeSource::Remote, Notice::Info(crate::i18n::t("This window is not connected to a server, so there is nothing to reload.").into()));
+                cx.notify();
+                return;
+            }
+        };
+        self.remote.pending_path = self.root(cx);
+        self.connect(alias, window, cx);
+    }
+
+    /// A switch of host or a reconnect replaces the editors. Files with unsaved changes are kept in their hot-exit backups
+    /// and come back with the folder; only without hot exit (or with a change not backed up yet) they must be saved first.
+    fn refuse_switch_if_dirty(&mut self, cx: &mut Context<Self>) -> bool {
+        self.flush_backups(cx);
+        (!cx.global::<Settings>().hot_exit || self.has_unbacked_dirty(cx)) && self.refuse_if_dirty(cx)
     }
 
     pub(super) fn disconnect(&mut self, cx: &mut Context<Self>) {

@@ -305,6 +305,8 @@ impl Workbench {
             Command::action("Remote: Add SSH Host…", AddSshHost),
             Command::action("Remote: Remove SSH Host…", RemoveSshHost),
             Command::action("Remote: Test SSH Connection…", TestSshHost),
+            Command::action("Remote: Reconnect", ReconnectHost),
+            Command::action("Developer: Reload Window", ReconnectHost),
             Command::action("Remote: Edit SSH Config", EditSshConfig),
             Command::action("Remote: Manage SSH Hosts…", ManageSshHosts),
             Command::action("Remote: Edit SSH Host…", EditSshHost),

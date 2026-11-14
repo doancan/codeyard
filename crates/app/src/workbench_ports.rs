@@ -6,12 +6,13 @@
 //! thread and feeds the results back.
 
 use std::collections::BTreeSet;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gpui::{App, Context, SharedString, Window};
-use host::forward::{LocalBind, RemoteTarget};
+use host::forward::{FailKind, LocalBind, RemoteTarget};
 
 use super::{Conn, InputPurpose, LOCAL_AGENT_ALIAS, Notice, NoticeSource, Workbench};
+use super::notifications_glue::model::{Action, Notification, Severity};
 use crate::port_forwards::{Effect, ForwardRequest, ForwardSet, ForwardState, OnForward, Origin, Protocol, failure_text, rule_for};
 use crate::ports::{self, ListeningPort, ScanMethod};
 
@@ -37,6 +38,11 @@ pub struct PortsState {
     pub auto_seen: BTreeSet<u16>,
     /// The project's saved forwards wait for the first scan, which tells where each port listens.
     pub restore_pending: bool,
+    /// Automatic forwarding rests until then after one failed for a reason that would fail the next ones too (a
+    /// refusing or dead connection): without it every new port on the server added one more failure.
+    pub auto_paused_until: Option<Instant>,
+    /// Why automatic forwarding is paused, shown above the list.
+    pub auto_note: Option<SharedString>,
     pub method: Option<ScanMethod>,
     /// Why the last scan failed (the list shown is the one before).
     pub scan_error: Option<SharedString>,
@@ -54,6 +60,8 @@ impl PortsState {
             open_when_ready: BTreeSet::new(),
             auto_seen: BTreeSet::new(),
             restore_pending: false,
+            auto_paused_until: None,
+            auto_note: None,
             method: None,
             scan_error: None,
             task: None,
@@ -65,6 +73,60 @@ impl PortsState {
 /// Scan interval while connected; after failed scans it backs off up to `SCAN_MAX`.
 const SCAN_EVERY: Duration = Duration::from_secs(4);
 const SCAN_MAX: Duration = Duration::from_secs(30);
+/// A port that just showed up is looked at again after this, before it is forwarded: servers that live for a moment
+/// (test runners, language servers, build tools) are gone by then and never cost a forward, a notice or a listener.
+const CONFIRM_AFTER: Duration = Duration::from_millis(1200);
+/// Automatic forwards held at once. More than this are listed and forwarded by hand: every forward is two listeners in
+/// the shared ssh connection.
+const MAX_AUTO_FORWARDS: usize = 32;
+/// How long automatic forwarding rests after a failure that is not about one port.
+const AUTO_PAUSE: Duration = Duration::from_secs(60);
+
+/// One forward that failed to open, as the notices need it.
+struct Failure {
+    remote: u16,
+    origin: Origin,
+    kind: FailKind,
+    why: String,
+}
+
+/// The notices for a batch of failed forwards. The user's own forwards each say what failed (a repeat of the same port
+/// collapses into one entry with a counter); the automatic ones of a batch are one entry, named by the first few ports,
+/// and every later batch is the same entry again: a server that opens dozens of ports must not fill the history.
+fn failure_notices(failures: &[Failure]) -> Vec<Notification> {
+    use crate::i18n::tf;
+    let mut out: Vec<Notification> = failures
+        .iter()
+        .filter(|f| f.origin == Origin::User)
+        .map(|f| Notification::new(Severity::Error, NoticeSource::Remote, tf("Could not forward port {}: {}", &[&f.remote, &f.why])).id(format!("ports:forward-failed:{}", f.remote)))
+        .collect();
+    let auto: Vec<&Failure> = failures.iter().filter(|f| f.origin == Origin::Auto).collect();
+    if let Some(first) = auto.first() {
+        let list = |n: usize| auto.iter().take(n).map(|f| f.remote.to_string()).collect::<Vec<_>>().join(", ");
+        let message = match auto.len() {
+            1 => tf("Could not forward port {}: {}", &[&first.remote, &first.why]),
+            n => tf("Could not forward {} ports automatically: {}", &[&n, &first.why]),
+        };
+        let mut note = Notification::new(Severity::Warning, NoticeSource::Remote, message).id("ports:auto-forward-failed");
+        if auto.len() > 1 {
+            note = note.detail(tf("Ports: {}", &[&list(MAX_LISTED)]));
+        }
+        if matches!(first.kind, FailKind::MasterGone | FailKind::Rejected) {
+            note = note.action(Action { label: "Remote: Reconnect", command: "Remote: Reconnect" });
+        }
+        out.push(note);
+    }
+    out
+}
+
+/// Ports named in the detail of a collapsed failure notice.
+const MAX_LISTED: usize = 24;
+
+/// Whether `failures` should pause automatic forwarding: a port that is merely busy here is that port's problem, anything
+/// else (refused, connection gone, ssh error) is the connection's and repeats for the next port.
+fn pauses_auto(failures: &[Failure]) -> bool {
+    failures.iter().any(|f| f.origin == Origin::Auto && f.kind != FailKind::AddrInUse && f.kind != FailKind::Privileged)
+}
 
 impl Workbench {
     /// The connection port forwarding can use (ssh alias).
@@ -100,6 +162,7 @@ impl Workbench {
                 let mut more = Vec::new();
                 let mut opened = Vec::new();
                 let mut saved = Vec::new();
+                let mut failures = Vec::new();
                 for (id, seq, alias, result) in results {
                     if let Ok(o) = &result {
                         more.extend(this.ports.set.orphan_cancel(id, &alias, o));
@@ -134,8 +197,7 @@ impl Workbench {
                             }
                         }
                         (ForwardState::Failed(_), Some(e)) => {
-                            let why = failure_text(&e, f.wanted_local);
-                            this.notify(NoticeSource::Remote, Notice::Error(crate::i18n::tf("Could not forward port {}: {}", &[&f.remote, &why]).into()));
+                            failures.push(Failure { remote: f.remote, origin: f.origin, kind: e.kind, why: failure_text(&e, f.wanted_local) });
                             // No browser tab for a forward that never opened.
                             this.ports.open_when_ready.remove(&remote);
                         }
@@ -144,6 +206,13 @@ impl Workbench {
                 }
                 for remote in saved {
                     this.save_forward(remote);
+                }
+                if pauses_auto(&failures) {
+                    this.ports.auto_paused_until = Some(Instant::now() + AUTO_PAUSE);
+                    this.ports.auto_note = Some(crate::i18n::t("Automatic forwarding is paused after a failure. Forward a port by hand, or reconnect.").into());
+                }
+                for note in failure_notices(&failures) {
+                    this.notify_with(note);
                 }
                 if !quiet {
                     match opened.as_slice() {
@@ -235,7 +304,7 @@ impl Workbench {
                     })
                     .await;
                 wait = if found.is_ok() { SCAN_EVERY } else { (wait * 2).min(SCAN_MAX) };
-                if this
+                let Ok(confirm) = this
                     .update(cx, |this, cx| {
                         #[cfg(windows)]
                         {
@@ -256,11 +325,11 @@ impl Workbench {
                         this.ports.method = method;
                         this.on_ports(found, cx)
                     })
-                    .is_err()
-                {
+                else {
                     return;
-                }
-                cx.background_executor().timer(wait).await;
+                };
+                // A port that just appeared is looked at again soon, not after a whole interval.
+                cx.background_executor().timer(if confirm { CONFIRM_AFTER.min(wait) } else { wait }).await;
             }
         }));
     }
@@ -270,10 +339,18 @@ impl Workbench {
         self.ports.listening.clear();
         self.ports.baseline = None;
         self.ports.scan_error = None;
+        self.ports.auto_paused_until = None;
+        self.ports.auto_note = None;
         self.ports.restore_pending = false;
     }
 
-    fn on_ports(&mut self, found: Result<Vec<ListeningPort>, String>, cx: &mut Context<Self>) {
+    /// The line above the Ports list: a failed scan, or why automatic forwarding is not doing its work.
+    pub(crate) fn ports_note(&self) -> Option<SharedString> {
+        self.ports.scan_error.clone().or_else(|| self.ports.auto_note.clone())
+    }
+
+    /// Takes a scan's result. Returns whether a port is waiting to be confirmed by the next scan.
+    fn on_ports(&mut self, found: Result<Vec<ListeningPort>, String>, cx: &mut Context<Self>) -> bool {
         let found = match found {
             Ok(found) => {
                 self.ports.scan_error = None;
@@ -287,7 +364,7 @@ impl Workbench {
                     self.open_saved_forwards(cx);
                 }
                 cx.notify();
-                return;
+                return false;
             }
         };
         let numbers: BTreeSet<u16> = found.iter().map(|p| p.port).collect();
@@ -299,6 +376,7 @@ impl Workbench {
             self.ports.open_when_ready.retain(|p| set.by_remote(&alias, *p).is_some());
         }
         let auto = cx.global::<crate::settings::Settings>().ports_auto_forward;
+        let mut confirm = false;
         match &self.ports.baseline {
             // First scan: ports already open (database, ssh) are the baseline and never auto-forwarded.
             None => self.ports.baseline = Some(numbers.clone()),
@@ -307,19 +385,29 @@ impl Workbench {
                 // Our own local forward ports: if the server is this machine they'd look like new ports and get
                 // forwarded again in a chain.
                 let ours = self.ports.set.used_locals();
-                let new: Vec<&ListeningPort> = found
+                let rules = cx.global::<crate::settings::Settings>().ports_rules.clone();
+                let wanted: Vec<&ListeningPort> = found
                     .iter()
                     .filter(|p| !base.contains(&p.port) && !self.ports.ignored.contains(&p.port) && ports::worth_forwarding(p.port))
-                    .filter(|p| !self.ports.listening.iter().any(|seen| seen.port == p.port))
                     .filter(|p| self.ports.set.by_remote(&alias, p.port).is_none() && !ours.contains(&p.port))
+                    .filter(|p| rule_for(&rules, p.port).on_forward != OnForward::Ignore)
                     .collect();
-                let rules = cx.global::<crate::settings::Settings>().ports_rules.clone();
+                // Seen by two scans in a row: a server that lives for a moment is never forwarded.
+                let (confirmed, fresh): (Vec<_>, Vec<_>) = wanted.into_iter().partition(|p| self.ports.listening.iter().any(|seen| seen.port == p.port));
+                confirm = !fresh.is_empty();
+                if self.ports.auto_paused_until.is_some_and(|t| Instant::now() >= t) {
+                    self.ports.auto_paused_until = None;
+                    self.ports.auto_note = None;
+                }
+                let paused = self.ports.auto_paused_until.is_some();
+                let held = self.ports.set.iter().filter(|f| f.alias == alias && f.origin == Origin::Auto && matches!(f.state, ForwardState::Pending | ForwardState::Active)).count();
+                let room = MAX_AUTO_FORWARDS.saturating_sub(held);
+                if !paused {
+                    self.ports.auto_note = (confirmed.len() > room).then(|| crate::i18n::tf("Automatic forwarding stops at {} forwards: forward other ports by hand.", &[&MAX_AUTO_FORWARDS]).into());
+                }
                 let (mut loud, mut quiet) = (Vec::new(), Vec::new());
-                for p in new {
+                for p in confirmed.into_iter().take(if paused { 0 } else { room }) {
                     let attrs = rule_for(&rules, p.port);
-                    if attrs.on_forward == OnForward::Ignore {
-                        continue;
-                    }
                     let mut r = ForwardRequest::user(&alias, p.port, ports::forward_target(&p.binds), self.port_bind(cx));
                     (r.origin, r.label, r.protocol) = (Origin::Auto, attrs.label, attrs.protocol);
                     let effects = self.ports.set.request(r).1;
@@ -346,6 +434,7 @@ impl Workbench {
         if self.ports.restore_pending {
             self.open_saved_forwards(cx);
         }
+        confirm
     }
 
     /// Local addresses new forwards listen on (`ports.localBind`).
@@ -576,6 +665,53 @@ pub fn parse_forward_input(text: &str) -> Result<(u16, Option<u16>), ()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn failure(remote: u16, origin: Origin, kind: FailKind) -> Failure {
+        Failure { remote, origin, kind, why: "The SSH connection refused this forward".into() }
+    }
+
+    #[test]
+    fn dozens_of_automatic_failures_are_one_history_entry() {
+        use super::super::notifications_glue::model::Log;
+        let mut log = Log::default();
+        // Four batches of ten ports each: what a server that opens many short-lived ports produced, one entry per port.
+        for batch in 0..4u16 {
+            let failures: Vec<Failure> = (0..10).map(|i| failure(40_000 + batch * 10 + i, Origin::Auto, FailKind::Rejected)).collect();
+            for note in failure_notices(&failures) {
+                log.post(note, 0);
+            }
+        }
+        assert_eq!(log.len(), 1, "the 40 ports share one entry");
+        let entry = log.newest_first().next().unwrap();
+        assert_eq!(entry.count, 4);
+        assert!(entry.message.contains("10 ports"), "{}", entry.message);
+        assert!(entry.action.is_some(), "a refusing connection offers Reconnect");
+    }
+
+    #[test]
+    fn a_users_own_failures_name_their_port_and_collapse_per_port() {
+        use super::super::notifications_glue::model::Log;
+        let mut log = Log::default();
+        for _ in 0..3 {
+            for note in failure_notices(&[failure(3000, Origin::User, FailKind::Rejected), failure(3001, Origin::User, FailKind::Rejected)]) {
+                log.post(note, 0);
+            }
+        }
+        assert_eq!(log.len(), 2);
+        assert!(log.newest_first().all(|e| e.count == 3 && e.severity == Severity::Error));
+        // A busy local port is that port's own problem: no Reconnect on it.
+        let busy = failure_notices(&[failure(3000, Origin::Auto, FailKind::AddrInUse)]);
+        assert!(busy[0].action.is_none());
+    }
+
+    #[test]
+    fn only_failures_of_the_connection_pause_automatic_forwarding() {
+        assert!(pauses_auto(&[failure(1, Origin::Auto, FailKind::Rejected)]));
+        assert!(pauses_auto(&[failure(1, Origin::Auto, FailKind::MasterGone)]));
+        assert!(!pauses_auto(&[failure(1, Origin::Auto, FailKind::AddrInUse)]), "a busy local port says nothing about the connection");
+        assert!(!pauses_auto(&[failure(1, Origin::Auto, FailKind::Privileged)]));
+        assert!(!pauses_auto(&[failure(1, Origin::User, FailKind::Rejected)]), "the user's own forward is not an automatic one");
+    }
 
     #[test]
     fn the_forward_field_reads_a_port_or_a_pair() {

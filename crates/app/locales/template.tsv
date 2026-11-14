@@ -162,6 +162,8 @@ Auto Forwarded
 Auto Save is off.	
 Auto Save is on.	
 Auto-detect project	
+Automatic forwarding is paused after a failure. Forward a port by hand, or reconnect.	
+Automatic forwarding stops at {} forwards: forward other ports by hand.	
 Back	
 Back to SSH workspace and container details	
 Back to the default (removes the value from settings.jsonc)	
@@ -557,6 +559,7 @@ Could not find your home folder
 Could not format: {}	
 Could not forward port {}: {}	
 Could not forward the debug port over SSH: {}	
+Could not forward {} ports automatically: {}	
 Could not inspect Cargo targets: {}	
 Could not install cyx: {}	
 Could not install the {0} dictionary: {1}.	
@@ -758,6 +761,7 @@ Dev Container is ready. The current workspace or unsaved files changed, so it wa
 Dev Container result: {}	
 Dev Container setup failed: {}. Check Output and install the Dev Container CLI if it is missing.	
 Developer: Extension Inspector	
+Developer: Reload Window	
 Developer: Restart Language Servers	
 Diagnostic copied	
 Diagnostics copied. Nothing was sent anywhere: paste them where you want to share them.	
@@ -2168,6 +2172,7 @@ Remote: Download Active File…
 Remote: Edit SSH Config	
 Remote: Edit SSH Host…	
 Remote: Manage SSH Hosts…	
+Remote: Reconnect	
 Remote: Remove SSH Host…	
 Remote: Set Up Key Login…	
 Remote: Test SSH Connection…	
@@ -2993,6 +2998,7 @@ This search belongs to {0} on {1}, which this window does not show. Results cann
 This tab cannot move to that window: its folder is on another machine.	
 This view is not available.	
 This window is installing an update. You can close it in a few seconds.	
+This window is not connected to a server, so there is nothing to reload.	
 This {} file could not be read. It may be damaged or cut short.	
 Thursday	
 Timeline	

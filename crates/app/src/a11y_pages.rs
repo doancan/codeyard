@@ -467,7 +467,8 @@ impl Workbench {
         };
         let field = Some((self.ports.field.read(cx).text().to_string(), self.ports.field.focus_handle(cx).is_focused(window)));
         let all = port_rows(&self.ports.set, &self.ports.listening, &alias);
-        let empty = port_notes(all.len(), self.ports.scan_error.as_ref().map(|e| e.as_ref()));
+        let note = self.ports_note();
+        let empty = port_notes(all.len(), note.as_ref().map(|e| e.as_ref()));
         let rows = all
             .iter()
             .take(MAX_PORTS)

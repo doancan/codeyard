@@ -424,7 +424,7 @@ impl DiffView {
 }
 
 /// Width of the column where changed lines are picked for staging.
-pub(crate) const PICK_W: f32 = 22.;
+pub(crate) const PICK_W: f32 = 14.;
 /// Height of a change's Stage / Unstage button drawn over its first line.
 const BLOCK_BUTTON_H: f32 = 18.;
 
@@ -464,7 +464,7 @@ impl DiffView {
         block.is_some() && (self.hover_row.and_then(|r| self.block_of(r)) == block || (focused && block == Some(self.current)))
     }
 
-    /// The pick column of row `src` (`key`: its list item): a checkbox on a changed row, a mark on the change under F7.
+    /// The pick column of row `src` (`key`: its list item): a click picks the line, a bar marks a picked one and the change under F7.
     fn pick_cell(&self, src: usize, key: &str, st: RowStyle, cx: &mut Context<Self>) -> gpui::AnyElement {
         let p = st.p;
         let block = self.block_of(src);
@@ -482,17 +482,10 @@ impl DiffView {
             return cell.into_any_element();
         }
         let picked = self.picked.contains(&src);
-        let near = self.block_active(block, st.focused) || block.is_some_and(|b| self.picked.range(self.blocks[b].clone()).next().is_some());
         let unstage = self.unstages();
         let label = self.row_heard(src);
-        let tick = div()
-            .size(px(13.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded(px(theme::radius::SM))
-            .when(picked, |d| d.bg(c(p.accent)).child(icon("check", 11., p.on_accent)))
-            .when(!picked, |d| d.border_1().border_color(if near { c(p.text_muted) } else { ca(p.text_muted, 0.3) }));
+        // No box to tick: a picked line is the accent bar in its gutter and the stronger tint of the row.
+        let mark = div().w(px(3.)).h(px((st.line_h - 4.).max(2.))).rounded(px(theme::radius::SM)).when(picked, |d| d.bg(c(p.accent)));
         cell.id(SharedString::from(format!("pick-{key}")))
             .cursor_pointer()
             .hover(|d| d.bg(c(p.surface_hover)))
@@ -502,7 +495,7 @@ impl DiffView {
                     .toggled(picked)
                     .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| this.click_row(src, false, cx)),
             ))
-            .child(tick)
+            .child(mark)
             .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, _, cx| this.click_row(src, ev.modifiers().shift, cx)))
             .into_any_element()
     }

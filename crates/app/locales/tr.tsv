@@ -4206,3 +4206,9 @@ The folder is not empty and the server did not ask to delete what is in it.	Klas
 {0} with {1}, {2}: {3}	{0}: {1}, {2}: {3}
 {} has unsaved changes: save or revert it first.	{} içinde kaydedilmemiş değişiklikler var: önce kaydedin ya da geri alın.
 The SSH connection refused this forward: reconnecting may help	SSH bağlantısı bu yönlendirmeyi reddetti: yeniden bağlanmak işe yarayabilir
+Automatic forwarding is paused after a failure. Forward a port by hand, or reconnect.	Otomatik yönlendirme bir hata nedeniyle duraklatıldı. Bağlantı noktasını elle yönlendirin ya da yeniden bağlanın.
+Automatic forwarding stops at {} forwards: forward other ports by hand.	Otomatik yönlendirme {} yönlendirmede durur: diğer bağlantı noktalarını elle yönlendirin.
+Could not forward {} ports automatically: {}	{0} bağlantı noktası otomatik yönlendirilemedi: {1}
+This window is not connected to a server, so there is nothing to reload.	Bu pencere bir sunucuya bağlı değil, yeniden yüklenecek bir şey yok.
+Remote: Reconnect	Uzak: Yeniden Bağlan
+Developer: Reload Window	Geliştirici: Pencereyi Yeniden Yükle

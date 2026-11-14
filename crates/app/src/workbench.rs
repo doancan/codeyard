@@ -537,6 +537,7 @@ actions!(
         AddSshHost,
         RemoveSshHost,
         TestSshHost,
+        ReconnectHost,
         EditSshConfig,
         EditSshHost,
         ManageSshHosts,
