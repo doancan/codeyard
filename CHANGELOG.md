@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Diff viewer: the view-mode button shows both modes (Side by side | Inline) with the active one marked.
 - Diff viewer: the per-line checkboxes are gone. A line is picked by clicking its gutter (Shift extends, as before) and a picked line shows a slim accent bar and a stronger tint; the gutter is narrower.
 - Ports: a new port is forwarded once a second scan confirms it (a quick second scan follows at once), and at most 32 automatic forwards are held.
 

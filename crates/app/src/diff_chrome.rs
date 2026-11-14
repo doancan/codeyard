@@ -124,10 +124,35 @@ impl DiffView {
             cx,
             |this, w, cx| this.toggle_whitespace(&ToggleIgnoreWhitespace, w, cx),
         );
+        // Both modes are shown and the active one is marked, so the control says what it is and what a click does.
+        let segment = |label: &'static str, active: bool| {
+            div()
+                .h(px(18.))
+                .flex()
+                .items_center()
+                .px(px(theme::SPACE[3]))
+                .rounded(px(theme::radius::SM))
+                .when(active, |d| d.bg(c(p.surface_active)).text_color(c(p.text)))
+                .when(!active, |d| d.text_color(c(p.text_muted)))
+                .child(label)
+        };
         let inline_pill = a11y_controls::press_on(
-            pill("diff-inline-toggle")
-                .text_color(c(p.text))
-                .child(inline_label)
+            div()
+                .id("diff-inline-toggle")
+                .relative()
+                .flex_none()
+                .h(px(22.))
+                .flex()
+                .items_center()
+                .gap(px(1.))
+                .p(px(1.))
+                .rounded(px(theme::radius::MD))
+                .border_1()
+                .border_color(c(p.border))
+                .cursor_pointer()
+                .hover(|s| s.border_color(c(p.text_muted)))
+                .child(segment(t("Side by side"), !self.inline))
+                .child(segment(t("Inline"), self.inline))
                 .tooltip(tooltip(with_keys(t("Toggle inline view"), chord("⌘K ⌘I", "Ctrl+K Ctrl+I")))),
             Control::button(self.path.clone(), "inline", t("Toggle inline view"), |_, _| {}).description(inline_label),
             cx,
