@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Remote: *Remote: Reconnect* (also *Developer: Reload Window*) connects to the window's server again and continues where the window was: folder, tabs, terminals that kept running, and port forwards on the same local ports. After a lost connection, Reconnect no longer refuses while files have unsaved changes when hot exit holds them.
+- Remote: connection errors name what to do about them (changed or unknown host key, refused key, too many keys, key permissions, unknown host, timeout, no route, broken jump host, no common algorithm, bad config), and a stale shared connection is restarted and retried on its own.
+- Ports: *Ports: Forward a Port…*, *Ports: Stop All Forwards*, *Ports: Retry Failed Forwards* and *Ports: Toggle Automatic Forwarding* in the palette.
+
+### Changed
+
+- Diff viewer: the per-line checkboxes are gone. A line is picked by clicking its gutter (Shift extends, as before) and a picked line shows a slim accent bar and a stronger tint; the gutter is narrower.
+- Ports: a new port is forwarded once a second scan confirms it (a quick second scan follows at once), and at most 32 automatic forwards are held.
+
+### Fixed
+
+- Ports: the flood of "Could not forward port N: mux_client_forward…" notifications (99+). The shared ssh connection now starts with a higher open-file limit (macOS apps start at 256, two listeners per forward), failures of automatic forwards are one notification instead of one per port, and a failure of the connection pauses automatic forwarding for a minute instead of failing every new port. A "refused" forward from a dead connection is reported as a lost connection.
+
 ## [0.10.1] - 2026-11-13
 
 ### Changed

@@ -12,6 +12,7 @@ mod outbox;
 pub mod ssh;
 pub mod ssh_config;
 pub mod ssh_hosts;
+pub mod ssh_problem;
 mod terminals;
 pub mod transfer;
 

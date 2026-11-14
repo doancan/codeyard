@@ -687,7 +687,32 @@ fn unmark_output(out: &str) -> &str {
     inner.strip_suffix('\n').unwrap_or(inner)
 }
 
+/// Runs `script` on the target. A failure that is the shared connection's own (a stale socket after a crash, a master that
+/// died between two calls) closes it and tries once more with a fresh one: nothing the user has to do.
 fn run(alias: &str, script: &str, stdin: Option<&[u8]>) -> Result<String> {
+    match run_once(alias, script, stdin) {
+        Err(HostError::Disconnected(why)) if crate::ssh_problem::classify(&why).needs_fresh_master() => {
+            reset_master(alias);
+            run_once(alias, script, stdin)
+        }
+        other => other,
+    }
+}
+
+/// Closes the shared connection and removes its socket, so the next ssh starts a new one.
+pub(crate) fn reset_master(alias: &str) {
+    close_master(alias);
+    #[cfg(unix)]
+    if let Some(path) = control_path(alias) {
+        // Only a socket: never a file that merely has the name.
+        use std::os::unix::fs::FileTypeExt;
+        if std::fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_socket()) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+fn run_once(alias: &str, script: &str, stdin: Option<&[u8]>) -> Result<String> {
     use std::io::{Read, Write};
     check_target(alias)?;
     let mut cmd = script_command(alias, &mark_output(script))?;

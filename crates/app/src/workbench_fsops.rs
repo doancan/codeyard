@@ -225,6 +225,9 @@ impl Workbench {
             InputPurpose::AllowHost { extension } => self.finish_allow_extension_host(extension, name, window, cx),
             InputPurpose::SetVariable { parent, name: var } => self.finish_set_variable(parent, var, name, cx),
             InputPurpose::PortLabel { remote } => self.finish_port_label(remote, name, cx),
+            InputPurpose::PortForward => {
+                self.submit_port_field(&name, cx);
+            }
             InputPurpose::PortLocal { remote } => self.finish_port_local(remote, name, cx),
             InputPurpose::DataBreakpoint => self.finish_data_breakpoint(name, cx),
             InputPurpose::NewFile { base } => {

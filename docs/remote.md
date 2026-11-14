@@ -24,6 +24,10 @@ files, search, terminals, git and language servers goes through that one interfa
   in the path lets agents of different protocol versions coexist; `proto::VERSION` is checked in the `Hello` handshake.
 - Published agents take precedence over old sidecar files; an explicit `CODEYARD_AGENT_DIR` overrides them for
   development. An app update brings new hashes, so the next connect fetches the matching agent.
+- ssh runs with a raised open-file limit (8192, capped by the hard limit) for itself only: a GUI app on macOS starts at 256 and the
+  shared connection holds two listeners per forward. `host::ssh_problem` sorts ssh's error output into kinds; a stale control
+  socket (`Control socket connect`, `mux_client_*`) closes the shared connection, removes the socket and retries once.
+  `Remote: Reconnect` / `Developer: Reload Window` connects again with the window's saved session (terminals, folder, tabs).
 - `Remote: Test SSH Connection…` reports reachability, architecture and whether this app has an agent for it.
 - Workspaces are identified by both host and folder path. Switching servers resets the editor even when their
   absolute folder paths match, and each server keeps its own saved tabs. Disconnect saves that session and clears

@@ -11,8 +11,10 @@ use std::time::{Duration, Instant};
 use gpui::{App, Context, SharedString, Window};
 use host::forward::{FailKind, LocalBind, RemoteTarget};
 
-use super::{Conn, InputPurpose, LOCAL_AGENT_ALIAS, Notice, NoticeSource, Workbench};
 use super::notifications_glue::model::{Action, Notification, Severity};
+use super::{
+    Conn, ForwardPortPrompt, InputPurpose, LOCAL_AGENT_ALIAS, Notice, NoticeSource, RetryFailedForwards, StopAllForwards, ToggleAutoForward, Workbench,
+};
 use crate::port_forwards::{Effect, ForwardRequest, ForwardSet, ForwardState, OnForward, Origin, Protocol, failure_text, rule_for};
 use crate::ports::{self, ListeningPort, ScanMethod};
 
@@ -98,7 +100,10 @@ fn failure_notices(failures: &[Failure]) -> Vec<Notification> {
     let mut out: Vec<Notification> = failures
         .iter()
         .filter(|f| f.origin == Origin::User)
-        .map(|f| Notification::new(Severity::Error, NoticeSource::Remote, tf("Could not forward port {}: {}", &[&f.remote, &f.why])).id(format!("ports:forward-failed:{}", f.remote)))
+        .map(|f| {
+            Notification::new(Severity::Error, NoticeSource::Remote, tf("Could not forward port {}: {}", &[&f.remote, &f.why]))
+                .id(format!("ports:forward-failed:{}", f.remote))
+        })
         .collect();
     let auto: Vec<&Failure> = failures.iter().filter(|f| f.origin == Origin::Auto).collect();
     if let Some(first) = auto.first() {
@@ -304,28 +309,26 @@ impl Workbench {
                     })
                     .await;
                 wait = if found.is_ok() { SCAN_EVERY } else { (wait * 2).min(SCAN_MAX) };
-                let Ok(confirm) = this
-                    .update(cx, |this, cx| {
-                        #[cfg(windows)]
-                        {
-                            let exited: Vec<_> = this
-                                .ports
-                                .set
-                                .iter()
-                                .filter(|f| f.is_active())
-                                .filter_map(|f| {
-                                    let spec = f.spec.as_ref()?;
-                                    (!host::forward::is_alive(&f.alias, spec)).then(|| (f.id, spec.clone()))
-                                })
-                                .collect();
-                            for (id, spec) in exited {
-                                this.ports.set.process_exited(id, &spec);
-                            }
+                let Ok(confirm) = this.update(cx, |this, cx| {
+                    #[cfg(windows)]
+                    {
+                        let exited: Vec<_> = this
+                            .ports
+                            .set
+                            .iter()
+                            .filter(|f| f.is_active())
+                            .filter_map(|f| {
+                                let spec = f.spec.as_ref()?;
+                                (!host::forward::is_alive(&f.alias, spec)).then(|| (f.id, spec.clone()))
+                            })
+                            .collect();
+                        for (id, spec) in exited {
+                            this.ports.set.process_exited(id, &spec);
                         }
-                        this.ports.method = method;
-                        this.on_ports(found, cx)
-                    })
-                else {
+                    }
+                    this.ports.method = method;
+                    this.on_ports(found, cx)
+                }) else {
                     return;
                 };
                 // A port that just appeared is looked at again soon, not after a whole interval.
@@ -400,10 +403,16 @@ impl Workbench {
                     self.ports.auto_note = None;
                 }
                 let paused = self.ports.auto_paused_until.is_some();
-                let held = self.ports.set.iter().filter(|f| f.alias == alias && f.origin == Origin::Auto && matches!(f.state, ForwardState::Pending | ForwardState::Active)).count();
+                let held = self
+                    .ports
+                    .set
+                    .iter()
+                    .filter(|f| f.alias == alias && f.origin == Origin::Auto && matches!(f.state, ForwardState::Pending | ForwardState::Active))
+                    .count();
                 let room = MAX_AUTO_FORWARDS.saturating_sub(held);
                 if !paused {
-                    self.ports.auto_note = (confirmed.len() > room).then(|| crate::i18n::tf("Automatic forwarding stops at {} forwards: forward other ports by hand.", &[&MAX_AUTO_FORWARDS]).into());
+                    self.ports.auto_note = (confirmed.len() > room)
+                        .then(|| crate::i18n::tf("Automatic forwarding stops at {} forwards: forward other ports by hand.", &[&MAX_AUTO_FORWARDS]).into());
                 }
                 let (mut loud, mut quiet) = (Vec::new(), Vec::new());
                 for p in confirmed.into_iter().take(if paused { 0 } else { room }) {
@@ -489,6 +498,55 @@ impl Workbench {
         let Some(id) = self.ports.set.by_remote(&alias, remote).map(|f| f.id) else { return };
         let effects = self.ports.set.retry(id);
         self.run_port_effects(effects, false, cx);
+        cx.notify();
+    }
+
+    /// `Ports: Forward a Port…`
+    pub(super) fn forward_port_prompt(&mut self, _: &ForwardPortPrompt, window: &mut Window, cx: &mut Context<Self>) {
+        if self.ssh_alias().is_none() {
+            self.notify(NoticeSource::Remote, Notice::Info(crate::i18n::t("Ports are forwarded while connected to an SSH host.").into()));
+            cx.notify();
+            return;
+        }
+        self.show_input(InputPurpose::PortForward, crate::i18n::t("Forward Port"), crate::i18n::t("port, e.g. 3000 or 3000:8080"), "", window, cx);
+    }
+
+    /// `Ports: Stop All Forwards`: none of them is forwarded automatically again on this connection.
+    pub(super) fn stop_all_forwards(&mut self, _: &StopAllForwards, _: &mut Window, cx: &mut Context<Self>) {
+        let alias = self.ssh_alias().unwrap_or_default();
+        let remotes: Vec<u16> = self.ports.set.iter().filter(|f| f.alias == alias).map(|f| f.remote).collect();
+        for remote in remotes {
+            self.stop_forward(remote, cx);
+        }
+    }
+
+    /// `Ports: Retry Failed Forwards`: also lifts a pause of automatic forwarding.
+    pub(super) fn retry_failed_forwards(&mut self, _: &RetryFailedForwards, _: &mut Window, cx: &mut Context<Self>) {
+        let alias = self.ssh_alias().unwrap_or_default();
+        self.ports.auto_paused_until = None;
+        self.ports.auto_note = None;
+        let failed: Vec<u16> = self.ports.set.iter().filter(|f| f.alias == alias && matches!(f.state, ForwardState::Failed(_))).map(|f| f.remote).collect();
+        for remote in failed {
+            self.retry_forward(remote, cx);
+        }
+        cx.notify();
+    }
+
+    /// `Ports: Toggle Automatic Forwarding` (`ports.autoForward`, saved in the settings file).
+    pub(super) fn toggle_auto_forward(&mut self, _: &ToggleAutoForward, window: &mut Window, cx: &mut Context<Self>) {
+        let on = !cx.global::<crate::settings::Settings>().ports_auto_forward;
+        self.write_setting("ports.autoForward", serde_json::json!(on), window, cx);
+        self.notify(
+            NoticeSource::Remote,
+            Notice::Info(
+                if on {
+                    crate::i18n::t("Ports opened on the server are forwarded automatically.")
+                } else {
+                    crate::i18n::t("Ports opened on the server are no longer forwarded automatically.")
+                }
+                .into(),
+            ),
+        );
         cx.notify();
     }
 
