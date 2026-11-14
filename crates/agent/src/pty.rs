@@ -242,6 +242,7 @@ mod imp {
                 if libc::ioctl(0, libc::TIOCSCTTY as _, 0) < 0 {
                     return Err(io::Error::last_os_error());
                 }
+                reset_signals();
                 Ok(())
             });
         }
@@ -249,6 +250,22 @@ mod imp {
         // `setsid` made the shell the leader of its own session and process group.
         crate::guard::pty_started(child.id());
         attach(child, File::from(master), File::try_clone)
+    }
+
+    /// What a program in a new terminal expects of its signals: default actions and none blocked. An application started from
+    /// a background job (`cmd &` in a script, `nohup`) inherits `SIGINT` and `SIGQUIT` as ignored, and an ignored signal stays
+    /// ignored through `exec`: without this, Ctrl+C in the terminal stops nothing. Only async-signal-safe calls (`signal`,
+    /// `sigemptyset`, `sigprocmask`), as the code between fork and exec requires.
+    pub(super) fn reset_signals() {
+        // SAFETY: plain libc calls on a stack-local set; the result of each is irrelevant (a failure leaves the inherited state).
+        unsafe {
+            for sig in [libc::SIGINT, libc::SIGQUIT, libc::SIGTERM, libc::SIGHUP, libc::SIGTSTP, libc::SIGTTIN, libc::SIGTTOU, libc::SIGALRM] {
+                libc::signal(sig, libc::SIG_DFL);
+            }
+            let mut none: libc::sigset_t = std::mem::zeroed();
+            libc::sigemptyset(&mut none);
+            libc::sigprocmask(libc::SIG_SETMASK, &none, std::ptr::null_mut());
+        }
     }
 
     /// Give the started shell its reader and writer threads. If a handle cannot be made (out of file descriptors), the shell is
@@ -451,6 +468,24 @@ mod tests {
         let (mut p, _reader) = spawn_with(spec).unwrap();
         p.kill();
         assert_eq!(p.wait(), Some(128 + libc::SIGKILL), "same code as a killed process in proc.rs");
+    }
+
+    /// A program started by a background job has `SIGINT` ignored, and an ignored signal survives `exec`. The shell of a
+    /// terminal must still be stopped by it, or Ctrl+C does nothing in that terminal.
+    #[test]
+    fn a_terminal_gets_default_signals_even_when_the_app_ignores_sigint() {
+        let spec =
+            Spawn { cols: 80, rows: 24, shell: Some("/bin/sh".into()), args: Some(vec!["-c".into(), "kill -INT $$; echo alive".into()]), ..Spawn::default() };
+        // SAFETY: only this test's window of the process runs with SIGINT ignored; it is put back right after the spawn.
+        let before = unsafe { libc::signal(libc::SIGINT, libc::SIG_IGN) };
+        let started = spawn_with(spec);
+        unsafe { libc::signal(libc::SIGINT, before) };
+        let (mut p, mut reader) = started.unwrap();
+        std::thread::spawn(move || {
+            let mut buf = [0u8; 4096];
+            while reader.read(&mut buf).is_ok_and(|n| n > 0) {}
+        });
+        assert_eq!(p.wait(), Some(128 + libc::SIGINT), "the shell was stopped by the signal instead of ignoring it");
     }
 
     #[test]
