@@ -230,6 +230,8 @@ mod web_preview_config;
 mod shell_quote;
 #[cfg(test)]
 mod ssh_error_tests;
+#[cfg(test)]
+mod ssh_forward_limit_tests;
 mod structural;
 #[cfg(test)]
 mod structural_tests;

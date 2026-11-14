@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-11-14
+
+### Changed
+
+- Extension templates and examples pin their `publish` action to the 0.11.0 release.
+
+### Fixed
+
+- Terminal: Ctrl+C stopped nothing in a window whose application had been started from a background job or `nohup`: such a process has `SIGINT` and `SIGQUIT` ignored, and an ignored signal stays ignored through `exec`, so every terminal's programs ignored it too. A new terminal now starts with default signal actions and none blocked.
+- Tests: a regression test opens 160 forwards through one real ssh connection under a 256-descriptor soft limit (the limit of a macOS app), which fails at the 125th forward with "Port forwarding failed" without the raised limit that 0.11.0 added.
+
 ## [0.11.0] - 2026-11-14
 
 ### Added
@@ -1958,7 +1969,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/doancan/codeyard/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/doancan/codeyard/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/doancan/codeyard/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/doancan/codeyard/compare/v0.9.1...v0.10.0
