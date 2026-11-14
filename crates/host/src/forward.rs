@@ -279,6 +279,11 @@ pub fn open(req: &OpenRequest) -> Result<Opened, ForwardError> {
                 if matches!(e.kind, FailKind::Rejected | FailKind::Other) && !bindable(req.bind, local) {
                     e.kind = FailKind::AddrInUse;
                 }
+                // "Refused" from a connection that is not there any more is a dead connection, not a refusal: the caller
+                // reconnects instead of asking the user to try again.
+                if e.kind == FailKind::Rejected && !check_master(&req.alias) {
+                    e.kind = FailKind::MasterGone;
+                }
                 if e.kind != FailKind::AddrInUse || req.strict {
                     return Err(e);
                 }

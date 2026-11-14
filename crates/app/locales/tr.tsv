@@ -4206,3 +4206,33 @@ The folder is not empty and the server did not ask to delete what is in it.	Klas
 {0} with {1}, {2}: {3}	{0}: {1}, {2}: {3}
 {} has unsaved changes: save or revert it first.	{} içinde kaydedilmemiş değişiklikler var: önce kaydedin ya da geri alın.
 The SSH connection refused this forward: reconnecting may help	SSH bağlantısı bu yönlendirmeyi reddetti: yeniden bağlanmak işe yarayabilir
+Automatic forwarding is paused after a failure. Forward a port by hand, or reconnect.	Otomatik yönlendirme bir hata nedeniyle duraklatıldı. Bağlantı noktasını elle yönlendirin ya da yeniden bağlanın.
+Automatic forwarding stops at {} forwards: forward other ports by hand.	Otomatik yönlendirme {} yönlendirmede durur: diğer bağlantı noktalarını elle yönlendirin.
+Could not forward {} ports automatically: {}	{0} bağlantı noktası otomatik yönlendirilemedi: {1}
+This window is not connected to a server, so there is nothing to reload.	Bu pencere bir sunucuya bağlı değil, yeniden yüklenecek bir şey yok.
+Remote: Reconnect	Uzak: Yeniden Bağlan
+Developer: Reload Window	Geliştirici: Pencereyi Yeniden Yükle
+Ports: Forward a Port…	Bağlantı Noktaları: Bağlantı Noktası Yönlendir…
+Ports: Stop All Forwards	Bağlantı Noktaları: Tüm Yönlendirmeleri Durdur
+Ports: Retry Failed Forwards	Bağlantı Noktaları: Başarısız Yönlendirmeleri Yeniden Dene
+Ports: Toggle Automatic Forwarding	Bağlantı Noktaları: Otomatik Yönlendirmeyi Aç/Kapat
+Ports are forwarded while connected to an SSH host.	Bağlantı noktaları, bir SSH sunucusuna bağlıyken yönlendirilir.
+port, e.g. 3000 or 3000:8080	bağlantı noktası, örn. 3000 ya da 3000:8080
+Ports opened on the server are forwarded automatically.	Sunucuda açılan bağlantı noktaları otomatik yönlendirilir.
+Ports opened on the server are no longer forwarded automatically.	Sunucuda açılan bağlantı noktaları artık otomatik yönlendirilmiyor.
+The server's host key changed. If you did not reinstall it, do not connect; otherwise remove the old key with: ssh-keygen -R {}	Sunucunun ana bilgisayar anahtarı değişti. Sunucuyu siz yeniden kurmadıysanız bağlanmayın; kurduysanız eski anahtarı şununla silin: ssh-keygen -R {}
+The server is not in known_hosts yet. Run “ssh {}” once in a terminal and accept its key.	Sunucu henüz known_hosts içinde yok. Bir terminalde bir kez “ssh {}” çalıştırıp anahtarını kabul edin.
+The server refused the key or password. Check the user name and key in the SSH config, or use Remote: Set Up Key Login….	Sunucu anahtarı ya da parolayı reddetti. SSH yapılandırmasındaki kullanıcı adını ve anahtarı kontrol edin ya da Remote: Set Up Key Login… komutunu kullanın.
+Too many keys were offered. Give this host an IdentityFile and IdentitiesOnly yes in the SSH config.	Çok fazla anahtar denendi. SSH yapılandırmasında bu sunucuya bir IdentityFile ve IdentitiesOnly yes verin.
+ssh ignores a private key that other users can read. Run chmod 600 on the key file.	ssh, başka kullanıcıların okuyabildiği özel anahtarı yok sayar. Anahtar dosyasına chmod 600 uygulayın.
+The key needs its passphrase. Add it to the agent with ssh-add.	Anahtarın parolası gerekiyor. ssh-add ile ajana ekleyin.
+The host name was not found. Check its spelling, your network and your VPN.	Sunucu adı bulunamadı. Yazımını, ağınızı ve VPN'inizi kontrol edin.
+Nothing accepted the connection. Check that the SSH server is running and the port is right.	Bağlantıyı kabul eden olmadı. SSH sunucusunun çalıştığını ve bağlantı noktasının doğru olduğunu kontrol edin.
+The server did not answer. Check the address, your network or VPN, and any firewall.	Sunucu yanıt vermedi. Adresi, ağınızı ya da VPN'inizi ve güvenlik duvarını kontrol edin.
+There is no route to the server. Check your network or VPN.	Sunucuya giden bir yol yok. Ağınızı ya da VPN'inizi kontrol edin.
+The connection was cut. Try again; if it keeps happening, check the network.	Bağlantı kesildi. Yeniden deneyin; tekrarlanırsa ağı kontrol edin.
+The server and this ssh share no algorithm. Update one of them, or allow the old one for this host in the SSH config.	Sunucu ile bu ssh ortak bir algoritma paylaşmıyor. Birini güncelleyin ya da SSH yapılandırmasında bu sunucu için eski olanı etkinleştirin.
+The jump host or proxy command failed. Check ProxyJump and ProxyCommand for this host.	Atlama sunucusu ya da proxy komutu başarısız oldu. Bu sunucu için ProxyJump ve ProxyCommand ayarlarını kontrol edin.
+The SSH config has an error: fix the line named above (Remote: Edit SSH Config).	SSH yapılandırmasında hata var: yukarıda adı geçen satırı düzeltin (Remote: Edit SSH Config).
+The shared connection was stale. Try again.	Paylaşılan bağlantı eskimişti. Yeniden deneyin.
+The server accepts no more sessions. Close other connections or raise MaxSessions on it.	Sunucu daha fazla oturum kabul etmiyor. Diğer bağlantıları kapatın ya da sunucuda MaxSessions değerini artırın.

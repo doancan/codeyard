@@ -162,6 +162,8 @@ Auto Forwarded
 Auto Save is off.	
 Auto Save is on.	
 Auto-detect project	
+Automatic forwarding is paused after a failure. Forward a port by hand, or reconnect.	
+Automatic forwarding stops at {} forwards: forward other ports by hand.	
 Back	
 Back to SSH workspace and container details	
 Back to the default (removes the value from settings.jsonc)	
@@ -557,6 +559,7 @@ Could not find your home folder
 Could not format: {}	
 Could not forward port {}: {}	
 Could not forward the debug port over SSH: {}	
+Could not forward {} ports automatically: {}	
 Could not inspect Cargo targets: {}	
 Could not install cyx: {}	
 Could not install the {0} dictionary: {1}.	
@@ -758,6 +761,7 @@ Dev Container is ready. The current workspace or unsaved files changed, so it wa
 Dev Container result: {}	
 Dev Container setup failed: {}. Check Output and install the Dev Container CLI if it is missing.	
 Developer: Extension Inspector	
+Developer: Reload Window	
 Developer: Restart Language Servers	
 Diagnostic copied	
 Diagnostics copied. Nothing was sent anywhere: paste them where you want to share them.	
@@ -1779,6 +1783,7 @@ Not valid Base64: left unchanged
 Not valid URL encoding: left unchanged	
 Not valid {}: left unchanged	
 Nothing	
+Nothing accepted the connection. Check that the SSH server is running and the port is right.	
 Nothing changed	
 Nothing changed: every setting has its default value.	
 Nothing in this file is staged	
@@ -1983,7 +1988,14 @@ Port {} is forwarded to localhost:{} ({} was busy here)
 Port {} is forwarded: localhost:{}	
 Ports	
 Ports and storage	
+Ports are forwarded while connected to an SSH host.	
 Ports below 1024 need extra privileges on this computer	
+Ports opened on the server are forwarded automatically.	
+Ports opened on the server are no longer forwarded automatically.	
+Ports: Forward a Port…	
+Ports: Retry Failed Forwards	
+Ports: Stop All Forwards	
+Ports: Toggle Automatic Forwarding	
 Ports: {}	
 Preferences: Apply Rust Setup…	
 Preferences: Configure User Snippets	
@@ -2168,6 +2180,7 @@ Remote: Download Active File…
 Remote: Edit SSH Config	
 Remote: Edit SSH Host…	
 Remote: Manage SSH Hosts…	
+Remote: Reconnect	
 Remote: Remove SSH Host…	
 Remote: Set Up Key Login…	
 Remote: Test SSH Connection…	
@@ -2745,6 +2758,7 @@ That does not look like a repository address.
 The JavaScript debugger is already installed.	
 The README is shortened here; the full one is in the package.	
 The Rust language server does not support this command	
+The SSH config has an error: fix the line named above (Remote: Edit SSH Config).	
 The SSH connection is gone: reconnect to forward again	
 The SSH connection refused this forward: reconnecting may help	
 The TLS/SSL handshake with {} failed (certificate or protocol problem): {}	
@@ -2772,6 +2786,7 @@ The connection to the language server was lost
 The connection to {} dropped while the data was being exchanged.	
 The connection to {} dropped. Reconnecting…	
 The connection to {} was lost during the scan, so the result is partial. Scan again once it is back.	
+The connection was cut. Try again; if it keeps happening, check the network.	
 The connection was lost; the results are incomplete.	
 The crash report is on the clipboard. Nothing was sent.	
 The current folder is not inside this folder.	
@@ -2816,9 +2831,12 @@ The folder is not empty.
 The folder it belongs in does not exist.	
 The folder of “{}” with its settings, keybindings and snippets is deleted. This cannot be undone.	
 The full report is in the crash reports folder and stays on this computer. Help: Report Issue… opens a new issue with the version filled in.	
+The host name was not found. Check its spelling, your network and your VPN.	
 The host stopped responding. Installation files were retained because a process may still be running. Reconnect and inspect the destination before retrying.	
 The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	
 The input “{}” would run an editor command; use promptString or pickString.	
+The jump host or proxy command failed. Check ProxyJump and ProxyCommand for this host.	
+The key needs its passphrase. Add it to the agent with ssh-add.	
 The language server proposed no changes.	
 The language server sent a documentation link that is not a web page or a local HTML file, so it was not opened	
 The language server's refactoring is too large to review ({0} files, {1} changes; the limit is {2} files and {3} changes). Nothing was changed.	
@@ -2871,15 +2889,22 @@ The search failed.
 The search or the connection changed while the preview was being made. Preview again.	
 The secondary side bar shows no view.	
 The selection is neither a JWT nor a Unix timestamp	
+The server accepts no more sessions. Close other connections or raise MaxSessions on it.	
+The server and this ssh share no algorithm. Update one of them, or allow the old one for this host in the SSH config.	
 The server did not answer within 60 seconds.	
+The server did not answer. Check the address, your network or VPN, and any firewall.	
 The server gave two different document versions for this file.	
+The server is not in known_hosts yet. Run “ssh {}” once in a terminal and accept its key.	
 The server no longer accepts an account password: use a personal access token as the password (or sign in with the GitHub CLI: gh auth login).	
 The server protects this branch and refuses direct pushes: push to another branch and open a pull request.	
+The server refused the key or password. Check the user name and key in the SSH config, or use Remote: Set Up Key Login….	
 The server refused the login: check the account and that the token may push.	
 The server wants credentials that were not given: try again and enter them when asked, or set up an SSH key.	
 The server's edit is for version {0} of this file, the editor has version {1}.	
+The server's host key changed. If you did not reinstall it, do not connect; otherwise remove the old key with: ssh-keygen -R {}	
 The settings file is not {} any more (another profile?). Nothing was written.	
 The settings folder is gone. Nothing was changed.	
+The shared connection was stale. Try again.	
 The shell has exited	
 The shell may run each line as soon as it arrives.	
 The source and the target are on different disks.	
@@ -2933,6 +2958,7 @@ There is no profile named “{}”.
 There is no refactoring to undo.	
 There is no replacement to undo.	
 There is no request here. Write METHOD URL on a line, separate requests with ###.	
+There is no route to the server. Check your network or VPN.	
 There is no task called “{}”.	
 There is no terminal to move.	
 There is nothing to commit: no change is staged.	
@@ -2993,6 +3019,7 @@ This search belongs to {0} on {1}, which this window does not show. Results cann
 This tab cannot move to that window: its folder is on another machine.	
 This view is not available.	
 This window is installing an update. You can close it in a few seconds.	
+This window is not connected to a server, so there is nothing to reload.	
 This {} file could not be read. It may be damaged or cut short.	
 Thursday	
 Timeline	
@@ -3008,6 +3035,7 @@ Toggle Terminal
 Toggle a break-on-exception filter	
 Toggle inline view	
 Too many files to preview ({}). Narrow the search.	
+Too many keys were offered. Give this host an IdentityFile and IdentitiesOnly yes in the SSH config.	
 Track which remote branch?	
 Trailing whitespace is ignored. Click to ignore all whitespace	
 Transfer cancelled.	
@@ -3491,6 +3519,7 @@ path branch (new branch is created if it does not exist)
 pause	
 paused on {}	
 pinned	
+port, e.g. 3000 or 3000:8080	
 port, user, key file, jump host	
 ports.rules.{}.{}: unexpected value	
 ports.rules.{}: expected a port or a range such as 3000-3010	
@@ -3539,6 +3568,7 @@ size differs
 skipped	
 source	
 split input and separator must be strings	
+ssh ignores a private key that other users can read. Run chmod 600 on the key file.	
 starting	
 step	
 stopped	

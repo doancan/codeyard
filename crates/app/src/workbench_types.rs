@@ -409,6 +409,8 @@ pub(super) enum InputPurpose {
     PortLabel {
         remote: u16,
     },
+    /// `Ports: Forward a Port…`: `3000` or `3000:8080`.
+    PortForward,
     /// Local port for the forward of a server port.
     PortLocal {
         remote: u16,

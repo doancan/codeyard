@@ -2215,7 +2215,12 @@ the columns Port, Label, Forwarded Address, Running Process and Origin.
   own and announced in the status bar. Ports that were already open (databases, ssh) are only listed, with a Forward
   button. When the server stops listening, its automatic forward goes too; if it starts again (a dev server restarting),
   it is forwarded again without another announcement. Forwards you made yourself stay until you stop them.
-  `"ports.autoForward": false` turns the automatic part off.
+  `"ports.autoForward": false` turns the automatic part off. A new port is forwarded once a second scan still finds it, so
+  servers that live for a moment (test runners, language servers) cost nothing; at most 32 automatic forwards are held. If an
+  automatic forward fails because of the connection (it refuses, it is gone), automatic forwarding rests for a minute and
+  the failures of that moment are one notification, not one per port; the list says why.
+- **Palette.** *Ports: Forward a Port…*, *Ports: Stop All Forwards*, *Ports: Retry Failed Forwards* (also ends the rest) and
+  *Ports: Toggle Automatic Forwarding*.
 - **Your own forwards.** Type a port number to forward it, or `3000:8080` to forward server port 3000 to local port 8080.
   If the port is busy on your computer, a free one is used.
 - **Row actions.** Each row can open the address in the browser, copy it or stop the forward. Its menu sets a label,
@@ -2258,6 +2263,11 @@ If the connection drops, the agent keeps running on the server for 5 minutes: th
 reconnects on its own (status bar shows "Reconnecting") and terminals and language servers continue where they were.
 If it cannot reconnect, a message gives the reason and a **Reconnect** button; your open files and unsaved changes
 stay in their tabs (saving waits for the connection; *File: Save a Copy to This Computer…* keeps a local copy).
+**Remote: Reconnect** (also *Developer: Reload Window*) connects to the window's server again and puts everything back
+where it was: the folder and its tabs (files with unsaved changes come back from their hot-exit backups, so reconnecting
+does not ask you to save first), the terminals that kept running on the server, and the port forwards on the same local
+ports. It also works while the connection is up but stuck. Connection errors say what to do about them (changed host key,
+refused key, unknown host, timeout, a broken jump host, …), and a stale shared connection is restarted on its own.
 A file that is deleted or changed on the server while you edit it shows a banner instead of being overwritten.
 
 Search and terminals run on the server through the agent: only results and terminal

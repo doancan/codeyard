@@ -366,9 +366,7 @@ impl Workbench {
                     .px(px(theme::SPACE[6]))
                     .child(div().text_color(c(p.text_muted)).child(crate::i18n::t("Forward a port:")))
                     .child(ui::input_box("ports-field-box", p, p.bg, false).w(px(200.)).child(self.ports.field.clone()))
-                    .children(
-                        self.ports.scan_error.clone().map(|e| div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_color(c(p.warning)).child(e)),
-                    ),
+                    .children(self.ports_note().map(|e| div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_color(c(p.warning)).child(e))),
             )
             .child(header)
             .child(body)

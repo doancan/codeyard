@@ -74,7 +74,7 @@ impl Workbench {
             self.persist.opening_recent = None;
             return;
         }
-        if matches!(self.remote.conn, Conn::Connecting { .. }) || self.refuse_if_dirty(cx) {
+        if matches!(self.remote.conn, Conn::Connecting { .. }) || self.refuse_switch_if_dirty(cx) {
             return;
         }
         let return_workspace = if crate::docker::is_target(&alias)
@@ -126,7 +126,7 @@ impl Workbench {
                     return;
                 }
                 // Files can become dirty while the network request is in flight.
-                if result.is_ok() && this.refuse_if_dirty(cx) {
+                if result.is_ok() && this.refuse_switch_if_dirty(cx) {
                     this.cancel_pending_connection();
                     cx.notify();
                     return;
@@ -150,7 +150,8 @@ impl Workbench {
                         this.remote.pending_path = None;
                         // Reason and "Reconnect" button are in the toast; the red indicator also stays in the status bar.
                         let why = crate::i18n::tf("Could not connect to {}: {}", &[&alias, &message]);
-                        this.notify(NoticeSource::Remote, Notice::Error(why.clone().into()));
+                        let told = with_hint(&why, &message, &alias);
+                        this.notify(NoticeSource::Remote, Notice::Error(told.into()));
                         // Connection started from a recent: if it can't be reached anymore, ask whether to remove it from the list.
                         if let Some(r) = opening_recent {
                             this.ask_forget_unreachable(r, why, window, cx);
@@ -297,6 +298,7 @@ impl Workbench {
                             host::ConnStatus::Lost(e) => {
                                 // Permanent loss: say why, that the work is safe, and what to do.
                                 let dirty = this.any_dirty(cx);
+                                let e = with_hint(&e, &e, &alias);
                                 let lost = if dirty {
                                     crate::i18n::tf("Lost the connection to {}: {}. Your open files stay here and unsaved changes are kept, but they cannot be saved until you reconnect (File: Save a Copy to This Computer… keeps one locally).", &[&alias, &e])
                                 } else {
@@ -328,6 +330,34 @@ impl Workbench {
         let alias = alias.clone();
         self.remote.pending_path = self.root(cx);
         self.connect(alias, window, cx);
+    }
+
+    /// `Remote: Reconnect` / `Developer: Reload Window`: connect to this window's server again and come back to where the
+    /// window was. The folder and its tabs return (files with unsaved changes through their hot-exit backups), the
+    /// terminals that kept running on the server are taken back from the window's session, and the forwards open again
+    /// on the same local ports. It works while the connection is up (a stuck one), reconnecting, or given up on.
+    pub(super) fn reconnect_host(&mut self, _: &ReconnectHost, window: &mut Window, cx: &mut Context<Self>) {
+        let alias = match &self.remote.conn {
+            Conn::Connected { alias } | Conn::Reconnecting { alias, .. } | Conn::Failed { alias, .. } if alias != LOCAL_AGENT_ALIAS => alias.clone(),
+            Conn::Connecting { .. } => return,
+            _ => {
+                self.notify(
+                    NoticeSource::Remote,
+                    Notice::Info(crate::i18n::t("This window is not connected to a server, so there is nothing to reload.").into()),
+                );
+                cx.notify();
+                return;
+            }
+        };
+        self.remote.pending_path = self.root(cx);
+        self.connect(alias, window, cx);
+    }
+
+    /// A switch of host or a reconnect replaces the editors. Files with unsaved changes are kept in their hot-exit backups
+    /// and come back with the folder; only without hot exit (or with a change not backed up yet) they must be saved first.
+    fn refuse_switch_if_dirty(&mut self, cx: &mut Context<Self>) -> bool {
+        self.flush_backups(cx);
+        (!cx.global::<Settings>().hot_exit || self.has_unbacked_dirty(cx)) && self.refuse_if_dirty(cx)
     }
 
     pub(super) fn disconnect(&mut self, cx: &mut Context<Self>) {
@@ -547,3 +577,77 @@ mod tests;
 #[cfg(test)]
 #[path = "workbench_container_live_tests.rs"]
 mod live_tests;
+
+/// `text`, followed by what to do about the ssh failure `stderr` describes (nothing when it is not a known one).
+fn with_hint(text: &str, stderr: &str, alias: &str) -> String {
+    match ssh_hint(host::ssh_problem::classify(stderr), alias) {
+        Some(hint) => format!("{text} {hint}"),
+        None => text.to_string(),
+    }
+}
+
+/// What the user can do about an ssh failure; `None` for one that is not recognised (ssh's own words stay).
+pub(crate) fn ssh_hint(problem: host::ssh_problem::Problem, alias: &str) -> Option<String> {
+    use crate::i18n::{t, tf};
+    use host::ssh_problem::Problem as P;
+    Some(match problem {
+        P::HostKeyChanged => {
+            tf("The server's host key changed. If you did not reinstall it, do not connect; otherwise remove the old key with: ssh-keygen -R {}", &[&alias])
+        }
+        P::HostKeyUnknown => tf("The server is not in known_hosts yet. Run “ssh {}” once in a terminal and accept its key.", &[&alias]),
+        P::AuthRefused => {
+            t("The server refused the key or password. Check the user name and key in the SSH config, or use Remote: Set Up Key Login….").to_string()
+        }
+        P::TooManyAuthFailures => t("Too many keys were offered. Give this host an IdentityFile and IdentitiesOnly yes in the SSH config.").to_string(),
+        P::KeyPermissions => t("ssh ignores a private key that other users can read. Run chmod 600 on the key file.").to_string(),
+        P::KeyPassphrase => t("The key needs its passphrase. Add it to the agent with ssh-add.").to_string(),
+        P::UnknownHost => t("The host name was not found. Check its spelling, your network and your VPN.").to_string(),
+        P::Refused => t("Nothing accepted the connection. Check that the SSH server is running and the port is right.").to_string(),
+        P::TimedOut => t("The server did not answer. Check the address, your network or VPN, and any firewall.").to_string(),
+        P::Unreachable => t("There is no route to the server. Check your network or VPN.").to_string(),
+        P::Dropped => t("The connection was cut. Try again; if it keeps happening, check the network.").to_string(),
+        P::NoCommonAlgorithm => {
+            t("The server and this ssh share no algorithm. Update one of them, or allow the old one for this host in the SSH config.").to_string()
+        }
+        P::Proxy => t("The jump host or proxy command failed. Check ProxyJump and ProxyCommand for this host.").to_string(),
+        P::BadConfig => t("The SSH config has an error: fix the line named above (Remote: Edit SSH Config).").to_string(),
+        P::StaleControl => t("The shared connection was stale. Try again.").to_string(),
+        P::TooManySessions => t("The server accepts no more sessions. Close other connections or raise MaxSessions on it.").to_string(),
+        P::Other => return None,
+    })
+}
+
+#[cfg(test)]
+mod hint_tests {
+    use super::*;
+    use host::ssh_problem::Problem;
+
+    #[test]
+    fn every_known_problem_has_advice_and_an_unknown_one_keeps_sshs_words() {
+        let all = [
+            Problem::HostKeyChanged,
+            Problem::HostKeyUnknown,
+            Problem::AuthRefused,
+            Problem::TooManyAuthFailures,
+            Problem::KeyPermissions,
+            Problem::KeyPassphrase,
+            Problem::UnknownHost,
+            Problem::Refused,
+            Problem::TimedOut,
+            Problem::Unreachable,
+            Problem::Dropped,
+            Problem::NoCommonAlgorithm,
+            Problem::Proxy,
+            Problem::BadConfig,
+            Problem::StaleControl,
+            Problem::TooManySessions,
+        ];
+        for p in all {
+            assert!(ssh_hint(p, "box").is_some_and(|h| !h.is_empty()), "{p:?}");
+        }
+        assert_eq!(ssh_hint(Problem::Other, "box"), None);
+        assert_eq!(with_hint("Could not connect to box: x", "something new", "box"), "Could not connect to box: x");
+        assert!(with_hint("Lost", "ssh: connect to host box port 22: Operation timed out", "box").contains("did not answer"));
+        assert!(ssh_hint(Problem::HostKeyChanged, "box").unwrap().contains("ssh-keygen -R box"));
+    }
+}
