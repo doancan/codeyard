@@ -258,6 +258,8 @@ pub(super) struct PersistState {
     pub(super) backup_task: Option<gpui::Task<()>>,
     /// Path -> backed-up version.
     pub(super) backed_up: std::collections::HashMap<String, u64>,
+    /// Servers whose Local History question is open (one question per server at a time).
+    pub(super) history_asking: std::collections::HashSet<String>,
     pub(super) state: Option<State>,
     pub(super) recent: Vec<RecentWorkspace>,
     /// Pinned folders (host alias or `None`, path).

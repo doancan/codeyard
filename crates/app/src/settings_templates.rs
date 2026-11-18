@@ -139,6 +139,12 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "files.exclude": [".git", ".DS_Store"],
   // Unsaved changes survive quitting and crashes.
   "files.hotExit": true,
+  // A copy of a file is kept on every save, so a change that never reached Git can be brought back. Secret files (.env,
+  // private keys, certificates) are never copied; "localHistory.exclude" adds more.
+  "localHistory.enabled": true,
+  // "localHistory.exclude": ["*.secret.yaml", "**/private/**"],
+  // Copies of a server's files on this computer: "ask" (once per server), "keep" or "off".
+  "localHistory.remote": "ask",
   // Deleted local files go to the Trash instead of being deleted for good (SSH hosts have none: deletes there are
   // always permanent). Off by default: a delete is permanent and asks first.
   "files.enableTrash": false,

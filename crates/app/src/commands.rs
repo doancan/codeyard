@@ -679,6 +679,7 @@ registry! {
     "remote.editSshConfig" => wb::EditSshConfig,
     "remote.editSshHost" => wb::EditSshHost,
     "remote.manageSshHosts" => wb::ManageSshHosts,
+    "localHistory.delete" => wb::DeleteLocalHistory,
     "remote.reconnect" => wb::ReconnectHost,
     "remote.removeSshHost" => wb::RemoveSshHost,
     "remote.setupKeyLogin" => wb::SetupKeyLogin,

@@ -400,6 +400,7 @@ impl Workbench {
             .on_action(cx.listener(Self::remove_ssh_host))
             .on_action(cx.listener(Self::test_ssh_host))
             .on_action(cx.listener(Self::reconnect_host))
+            .on_action(cx.listener(Self::delete_local_history))
             .on_action(cx.listener(Self::forward_port_prompt))
             .on_action(cx.listener(Self::stop_all_forwards))
             .on_action(cx.listener(Self::retry_failed_forwards))
