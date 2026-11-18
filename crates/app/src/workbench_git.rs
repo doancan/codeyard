@@ -133,32 +133,6 @@ impl Workbench {
         }
     }
 
-    /// After a save: keep a copy of the file (in the background), refresh TIMELINE.
-    pub(super) fn record_history(&mut self, ed: &gpui::Entity<crate::editor::EditorView>, cx: &mut Context<Self>) {
-        let Some(data) = self.persist.data_dir.clone() else { return };
-        let e = ed.read(cx);
-        if e.line_count() > 60_000 {
-            return;
-        }
-        let (path, text) = (e.path.clone(), e.text_lines().join("\n"));
-        let dir = crate::history::dir_for(&data, &self.history_host(), &path);
-        let folder = dir.clone();
-        let task = cx.background_executor().spawn(async move { crate::history::record(&dir, &text) });
-        cx.spawn(async move |this, cx| {
-            let result = task.await;
-            this.update(cx, |this, cx| {
-                match result {
-                    Ok(true) => this.timeline.rev += 1,
-                    Ok(false) => {}
-                    Err(e) => this.report_history_failed(&folder, &e),
-                }
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
-    }
-
     /// Show a local history copy next to the editor's current version.
     pub(super) fn open_local_history(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(entry) = self.timeline.local.get(ix).cloned() else { return };

@@ -41,6 +41,11 @@ pub const USER_ONLY_KEYS: &[&str] = &[
     "extensions.autoUpdate",
     // A repository must not add a registry to install from.
     "extensions.registries",
+    // A repository must not decide what is copied to this computer: it could switch Local History on for a server's files,
+    // or off for the files that matter to someone else's history.
+    "localHistory.enabled",
+    "localHistory.exclude",
+    "localHistory.remote",
     // --- git-sync ---
     // A repository must not turn the question before a sync off, or make every commit push by itself.
     "git.confirmSync",

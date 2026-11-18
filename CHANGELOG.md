@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Local History: secret files are never copied: `.env` and `.env.*` (not `.env.example`), private keys and certificates (`*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`, `id_ecdsa*`), `*.kdbx`, `.netrc`, `.npmrc`, `.pypirc`, `credentials*.json` and `*.tfstate`. `localHistory.exclude` adds patterns, `localHistory.enabled` turns it off. Copies already made of such a file are deleted at its next save, and a forced save no longer keeps the overwritten version of it.
+- Local History: the first save of a file on a server asks once per server whether to keep copies on this computer; nothing is written before the answer. `localHistory.remote` (`ask`, `keep`, `off`) decides without asking.
+- *Local History: Delete…* removes the copies of the open file or all of them, and reports copies it could not delete.
+- Timeline says "Local History is off for this file" for a file it does not keep.
+
 ## [0.11.1] - 2026-11-14
 
 ### Changed

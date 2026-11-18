@@ -142,6 +142,13 @@ status bar reports it.
 | --- | --- | --- | --- |
 | `keymap.preset` | text | empty | Keymap preset from an installed extension, as publisher.name/label (empty: Codeyard's own keys) |
 
+## `localHistory`
+
+| Setting | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `localHistory.enabled` | `true` / `false` | `true` | Keep a copy of a file on every save (Local History) |
+| `localHistory.remote` | `ask`, `keep`, `off` | `ask` | Keep Local History of files on servers |
+
 ## `lsp`
 
 | Setting | Values | Default | What it does |
@@ -266,6 +273,7 @@ status bar reports it.
 | `explorer.fileNesting.patterns` | object of pattern → file names | built-in rules (see the user guide) | Which files the explorer lists under another file when `explorer.fileNesting.enabled` is on, added to the built-in rules. The key is a file name or a pattern with one `*`; the value is a comma-separated list of names (or a list of texts) in the same folder, where `${capture}` stands for the text the `*` matched, e.g. `{ "*.c": "${capture}.h" }`. An entry replaces the built-in rule with the same key; `false` removes it. A file is nested under one parent only (the first matching rule wins). Names are case-sensitive. |
 | `diagnostics.logLevel` | `error`, `warn`, `info` or `debug` | `info` | What the log file (`logs/codeyard.log` in the state folder) records: `error` only failures, `warn` adds problems that were worked around, `info` adds what the app did, `debug` is for bug reports. Only your own settings file counts; a folder's setting is ignored. |
 | `search.exclude` | list of globs | `[]` | Skip matching paths in Find in Files. |
+| `localHistory.exclude` | list of globs | `[]` | Files Local History does not copy, added to the built-in list: `.env` and `.env.*` (not `.env.example` or `.env.sample`), `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`, `id_ecdsa*`, `*.kdbx`, `.netrc`, `.npmrc`, `.pypirc`, `credentials*.json` and `*.tfstate`. A pattern without `/` matches a file or folder name, one with `/` a run of folders and the file at its end (`config/*.secret.yaml`). Case is ignored. Copies that already exist of a file that matches are deleted the next time it is saved. Only your own settings file counts; a folder's setting is ignored. |
 | `compare.folders.ignore` | list of globs | `[".git", "node_modules", "target"]` | Names and paths *Compare: Folders…* leaves out on both sides (gitignore syntax). |
 | `compare.folders.maxFiles` | number 100–5000000 | `50000` | Entries per side *Compare: Folders…* reads before it stops and reports that the result is partial. |
 | `workbench.startupEditor` | string | `welcome` | Alias of `window.startup`, kept for settings imported from another editor. |

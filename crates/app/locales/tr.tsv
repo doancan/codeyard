@@ -4236,3 +4236,21 @@ The jump host or proxy command failed. Check ProxyJump and ProxyCommand for this
 The SSH config has an error: fix the line named above (Remote: Edit SSH Config).	SSH yapılandırmasında hata var: yukarıda adı geçen satırı düzeltin (Remote: Edit SSH Config).
 The shared connection was stale. Try again.	Paylaşılan bağlantı eskimişti. Yeniden deneyin.
 The server accepts no more sessions. Close other connections or raise MaxSessions on it.	Sunucu daha fazla oturum kabul etmiyor. Diğer bağlantıları kapatın ya da sunucuda MaxSessions değerini artırın.
+Delete All Local History	Tüm Yerel Geçmişi Sil
+Delete History of “{}”	“{}” Geçmişini Sil
+Delete Local History?	Yerel Geçmiş silinsin mi?
+Deleted {} copy from Local History.|Deleted {} copies from Local History.	Yerel Geçmişten {} kopya silindi.
+Don't Keep	Tutma
+Every save of a file on this server would leave a copy of it in Codeyard's data folder here, for up to 30 days. Secrets in those files would be copied too. Change it later with localHistory.remote.	Bu sunucudaki bir dosyanın her kaydı, Codeyard'ın bu bilgisayardaki veri klasöründe 30 güne kadar bir kopya bırakır. Dosyalardaki gizli bilgiler de kopyalanır. Sonradan localHistory.remote ile değiştirebilirsin.
+Keep Local History of files on servers	Sunucudaki dosyaların Yerel Geçmişini tut
+Keep Local History of files on {} on this computer?	{} üzerindeki dosyaların Yerel Geçmişi bu bilgisayarda tutulsun mu?
+Keep a copy of a file on every save (Local History)	Dosyanın her kaydında bir kopya tut (Yerel Geçmiş)
+Local History has nothing to delete.	Yerel Geçmişte silinecek bir şey yok.
+Local History is not available in this window.	Yerel Geçmiş bu pencerede kullanılamıyor.
+Local History is off for this file.	Bu dosya için Yerel Geçmiş kapalı.
+Local History: Delete…	Yerel Geçmiş: Sil…
+Local History: {0} copies deleted, {1} could not be deleted.	Yerel Geçmiş: {0} kopya silindi, {1} kopya silinemedi.
+The copies are removed from this computer. Git history and the files themselves are not touched. This can't be undone.	Kopyalar bu bilgisayardan silinir. Git geçmişine ve dosyaların kendisine dokunulmaz. Bu geri alınamaz.
+The version that was on disk was not kept: Local History does not keep this file.	Diskteki sürüm saklanmadı: Yerel Geçmiş bu dosyayı tutmaz.
+The version that was on disk was not kept: Local History does not keep this server's files.	Diskteki sürüm saklanmadı: Yerel Geçmiş bu sunucunun dosyalarını tutmaz.
+{} earlier copy of this file could not be deleted from Local History, which does not keep it any more.|{} earlier copies of this file could not be deleted from Local History, which does not keep it any more.	Bu dosyanın {} eski kopyası Yerel Geçmişten silinemedi; Yerel Geçmiş artık bu dosyayı tutmuyor.

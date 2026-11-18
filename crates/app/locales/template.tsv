@@ -723,6 +723,9 @@ Default terminal profile
 Default: build for this machine	
 Delay for afterDelay (ms)	
 Delete	
+Delete All Local History	
+Delete History of “{}”	
+Delete Local History?	
 Delete Permanently	
 Delete Tag…	
 Delete a profile	
@@ -745,6 +748,7 @@ Deleted
 Deleted tag {0} on {1}	
 Deleted tag {}	
 Deleted {}	
+Deleted {} copy from Local History.|Deleted {} copies from Local History.	
 Deleted “{0}” from {1}	
 Deleting {}…	
 Deleting…	
@@ -806,6 +810,7 @@ Docker: {}
 Docker: {}. Check Output and verify that the selected engine is running.	
 Docker: {}. Check Output. Dev Container creation requires the separately installed Dev Container CLI.	
 Documentation: {}	
+Don't Keep	
 Don't Save	
 Don't Trust	
 Don't Trust This Folder	
@@ -973,6 +978,7 @@ Evaluate
 Evaluate an expression (↵)	
 Every change in this file is staged	
 Every file of {} matches its package.	
+Every save of a file on this server would leave a copy of it in Codeyard's data folder here, for up to 30 days. Secrets in those files would be copied too. Change it later with localHistory.remote.	
 Every setting, with comments	
 Every uncommitted change is lost. This can't be undone.	
 Everything resolved so far in this merge is discarded.	
@@ -1407,7 +1413,10 @@ Jump to latest and follow
 Jun	
 Keep	
 Keep Going	
+Keep Local History of files on servers	
+Keep Local History of files on {} on this computer?	
 Keep Waiting	
+Keep a copy of a file on every save (Local History)	
 Keep unsaved changes across restarts	
 Key binding: {0} runs {1}	
 Key login is set up for “{}” (created {}). The next connection needs no password.	
@@ -1496,6 +1505,11 @@ Loading {}…
 Loading…	
 Local	
 Local History could not keep a copy of the file you saved. {}	
+Local History has nothing to delete.	
+Local History is not available in this window.	
+Local History is off for this file.	
+Local History: Delete…	
+Local History: {0} copies deleted, {1} could not be deleted.	
 Local changes would be overwritten: commit or stash them first.	
 Local history	
 Local port {} is busy	
@@ -2788,6 +2802,7 @@ The connection to {} dropped. Reconnecting…
 The connection to {} was lost during the scan, so the result is partial. Scan again once it is back.	
 The connection was cut. Try again; if it keeps happening, check the network.	
 The connection was lost; the results are incomplete.	
+The copies are removed from this computer. Git history and the files themselves are not touched. This can't be undone.	
 The crash report is on the clipboard. Nothing was sent.	
 The current folder is not inside this folder.	
 The current folder is the workspace.	
@@ -2929,6 +2944,8 @@ The update failed. Click for details.
 The version comes from [workspace.dependencies].	
 The version that was on disk could not be kept in Local History. {}	
 The version that was on disk has been kept in Local History.	
+The version that was on disk was not kept: Local History does not keep this file.	
+The version that was on disk was not kept: Local History does not keep this server's files.	
 The view could not move to a new window: {}	
 The workspace changed. Open the source project and review its container configuration again.	
 The workspace file lists no folder that exists on this computer.	
@@ -3853,6 +3870,7 @@ your words
 {} did not answer within 5 seconds	
 {} download, including updates|{} downloads, including updates	
 {} download|{} downloads	
+{} earlier copy of this file could not be deleted from Local History, which does not keep it any more.|{} earlier copies of this file could not be deleted from Local History, which does not keep it any more.	
 {} entry is left out.|{} entries are left out.	
 {} entry|{} entries	
 {} exists and is not a link; remove it first	

@@ -165,6 +165,8 @@ pub use row_nav_glue::{ROW_LIST, RowActivate, RowFirst, RowLast, RowNext, RowPre
 #[path = "workbench_rust.rs"]
 pub(crate) mod rust_glue;
 // --- git-refs ---
+#[path = "workbench_history.rs"]
+mod history_glue;
 #[path = "workbench_recover.rs"]
 mod recover_glue;
 #[path = "workbench_refactor.rs"]
@@ -542,6 +544,7 @@ actions!(
         RemoveSshHost,
         TestSshHost,
         ReconnectHost,
+        DeleteLocalHistory,
         EditSshConfig,
         EditSshHost,
         ManageSshHosts,
@@ -1367,6 +1370,7 @@ impl Workbench {
                 pending_restore_workspace: None,
                 backup_task: None,
                 backed_up: Default::default(),
+                history_asking: Default::default(),
                 state,
                 recent,
                 pinned,
@@ -2443,7 +2447,7 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 this.reload_snippets_if_edited(ed, cx);
                 this.save_failure_resolved(ed, cx);
                 this.refresh_git(200, cx);
-                this.record_history(ed, cx);
+                this.record_history(ed, window, cx);
             }
             EditorEvent::Overwrote(text) => return this.keep_overwritten(ed, text, cx),
             EditorEvent::SaveFailed(error) => return this.report_save_failed(ed, error, cx),

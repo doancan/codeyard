@@ -23,6 +23,12 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
     ),
     ("search.exclude", "list of globs", "`[]`", "Skip matching paths in Find in Files."),
     (
+        "localHistory.exclude",
+        "list of globs",
+        "`[]`",
+        "Files Local History does not copy, added to the built-in list: `.env` and `.env.*` (not `.env.example` or `.env.sample`), `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`, `id_ecdsa*`, `*.kdbx`, `.netrc`, `.npmrc`, `.pypirc`, `credentials*.json` and `*.tfstate`. A pattern without `/` matches a file or folder name, one with `/` a run of folders and the file at its end (`config/*.secret.yaml`). Case is ignored. Copies that already exist of a file that matches are deleted the next time it is saved. Only your own settings file counts; a folder's setting is ignored.",
+    ),
+    (
         "compare.folders.ignore",
         "list of globs",
         "`[\".git\", \"node_modules\", \"target\"]`",

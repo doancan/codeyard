@@ -581,6 +581,22 @@ click one to turn it off. Stashes are listed with apply, pop and drop. `"git.gra
 **Explorer sections.** OPEN EDITORS, the folder tree, **OUTLINE** (the symbols of the open file) and **TIMELINE** (the file's git
 commits plus a saved copy for every save, "local history"; click an entry for a diff).
 
+**Local History and secrets.** The copies live in Codeyard's data folder, outside the project, so a copy of a secret would
+outlive the file, its `.gitignore` entry and a clean-up of the project. Local History therefore never copies secret files:
+`.env` and `.env.*` (not `.env.example` or `.env.sample`), `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`,
+`id_ecdsa*`, `*.kdbx`, `.netrc`, `.npmrc`, `.pypirc`, `credentials*.json` and `*.tfstate`. The names are what is checked, not
+the content: a secret in an ordinary file is copied. `"localHistory.exclude"` adds patterns of your own (`"*.secret.yaml"`;
+a pattern with a `/` such as `"config/*.secret.yaml"` matches a run of folders and the file at its end; case is ignored) and
+`"localHistory.enabled": false` turns Local History off. When a file that Local History does not keep was copied before, its
+old copies are deleted at its next save, and a forced save that overwrites it does not keep the overwritten version either.
+TIMELINE says "Local History is off for this file" instead of an empty list. These settings are read from your own settings
+file only; a folder's are ignored.
+
+Copies of a **server's** files are written on this computer, so the first save of a file on a server asks, once per server,
+whether to *Keep* them or not (*Don't Keep*, also what Escape does); nothing is written before the answer. `"localHistory.remote"`
+decides without asking: `"keep"` or `"off"` (`"ask"` is the default). **Local History: Delete…** in the palette removes the
+copies of the open file or all of them, and says if any copy could not be deleted.
+
 **Outline and breadcrumb symbols.** When a language server runs for the file and offers symbols, the Outline and the
 breadcrumbs use its answer (classes, methods, fields, with their real ranges); until it answers, and for files with no server
 (also over SSH), they use line patterns for the common languages and Markdown headings, which is why a method can show as a
