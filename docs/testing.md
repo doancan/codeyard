@@ -16,7 +16,11 @@ the 2026-10-27 local run passed 1,516 tests, with three documented manual/data-d
 - **Integration tests with real processes.** `test_sshd.rs` starts a real `sshd` on a free port with throw-away keys
   (a mutex serialises users of it); `crates/app/tests/ssh_askpass.rs` runs the whole askpass chain against it.
   Git tests use real repositories (including a local bare "remote" for pull requests); `.http` tests use a tiny TCP
-  server inside the test.
+  server inside the test. A feature that runs git or reads files through the `Host` has a test over this `sshd` too (squash
+  and reorder, image and binary diffs, the commit hover card, Local History, continuing or aborting a cherry-pick, line staging
+  and the reset questions); each skips loudly without `sshd` and fails with `CODEYARD_REQUIRE_SSHD=1`. A failure test of a
+  history rewrite compares refs, index bytes, files and the worktree list with their state before, and asserts that no temporary
+  worktree is left: copy that pattern for any operation that promises "all or nothing".
 - **Fake language server.** `test_lsp.rs` writes a small Python server driven by a JSON scenario (capabilities, an answer
   per method or none at all, messages to send when a file opens or after a given message) and records every message it receives, so a test can
   assert on what Codeyard sent: `FakeServer::received("initialize")`, `replies()`, `starts()`. Tests using it skip with a
@@ -120,6 +124,10 @@ such a list silently drops every new test (until 2026-10 it ran 322 of the app's
 
 - Code that exists only on Unix (a POSIX shell script as a fixture, Unix permissions, the SSH daemon's sockets) is
   tested under `#[cfg(unix)]`, next to the code it tests.
+- Terminal tests run in `/bin/sh` on Unix and in cmd on Windows, through a real ConPTY. What cmd cannot do itself
+  (`stty size`, `printf '\033[?1000h'; cat -v`) is done by `qa_integration_tests::terminal_fixture`, which starts the
+  test binary in the terminal as a console program reading VT input. ConPTY's console host asks the terminal for SGR
+  mouse reports and focus events on its own, so a program that set mode 1000 gets `ESC [ < …` reports there.
 - A test that needs something this machine lacks checks for it first and returns after printing a `SKIPPED` line
   with the reason: `test_sshd::start` for `sshd`, `test_sshd::skip_missing` for an external tool (python3, clangd, …)
   and `ext_runtime::code_runs_for_test` for code extensions, which run only in `codeyard-exthost` inside its OS

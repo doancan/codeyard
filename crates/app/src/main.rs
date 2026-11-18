@@ -202,8 +202,6 @@ mod reliability_data_tests;
 mod replace_apply;
 mod replace_plan;
 mod repos;
-mod resource_monitor;
-mod resources;
 #[cfg(test)]
 mod rust_hardening_tests;
 mod rust_toolchain;

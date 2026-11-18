@@ -108,7 +108,7 @@ pub struct Settings {
     /// Where a right click goes while a program reads the mouse: "menu" (the terminal's menu) or "program"
     /// (`terminal.rightClick`; Shift or ⌥ still opens the menu).
     pub terminal_right_click: String,
-    /// zsh, bash and fish mark prompts, commands and their folder (`terminal.shellIntegration`).
+    /// zsh, bash, fish and PowerShell mark prompts, commands and their folder (`terminal.shellIntegration`).
     pub terminal_shell_integration: bool,
     /// The bell and program notifications (OSC 9/777) flag the terminal and the taskbar (`terminal.notifications`).
     pub terminal_notifications: bool,
@@ -136,6 +136,12 @@ pub struct Settings {
     /// Whether to start with the welcome screen or continue where you left off.
     pub startup: Startup,
     pub hot_exit: bool,
+    /// `localHistory.enabled`: a copy of a file is kept on every save.
+    pub local_history: bool,
+    /// `localHistory.exclude`: patterns of files that are not copied, added to the built-in list of secret files.
+    pub local_history_exclude: Vec<String>,
+    /// `localHistory.remote`: whether copies of a server's files are kept on this computer.
+    pub local_history_remote: crate::history::Remote,
     /// Small preview on the right (off by default).
     pub minimap: bool,
     /// Long lines wrap at the window width (⌥Z).
@@ -386,6 +392,9 @@ impl Default for Settings {
             restore_session: true,
             startup: Startup::Welcome,
             hot_exit: true,
+            local_history: true,
+            local_history_exclude: Vec::new(),
+            local_history_remote: crate::history::Remote::default(),
             auto_close_brackets: true,
             format_on_save: false,
             code_actions_on_save: Vec::new(),
@@ -652,6 +661,15 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.bool("files.hotExit") {
         s.hot_exit = v;
+    }
+    if let Some(v) = r.bool("localHistory.enabled") {
+        s.local_history = v;
+    }
+    if let Some(v) = r.strings("localHistory.exclude") {
+        s.local_history_exclude = v;
+    }
+    if let Some(v) = r.choice("localHistory.remote", &["ask", "keep", "off"]) {
+        s.local_history_remote = crate::history::Remote::parse(&v).unwrap_or_default();
     }
     if let Some(v) = r.number("search.maxResults", 1., 100_000.) {
         s.search_max_results = v as u32;
@@ -1174,6 +1192,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "files.autoSaveDelay",
         "files.exclude",
         "files.hotExit",
+        "localHistory.enabled",
+        "localHistory.exclude",
+        "localHistory.remote",
         "search.maxResults",
         // --- git-sync ---
         "git.autofetch",

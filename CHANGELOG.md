@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-18
+
+### Added
+
+- Windows: PowerShell terminals (Windows PowerShell 5.1 and PowerShell 7) get shell integration, as zsh, bash and fish
+  have: a dot shows how each command ended (with a program's own exit code), commands can be jumped between and their
+  output copied, and a split opens in the folder the shell is in. Your profile still runs first, and an execution
+  policy that refuses scripts does not stop it. It needs a console host that passes the marks on, as current Windows 11
+  does; with an older one PowerShell runs as before. `terminal.shellIntegration: false` turns it off.
+- Local History: secret files are never copied: `.env` and `.env.*` (not `.env.example`), private keys and certificates (`*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`, `id_ecdsa*`), `*.kdbx`, `.netrc`, `.npmrc`, `.pypirc`, `credentials*.json` and `*.tfstate`. `localHistory.exclude` adds patterns, `localHistory.enabled` turns it off. Copies already made of such a file are deleted at its next save, and a forced save no longer keeps the overwritten version of it.
+- Local History: the first save of a file on a server asks once per server whether to keep copies on this computer; nothing is written before the answer. `localHistory.remote` (`ask`, `keep`, `off`) decides without asking.
+- *Local History: Delete…* removes the copies of the open file or all of them, and reports copies it could not delete.
+- Timeline says "Local History is off for this file" for a file it does not keep.
+- Source Control: a changed image (PNG, JPEG, GIF, WebP, BMP, SVG) opens as its old and new version side by side, with their sizes in pixels and bytes, instead of a screen of replacement characters. Added and deleted images show "(none)" on one side; a damaged, too big or too large image says so while the other side still shows; a change of metadata only says the pixels are the same. *Stage File* / *Unstage File* in its header moves the whole file.
+- Source Control: another binary file shows one line ("Binary file changed (5 B → 9 B)"). A text file named like an image (a Git LFS pointer) stays a text diff.
+- Graph: hovering a commit shows what it changed: the number of files, the added and removed lines, and its first eight files with their status and counts, plus the rest of the message and the parents of a merge. The changes are read once per commit when the card shows (also over SSH).
+- Graph: squash and reorder the commits that are not pushed yet. Shift-click picks a run, *Squash N Commits…* makes one commit of it (the subject is asked for, the other messages become the body), *Move Commit Up / Down* swaps neighbours. The new history is built off to the side and installed with one ref update that names the old tip, so the branch is rewritten completely or not at all; the checkout's files, index and uncommitted changes are untouched. Pushed commits, merges, the first commit, a detached HEAD, a branch checked out in another worktree and a branch that moved are refused with the reason; a conflicting reorder names the two commits.
+- Source Control: a cherry-pick or revert that stopped on a conflict can be continued or aborted from the banner and the palette (*Git: Continue / Abort Cherry-pick or Revert*). The banner named the operation and offered no way out.
+- Git failures with a usual cause say it: diverged branches, a branch with no upstream, a detached HEAD, a merge or cherry-pick waiting for its conflicts, two branch names that clash, and the files in the way of a blocked switch (up to five, named).
+
+### Removed
+
+- The Resources strip at the right end of the status bar (CPU, memory, disk and project size, and what is running), its *View: Resources* command and its *View* menu item. It no longer worked as intended. *Codeyard memory* and the other figures are gone with it; the diagnostics report is unchanged.
+
+### Fixed
+
+- Windows: *File: Filter Log Lines…* works on a local file without Git Bash or WSL. It needed `sh`, `tail` and `grep`
+  on the PATH, which Git for Windows does not put there by default; a local file is now filtered by the app itself (the
+  last 256 MB, a case-insensitive regular expression, the last 5000 matches). Files over SSH are filtered on the server
+  as before.
+- Windows: Data Lens shows an epoch time in local time too (with that date's daylight saving), as on macOS and Linux;
+  it said local time was not available.
+- Windows: crash reports, scratch files (which hold HTTP responses) and the update hand-over file are for your account
+  alone, as on macOS and Linux: their folder gets an ACL of its own (you, SYSTEM and Administrators) instead of taking
+  the parent's. In `%APPDATA%` nothing changes; a `CODEYARD_CONFIG_DIR` on a shared disk let other users read them.
+- Source Control: opening a second diff while the first was still being read could leave the first one in the tab; the last request now wins.
+- Graph: a cherry-pick or revert started while another one waited for its conflicts failed and then aborted the one the user was in the middle of. It now refuses with "Cherry-pick in progress: finish or abort it first, then try again." and leaves the waiting operation alone.
+- Git: a leftover lock file other than `index.lock` (a branch or `HEAD` lock) is named too.
+
 ## [0.11.1] - 2026-11-14
 
 ### Changed
@@ -1969,7 +2008,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/doancan/codeyard/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/doancan/codeyard/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/doancan/codeyard/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/doancan/codeyard/compare/v0.10.0...v0.10.1

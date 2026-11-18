@@ -330,7 +330,6 @@ impl Workbench {
             .children(self.web_preview_status(p, cx))
             .children(self.extension_status_items(p, cx))
             .child(self.notifications_bell(p, cx))
-            .child(self.chrome.resources.clone())
             // macOS has the switches in its title bar; Windows and Linux have none there, so the panel's own button stays here.
             .when(!cfg!(target_os = "macos"), |d| {
                 let key = Command { label: String::new(), run: Run::Action(Box::new(TogglePanel)) }.shortcut(cx);

@@ -121,6 +121,32 @@ pub fn merge(host: &dyn Host, root: &str, branch: &str) -> Result<bool, String> 
     Err(failure_text(&out))
 }
 
+/// Which of the two commands that stop on a conflict and wait.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sequencer {
+    CherryPick,
+    Revert,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Step {
+    Continue,
+    Abort,
+}
+
+/// `git cherry-pick|revert --continue|--abort`. Continuing makes the commit with the message the operation had (no editor opens).
+pub fn sequencer(host: &dyn Host, root: &str, which: Sequencer, step: Step) -> Result<(), String> {
+    let command = match which {
+        Sequencer::CherryPick => "cherry-pick",
+        Sequencer::Revert => "revert",
+    };
+    let flag = match step {
+        Step::Continue => "--continue",
+        Step::Abort => "--abort",
+    };
+    git_ok(host, root, &["-c", "core.editor=true", command, flag]).map(|_| ())
+}
+
 pub fn merge_abort(host: &dyn Host, root: &str) -> Result<(), String> {
     git_ok(host, root, &["merge", "--abort"]).map(|_| ())
 }

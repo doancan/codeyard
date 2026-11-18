@@ -1026,11 +1026,7 @@ fn schema_download_hosts_are_asked_once(cx: &mut TestAppContext) {
 /// Log files follow on their own when opened in the large-file view, the menu entry follows anything, and the
 /// filter shows matching lines only (the pattern is a case-insensitive regular expression).
 #[gpui::test]
-#[cfg_attr(windows, ignore = "log filtering runs sh, tail and grep, which Windows has only with Git Bash or WSL")]
 fn logs_follow_automatically_and_can_be_filtered(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
-        return;
-    }
     let dir = fresh("log-filter");
     let log = dir.join("app.log");
     let plain = dir.join("data.txt");
@@ -1250,16 +1246,13 @@ fn following_a_file_that_vanishes_reports_it_and_recovers(cx: &mut TestAppContex
 }
 
 /// The log filter passes the pattern and the path to the shell as data: quotes, `$()`, backticks, a leading dash and odd file
-/// names are literal text, and nothing is executed.
+/// names are literal text, and nothing is executed. On Windows a local file is filtered in the app, with no shell at all.
 #[gpui::test]
-#[cfg_attr(windows, ignore = "log filtering runs sh, tail and grep, which Windows has only with Git Bash or WSL")]
 fn the_log_filter_is_safe_against_shell_metacharacters(cx: &mut TestAppContext) {
-    if !crate::test_sshd::posix_shell() {
-        return;
-    }
     let dir = fresh("log-filter-safe");
     let canary = dir.join("INJECTED");
-    let log = dir.join("it's a \"log\" $HOME file.log");
+    // Windows allows no `"` in a name.
+    let log = dir.join(if cfg!(windows) { "it's a $HOME `x` & %PATH% file.log" } else { "it's a \"log\" $HOME file.log" });
     std::fs::write(&log, "plain line\n-v starts with a dash\nprice $5 (approx)\nback`tick`\nIt's quoted\nERROR boom\n").unwrap();
     let (wb, cx) = crate::qa_workbench_tests::setup_with_config(cx, &fresh("log-filter-safe-config"));
     let run = |wb: &gpui::Entity<crate::workbench::Workbench>, cx: &mut gpui::VisualTestContext, pattern: &str| {
@@ -1294,7 +1287,8 @@ fn the_log_filter_is_safe_against_shell_metacharacters(cx: &mut TestAppContext) 
     wait_ticking(cx, "invalid regex", |cx| crate::qa_integration_tests::notice(&wb, cx).contains("not a valid regular expression"));
     // A missing file reports the reason.
     wb.update_in(cx, |wb, window, cx| wb.filter_log_for_test(dir.join("missing.log").to_str().unwrap(), "x", window, cx));
-    wait_ticking(cx, "missing file", |cx| crate::qa_integration_tests::notice(&wb, cx).to_lowercase().contains("no such file"));
+    let missing = if cfg!(windows) { "cannot find the file" } else { "no such file" };
+    wait_ticking(cx, "missing file", |cx| crate::qa_integration_tests::notice(&wb, cx).to_lowercase().contains(missing));
 }
 
 /// Over SSH the schema file is read from the server (through the agent) and its problems show up like any other.

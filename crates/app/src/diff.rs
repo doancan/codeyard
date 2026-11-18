@@ -10,6 +10,8 @@ pub(crate) mod colors;
 pub(crate) mod fold;
 #[path = "diff_guard.rs"]
 pub(crate) mod guard;
+#[path = "diff_media.rs"]
+pub(crate) mod media;
 #[path = "diff_ruler.rs"]
 pub(crate) mod ruler;
 #[cfg(test)]
@@ -121,6 +123,8 @@ pub struct DiffView {
     pub(crate) busy: bool,
     /// The last operation's result: its message and whether it failed.
     pub(crate) outcome: Option<(SharedString, bool)>,
+    /// An image or another binary file: shown instead of lines (`diff_media`).
+    pub(crate) media: Option<media::Media>,
 }
 
 /// The two sides' names from a label like "HEAD ↔ Working Tree".
@@ -242,6 +246,7 @@ impl DiffView {
             hover_row: None,
             busy: false,
             outcome: None,
+            media: None,
         };
         view.set_texts(old, new);
         view.scroll_to_change(0);
@@ -793,6 +798,16 @@ impl DiffView {
 
 impl Render for DiffView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(media) = self.media.clone() {
+            let p = *palette(cx);
+            return self.render_media(&media, p, cx).into_any_element();
+        }
+        self.render_lines(window, cx).into_any_element()
+    }
+}
+
+impl DiffView {
+    fn render_lines(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui::Div {
         let p = *palette(cx);
         let settings = cx.global::<Settings>();
         let (font_size, line_h) = (settings.editor_font_size, settings.editor_line_height);

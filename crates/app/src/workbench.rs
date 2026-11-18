@@ -165,6 +165,8 @@ pub use row_nav_glue::{ROW_LIST, RowActivate, RowFirst, RowLast, RowNext, RowPre
 #[path = "workbench_rust.rs"]
 pub(crate) mod rust_glue;
 // --- git-refs ---
+#[path = "workbench_history.rs"]
+mod history_glue;
 #[path = "workbench_recover.rs"]
 mod recover_glue;
 #[path = "workbench_refactor.rs"]
@@ -175,6 +177,8 @@ mod refs_glue;
 mod render_glue;
 #[path = "workbench_replace.rs"]
 mod replace_glue;
+#[path = "workbench_rewrite.rs"]
+mod rewrite_glue;
 // --- structural ---
 #[path = "workbench_schema.rs"]
 mod schema_glue;
@@ -444,6 +448,8 @@ actions!(
         GitRenameBranch,
         GitPublishBranch,
         GitAbortMerge,
+        GitContinueSequencer,
+        GitAbortSequencer,
         GitAddRemote,
         GitRemoveRemote,
         GitCreateTag,
@@ -542,6 +548,7 @@ actions!(
         RemoveSshHost,
         TestSshHost,
         ReconnectHost,
+        DeleteLocalHistory,
         EditSshConfig,
         EditSshHost,
         ManageSshHosts,
@@ -1316,7 +1323,6 @@ impl Workbench {
             chrome: state_glue::ChromeLayout {
                 a11y_bounds: Default::default(),
                 row_nav: row_nav_glue::RowNav::new(cx),
-                resources: cx.new(crate::resource_monitor::ResourceMonitor::new),
                 web_preview: Default::default(),
                 panel: Some(Panel::Explorer),
                 bottom: Bottom::Terminal,
@@ -1367,6 +1373,7 @@ impl Workbench {
                 pending_restore_workspace: None,
                 backup_task: None,
                 backed_up: Default::default(),
+                history_asking: Default::default(),
                 state,
                 recent,
                 pinned,
@@ -2443,7 +2450,7 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 this.reload_snippets_if_edited(ed, cx);
                 this.save_failure_resolved(ed, cx);
                 this.refresh_git(200, cx);
-                this.record_history(ed, cx);
+                this.record_history(ed, window, cx);
             }
             EditorEvent::Overwrote(text) => return this.keep_overwritten(ed, text, cx),
             EditorEvent::SaveFailed(error) => return this.report_save_failed(ed, error, cx),

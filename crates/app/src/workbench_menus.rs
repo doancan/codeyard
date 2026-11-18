@@ -467,6 +467,8 @@ impl Workbench {
                     self.scm.update(cx, |s, cx| s.commit_op_in(Some(repo), target.path, op, window, cx));
                 }
             }
+            MenuCmd::CommitSquash => self.squash_commits(window, cx),
+            MenuCmd::CommitMove { down } => self.move_commit(target.path, down, cx),
             // --- git-refs ---
             MenuCmd::GitIgnore => self.git_ignore_path(target.path, target.is_dir, cx),
             MenuCmd::GitOpenChanges => self.git_open_changes(target.path, window, cx),

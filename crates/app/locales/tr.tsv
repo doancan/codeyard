@@ -2522,7 +2522,7 @@ Terminal: Rename…	Terminal: Yeniden Adlandır…
 Terminal: Change Color…	Terminal: Rengi Değiştir…
 Terminal: Kill All Terminals	Terminal: Tüm Terminalleri Sonlandır
 Copy Last Command Output	Son Komutun Çıktısını Kopyala
-Mark prompts, commands and the folder in zsh, bash and fish	zsh, bash ve fish'te istemleri, komutları ve klasörü işaretle
+Mark prompts, commands and the folder in zsh, bash, fish and PowerShell	zsh, bash, fish ve PowerShell'de istemleri, komutları ve klasörü işaretle
 Flag a terminal and the taskbar when its program rings the bell or asks for you	Terminaldeki program zil çaldığında veya sizi beklediğinde terminali ve görev çubuğunu işaretle
 A command failed with code {}	Bir komut {} koduyla başarısız oldu
 A command finished	Bir komut bitti
@@ -2718,15 +2718,8 @@ Restore window	Pencereyi önceki boyutuna getir
 Close window	Pencereyi kapat
 Mouse wheel and trackpad scroll speed multiplier	Fare tekerleği ve izleme dörtgeni kaydırma hızı çarpanı
 Terminal row height, as a multiple of the font size	Terminal satır yüksekliği, yazı boyutunun katı olarak
-Codeyard memory	Codeyard belleği
-Disk available	Kullanılabilir disk
-Load	Yük
-files	dosya
-Measuring…	Ölçülüyor…
 Open File	Dosyayı Aç
-Project	Proje
 Unavailable	Kullanılamıyor
-View: Resources	Görünüm: Kaynaklar
 Web Preview	Web Önizleme
 Preview	Önizleme
 Web Preview stopped.	Web Önizleme durduruldu.
@@ -3618,8 +3611,6 @@ Tasks, tests and debugging	Görevler, testler ve hata ayıklama
 “{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	“{}” ve klasörleri, görevleri, hata ayıklama yapılandırmaları ve proje ayarları aracılığıyla program çalıştırabilir. Yalnızca bu çalışma alanının nereden geldiğine güveniyorsanız devam edin.
 Title bar	Başlık çubuğu
 Toggle Secondary Side Bar	İkincil Kenar Çubuğunu Aç/Kapat
-Debugger	Hata ayıklayıcı
-Failing tests	Başarısız testler
 The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	Bir pencerede açılan ilk terminal tüm düzenleyici alanını kaplar; panelin büyüt düğmesiyle eski boyutuna döner
 terminal.scrollback: {} lines can use hundreds of megabytes per terminal and slow down scrolling and search (up to {} is comfortable); applied as set	terminal.scrollback: {0} satır terminal başına yüzlerce megabayt bellek kullanabilir, kaydırmayı ve aramayı yavaşlatabilir ({1} satıra kadar rahattır); verildiği gibi uygulandı
 Lines kept in terminal history. More than 50,000 can use a lot of memory and slow down scrolling and search	Terminal geçmişinde tutulan satır sayısı. 50.000'den fazlası çok bellek kullanabilir, kaydırmayı ve aramayı yavaşlatabilir
@@ -3649,7 +3640,6 @@ View: Toggle Status Bar Visibility	Görünüm: Durum Çubuğunu Göster/Gizle
 Let programs in the terminal erase its scrollback (some full-screen tools do on every redraw, and the history is lost)	Terminaldeki programların geçmişi silmesine izin ver (bazı tam ekran araçlar her yeniden çizimde yapar ve geçmiş kaybolur)
 
 Search files by name (> commands, : line, # symbols, ? help)	Dosyaları adla ara (> komutlar, : satır, # semboller, ? yardım)
-{} running	{} çalışıyor
 Another git process is using this repository. If none is running, a crash left {} behind: delete it and try again.	Bu depoyu başka bir git işlemi kullanıyor. Çalışan yoksa bir çökme {} dosyasını bırakmıştır: silip yeniden deneyin.
 Before switching to {}	{} dalına geçmeden önce
 Cannot reach the server: check the network connection (and a proxy or VPN, if you use one).	Sunucuya ulaşılamıyor: ağ bağlantısını (varsa proxy veya VPN'i) kontrol edin.
@@ -4236,3 +4226,82 @@ The jump host or proxy command failed. Check ProxyJump and ProxyCommand for this
 The SSH config has an error: fix the line named above (Remote: Edit SSH Config).	SSH yapılandırmasında hata var: yukarıda adı geçen satırı düzeltin (Remote: Edit SSH Config).
 The shared connection was stale. Try again.	Paylaşılan bağlantı eskimişti. Yeniden deneyin.
 The server accepts no more sessions. Close other connections or raise MaxSessions on it.	Sunucu daha fazla oturum kabul etmiyor. Diğer bağlantıları kapatın ya da sunucuda MaxSessions değerini artırın.
+Delete All Local History	Tüm Yerel Geçmişi Sil
+Delete History of “{}”	“{}” Geçmişini Sil
+Delete Local History?	Yerel Geçmiş silinsin mi?
+Deleted {} copy from Local History.|Deleted {} copies from Local History.	Yerel Geçmişten {} kopya silindi.
+Don't Keep	Tutma
+Every save of a file on this server would leave a copy of it in Codeyard's data folder here, for up to {} days. Secrets in those files would be copied too. Change it later with localHistory.remote.	Bu sunucudaki bir dosyanın her kaydı, Codeyard'ın bu bilgisayardaki veri klasöründe {} güne kadar bir kopya bırakır. Dosyalardaki gizli bilgiler de kopyalanır. Sonradan localHistory.remote ile değiştirebilirsin.
+Keep Local History of files on servers	Sunucudaki dosyaların Yerel Geçmişini tut
+Keep Local History of files on {} on this computer?	{} üzerindeki dosyaların Yerel Geçmişi bu bilgisayarda tutulsun mu?
+Keep a copy of a file on every save (Local History)	Dosyanın her kaydında bir kopya tut (Yerel Geçmiş)
+Local History has nothing to delete.	Yerel Geçmişte silinecek bir şey yok.
+Local History is not available in this window.	Yerel Geçmiş bu pencerede kullanılamıyor.
+Local History is off for this file.	Bu dosya için Yerel Geçmiş kapalı.
+Local History: Delete…	Yerel Geçmiş: Sil…
+Local History: {0} copies deleted, {1} could not be deleted.	Yerel Geçmiş: {0} kopya silindi, {1} kopya silinemedi.
+The copies are removed from this computer. Git history and the files themselves are not touched. This can't be undone.	Kopyalar bu bilgisayardan silinir. Git geçmişine ve dosyaların kendisine dokunulmaz. Bu geri alınamaz.
+The version that was on disk was not kept: Local History does not keep this file.	Diskteki sürüm saklanmadı: Yerel Geçmiş bu dosyayı tutmaz.
+The version that was on disk was not kept: Local History does not keep this server's files.	Diskteki sürüm saklanmadı: Yerel Geçmiş bu sunucunun dosyalarını tutmaz.
+{} earlier copy of this file could not be deleted from Local History, which does not keep it any more.|{} earlier copies of this file could not be deleted from Local History, which does not keep it any more.	Bu dosyanın {} eski kopyası Yerel Geçmişten silinemedi; Yerel Geçmiş artık bu dosyayı tutmuyor.
+(none)	(yok)
+After	Sonra
+Before	Önce
+Binary file added ({})	İkili dosya eklendi ({})
+Binary file changed ({0} → {1})	İkili dosya değişti ({0} → {1})
+Binary file deleted ({})	İkili dosya silindi ({})
+Only the file's metadata changed: the pixels are the same.	Yalnızca dosyanın üst verisi değişti: pikseller aynı.
+Stage File	Dosyayı Stage'e Al
+Staged “{}”	“{}” Stage'e alındı
+Unstage File	Dosyayı Stage'den Çıkar
+Unstaged “{}”	“{}” Stage'den çıkarıldı
+No files changed	Değişen dosya yok
+Parents: {}	Ebeveynler: {}
+Reading the changes…	Değişiklikler okunuyor…
+The changes could not be read.	Değişiklikler okunamadı.
+and {} more file|and {} more files	ve {} dosya daha
+{} file changed|{} files changed	{} dosya değişti
+A commit could not be made while rewriting ({}). Nothing was changed.	Yeniden yazarken bir commit oluşturulamadı ({}). Hiçbir şey değişmedi.
+A merge commit cannot be part of the run, or above it	Birleştirme (merge) commit'i aralığın içinde veya üstünde olamaz
+Choose at least two commits to squash.	Birleştirmek için en az iki commit seç.
+Commits can only be rewritten on a branch, and HEAD is detached.	Commit'ler yalnızca bir dalda yeniden yazılabilir; HEAD ayrık (detached).
+Move Commit Down	Commit'i Aşağı Taşı
+Move Commit Up	Commit'i Yukarı Taşı
+Moved {}	{} taşındı
+Moving {0} would conflict with {1}: nothing was changed	{0} commit'ini taşımak {1} ile çakışırdı: hiçbir şey değişmedi
+Only commits that are not pushed can be moved	Yalnızca push edilmemiş commit'ler taşınabilir
+Only commits that are not pushed can be squashed	Yalnızca push edilmemiş commit'ler birleştirilebilir (squash)
+Rewriting more than {} commits is refused	{} commit'ten fazlasını yeniden yazmak reddedildi
+Squash	Birleştir
+Squash {} Commit…|Squash {} Commits…	{} Commit'i Birleştir…
+Squashed {0} commit into {1}|Squashed {0} commits into {1}	{0} commit {1} olarak birleştirildi
+Subject of the squashed commit; the other messages follow it	Birleştirilen commit'in konusu; diğer mesajlar ardından gelir
+The branch {} is checked out in another worktree, so its commits cannot be rewritten here.	{} dalı başka bir worktree'de açık, bu yüzden commit'leri burada yeniden yazılamaz.
+The chosen commits are not one run of this branch.	Seçilen commit'ler bu dalın kesintisiz bir aralığı değil.
+The first commit of the repository cannot be rewritten	Deponun ilk commit'i yeniden yazılamaz
+The graph does not show the current branch's latest commit. Reload it and try again.	Grafik, geçerli dalın son commit'ini göstermiyor. Yenileyip tekrar dene.
+The rewritten commits would end with different files. Nothing was changed.	Yeniden yazılan commit'lerin sonunda dosyalar farklı olurdu. Hiçbir şey değişmedi.
+The subject of the squashed commit cannot be empty.	Birleştirilen commit'in konusu boş olamaz.
+There is no commit above to swap with	Yer değiştirecek üstte commit yok
+There is no commit below to swap with	Yer değiştirecek altta commit yok
+{} would conflict while the commits are rewritten: nothing was changed	{}, commit'ler yeniden yazılırken çakışırdı: hiçbir şey değişmedi
+A merge, rebase or cherry-pick is waiting for its conflicts to be resolved: resolve and stage the files, or abort it, then try again.	Bir merge, rebase veya cherry-pick çakışmalarının çözülmesini bekliyor: dosyaları çöz ve stage'e al ya da işlemi iptal et, sonra tekrar dene.
+Abort the cherry-pick?	Cherry-pick iptal edilsin mi?
+Abort the revert?	Revert iptal edilsin mi?
+Aborting…	İptal ediliyor…
+Cherry-pick aborted	Cherry-pick iptal edildi
+Cherry-pick finished	Cherry-pick tamamlandı
+Continuing…	Devam ediliyor…
+Everything resolved so far is discarded and the files go back to how they were.	Şimdiye kadar çözülenlerin hepsi atılır ve dosyalar eski haline döner.
+Git: Abort Cherry-pick or Revert	Git: Cherry-pick veya Revert'i İptal Et
+Git: Continue Cherry-pick or Revert	Git: Cherry-pick veya Revert'e Devam Et
+HEAD is detached, not on a branch: check out a branch, or create one at this commit, before pulling or pushing.	HEAD ayrık, bir dalda değil: pull veya push öncesinde bir dala geç ya da bu commit'te yeni bir dal oluştur.
+No cherry-pick or revert is in progress.	Süren bir cherry-pick veya revert yok.
+Revert aborted	Revert iptal edildi
+Revert finished	Revert tamamlandı
+The branch name {0} clashes with {1}: a branch cannot also be a folder of branches. Delete or rename one of them (on the remote too), then fetch again.	{0} dal adı {1} ile çakışıyor: bir dal aynı zamanda başka dalların klasörü olamaz. Birini sil veya yeniden adlandır (uzakta da), sonra yeniden fetch et.
+These files would be overwritten ({0} and {1} more): commit or stash your changes first.	Bu dosyaların üzerine yazılırdı ({0} ve {1} tane daha): önce değişikliklerini commit et veya stash'e al.
+These files would be overwritten ({}): commit or stash your changes first.	Bu dosyaların üzerine yazılırdı ({}): önce değişikliklerini commit et veya stash'e al.
+This branch and its upstream both have new commits. Choose once how to combine them: in a terminal, git pull --rebase or git pull --no-rebase (or set pull.rebase).	Bu dalda da upstream'de de yeni commit'ler var. Nasıl birleştireceğini bir kez seç: terminalde git pull --rebase veya git pull --no-rebase (ya da pull.rebase ayarla).
+This branch has no upstream yet: publish it with Git: Publish Branch, or set one in a terminal with git branch --set-upstream-to.	Bu dalın henüz upstream'i yok: Git: Publish Branch ile yayınla ya da terminalde git branch --set-upstream-to ile ayarla.
+{}: finish or abort it first, then try again.	{}: önce bitir veya iptal et, sonra tekrar dene.

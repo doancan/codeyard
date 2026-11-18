@@ -276,6 +276,29 @@ pub(crate) fn replace_on_transfer(existing: &[String]) -> Question {
     confirm(PromptLevel::Warning, title, t("Files with the same name are overwritten; other files in the folder are kept.").into(), t("Replace"))
 }
 
+/// Whether the copies of a server's files may be kept on this computer (`localHistory.remote: "ask"`). Not keeping is the
+/// cancel button: Escape never starts copying secrets.
+pub(crate) fn remote_history(host: &str) -> Question {
+    Question::new(PromptLevel::Warning, tf("Keep Local History of files on {} on this computer?", &[&host]))
+        .detail(tf(
+            "Every save of a file on this server would leave a copy of it in Codeyard's data folder here, for up to {} days. Secrets in those files would be copied too. Change it later with localHistory.remote.",
+            &[&crate::history::KEEP_DAYS],
+        ))
+        .button(t("Keep"))
+        .cancel(t("Don't Keep"))
+}
+
+/// *Local History: Delete…*: one file's copies or all of them; nothing is deleted on Cancel.
+pub(crate) fn delete_history(file: Option<&str>) -> Question {
+    let question = Question::new(PromptLevel::Warning, t("Delete Local History?"))
+        .detail(t("The copies are removed from this computer. Git history and the files themselves are not touched. This can't be undone."));
+    match file {
+        Some(name) => question.button(tf("Delete History of “{}”", &[&name])).button(t("Delete All Local History")),
+        None => question.button(t("Delete All Local History")),
+    }
+    .cancel(t("Cancel"))
+}
+
 /// Cancelling a running transfer: going on is the safe answer.
 pub(crate) fn cancel_transfer(label: &str) -> Question {
     Question::new(PromptLevel::Warning, tf("Cancel “{}”?", &[&label]))

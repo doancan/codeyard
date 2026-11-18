@@ -562,7 +562,11 @@ Make it yours:
 columns), one line per commit: message, author and the most important branch/tag chip
 (`"git.graph.showHash"` adds the short hash). Every row is only as wide as the branches running
 next to it, so history reads from the left edge and side branches step to the right. Hover a commit
-for its author, date, all labels and hash. Click a commit for its message, files and `+/−` counts below
+for a card with its author, date, full message, labels, hash (and a merge's parents) and what it changed: the number of
+files, the added and removed lines, and its first eight files with their own counts ("and 12 more files" for the rest; a
+binary file says so; a merge shows what it brought in against its first parent). The changes are read when the card shows,
+once per commit, so scrolling through the graph runs no Git commands. The same information is under the graph when you click
+a commit, which is also the way to reach it from the keyboard. Click a commit for its message, files and `+/−` counts below
 the graph (click a file for its diff; double-click for the file list). Right-click for copy hash,
 create branch or tag here, checkout (detached), cherry-pick, revert and reset (a cherry-pick or revert that conflicts is
 undone, never left half done; for a merge commit the first parent is the mainline). Before a reset Codeyard counts the
@@ -570,7 +574,20 @@ commits that leave the branch: a hard reset always asks and says how many leave,
 or remote (afterwards only Git's reflog finds them) and how many are already on the upstream; a soft or mixed reset asks
 only when some are already on the upstream, because the next Sync would bring them back. The result names the commit the
 branch was at, so `git reset <hash>` returns there.
-There is no interactive rebase (squash, reorder, edit): use a terminal for that. The header searches
+**Squash and reorder.** The commits that are not pushed yet can be cleaned up without a terminal. Shift-click a second row to
+pick the run from the selected commit to it (rows of the branch's own line only), then right-click it: **Squash N Commits…**
+asks for the subject of the new commit (the oldest commit's subject to start with; the other commits' messages follow it as the
+body) and replaces the run with one commit that has the oldest commit's author and date. **Move Commit Up** / **Move Commit
+Down** swaps a commit with its newer or older neighbour. Commits above a squashed run are replayed on top of it, none is
+dropped. The new history is built in a temporary worktree and installed with one ref update that names the old tip, so the
+branch is either rewritten completely or untouched, and the checkout's files, index and uncommitted changes are never touched
+(the files at the tip are checked to be identical before and after). It is refused, with the reason, for a commit that is
+already on the upstream (or on any remote when there is no upstream), a merge among the commits that would be replayed, the
+repository's first commit, a detached `HEAD`, a branch checked out in another worktree, more than 1000 commits, or when the
+branch moved since the graph was read; a reorder that would conflict names the two commits. Your hooks (`commit-msg`,
+`pre-commit`) and `commit.gpgsign` apply as for a normal commit, and one that refuses stops the rewrite. Editing a commit's
+content, dropping, rewording one commit and rewriting pushed history stay with the terminal. The old commits remain in the
+reflog (`git reflog`). The header searches
 commits (message, author, hash, branch), fetches, pulls and pushes (with the counts of commits to pull
 and to push) and reloads; its **…** menu picks the view (Graph, List with times, Days), the scope (all
 branches or the current one), *Only My Commits* and *Hide Merge Commits*, and offers sync, pull
@@ -580,6 +597,24 @@ click one to turn it off. Stashes are listed with apply, pop and drop. `"git.gra
 
 **Explorer sections.** OPEN EDITORS, the folder tree, **OUTLINE** (the symbols of the open file) and **TIMELINE** (the file's git
 commits plus a saved copy for every save, "local history"; click an entry for a diff).
+
+**Local History and secrets.** The copies live in Codeyard's data folder, outside the project, so a copy of a secret would
+outlive the file, its `.gitignore` entry and a clean-up of the project. Local History therefore never copies secret files:
+`.env` and `.env.*` (not `.env.example` or `.env.sample`), `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`,
+`id_ecdsa*`, `*.kdbx`, `.netrc`, `.npmrc`, `.pypirc`, `credentials*.json` and `*.tfstate`. The names are what is checked, not
+the content: a secret in an ordinary file is copied. `"localHistory.exclude"` adds patterns of your own (`"*.secret.yaml"`;
+a pattern with a `/` such as `"config/*.secret.yaml"` matches a run of folders and the file at its end; case is ignored) and
+`"localHistory.enabled": false` turns Local History off. When a file that Local History does not keep was copied before, its
+old copies are deleted at its next save, and a forced save that overwrites it does not keep the overwritten version either.
+TIMELINE says "Local History is off for this file" instead of an empty list. These settings are read from your own settings
+file only; a folder's are ignored.
+
+A file's copies are kept for 30 days, at most 40 of them, and a file over 2 MB is not copied.
+
+Copies of a **server's** files are written on this computer, so the first save of a file on a server asks, once per server,
+whether to *Keep* them or not (*Don't Keep*, also what Escape does); nothing is written before the answer. `"localHistory.remote"`
+decides without asking: `"keep"` or `"off"` (`"ask"` is the default). **Local History: Delete…** in the palette removes the
+copies of the open file or all of them, and says if any copy could not be deleted.
 
 **Outline and breadcrumb symbols.** When a language server runs for the file and offers symbols, the Outline and the
 breadcrumbs use its answer (classes, methods, fields, with their real ranges); until it answers, and for files with no server
@@ -1399,8 +1434,35 @@ The strip at the right edge is the overview ruler. It shows the whole list: a gr
 removed lines and a half-red, half-green one for a changed line, in proportion to their place in the file. The lighter
 box is the part on screen, and the outlined mark is the change F7 is on. Click the ruler or drag along it to scroll there.
 
-A binary file and a file over 4 MB show a message instead of a diff. A file with bytes that are not valid UTF-8 still
+**Images and other binary files.** A changed PNG, JPEG, GIF, WebP, BMP or SVG opened from Source Control shows its two
+versions side by side, scaled to fit on a checkerboard (so transparency is visible), with the size in pixels and bytes under
+each ("1280 × 800 · 214 KB"). An added image has "(none)" on the old side and a deleted one on the new side; a version that
+is too big (20 MB, or too many pixels) or damaged says so while the other still shows, and when only the file's metadata
+changed the diff says the pixels are the same. SVGs load nothing from outside the file. Lines of a picture cannot be picked:
+the header's **Stage File** / **Unstage File** moves the whole file. Another binary file (a NUL byte in it, whatever its name)
+gets one line, "Binary file changed (5 B → 9 B)". A file that is text stays a text diff even when its name says image (a Git
+LFS pointer). It works the same over SSH.
+
+A file over 4 MB shows a message instead of a diff. A file with bytes that are not valid UTF-8 still
 shows, with a warning above it, and those bytes appear as replacement characters.
+
+**When Git is in the middle of something.** A merge, rebase, cherry-pick or revert that stopped on a conflict shows a banner
+above the changes ("Cherry-pick in progress · 2 conflicts") with **Continue** (once the files are resolved and staged) and
+**Abort** (it asks first; everything resolved so far is discarded). Commands that would start another operation do not run
+on top of it:
+
+| Git is in… | Graph cherry-pick / revert | Squash / Move | Pull, commit |
+| --- | --- | --- | --- |
+| a merge, cherry-pick or revert waiting | refused: "Merge in progress: finish or abort it first, then try again." The waiting operation is never aborted for you. | refused, same sentence | git's refusal is turned into "waiting for its conflicts to be resolved: resolve and stage the files, or abort it" |
+| a rebase | refused, same sentence | refused (HEAD is detached) | same as above |
+| a detached `HEAD` | works (the commits are applied to the detached head) | refused: it needs a branch | pull and push say HEAD is detached and what to do |
+| a repository without commits | the graph is empty, not an error | nothing to rewrite | commit works; pull and push say the branch has no upstream |
+
+Failures that have a usual cause say it in a sentence, with git's own text kept as the fallback: a push the remote rejects
+(pull first), a protected branch, a leftover `index.lock` (the file is named), a switch blocked by local changes (the files in
+the way are named, up to five), diverged branches (how to choose once), a branch with no upstream (*Git: Publish Branch*), a
+detached `HEAD`, two branch names that clash, and a server that cannot be reached. *Git: Continue Cherry-pick or Revert* and
+*Git: Abort Cherry-pick or Revert* are in the palette too.
 
 ### Log, diagnostics and crash reports
 
@@ -2143,7 +2205,7 @@ program that only reads clicks gets a reminder the first time. Such a program al
 pastes instead). A right click opens the terminal's menu there too; `terminal.rightClick: "program"` gives it to the
 program, and Shift or ⌥ then opens the menu.
 
-**Shell integration.** zsh, bash and fish mark each prompt and command, with no setup:
+**Shell integration.** zsh, bash, fish and PowerShell mark each prompt and command, with no setup:
 
 - A dot beside each command shows how it ended: green for success, red for failure.
 - ⌥⌘↑ / ⌥⌘↓ (Ctrl+Shift+↑ / ↓) jump between commands. ⌘↑ / ⌘↓ scroll to the top and bottom of the history.
@@ -2152,7 +2214,10 @@ program, and Shift or ⌥ then opens the menu.
 - A split opens in the folder the shell is in.
 
 Your own startup files are still read. `"terminal.shellIntegration": false` turns it off. bash before 4.4 (the macOS
-system bash is 3.2) marks prompts and the folder only, so it has no command dots or jumps.
+system bash is 3.2) marks prompts and the folder only, so it has no command dots or jumps. On Windows, PowerShell
+(Windows PowerShell 5.1 and PowerShell 7) is marked where Windows' console host passes the marks on to the terminal, as
+current Windows 11 does; with an older console host PowerShell runs as before, unmarked. cmd has no way to mark its
+commands.
 
 **Profiles.** *Terminal: New Terminal with Profile…* lists your profiles and the shells installed on the machine, and
 *Terminal: Select Default Profile…* picks the one new terminals use. Profiles are defined in `terminal.profiles.macos`,
@@ -2301,7 +2366,7 @@ reaches the same targets from the keyboard.
 - **Follow (Tail)**: *File: Follow (Tail) Active File*, or *Follow (Tail)* in the explorer and tab menus, opens the file in a read-only
   view that sticks to the end while the file grows (`tail -f`). It works for any size, survives log rotation, colours `ERROR`/`WARN`/`DEBUG`
   lines, and starts on its own for `.log` files (and `/var/log`) that are too large to edit. Scrolling up pauses it and a
-  "↓ N new lines" badge counts what arrived; click it, press End or ⌘↓ to catch up. **File: Filter Log Lines…** runs `grep` on the host
+  "↓ N new lines" badge counts what arrived; click it, press End or ⌘↓ to catch up. **File: Filter Log Lines…** runs `grep` on the host (on Windows the app filters a local file itself)
   (the last 256 MB, at most 5000 lines, case-insensitive regular expression) and shows the matches in a tab.
 - **Edit and secure hosts**: **Remote: Edit SSH Host…** changes `HostName`, `User`, `Port`, `IdentityFile` or `ProxyJump` of one host block
   (values are validated; other lines, comments and blocks stay as they are). **Remote: Set Up Key Login…** finds or creates
