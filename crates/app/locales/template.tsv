@@ -4004,6 +4004,7 @@ your words
 {}: expected text	
 {}: expected text or a list of text	
 {}: expected true or false	
+{}: finish or abort it first, then try again.	
 {}: invalid color {}	
 {}: no answer from the debug adapter	
 {}: no changed files.	

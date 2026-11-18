@@ -100,6 +100,12 @@ fn plan(host: &dyn Host, root: &str, expected_tip: &str, what: &Rewrite, limit: 
     if old_tip != expected_tip {
         return Err(super::moved_message());
     }
+    // A merge, cherry-pick or revert waiting for the user: moving the branch under it would leave it pointing at the wrong place.
+    let git_dir = git_ok(host, root, &["rev-parse", "--absolute-git-dir"])?;
+    let state = crate::repos::OpState::read(host, git_dir.trim());
+    if let Some(label) = state.label().filter(|_| state != crate::repos::OpState::Bisecting) {
+        return Err(tf("{}: finish or abort it first, then try again.", &[&label]));
+    }
     if checked_out_elsewhere(host, root, &branch)? {
         return Err(tf("The branch {} is checked out in another worktree, so its commits cannot be rewritten here.", &[&branch]));
     }

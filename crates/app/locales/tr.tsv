@@ -4266,3 +4266,4 @@ The subject of the squashed commit cannot be empty.	Birleştirilen commit'in kon
 There is no commit above to swap with	Yer değiştirecek üstte commit yok
 There is no commit below to swap with	Yer değiştirecek altta commit yok
 {} would conflict while the commits are rewritten: nothing was changed	{}, commit'ler yeniden yazılırken çakışırdı: hiçbir şey değişmedi
+{}: finish or abort it first, then try again.	{}: önce bitir veya iptal et, sonra tekrar dene.

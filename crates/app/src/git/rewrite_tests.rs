@@ -308,3 +308,20 @@ fn the_default_message_joins_the_messages_oldest_first() {
     let (a, b) = (f.commit("a.txt", "a", "first"), f.commit("b.txt", "b", "second\n\nwith a body"));
     assert_eq!(default_squash_message(&f.host, &f.root, &[a, b]).unwrap(), "first\n\nsecond\n\nwith a body");
 }
+
+#[test]
+fn a_merge_that_waits_for_the_user_blocks_the_rewrite() {
+    let f = fixture("merge-waiting");
+    let base = f.head();
+    f.git(&["checkout", "-q", "-b", "side", &base]);
+    f.commit("f.txt", "side\n", "side");
+    f.git(&["checkout", "-q", "-"]);
+    let (a, b) = (f.commit("a.txt", "a", "a"), f.commit("f.txt", "main\n", "main"));
+    let merge = crate::test_git::git().args(["merge", "side"]).current_dir(&f.dir).output().unwrap();
+    assert!(!merge.status.success(), "the merge stops at a conflict");
+    let before = f.snapshot();
+    let error = f.rewrite(&b, &squash(&[&a, &b], "ab")).unwrap_err();
+    assert_eq!(error, "Merge in progress: finish or abort it first, then try again.");
+    f.assert_untouched(&before, "a merge in progress");
+    assert!(f.dir.join(".git/MERGE_HEAD").exists(), "the merge is still waiting");
+}
