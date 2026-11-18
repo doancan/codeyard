@@ -85,6 +85,10 @@ impl ScmPanel {
                 link("scm-op-continue", t("Continue"), Box::new(crate::workbench::GitContinueRebase)),
                 link("scm-op-abort", t("Abort"), Box::new(crate::workbench::GitAbortRebase)),
             ],
+            OpState::CherryPicking | OpState::Reverting => vec![
+                link("scm-op-continue", t("Continue"), Box::new(crate::workbench::GitContinueSequencer)),
+                link("scm-op-abort", t("Abort"), Box::new(crate::workbench::GitAbortSequencer)),
+            ],
             _ => Vec::new(),
         };
         Some(
@@ -105,3 +109,7 @@ impl ScmPanel {
 fn conflict_count(n: usize) -> String {
     crate::i18n::tn("{} conflict", "{} conflicts", n, &[])
 }
+
+#[cfg(test)]
+#[path = "scm_sequencer_tests.rs"]
+mod sequencer_tests;

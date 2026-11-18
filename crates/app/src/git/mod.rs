@@ -54,6 +54,22 @@ fn git_stdin(host: &dyn Host, cwd: &str, args: &[&str], stdin: Option<Vec<u8>>) 
     Ok(out)
 }
 
+/// What the repository is in the middle of, when that blocks starting another operation: a merge, a rebase, a cherry-pick or a
+/// revert waiting for the user ("Merge in progress"). A bisect does not block, and nothing else is read from here.
+pub(crate) fn blocking_operation(host: &dyn Host, root: &str) -> Option<&'static str> {
+    use crate::repos::OpState;
+    let dir = git_ok(host, root, &["rev-parse", "--absolute-git-dir"]).ok()?;
+    match OpState::read(host, dir.trim()) {
+        OpState::Bisecting | OpState::Idle => None,
+        state => state.label(),
+    }
+}
+
+/// The sentence for an operation refused because `blocking_operation` found one.
+pub(crate) fn finish_first(label: &str) -> String {
+    crate::i18n::tf("{}: finish or abort it first, then try again.", &[&label])
+}
+
 pub(crate) fn git_ok(host: &dyn Host, cwd: &str, args: &[&str]) -> Result<String, String> {
     let out = git(host, cwd, args)?;
     if out.ok() {
@@ -93,6 +109,10 @@ fn repo(name: &str) -> Option<(std::path::PathBuf, impl Fn(&[&str]) -> Option<St
     run(&["commit", "-q", "-m", "base"])?;
     Some((dir, run))
 }
+
+#[cfg(test)]
+#[path = "states_tests.rs"]
+mod states_tests;
 
 #[cfg(test)]
 mod tests {

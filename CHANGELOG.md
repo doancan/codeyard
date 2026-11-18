@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Source Control: a cherry-pick or revert that stopped on a conflict can be continued or aborted from the banner and the palette (*Git: Continue / Abort Cherry-pick or Revert*). The banner named the operation and offered no way out.
+- Git failures with a usual cause say it: diverged branches, a branch with no upstream, a detached HEAD, a merge or cherry-pick waiting for its conflicts, two branch names that clash, and the files in the way of a blocked switch (up to five, named).
+
+### Fixed
+
+- Graph: a cherry-pick or revert started while another one waited for its conflicts failed and then aborted the one the user was in the middle of. It now refuses with "Cherry-pick in progress: finish or abort it first, then try again." and leaves the waiting operation alone.
+- Git: a leftover lock file other than `index.lock` (a branch or `HEAD` lock) is named too.
+
 ## [0.11.1] - 2026-11-14
 
 ### Changed

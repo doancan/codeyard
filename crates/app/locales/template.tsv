@@ -26,6 +26,7 @@ A folder named “{}” is already there; a file cannot replace it. Rename or re
 A git dependency: not looked up on crates.io.	
 A key that types text cannot be a shortcut on its own. Add Ctrl, Alt or Cmd, or press a function key.	
 A merge commit is created unless it can fast-forward. Conflicts are resolved in Source Control.	
+A merge, rebase or cherry-pick is waiting for its conflicts to be resolved: resolve and stage the files, or abort it, then try again.	
 A part of the path is a file, not a folder.	
 A path dependency: not looked up on crates.io.	
 A pattern is one expression or statement, not several.	
@@ -45,10 +46,13 @@ A window supports up to {} editor groups.
 Abort	
 Abort Merge	
 Abort Rebase	
+Abort the cherry-pick?	
 Abort the merge?	
 Abort the rebase?	
+Abort the revert?	
 Aborting merge…	
 Aborting rebase…	
+Aborting…	
 About Codeyard	
 Accept All Current	
 Accept All Incoming	
@@ -304,6 +308,8 @@ Checkout (Detached)
 Checkout to…	
 Checks	
 Cherry-pick	
+Cherry-pick aborted	
+Cherry-pick finished	
 Cherry-pick in progress	
 Cherry-pick stopped and was undone: {}	
 Cherry-picked {}	
@@ -481,6 +487,7 @@ Context: {} line|Context: {} lines
 Continue	
 Continue (F5)	
 Continuing rebase…	
+Continuing…	
 Contributes	
 Convert indentation to spaces	
 Convert indentation to tabs	
@@ -976,6 +983,7 @@ Every file of {} matches its package.
 Every setting, with comments	
 Every uncommitted change is lost. This can't be undone.	
 Everything resolved so far in this merge is discarded.	
+Everything resolved so far is discarded and the files go back to how they were.	
 Existing custom server commands are preserved. Services start only in trusted folders. Closing this tab cancels an installation that has not reached activation.	
 Exit	
 Expand	
@@ -1149,6 +1157,7 @@ Git does not trust this folder because another user owns it. If you trust it, ru
 Git doesn't know who you are on this host. Run these in the terminal: {0} and {1}	
 Git identity is not set on this host: commits will be refused. Set user.name and user.email (git config --global …).	
 Git is paused in this folder: its repository settings run programs ({}). Trust the folder to use Git here.	
+Git: Abort Cherry-pick or Revert	
 Git: Abort Merge	
 Git: Abort Rebase	
 Git: Add Remote…	
@@ -1167,6 +1176,7 @@ Git: Commit (No Verify)
 Git: Commit Signed Off	
 Git: Compare with Branch…	
 Git: Compare with Commit…	
+Git: Continue Cherry-pick or Revert	
 Git: Continue Rebase	
 Git: Copy Changes as Patch	
 Git: Copy Permalink	
@@ -1258,6 +1268,7 @@ Go: Symbol in File…
 Go: Symbol in Workspace…	
 Graph	
 Graph starts with every branch	
+HEAD is detached, not on a branch: check out a branch, or create one at this commit, before pulling or pushing.	
 HEAD ↔ Staged	
 HIR of {}	
 HOME is not set	
@@ -1648,6 +1659,7 @@ No changes
 No changes in this file	
 No changes to discard	
 No changes.	
+No cherry-pick or revert is in progress.	
 No code extension is installed and enabled.	
 No code lens on this line	
 No comment syntax for this file type	
@@ -2310,6 +2322,8 @@ Revert
 Revert Change	
 Revert File	
 Revert Selected Lines	
+Revert aborted	
+Revert finished	
 Revert in progress	
 Revert stopped and was undone: {}	
 Reverted {}	
@@ -2769,6 +2783,7 @@ The branch goes back to how it was before the rebase started.
 The branch is fully merged into the current branch.	
 The branch is removed from the remote repository for everyone. Local branches are not touched.	
 The branch moved while the question was open. Nothing was changed.	
+The branch name {0} clashes with {1}: a branch cannot also be a folder of branches. Delete or rename one of them (on the remote too), then fetch again.	
 The build failed. See Output and Problems for the compiler errors.	
 The bundled service catalogue is invalid. Reinstall Codeyard before retrying.	
 The changes are too large for one patch.	
@@ -2966,9 +2981,13 @@ There is nothing to copy.
 There is nothing to ignore here	
 There isn't enough free disk space for the download. Free some space and try again.	
 These branches share no history, so git will not merge them. In a terminal, `git merge --allow-unrelated-histories` merges them anyway.	
+These files would be overwritten ({0} and {1} more): commit or stash your changes first.	
+These files would be overwritten ({}): commit or stash your changes first.	
 They stay on {}: the next Sync brings them back. To remove them there too, push with force after the reset (Git: Push (Force)…).	
 They were not found.	
 This animation has {0} frames of {1} × {2} pixels, too large to play.	
+This branch and its upstream both have new commits. Choose once how to combine them: in a terminal, git pull --rebase or git pull --no-rebase (or set pull.rebase).	
+This branch has no upstream yet: publish it with Git: Publish Branch, or set one in a terminal with git branch --set-upstream-to.	
 This branch is not published yet. Click to publish it.	
 This can't be undone.	
 This change removes the file: unstage the whole file instead	
@@ -3974,6 +3993,7 @@ your words
 {}: expected text	
 {}: expected text or a list of text	
 {}: expected true or false	
+{}: finish or abort it first, then try again.	
 {}: invalid color {}	
 {}: no answer from the debug adapter	
 {}: no changed files.	
