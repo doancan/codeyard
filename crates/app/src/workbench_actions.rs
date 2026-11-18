@@ -465,9 +465,6 @@ impl Workbench {
             .on_action(cx.listener(Self::reset_rust_setup))
             .on_action(cx.listener(Self::reset_settings))
             .on_action(cx.listener(Self::toggle_panel))
-            .on_action(cx.listener(|this, _: &crate::resource_monitor::ToggleResources, window, cx| {
-                this.chrome.resources.update(cx, |monitor, cx| monitor.toggle(window, cx));
-            }))
             .on_action(cx.listener(Self::toggle_terminal))
             .on_action(cx.listener(Self::new_terminal))
             .on_action(cx.listener(Self::kill_terminal))

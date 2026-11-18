@@ -146,7 +146,6 @@ pub(super) struct ChromeLayout {
     /// Keyboard focus and cursor rows of the side view and panel lists (workbench_row_nav.rs).
     pub(super) row_nav: super::row_nav_glue::RowNav,
     pub(super) web_preview: super::web_preview_glue::State,
-    pub(super) resources: Entity<crate::resource_monitor::ResourceMonitor>,
     pub(super) panel: Option<Panel>,
     /// The bottom panel shows the Problems list instead of the terminal.
     pub(super) bottom: Bottom,

@@ -690,7 +690,6 @@ registry! {
     "spelling.toggle" => wb::ToggleSpelling,
     "terminal.copyLastOutput" => crate::terminal::TermCopyLastOutput,
     "terminal.reset" => crate::terminal::TermReset,
-    "view.toggleResources" => crate::resource_monitor::ToggleResources,
     "webPreview.copyUrl" => wb::CopyWebPreviewUrl,
     "webPreview.open" => wb::OpenWebPreview,
     "webPreview.showLog" => wb::WebPreviewLog,
