@@ -191,6 +191,8 @@ pub struct ScmPanel {
     menu_open: bool,
     /// What the commit hover cards already read (`scm_graph.rs`).
     card_cache: graph_ui::CardCache,
+    /// Rows picked with Shift-click: the commit the range starts from and the one it ends at (hashes).
+    range: Option<(String, String)>,
     /// Folders that code extensions' providers claim (scm_ext.rs).
     ext: ext_ui::ExtSources,
     _subs: Vec<Subscription>,
@@ -290,6 +292,7 @@ impl ScmPanel {
             has_remote: false,
             menu_open: false,
             card_cache: Default::default(),
+            range: None,
             opened: None,
             ext: Default::default(),
             _subs: subs,

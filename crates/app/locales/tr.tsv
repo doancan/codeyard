@@ -4261,3 +4261,28 @@ Reading the changes…	Değişiklikler okunuyor…
 The changes could not be read.	Değişiklikler okunamadı.
 and {} more file|and {} more files	ve {} dosya daha
 {} file changed|{} files changed	{} dosya değişti
+A commit could not be made while rewriting ({}). Nothing was changed.	Yeniden yazarken bir commit oluşturulamadı ({}). Hiçbir şey değişmedi.
+A merge commit cannot be part of the run, or above it	Birleştirme (merge) commit'i aralığın içinde veya üstünde olamaz
+Choose at least two commits to squash.	Birleştirmek için en az iki commit seç.
+Commits can only be rewritten on a branch, and HEAD is detached.	Commit'ler yalnızca bir dalda yeniden yazılabilir; HEAD ayrık (detached).
+Move Commit Down	Commit'i Aşağı Taşı
+Move Commit Up	Commit'i Yukarı Taşı
+Moved {}	{} taşındı
+Moving {0} would conflict with {1}: nothing was changed	{0} commit'ini taşımak {1} ile çakışırdı: hiçbir şey değişmedi
+Only commits that are not pushed can be moved	Yalnızca push edilmemiş commit'ler taşınabilir
+Only commits that are not pushed can be squashed	Yalnızca push edilmemiş commit'ler birleştirilebilir (squash)
+Rewriting more than {} commits is refused	{} commit'ten fazlasını yeniden yazmak reddedildi
+Squash	Birleştir
+Squash {} Commit…|Squash {} Commits…	{} Commit'i Birleştir…
+Squashed {0} commit into {1}|Squashed {0} commits into {1}	{0} commit {1} olarak birleştirildi
+Subject of the squashed commit; the other messages follow it	Birleştirilen commit'in konusu; diğer mesajlar ardından gelir
+The branch {} is checked out in another worktree, so its commits cannot be rewritten here.	{} dalı başka bir worktree'de açık, bu yüzden commit'leri burada yeniden yazılamaz.
+The chosen commits are not one run of this branch.	Seçilen commit'ler bu dalın kesintisiz bir aralığı değil.
+The first commit of the repository cannot be rewritten	Deponun ilk commit'i yeniden yazılamaz
+The graph does not show the current branch's latest commit. Reload it and try again.	Grafik, geçerli dalın son commit'ini göstermiyor. Yenileyip tekrar dene.
+The rewritten commits would end with different files. Nothing was changed.	Yeniden yazılan commit'lerin sonunda dosyalar farklı olurdu. Hiçbir şey değişmedi.
+The subject of the squashed commit cannot be empty.	Birleştirilen commit'in konusu boş olamaz.
+There is no commit above to swap with	Yer değiştirecek üstte commit yok
+There is no commit below to swap with	Yer değiştirecek altta commit yok
+{} would conflict while the commits are rewritten: nothing was changed	{}, commit'ler yeniden yazılırken çakışırdı: hiçbir şey değişmedi
+{}: finish or abort it first, then try again.	{}: önce bitir veya iptal et, sonra tekrar dene.

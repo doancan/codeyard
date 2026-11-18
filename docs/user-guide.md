@@ -574,7 +574,20 @@ commits that leave the branch: a hard reset always asks and says how many leave,
 or remote (afterwards only Git's reflog finds them) and how many are already on the upstream; a soft or mixed reset asks
 only when some are already on the upstream, because the next Sync would bring them back. The result names the commit the
 branch was at, so `git reset <hash>` returns there.
-There is no interactive rebase (squash, reorder, edit): use a terminal for that. The header searches
+**Squash and reorder.** The commits that are not pushed yet can be cleaned up without a terminal. Shift-click a second row to
+pick the run from the selected commit to it (rows of the branch's own line only), then right-click it: **Squash N Commits…**
+asks for the subject of the new commit (the oldest commit's subject to start with; the other commits' messages follow it as the
+body) and replaces the run with one commit that has the oldest commit's author and date. **Move Commit Up** / **Move Commit
+Down** swaps a commit with its newer or older neighbour. Commits above a squashed run are replayed on top of it, none is
+dropped. The new history is built in a temporary worktree and installed with one ref update that names the old tip, so the
+branch is either rewritten completely or untouched, and the checkout's files, index and uncommitted changes are never touched
+(the files at the tip are checked to be identical before and after). It is refused, with the reason, for a commit that is
+already on the upstream (or on any remote when there is no upstream), a merge among the commits that would be replayed, the
+repository's first commit, a detached `HEAD`, a branch checked out in another worktree, more than 1000 commits, or when the
+branch moved since the graph was read; a reorder that would conflict names the two commits. Your hooks (`commit-msg`,
+`pre-commit`) and `commit.gpgsign` apply as for a normal commit, and one that refuses stops the rewrite. Editing a commit's
+content, dropping, rewording one commit and rewriting pushed history stay with the terminal. The old commits remain in the
+reflog (`git reflog`). The header searches
 commits (message, author, hash, branch), fetches, pulls and pushes (with the counts of commits to pull
 and to push) and reloads; its **…** menu picks the view (Graph, List with times, Days), the scope (all
 branches or the current one), *Only My Commits* and *Hide Merge Commits*, and offers sync, pull
