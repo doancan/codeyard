@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Source Control: a changed image (PNG, JPEG, GIF, WebP, BMP, SVG) opens as its old and new version side by side, with their sizes in pixels and bytes, instead of a screen of replacement characters. Added and deleted images show "(none)" on one side; a damaged, too big or too large image says so while the other side still shows; a change of metadata only says the pixels are the same. *Stage File* / *Unstage File* in its header moves the whole file.
+- Source Control: another binary file shows one line ("Binary file changed (5 B → 9 B)"). A text file named like an image (a Git LFS pointer) stays a text diff.
+
+### Fixed
+
+- Source Control: opening a second diff while the first was still being read could leave the first one in the tab; the last request now wins.
+
 ## [0.11.1] - 2026-11-14
 
 ### Changed

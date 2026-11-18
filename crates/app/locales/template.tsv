@@ -4,6 +4,7 @@
 (+{} more)	
 (from the cache, offline)	
 (modified)	
+(none)	
 (nothing)	
 (the lines are removed)	
 + Create new branch from…	
@@ -102,6 +103,7 @@ Added “{}”. Save the file to keep it.
 Adding comment…	
 Adding remote…	
 Adding worktree…	
+After	
 All	
 All Branches	
 All conflicts are resolved	
@@ -169,7 +171,11 @@ Back to SSH workspace and container details
 Back to the default (removes the value from settings.jsonc)	
 Back to this computer; files with unsaved changes must be saved or closed first	
 Bare repository	
+Before	
 Before switching to {}	
+Binary file added ({})	
+Binary file changed ({0} → {1})	
+Binary file deleted ({})	
 Binary file: not changed.	
 Bisect in progress	
 Blame Line	
@@ -1834,6 +1840,7 @@ Only on the right
 Only right	
 Only send it if you trust this file.	
 Only the connection is removed; the remote repository itself is untouched.	
+Only the file's metadata changed: the pixels are the same.	
 Only the first {} files are searched.	
 Only the local tag is removed. A copy on a remote stays until you delete it there (Git: Delete Remote Tag…).	
 Only the {} changed file.|Only the {} changed files.	
@@ -2595,6 +2602,7 @@ Split Editor
 Split Terminal	
 Stage	
 Stage Change	
+Stage File	
 Stage Lines	
 Stage Selected Lines	
 Stage all	
@@ -2602,6 +2610,7 @@ Stage {}
 Staged Changes	
 Staged {} change|Staged {} changes	
 Staged {} line|Staged {} lines	
+Staged “{}”	
 Staging changes inside a symlink or submodule is not supported	
 Staging changes is not supported in files with old-Mac (CR only) line endings	
 Staging changes needs a UTF-8 file	
@@ -3100,10 +3109,12 @@ Unpin
 Unsaved changes stay open in their tabs; saving recreates the file.	
 Unstage	
 Unstage Change	
+Unstage File	
 Unstage Lines	
 Unstage all	
 Unstage {}	
 Unstaged {} line|Unstaged {} lines	
+Unstaged “{}”	
 Unstaging…	
 Unsupported encoding: the file would not be written back exactly, so it is not changed.	
 Unterminated quote in the Cargo test command	

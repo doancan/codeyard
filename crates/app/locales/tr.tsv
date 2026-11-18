@@ -4236,3 +4236,14 @@ The jump host or proxy command failed. Check ProxyJump and ProxyCommand for this
 The SSH config has an error: fix the line named above (Remote: Edit SSH Config).	SSH yapılandırmasında hata var: yukarıda adı geçen satırı düzeltin (Remote: Edit SSH Config).
 The shared connection was stale. Try again.	Paylaşılan bağlantı eskimişti. Yeniden deneyin.
 The server accepts no more sessions. Close other connections or raise MaxSessions on it.	Sunucu daha fazla oturum kabul etmiyor. Diğer bağlantıları kapatın ya da sunucuda MaxSessions değerini artırın.
+(none)	(yok)
+After	Sonra
+Before	Önce
+Binary file added ({})	İkili dosya eklendi ({})
+Binary file changed ({0} → {1})	İkili dosya değişti ({0} → {1})
+Binary file deleted ({})	İkili dosya silindi ({})
+Only the file's metadata changed: the pixels are the same.	Yalnızca dosyanın üst verisi değişti: pikseller aynı.
+Stage File	Dosyayı Stage'e Al
+Staged “{}”	“{}” Stage'e alındı
+Unstage File	Dosyayı Stage'den Çıkar
+Unstaged “{}”	“{}” Stage'den çıkarıldı

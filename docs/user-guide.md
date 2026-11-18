@@ -1399,7 +1399,16 @@ The strip at the right edge is the overview ruler. It shows the whole list: a gr
 removed lines and a half-red, half-green one for a changed line, in proportion to their place in the file. The lighter
 box is the part on screen, and the outlined mark is the change F7 is on. Click the ruler or drag along it to scroll there.
 
-A binary file and a file over 4 MB show a message instead of a diff. A file with bytes that are not valid UTF-8 still
+**Images and other binary files.** A changed PNG, JPEG, GIF, WebP, BMP or SVG opened from Source Control shows its two
+versions side by side, scaled to fit on a checkerboard (so transparency is visible), with the size in pixels and bytes under
+each ("1280 × 800 · 214 KB"). An added image has "(none)" on the old side and a deleted one on the new side; a version that
+is too big (20 MB, or too many pixels) or damaged says so while the other still shows, and when only the file's metadata
+changed the diff says the pixels are the same. SVGs load nothing from outside the file. Lines of a picture cannot be picked:
+the header's **Stage File** / **Unstage File** moves the whole file. Another binary file (a NUL byte in it, whatever its name)
+gets one line, "Binary file changed (5 B → 9 B)". A file that is text stays a text diff even when its name says image (a Git
+LFS pointer). It works the same over SSH.
+
+A file over 4 MB shows a message instead of a diff. A file with bytes that are not valid UTF-8 still
 shows, with a warning above it, and those bytes appear as replacement characters.
 
 ### Log, diagnostics and crash reports

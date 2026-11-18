@@ -385,12 +385,24 @@ impl Workbench {
         // moved between two paths).
         let stager = (!staged || orig == rel).then(|| crate::diff_stage::Stager { host: host.clone(), root: root.clone(), staged });
         let o = orig.clone();
-        let task = cx.background_executor().spawn(async move { crate::diff_stage::load_texts(host.as_ref(), &r, &path, &o, staged) });
+        let svg = cx.svg_renderer().restricted();
+        self.tabs.diff_request += 1;
+        let request = self.tabs.diff_request;
+        let task = cx.background_executor().spawn(async move { crate::diff::media::load(host.as_ref(), &r, &path, &o, staged, &svg) });
         cx.spawn_in(window, async move |this, cx| {
-            let (old, new) = task.await;
+            let loaded = task.await;
             this.update_in(cx, |this, window, cx| {
+                // Another diff was asked for (or the folder changed) while this one was read.
+                if this.tabs.diff_request != request {
+                    return;
+                }
                 let view = cx.new(|cx| {
-                    let view = crate::diff::DiffView::new(rel, staged, old.as_deref().unwrap_or(""), new.as_deref().unwrap_or(""), cx);
+                    let view = match loaded {
+                        crate::diff::media::Loaded::Text(old, new) => {
+                            crate::diff::DiffView::new(rel, staged, old.as_deref().unwrap_or(""), new.as_deref().unwrap_or(""), cx)
+                        }
+                        crate::diff::media::Loaded::Media(media) => crate::diff::DiffView::new_media(rel, staged, media, cx),
+                    };
                     match stager {
                         Some(stager) => view.with_staging(stager),
                         None => view,
