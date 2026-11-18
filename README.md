@@ -71,7 +71,7 @@ read-only view.
   profiles, tasks and problems, themes with enforced WCAG AA contrast.
 - **Search by structure.** Find and rewrite code by its syntax tree, not its text: patterns are code with `$X` and `$$$X`
   placeholders (ast-grep style), for Rust, TypeScript, JavaScript, Python, Go and more, over local and SSH folders.
-- **Git inside.** Source control with a one-click Sync button, branch graph, timeline and local history, blame, a three-way merge editor, GitHub pull requests.
+- **Git inside.** Source control with a one-click Sync button, branch graph (hover a commit for what it changed; squash and reorder the commits you have not pushed), line-level staging, image diffs, timeline and local history (secret files are never copied), blame, a three-way merge editor, GitHub pull requests.
 - **Everyday tools built in.** JSON/YAML schema validation, spell check (English built in, more on demand), colour picker,
   `.http` requests, log follow and filter, Markdown preview, hex view.
 - **Data tools.** Convert between JSON, YAML, TOML and `.env`, query a file with a jq-style language as you type, copy the path

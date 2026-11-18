@@ -16,7 +16,11 @@ the 2026-10-27 local run passed 1,516 tests, with three documented manual/data-d
 - **Integration tests with real processes.** `test_sshd.rs` starts a real `sshd` on a free port with throw-away keys
   (a mutex serialises users of it); `crates/app/tests/ssh_askpass.rs` runs the whole askpass chain against it.
   Git tests use real repositories (including a local bare "remote" for pull requests); `.http` tests use a tiny TCP
-  server inside the test.
+  server inside the test. A feature that runs git or reads files through the `Host` has a test over this `sshd` too (squash
+  and reorder, image and binary diffs, the commit hover card, Local History, continuing or aborting a cherry-pick, line staging
+  and the reset questions); each skips loudly without `sshd` and fails with `CODEYARD_REQUIRE_SSHD=1`. A failure test of a
+  history rewrite compares refs, index bytes, files and the worktree list with their state before, and asserts that no temporary
+  worktree is left: copy that pattern for any operation that promises "all or nothing".
 - **Fake language server.** `test_lsp.rs` writes a small Python server driven by a JSON scenario (capabilities, an answer
   per method or none at all, messages to send when a file opens or after a given message) and records every message it receives, so a test can
   assert on what Codeyard sent: `FakeServer::received("initialize")`, `replies()`, `starts()`. Tests using it skip with a

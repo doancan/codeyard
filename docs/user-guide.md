@@ -609,6 +609,8 @@ old copies are deleted at its next save, and a forced save that overwrites it do
 TIMELINE says "Local History is off for this file" instead of an empty list. These settings are read from your own settings
 file only; a folder's are ignored.
 
+A file's copies are kept for 30 days, at most 40 of them, and a file over 2 MB is not copied.
+
 Copies of a **server's** files are written on this computer, so the first save of a file on a server asks, once per server,
 whether to *Keep* them or not (*Don't Keep*, also what Escape does); nothing is written before the answer. `"localHistory.remote"`
 decides without asking: `"keep"` or `"off"` (`"ask"` is the default). **Local History: Delete…** in the palette removes the
