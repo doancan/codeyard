@@ -2817,8 +2817,8 @@ The branch goes back to how it was before the rebase started.
 The branch is fully merged into the current branch.	
 The branch is removed from the remote repository for everyone. Local branches are not touched.	
 The branch moved while the question was open. Nothing was changed.	
-The branch {} is checked out in another worktree, so its commits cannot be rewritten here.	
 The branch name {0} clashes with {1}: a branch cannot also be a folder of branches. Delete or rename one of them (on the remote too), then fetch again.	
+The branch {} is checked out in another worktree, so its commits cannot be rewritten here.	
 The build failed. See Output and Problems for the compiler errors.	
 The bundled service catalogue is invalid. Reinstall Codeyard before retrying.	
 The changes are too large for one patch.	
