@@ -110,12 +110,19 @@ mod windows {
     }
 
     pub fn spawn_with(spec: Spawn) -> io::Result<(Pty, Box<dyn io::Read + Send>)> {
-        let Spawn { cols, rows, cwd, shell, args, env, .. } = spec;
+        let Spawn { cols, rows, cwd, shell, args, mut env, integration } = spec;
         // The console host the pseudo console starts, and the shell, end with this process (pty_job.rs).
         let hosts = super::job::console_hosts();
         let pair = native_pty_system().openpty(size(cols, rows)).map_err(io::Error::other)?;
         super::job::adopt_new_console_hosts(&hosts);
         let shell = shell.filter(|s| !s.is_empty()).map(std::ffi::OsString::from).or_else(|| std::env::var_os("COMSPEC")).unwrap_or_else(|| "cmd.exe".into());
+        // PowerShell started without arguments of its own gets the integration (cmd has no hook for it).
+        let args = match (args, integration) {
+            (None, true) => crate::shell_integration::powershell_args(&shell.to_string_lossy()).inspect(|_| {
+                env.push(("CODEYARD_SHELL_INTEGRATION".into(), "1".into()));
+            }),
+            (args, _) => args,
+        };
         let mut cmd = CommandBuilder::new(shell);
         for a in args.unwrap_or_default() {
             cmd.arg(a);
