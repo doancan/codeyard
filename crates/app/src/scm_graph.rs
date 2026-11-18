@@ -838,3 +838,15 @@ fn compact_row(
 #[cfg(test)]
 #[path = "scm_graph_card_tests.rs"]
 mod card_tests;
+
+/// What tests ask of the graph's selection (kept here so `scm.rs` stays within its line limit).
+#[cfg(test)]
+impl ScmPanel {
+    pub fn selected_hash(&self) -> Option<String> {
+        self.selected.as_ref().map(|c| c.hash.clone())
+    }
+
+    pub fn detail_for_test(&self) -> Option<Arc<CommitDetail>> {
+        self.detail.clone()
+    }
+}

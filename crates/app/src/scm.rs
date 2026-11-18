@@ -1099,16 +1099,6 @@ impl ScmPanel {
     }
 
     #[cfg(test)]
-    pub fn selected_hash(&self) -> Option<String> {
-        self.selected.as_ref().map(|c| c.hash.clone())
-    }
-
-    #[cfg(test)]
-    pub fn detail_for_test(&self) -> Option<Arc<CommitDetail>> {
-        self.detail.clone()
-    }
-
-    #[cfg(test)]
     pub fn stash_count(&self) -> usize {
         self.stashes.len()
     }
