@@ -161,3 +161,58 @@ fn a_staged_rename_and_a_comparison_do_not_stage(cx: &mut TestAppContext) {
     let view = wb.read_with(cx, |wb, _| wb.diff_view()).unwrap();
     assert!(!view.read_with(cx, |v, _| v.can_stage()), "a rename is unstaged as a whole file");
 }
+
+/// Epic #267, exit criterion 1: two of three changed lines of one change are staged from the diff and committed, and the third
+/// stays out of the commit and in the working file. Locally and against a real SSH server (the throwaway `sshd`).
+fn stage_two_of_three(cx: &mut TestAppContext, over_ssh: bool) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let dir = repo(if over_ssh { "diffstage-two-of-three-ssh" } else { "diffstage-two-of-three" });
+    let text: String = (1..=10).map(|i| if (3..=5).contains(&i) { format!("// changed {i}\n") } else { format!("// satır {i}\n") }).collect();
+    std::fs::write(dir.join("src/lib.rs"), &text).unwrap();
+    let (wb, cx) = setup(cx);
+    if over_ssh {
+        wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+        crate::qa_integration_tests::wait_secs(cx, 30, "connected", |cx| {
+            cx.executor().advance_clock(std::time::Duration::from_millis(300));
+            wb.read_with(cx, |wb, _| wb.ports_ready())
+        });
+        wb.update_in(cx, |wb, window, cx| wb.open_path(&crate::ui::local_path(&dir), window, cx));
+        cx.run_until_parked();
+        assert_eq!(wb.read_with(cx, |wb, _| wb.remote_host_label_for_test()), Some(format!("ssh://{}", crate::test_sshd::ALIAS)));
+    } else {
+        open(&wb, &dir, cx);
+    }
+    crate::qa_integration_tests::wait_secs(cx, 30, "status", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        changes(&wb, cx).is_some_and(|c| !c.is_empty())
+    });
+    let view = open_diff(&wb, false, cx);
+    assert_eq!(view.read_with(cx, |v, _| v.blocks.len()), 1, "three neighbouring lines are one change");
+    // The first two lines of the change; Shift-click would pick the range, here each is clicked.
+    for line in [2, 3] {
+        let row = row_of(&view, line, cx);
+        view.update(cx, |v, cx| v.click_row(row, false, cx));
+    }
+    cx.simulate_keystrokes("enter");
+    crate::qa_integration_tests::wait_secs(cx, 30, "the index", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        index(&dir).contains("changed 4")
+    });
+    assert!(index(&dir).contains("changed 3") && !index(&dir).contains("changed 5"), "two of the three lines are in the index");
+    git_in(&dir, &["commit", "-q", "-m", "two of three"]);
+    let committed = git_in(&dir, &["show", "HEAD:src/lib.rs"]);
+    assert!(committed.contains("changed 3") && committed.contains("changed 4") && !committed.contains("changed 5"), "the commit holds only those");
+    assert_eq!(std::fs::read_to_string(dir.join("src/lib.rs")).unwrap(), text, "the working file is untouched, third line included");
+    assert!(git_in(&dir, &["diff", "--stat"]).contains("src/lib.rs"), "the third line is still a change");
+}
+
+#[gpui::test]
+fn criterion_1_two_of_three_lines_are_staged_and_committed_locally(cx: &mut TestAppContext) {
+    stage_two_of_three(cx, false);
+}
+
+#[gpui::test]
+fn criterion_1_two_of_three_lines_are_staged_and_committed_over_ssh(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("diffstage-two-of-three-ssh") else { return };
+    stage_two_of_three(cx, true);
+}
