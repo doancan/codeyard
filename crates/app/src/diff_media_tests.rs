@@ -288,3 +288,15 @@ fn images_and_binary_files_diff_over_ssh(cx: &mut TestAppContext) {
     let binary = show(&wb, "data.bin", false, cx).read_with(cx, |v, _| v.media.clone()).unwrap();
     assert_eq!(binary_line(&binary.old, &binary.new), "Binary file changed (3 B → 6 B)");
 }
+
+/// The checkerboard must be seen in a light theme as well as a dark one (it was almost invisible in light: two neighbouring surface
+/// colours), and the diff draws the same greys as the image tab.
+#[test]
+fn the_checkerboard_is_visible_in_every_theme() {
+    for theme in theme::themes::builtin() {
+        let (low, high) = crate::large::checker_colors(&theme.palette);
+        let ratio = theme::themes::contrast(low, high);
+        assert!(ratio >= 1.08, "{}: the two greys differ only by {ratio:.3}:1", theme.name);
+        assert_ne!(low, theme.palette.bg, "{}: the squares are drawn on the background, not as it", theme.name);
+    }
+}

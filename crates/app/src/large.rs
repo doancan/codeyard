@@ -116,6 +116,12 @@ fn is_word_edge(text: &str, at: usize, len: usize) -> bool {
 }
 
 /// Image format from the extension (previewable ones).
+/// The two greys of the checkerboard under a picture with transparent pixels, for the image tab and the image diff alike: visible
+/// in a light theme as well as in a dark one.
+pub(crate) fn checker_colors(p: &ui::Palette) -> (u32, u32) {
+    (ui::mix(p.bg, p.text, 0.05), ui::mix(p.bg, p.text, 0.13))
+}
+
 pub fn image_format(path: &str) -> Option<gpui::ImageFormat> {
     use gpui::ImageFormat::*;
     let ext = path.rsplit_once('.')?.1.to_ascii_lowercase();

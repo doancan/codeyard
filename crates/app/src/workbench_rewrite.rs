@@ -48,9 +48,8 @@ impl Workbench {
         subject: String,
         cx: &mut Context<Self>,
     ) {
-        if !self.repo_unchanged(&repo, cx) {
-            return;
-        }
+        // No comparison with the repository Source Control shows now: the rewrite runs in `repo`, the one the menu was opened on,
+        // and `run_in` checks that it is still the same repository (identity, not a snapshot of Source Control's state).
         let subject = subject.trim();
         if subject.is_empty() {
             self.notify_rewrite_failed(crate::i18n::t("The subject of the squashed commit cannot be empty.").to_string(), cx);
