@@ -767,13 +767,17 @@ impl Workbench {
             })
             .collect();
         let has_local = !local_rows.is_empty();
+        let history_off = self.timeline.key.as_ref().is_some_and(|key| self.history_off_for(&key.0, cx));
+        let off_text = crate::i18n::t("Local History is off for this file.");
         if let Some(e) = &self.timeline.error
             && !has_local
         {
             return note(&crate::i18n::tf("Could not read the history: {}", &[&e]));
         }
         if self.timeline.entries.is_empty() && !has_local {
-            return note(if self.timeline.loading {
+            return note(if history_off && !self.timeline.loading {
+                off_text
+            } else if self.timeline.loading {
                 crate::i18n::t("Loading…")
             } else if self.vcs.status.is_none() {
                 crate::i18n::t("No saved copies yet. Save the file to start its local history.")
@@ -825,7 +829,16 @@ impl Workbench {
                     .into_any_element()
             })
             .collect();
-        div().id("timeline-list").size_full().overflow_y_scroll().flex().flex_col().children(local_rows).children(rows).into_any_element()
+        div()
+            .id("timeline-list")
+            .size_full()
+            .overflow_y_scroll()
+            .flex()
+            .flex_col()
+            .children(history_off.then(|| note(off_text)))
+            .children(local_rows)
+            .children(rows)
+            .into_any_element()
     }
 
     /// Save the open folders (relative to the root) for this workspace.

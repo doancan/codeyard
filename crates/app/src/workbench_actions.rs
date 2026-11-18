@@ -211,6 +211,8 @@ impl Workbench {
             .on_action(cx.listener(|this, _: &GitRemoveRemote, window, cx| this.show_branch_op_picker(git_glue::BranchOp::RemoveRemote, window, cx)))
             .on_action(cx.listener(|this, _: &GitPublishBranch, _, cx| this.git_publish_branch(cx)))
             .on_action(cx.listener(|this, _: &GitAbortMerge, window, cx| this.git_abort_merge(window, cx)))
+            .on_action(cx.listener(|this, _: &GitContinueSequencer, _, cx| this.git_continue_sequencer(cx)))
+            .on_action(cx.listener(|this, _: &GitAbortSequencer, window, cx| this.git_abort_sequencer(window, cx)))
             .on_action(cx.listener(|this, _: &GitAddRemote, window, cx| this.git_add_remote(window, cx)))
             .on_action(cx.listener(|this, _: &GitCreateTag, window, cx| this.git_create_tag(window, cx)))
             .on_action(cx.listener(|this, _: &GitPull, _, cx| this.git_sync(vec![crate::git::SyncOp::Pull], cx)))
@@ -400,6 +402,7 @@ impl Workbench {
             .on_action(cx.listener(Self::remove_ssh_host))
             .on_action(cx.listener(Self::test_ssh_host))
             .on_action(cx.listener(Self::reconnect_host))
+            .on_action(cx.listener(Self::delete_local_history))
             .on_action(cx.listener(Self::forward_port_prompt))
             .on_action(cx.listener(Self::stop_all_forwards))
             .on_action(cx.listener(Self::retry_failed_forwards))
@@ -465,9 +468,6 @@ impl Workbench {
             .on_action(cx.listener(Self::reset_rust_setup))
             .on_action(cx.listener(Self::reset_settings))
             .on_action(cx.listener(Self::toggle_panel))
-            .on_action(cx.listener(|this, _: &crate::resource_monitor::ToggleResources, window, cx| {
-                this.chrome.resources.update(cx, |monitor, cx| monitor.toggle(window, cx));
-            }))
             .on_action(cx.listener(Self::toggle_terminal))
             .on_action(cx.listener(Self::new_terminal))
             .on_action(cx.listener(Self::kill_terminal))

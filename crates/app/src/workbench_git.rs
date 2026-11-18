@@ -133,32 +133,6 @@ impl Workbench {
         }
     }
 
-    /// After a save: keep a copy of the file (in the background), refresh TIMELINE.
-    pub(super) fn record_history(&mut self, ed: &gpui::Entity<crate::editor::EditorView>, cx: &mut Context<Self>) {
-        let Some(data) = self.persist.data_dir.clone() else { return };
-        let e = ed.read(cx);
-        if e.line_count() > 60_000 {
-            return;
-        }
-        let (path, text) = (e.path.clone(), e.text_lines().join("\n"));
-        let dir = crate::history::dir_for(&data, &self.history_host(), &path);
-        let folder = dir.clone();
-        let task = cx.background_executor().spawn(async move { crate::history::record(&dir, &text) });
-        cx.spawn(async move |this, cx| {
-            let result = task.await;
-            this.update(cx, |this, cx| {
-                match result {
-                    Ok(true) => this.timeline.rev += 1,
-                    Ok(false) => {}
-                    Err(e) => this.report_history_failed(&folder, &e),
-                }
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
-    }
-
     /// Show a local history copy next to the editor's current version.
     pub(super) fn open_local_history(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(entry) = self.timeline.local.get(ix).cloned() else { return };
@@ -615,7 +589,10 @@ impl Workbench {
         use super::{MenuCmd, MenuTarget};
         use crate::graph::ResetMode;
         use crate::menu::MenuItem;
-        let rows: Vec<(MenuItem, MenuCmd)> = vec![
+        let run = self.scm.read(cx).range_run();
+        let squash = (run.len() >= 2 && run.contains(&commit.hash))
+            .then(|| (MenuItem::new(&crate::i18n::tn("Squash {} Commit…", "Squash {} Commits…", run.len(), &[])), MenuCmd::CommitSquash));
+        let mut rows: Vec<(MenuItem, MenuCmd)> = vec![
             (MenuItem::new(crate::i18n::t("Copy Commit Hash")), MenuCmd::CopyHash),
             (MenuItem::new(crate::i18n::t("Copy Message")), MenuCmd::CopySubject),
             (MenuItem::new(crate::i18n::t("Show Changed Files…")), MenuCmd::CommitFiles),
@@ -627,7 +604,10 @@ impl Workbench {
             (MenuItem::new(crate::i18n::t("Reset Soft to Here")).separator(), MenuCmd::CommitReset(ResetMode::Soft)),
             (MenuItem::new(crate::i18n::t("Reset Mixed to Here")), MenuCmd::CommitReset(ResetMode::Mixed)),
             (MenuItem::new(crate::i18n::t("Reset Hard to Here…")), MenuCmd::CommitReset(ResetMode::Hard)),
+            (MenuItem::new(crate::i18n::t("Move Commit Up")).separator(), MenuCmd::CommitMove { down: false }),
+            (MenuItem::new(crate::i18n::t("Move Commit Down")), MenuCmd::CommitMove { down: true }),
         ];
+        rows.extend(squash);
         let (items, commands): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
         let target = MenuTarget { path: commit.hash, is_dir: false, tab: None };
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
@@ -1059,6 +1039,46 @@ impl Workbench {
                 this.git_task(crate::i18n::t("Aborting merge…"), cx, move |h| {
                     git::merge_abort(h, &root).map(|_| crate::i18n::t("Merge aborted").to_string())
                 });
+            },
+        );
+    }
+
+    /// The cherry-pick or revert the repository is waiting in, if it is in one.
+    fn waiting_sequencer(&mut self, cx: &mut Context<Self>) -> Option<(String, git::Sequencer)> {
+        let root = self.repo_root(cx)?;
+        let which = match self.git_status().map(|s| s.op) {
+            Some(crate::repos::OpState::CherryPicking) => git::Sequencer::CherryPick,
+            Some(crate::repos::OpState::Reverting) => git::Sequencer::Revert,
+            _ => {
+                self.notify(NoticeSource::Git, Notice::Info(crate::i18n::t("No cherry-pick or revert is in progress.").into()));
+                cx.notify();
+                return None;
+            }
+        };
+        Some((root, which))
+    }
+
+    /// *Continue* once its conflicts are resolved and staged: the commit is made with the message the operation had.
+    pub(super) fn git_continue_sequencer(&mut self, cx: &mut Context<Self>) {
+        let Some((root, which)) = self.waiting_sequencer(cx) else { return };
+        let done = if which == git::Sequencer::CherryPick { crate::i18n::t("Cherry-pick finished") } else { crate::i18n::t("Revert finished") };
+        self.git_task(crate::i18n::t("Continuing…"), cx, move |h| git::sequencer(h, &root, which, git::Step::Continue).map(|_| done.to_string()));
+    }
+
+    pub(super) fn git_abort_sequencer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((root, which)) = self.waiting_sequencer(cx) else { return };
+        let (title, done) = match which {
+            git::Sequencer::CherryPick => (crate::i18n::t("Abort the cherry-pick?"), crate::i18n::t("Cherry-pick aborted")),
+            git::Sequencer::Revert => (crate::i18n::t("Abort the revert?"), crate::i18n::t("Revert aborted")),
+        };
+        self.confirm_git(
+            window,
+            title,
+            crate::i18n::t("Everything resolved so far is discarded and the files go back to how they were."),
+            crate::i18n::t("Abort"),
+            cx,
+            move |this, cx| {
+                this.git_task(crate::i18n::t("Aborting…"), cx, move |h| git::sequencer(h, &root, which, git::Step::Abort).map(|_| done.to_string()));
             },
         );
     }

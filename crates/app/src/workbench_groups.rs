@@ -31,6 +31,8 @@ pub(super) struct Group {
     /// Single diff tab (a new diff replaces the previous one); `diff_active`: that tab is in front.
     pub(super) diff: Option<Entity<crate::diff::DiffView>>,
     pub(super) diff_active: bool,
+    /// The diff most recently asked for: one that was read for an older request is dropped when it arrives.
+    pub(super) diff_request: u64,
     /// Single large-file view (read-only; a separate tab like diff).
     pub(super) large: Option<Entity<crate::large::LargeFileView>>,
     pub(super) large_active: bool,
@@ -59,6 +61,7 @@ impl Default for Group {
             open_error: None,
             diff: None,
             diff_active: false,
+            diff_request: 0,
             large: None,
             large_active: false,
             page: None,

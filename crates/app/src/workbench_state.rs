@@ -146,7 +146,6 @@ pub(super) struct ChromeLayout {
     /// Keyboard focus and cursor rows of the side view and panel lists (workbench_row_nav.rs).
     pub(super) row_nav: super::row_nav_glue::RowNav,
     pub(super) web_preview: super::web_preview_glue::State,
-    pub(super) resources: Entity<crate::resource_monitor::ResourceMonitor>,
     pub(super) panel: Option<Panel>,
     /// The bottom panel shows the Problems list instead of the terminal.
     pub(super) bottom: Bottom,
@@ -259,6 +258,8 @@ pub(super) struct PersistState {
     pub(super) backup_task: Option<gpui::Task<()>>,
     /// Path -> backed-up version.
     pub(super) backed_up: std::collections::HashMap<String, u64>,
+    /// Servers whose Local History question is open (one question per server at a time).
+    pub(super) history_asking: std::collections::HashSet<String>,
     pub(super) state: Option<State>,
     pub(super) recent: Vec<RecentWorkspace>,
     /// Pinned folders (host alias or `None`, path).

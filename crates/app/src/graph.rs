@@ -377,6 +377,12 @@ impl ResetMode {
 
 /// Runs the commit operation; a conflicting cherry-pick/revert is rolled back (no half-done state is left behind).
 pub fn run_op(host: &dyn Host, root: &str, hash: &str, op: &CommitOp) -> Result<String, String> {
+    // A cherry-pick or revert that fails is aborted below: that must never be the user's own, still waiting for its conflicts.
+    if matches!(op, CommitOp::CherryPick | CommitOp::Revert)
+        && let Some(label) = crate::git::blocking_operation(host, root)
+    {
+        return Err(crate::git::finish_first(label));
+    }
     let git = |args: &[&str]| crate::git::git_ok(host, root, args);
     let short = &hash[..hash.len().min(7)];
     match op {

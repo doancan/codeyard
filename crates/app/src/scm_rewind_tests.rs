@@ -136,3 +136,56 @@ fn an_answer_applies_only_to_the_head_it_was_about(cx: &mut TestAppContext) {
     assert_eq!(f.result(), crate::git::moved_message());
     assert_eq!(head(&f.dir), moved, "nothing undone");
 }
+
+/// Epic #267, exit criteria 2 and 3 against a real SSH server (the throwaway `sshd`): what a pushed undo or a hard reset takes off the
+/// branch is counted on the host, and both ask before they run.
+#[gpui::test]
+fn criteria_2_and_3_hold_over_ssh(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("rewind-ssh") else { return };
+    let _en = crate::i18n::LangGuard::set("en");
+    let (dir, _bare, _other) = repo_with_remote("rewind-ssh");
+    commit(&dir, "shared");
+    git_in(&dir, &["push", "-q"]);
+    commit(&dir, "mine");
+    let base = git_in(&dir, &["rev-parse", "HEAD~2"]).trim().to_string();
+    let (wb, cx) = setup(cx);
+    wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    crate::qa_integration_tests::wait_secs(cx, 30, "connected", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    wb.update_in(cx, |wb, window, cx| wb.open_path(&crate::ui::local_path(&dir), window, cx));
+    crate::qa_integration_tests::wait_secs(cx, 30, "status over SSH", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        wb.read_with(cx, |wb, _| wb.git_status().is_some())
+    });
+    assert_eq!(wb.read_with(cx, |wb, _| wb.remote_host_label_for_test()), Some(format!("ssh://{}", crate::test_sshd::ALIAS)));
+    // Counted on the host: two commits leave, one of them is on the upstream, and both are on no other branch.
+    let host = wb.read_with(cx, |wb, _| wb.remote_host_for_test());
+    let leaving = crate::git::leaving(host.as_ref(), &crate::ui::local_path(&dir), &base).unwrap();
+    assert_eq!((leaving.count, leaving.pushed), (2, 1));
+    assert_eq!(leaving.upstream.as_deref(), Some("origin/main"));
+    // Criterion 3: a hard reset asks, and Cancel changes nothing.
+    let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
+    let before = head(&dir);
+    wb.update_in(cx, |wb, window, cx| wb.scm_panel().update(cx, |s, cx| s.commit_op(base.clone(), CommitOp::Reset(ResetMode::Hard), window, cx)));
+    crate::qa_integration_tests::wait_secs(cx, 30, "the question", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        cx.has_pending_prompt()
+    });
+    cx.simulate_prompt_answer("Cancel");
+    cx.run_until_parked();
+    assert_eq!(head(&dir), before, "Cancel resets nothing");
+    // Criterion 2: undoing a commit that is on the upstream asks before it does anything, and the answer decides.
+    git_in(&dir, &["push", "-q"]);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Undo Last Commit", window, cx));
+    crate::qa_integration_tests::wait_secs(cx, 30, "the question", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        cx.has_pending_prompt()
+    });
+    assert_eq!(head(&dir), before, "nothing is undone before the answer");
+    cx.simulate_prompt_answer("Cancel");
+    cx.run_until_parked();
+    assert_eq!(head(&dir), before, "Cancel undoes nothing");
+    let _ = scm;
+}

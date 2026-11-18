@@ -286,10 +286,16 @@ pub fn show(host: &dyn Host, root: &str, rev: &str, rel: &str) -> Option<String>
 /// What failed is decided by the exit codes of plumbing commands, never by git's words: they are translated, so a German or Turkish
 /// git would otherwise turn "not there" into an error.
 pub fn show_checked(host: &dyn Host, root: &str, rev: &str, rel: &str) -> Result<Option<String>, String> {
+    Ok(show_bytes_checked(host, root, rev, rel)?.map(|bytes| String::from_utf8_lossy(&bytes).trim_start_matches('\u{feff}').replace("\r\n", "\n")))
+}
+
+/// [`show_checked`] without reading the content as text: the bytes of a file at `rev` (`""` is the index), for images and other
+/// binary files.
+pub fn show_bytes_checked(host: &dyn Host, root: &str, rev: &str, rel: &str) -> Result<Option<Vec<u8>>, String> {
     let spec = format!("{rev}:{rel}");
     let out = git(host, root, &["show", "--no-textconv", &spec])?;
     if out.ok() {
-        return Ok(Some(String::from_utf8_lossy(&out.stdout).trim_start_matches('\u{feff}').replace("\r\n", "\n")));
+        return Ok(Some(out.stdout));
     }
     let why = || failure_text(&out).lines().next().unwrap_or_default().to_string();
     let succeeds = |args: &[&str]| git(host, root, args).map(|o| o.ok());

@@ -413,10 +413,20 @@ fn a_deleted_picked_repository_is_let_go_of(cx: &mut TestAppContext) {
     wait_ticking(cx, "nested selected", |cx| selected_root(&wb, cx) == Some(s(&f.nested)));
     std::fs::remove_dir_all(f.nested.join(".git")).unwrap();
     wb.update(cx, |wb, cx| wb.refresh_git(0, cx));
-    wait_ticking(cx, "let go", |cx| scm.read_with(cx, |s, _| s.repos.len() == 2));
+    // Real git processes find the repositories again: on a busy machine (the whole suite in parallel) that takes longer than the
+    // 10 s of `wait_ticking`.
+    let slow = |cx: &mut VisualTestContext, what: &str, mut done: Box<dyn FnMut(&mut VisualTestContext) -> bool>| {
+        crate::qa_integration_tests::wait_secs(cx, 30, what, |cx| {
+            cx.executor().advance_clock(std::time::Duration::from_millis(300));
+            done(cx)
+        })
+    };
+    let probe = scm.clone();
+    slow(cx, "let go", Box::new(move |cx| probe.read_with(cx, |s, _| s.repos.len() == 2)));
     assert_eq!(wb.read_with(cx, |wb, _| wb.notice_text()), Some(format!("Repository is no longer available: {}", s(&f.nested))));
     // Source Control says so, and goes back to the first repository of the inventory, not to the enclosing one by accident.
-    wait_ticking(cx, "first repository", |cx| selected_root(&wb, cx) == Some(s(&f.alpha)));
+    let (probe, alpha) = (wb.clone(), s(&f.alpha));
+    slow(cx, "first repository", Box::new(move |cx| selected_root(&probe, cx) == Some(alpha.clone())));
     assert!(scm.read_with(cx, |s, _| s.repos.iter().all(|r| r.id.worktree != s_(&f.nested))));
 }
 

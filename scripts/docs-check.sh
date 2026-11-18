@@ -144,6 +144,28 @@ else:
     for f in sorted(parsed - flags - {"--do", "--help", "--version"}):
         fail(f"crates/app/src/main.rs parses {f} but --help does not list it")
 
+# 8. Numbers the user guide quotes for features: the code's constant is the source
+def const(path, name):
+    m = re.search(rf"\b{name}: [A-Za-z0-9]+ = ([^;]+);", read(path))
+    if not m: fail(f"{path}: `{name}` not found"); return None
+    expr = m.group(1).replace("_", "")
+    return int(eval(expr, {"__builtins__": {}}, {})) if re.fullmatch(r"[0-9 *+]+|[A-Z_]+ \* [0-9 *]+", expr) else None
+words = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
+flat_guide = " ".join(guide.split())
+def quoted(label, path, name, phrase):
+    n = const(path, name)
+    if n is not None and phrase.format(n=n, word=words.get(n, str(n))) not in flat_guide:
+        fail(f"docs/user-guide.md: {label} is not '{phrase.format(n=n, word=words.get(n, str(n)))}' ({path} {name} = {n})")
+quoted("the most commits one rewrite replays", "crates/app/src/git/rewrite.rs", "MAX_COMMITS", "more than {n} commits")
+quoted("the files a commit card lists", "crates/app/src/scm_graph.rs", "CARD_FILES", "first {word} files")
+quoted("the files a blocked switch names", "crates/app/src/git/explain.rs", "MAX_FILES_NAMED", "up to {word}")
+quoted("how long Local History keeps a copy", "crates/app/src/history.rs", "KEEP_DAYS", "kept for {n} days")
+quoted("how many copies Local History keeps", "crates/app/src/history.rs", "KEEP", "at most {n} of them")
+mb = const("crates/app/src/image_size.rs", "MAX_BYTES")
+if mb is not None and f"({mb // (1024 * 1024)} MB, or too many pixels)" not in flat_guide: fail("docs/user-guide.md: the size limit of a picture in the diff is not the image tab's MAX_BYTES")
+hb = const("crates/app/src/history.rs", "MAX_BYTES")
+if hb is not None and f"a file over {hb // (1024 * 1024)} MB is not copied" not in flat_guide: fail("docs/user-guide.md: the size limit of Local History copies is not history.rs MAX_BYTES")
+
 if errors:
     print("docs-check: FAIL")
     for e in errors: print("  -", e)

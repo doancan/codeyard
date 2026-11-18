@@ -1,6 +1,6 @@
 //! The window's chrome and the controls views declare where they draw them (`a11y_controls.rs`): the activity bar,
 //! the status bar's items, the editor tabs' large-file, diff and page tabs and their buttons, another group's tabs,
-//! the panel's buttons and terminals, breadcrumbs, the resource monitor, the error card, the Run and Debug selector and
+//! the panel's buttons and terminals, breadcrumbs, the error card, the Run and Debug selector and
 //! a breakpoint's place. Each has its frame, and a press does what a click does.
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Role, TreeId};
@@ -82,14 +82,6 @@ fn the_activity_bar_and_status_bar_act_like_their_clicks(cx: &mut TestAppContext
     hit(&snap, toggle);
     press(&wb, cx, &snap, toggle);
     assert!(!wb.read_with(cx, |wb, _| wb.chrome.panel_open), "the panel is hidden");
-    let (resources, node) = get(&snapshot(&wb, cx), Role::Button, "Resources");
-    assert_eq!(node.is_expanded(), Some(false));
-    let snap = snapshot(&wb, cx);
-    press(&wb, cx, &snap, resources);
-    assert_eq!(get(&snapshot(&wb, cx), Role::Button, "Resources").1.is_expanded(), Some(true));
-    // The figures slide open (200 ms): the tree lists them once they are laid out.
-    let cpu = |snap: &Snapshot| snap.to_tree().nodes.iter().any(|(_, n)| n.role() == Role::Label && n.label().is_some_and(|l| l.starts_with("CPU: ")));
-    crate::qa_integration_tests::wait_ticking(cx, "the figures", |cx| cpu(&snapshot(&wb, cx)));
 }
 
 /// Page, diff and large-file tabs are tabs of the list; their Close buttons close them; a breadcrumb shows the file
