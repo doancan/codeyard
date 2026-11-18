@@ -26,9 +26,7 @@ The tree, in the order a screen reader walks it:
   may update any view) and `Focus` when it can take the keyboard. A press from an outdated tree acts only while the
   same control with the same name is still drawn. Surfaces declared this way: the status bar's other items (file
   operation progress, Sync, ports, Extensions off, transfer, language server progress, saving and unsaved marks, the
-  terminal toggle, merge conflicts, a data path, the web preview's Open and Stop) joined to the status bar's node; the
-  resource monitor (its "Resources" button, expanded while the figures show, each figure as a label, Pin and Close);
-  the error card's Reconnect and Close; the containers' "Back to SSH workspace" bar; the breadcrumbs (`Link`s that
+  terminal toggle, merge conflicts, a data path, the web preview's Open and Stop) joined to the status bar's node; the error card's Reconnect and Close; the containers' "Back to SSH workspace" bar; the breadcrumbs (`Link`s that
   show the folder or file in the Explorer, then a `Button` per symbol around the cursor, with its kind as description, that
   opens a picker of the symbols at its level); the menu bar the app draws on Windows and Linux (`MenuItem`s that open
   their menu under them); the panel's buttons (New Terminal, Launch Profile…, Split Terminal, Kill Terminal, Move
@@ -405,7 +403,7 @@ group only toggles it from the state that was read, and committing checks the re
   a Windows high-contrast theme). `crates/app/src/system_prefs.rs` reads both system settings at startup and whenever a
   window comes forward.
 - `workbench.reduceMotion` (`auto` follows macOS *Reduce motion* or Windows *Show animations*): the cursor stops
-  blinking, spinners stand still, the resource monitor card appears without fading and the update dialog's
+  blinking, spinners stand still, the update dialog's
   indeterminate bar stops sliding.
 - Every command is reachable from the palette and the keyboard.
 

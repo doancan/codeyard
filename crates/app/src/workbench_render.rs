@@ -226,11 +226,6 @@ impl Render for Workbench {
         self.sync_search_scope(cx);
         self.sync_ext_views_frame(cx);
         self.sync_update_window(window, cx);
-        let remote = self.remote.host.is_remote();
-        let project = self.root(cx).map(std::path::PathBuf::from);
-        self.chrome.resources.update(cx, |monitor, cx| monitor.set_project(project, remote, cx));
-        let run = self.run_info(cx);
-        self.chrome.resources.update(cx, |monitor, cx| monitor.set_run(run, cx));
         // Whatever had the keyboard went away (a tab closed with the old folder when a workspace opened, for one): the
         // keyboard stays in the window, or no shortcut works until something is clicked.
         if window.focused(cx).is_none() {
@@ -538,10 +533,7 @@ mod resize_tests {
             cx.simulate_resize(gpui::size(px(width), px(800.)));
             cx.run_until_parked();
             let bar = cx.debug_bounds("status-bar").unwrap();
-            let resources = cx.debug_bounds("sb-resources").unwrap();
             assert_eq!(bar.size.height, px(28.));
-            assert!(resources.left() >= bar.left() && resources.right() <= bar.right(), "resource control at {width}: {resources:?} inside {bar:?}");
-            assert!(resources.size.width >= px(28.) && resources.size.height >= px(24.));
         }
     }
 
@@ -588,11 +580,6 @@ mod resize_tests {
             cx.simulate_resize(gpui::size(px(width), px(800.)));
             cx.run_until_parked();
             let bar = cx.debug_bounds("status-bar").unwrap();
-            let resources = cx.debug_bounds("sb-resources").unwrap();
-            assert!(
-                resources.left() >= bar.left() && resources.right() + px(32.) <= bar.right(),
-                "resource and terminal controls at {width}: {resources:?} inside {bar:?}"
-            );
             for id in ["sb-conflicts", "sb-unsaved", "sb-update"] {
                 let item = cx.debug_bounds(id).unwrap();
                 assert!(item.left() >= bar.left() && item.right() <= bar.right(), "{id} at {width}: {item:?} inside {bar:?}");

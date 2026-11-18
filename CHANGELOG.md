@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- The Resources strip at the right end of the status bar (CPU, memory, disk and project size, and what is running), its *View: Resources* command and its *View* menu item. It no longer worked as intended. *Codeyard memory* and the other figures are gone with it; the diagnostics report is unchanged.
+
 ## [0.11.1] - 2026-11-14
 
 ### Changed

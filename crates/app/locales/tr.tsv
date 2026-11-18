@@ -2718,15 +2718,8 @@ Restore window	Pencereyi önceki boyutuna getir
 Close window	Pencereyi kapat
 Mouse wheel and trackpad scroll speed multiplier	Fare tekerleği ve izleme dörtgeni kaydırma hızı çarpanı
 Terminal row height, as a multiple of the font size	Terminal satır yüksekliği, yazı boyutunun katı olarak
-Codeyard memory	Codeyard belleği
-Disk available	Kullanılabilir disk
-Load	Yük
-files	dosya
-Measuring…	Ölçülüyor…
 Open File	Dosyayı Aç
-Project	Proje
 Unavailable	Kullanılamıyor
-View: Resources	Görünüm: Kaynaklar
 Web Preview	Web Önizleme
 Preview	Önizleme
 Web Preview stopped.	Web Önizleme durduruldu.
@@ -3618,8 +3611,6 @@ Tasks, tests and debugging	Görevler, testler ve hata ayıklama
 “{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	“{}” ve klasörleri, görevleri, hata ayıklama yapılandırmaları ve proje ayarları aracılığıyla program çalıştırabilir. Yalnızca bu çalışma alanının nereden geldiğine güveniyorsanız devam edin.
 Title bar	Başlık çubuğu
 Toggle Secondary Side Bar	İkincil Kenar Çubuğunu Aç/Kapat
-Debugger	Hata ayıklayıcı
-Failing tests	Başarısız testler
 The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	Bir pencerede açılan ilk terminal tüm düzenleyici alanını kaplar; panelin büyüt düğmesiyle eski boyutuna döner
 terminal.scrollback: {} lines can use hundreds of megabytes per terminal and slow down scrolling and search (up to {} is comfortable); applied as set	terminal.scrollback: {0} satır terminal başına yüzlerce megabayt bellek kullanabilir, kaydırmayı ve aramayı yavaşlatabilir ({1} satıra kadar rahattır); verildiği gibi uygulandı
 Lines kept in terminal history. More than 50,000 can use a lot of memory and slow down scrolling and search	Terminal geçmişinde tutulan satır sayısı. 50.000'den fazlası çok bellek kullanabilir, kaydırmayı ve aramayı yavaşlatabilir
@@ -3649,7 +3640,6 @@ View: Toggle Status Bar Visibility	Görünüm: Durum Çubuğunu Göster/Gizle
 Let programs in the terminal erase its scrollback (some full-screen tools do on every redraw, and the history is lost)	Terminaldeki programların geçmişi silmesine izin ver (bazı tam ekran araçlar her yeniden çizimde yapar ve geçmiş kaybolur)
 
 Search files by name (> commands, : line, # symbols, ? help)	Dosyaları adla ara (> komutlar, : satır, # semboller, ? yardım)
-{} running	{} çalışıyor
 Another git process is using this repository. If none is running, a crash left {} behind: delete it and try again.	Bu depoyu başka bir git işlemi kullanıyor. Çalışan yoksa bir çökme {} dosyasını bırakmıştır: silip yeniden deneyin.
 Before switching to {}	{} dalına geçmeden önce
 Cannot reach the server: check the network connection (and a proxy or VPN, if you use one).	Sunucuya ulaşılamıyor: ağ bağlantısını (varsa proxy veya VPN'i) kontrol edin.

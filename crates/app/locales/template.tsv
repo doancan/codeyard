@@ -363,7 +363,6 @@ Codeyard couldn't set up a secure connection to the update server. Check that yo
 Codeyard is not signed in to GitHub: run `gh auth login` in a terminal, then try again.	
 Codeyard is still installing an update	
 Codeyard is up to date	
-Codeyard memory	
 Codeyard quit unexpectedly last time	
 Codeyard signs its requests to {} with this account. The extension never sees your password or token. You can sign out on its page in Extensions.	
 Codeyard will reopen your windows.	
@@ -715,7 +714,6 @@ Debug: Step Over
 Debug: Stop	
 Debug: Stop All	
 Debug: Toggle Breakpoint	
-Debugger	
 Dec	
 Decoded here only: nothing is sent or logged	
 Default	
@@ -785,7 +783,6 @@ Disconnect the container before disabling the container module. Your open files 
 Discovering containers…	
 Disk I/O total	
 Disk and network activity	
-Disk available	
 Disk read	
 Disk read / write rate	
 Disk size	
@@ -1014,7 +1011,6 @@ Extensions: Show Extensions
 External image: open the link to view it.	
 F4 steps through the search results, ⇧F4 goes back.	
 Failed with code {}: {}	
-Failing tests	
 Favorites	
 Favorites: Show Favorites…	
 Favorites: Toggle Active File	
@@ -1484,7 +1480,6 @@ Listing worktrees timed out. Refresh to try again.
 Live updates	
 Ln {}, Col {}	
 Ln {}, Col {} ({} selected)	
-Load	
 Load More Stack Frames	
 Load installed extensions (off: Codeyard starts as if none were installed)	
 Load more	
@@ -1531,7 +1526,6 @@ Match case (⌥C)
 Maximize Panel	
 Maximize window	
 May	
-Measuring…	
 Memory	
 Memory usage (%)	
 Memory: {0} ({1})	
@@ -2048,7 +2042,6 @@ Profiles: Duplicate Current…
 Profiles: Rename…	
 Profiles: Switch…	
 Progress	
-Project	
 Project lifecycle commands will run. Rebuild replaces the container; persistent volumes are kept.	
 Project name	
 Project settings that start programs	
@@ -3198,7 +3191,6 @@ View: Problems
 View: Remote Explorer	
 View: Reopen Closed Editor	
 View: Reset Zoom	
-View: Resources	
 View: Run and Debug	
 View: Source Control	
 View: Split Editor	
@@ -3414,7 +3406,6 @@ features: {}
 fetches {} from {}	
 field	
 file	
-files	
 files not found in the toolchain	
 files.associations.{}: expected a language name or extension	
 files.autoSave: unknown value {} (off, afterDelay, onFocusChange)	
@@ -3934,7 +3925,6 @@ your words
 {} removed	
 {} result in 1 file|{} results in 1 file	
 {} result|{} results	
-{} running	
 {} shortcut shares its key with another command|{} shortcuts share their key with another command	
 {} skipped	
 {} space|{} spaces	

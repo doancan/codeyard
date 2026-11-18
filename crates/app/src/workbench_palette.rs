@@ -514,7 +514,6 @@ impl Workbench {
             Command::action("Terminal: Close", KillTerminal),
             Command::action("Terminal: Split", SplitTerminal),
             Command::action("View: Toggle Panel", TogglePanel),
-            Command::action("View: Resources", crate::resource_monitor::ToggleResources),
             Command::action("View: Move Panel (bottom ⇄ right)", TogglePanelPosition),
             Command::action("View: Move Panel Left", MovePanelLeft),
             Command::action("View: Move Panel Right", MovePanelRight),
