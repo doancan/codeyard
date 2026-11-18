@@ -74,3 +74,42 @@ fn without_an_operation_the_commands_say_so(cx: &mut TestAppContext) {
     assert!(!cx.has_pending_prompt(), "nothing to abort, nothing to ask");
     assert_eq!(wb.read_with(cx, |wb, _| wb.notice_for_test()), Some((false, "No cherry-pick or revert is in progress.".into())));
 }
+
+/// The same abort and refusal over a real SSH connection (the throwaway `sshd`): the operation state is read from the host's git
+/// directory and the abort runs there.
+#[gpui::test]
+fn a_waiting_cherry_pick_is_aborted_over_ssh(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("sequencer-ssh") else { return };
+    let _en = crate::i18n::LangGuard::set("en");
+    let dir = repo("seq-ssh");
+    let base = git_in(&dir, &["rev-parse", "HEAD"]).trim().to_string();
+    git_in(&dir, &["checkout", "-q", "-b", "other", &base]);
+    std::fs::write(dir.join("f.txt"), "theirs\n").unwrap();
+    git_in(&dir, &["add", "f.txt"]);
+    git_in(&dir, &["commit", "-q", "-m", "theirs"]);
+    let theirs = git_in(&dir, &["rev-parse", "HEAD"]).trim().to_string();
+    git_in(&dir, &["checkout", "-q", "-"]);
+    std::fs::write(dir.join("f.txt"), "ours\n").unwrap();
+    git_in(&dir, &["add", "f.txt"]);
+    git_in(&dir, &["commit", "-q", "-m", "ours"]);
+    assert!(!crate::test_git::git().args(["cherry-pick", &theirs]).current_dir(&dir).output().unwrap().status.success());
+    let (wb, cx) = setup(cx);
+    wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    crate::qa_integration_tests::wait_secs(cx, 30, "connected", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    wb.update_in(cx, |wb, window, cx| wb.open_path(&crate::ui::local_path(&dir), window, cx));
+    crate::qa_integration_tests::wait_secs(cx, 30, "the operation over SSH", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        wb.read_with(cx, |wb, _| wb.git_status().is_some_and(|s| s.op == crate::repos::OpState::CherryPicking))
+    });
+    assert_eq!(wb.read_with(cx, |wb, _| wb.remote_host_label_for_test()), Some(format!("ssh://{}", crate::test_sshd::ALIAS)));
+    command(&wb, cx, "Git: Abort Cherry-pick or Revert");
+    cx.simulate_prompt_answer("Abort");
+    crate::qa_integration_tests::wait_secs(cx, 30, "the abort", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        !dir.join(".git/CHERRY_PICK_HEAD").exists()
+    });
+    assert_eq!(std::fs::read_to_string(dir.join("f.txt")).unwrap(), "ours\n");
+}
