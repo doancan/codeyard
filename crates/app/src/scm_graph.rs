@@ -3,10 +3,16 @@
 
 use gpui::{AnyElement, Context, Focusable as _, Render, SharedString, Window, div, prelude::*, px, uniform_list};
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
 
+use host::Host;
+
 use super::{AccessFrame, GraphData, HistoryFrame, ScmEvent, ScmPanel, avatar, commit_matches};
-use crate::graph::{self, GraphCommit, GraphItem, GraphView, RefKind, RefLabel};
+use crate::graph::{self, CommitDetail, GraphCommit, GraphItem, GraphView, RefKind, RefLabel};
+use crate::i18n::{t, tf, tn};
 use crate::sections;
 use crate::ui::{self, Palette, c, icon, palette, text};
 
@@ -44,9 +50,167 @@ fn ordered_refs(commit: &GraphCommit) -> Vec<&RefLabel> {
     refs
 }
 
-/// On commit hover: author and time, subject, all branches/tags, hash and hint; a tidy card instead of a wall of plain text.
+/// Most files a hover card lists; the rest are counted.
+const CARD_FILES: usize = 8;
+/// Most lines of the message body a hover card shows, and the longest of those lines in characters.
+const CARD_MESSAGE_LINES: usize = 6;
+const CARD_LINE_CHARS: usize = 160;
+/// Details kept for hovered commits; the oldest are dropped when it is full (a commit's changes never change, so nothing else
+/// invalidates them).
+const CARD_CACHE: usize = 64;
+
+/// What the card needs to read a commit's changes: where the repository is and what was already read. Hovering one commit again
+/// does not run git again, and nothing is read for a row the pointer only passes over: the card is built when the tooltip shows.
+#[derive(Clone)]
+pub(super) struct CardSource {
+    host: Arc<dyn Host>,
+    root: String,
+    cache: CardCache,
+}
+
+pub(super) type CardCache = Rc<RefCell<HashMap<String, Result<Arc<CommitDetail>, ()>>>>;
+
+impl CardSource {
+    pub(super) fn new(host: Arc<dyn Host>, root: String, cache: CardCache) -> Self {
+        Self { host, root, cache }
+    }
+
+    fn key(&self, hash: &str) -> String {
+        format!("{}\n{hash}", self.root)
+    }
+}
+
+/// What the card knows of the commit's changes.
+#[derive(Clone)]
+pub(super) enum Changes {
+    Loading,
+    Ready(Arc<CommitDetail>),
+    Failed,
+}
+
+/// On commit hover: author and time, subject, the rest of the message, all branches/tags, hash, parents of a merge, and what the
+/// commit changed (counts and the first files with their own counts); a tidy card instead of a wall of plain text.
 pub struct CommitCard {
     commit: GraphCommit,
+    pub(super) changes: Changes,
+    _read: Option<gpui::Task<()>>,
+}
+
+impl CommitCard {
+    pub(super) fn new(commit: GraphCommit, source: Option<CardSource>, cx: &mut Context<Self>) -> Self {
+        let Some(source) = source else { return Self { commit, changes: Changes::Failed, _read: None } };
+        let key = source.key(&commit.hash);
+        if let Some(known) = source.cache.borrow().get(&key).cloned() {
+            return Self { commit, changes: known.map_or(Changes::Failed, Changes::Ready), _read: None };
+        }
+        let hash = commit.hash.clone();
+        let (host, root) = (source.host.clone(), source.root.clone());
+        let task = cx.background_executor().spawn(async move { graph::commit_detail(host.as_ref(), &root, &hash) });
+        let read = cx.spawn(async move |this, cx| {
+            let result = task.await.map(Arc::new).map_err(|_| ());
+            let mut cache = source.cache.borrow_mut();
+            if cache.len() >= CARD_CACHE {
+                cache.clear();
+            }
+            cache.insert(key, result.clone());
+            drop(cache);
+            this.update(cx, |this, cx| {
+                this.changes = result.map_or(Changes::Failed, Changes::Ready);
+                cx.notify();
+            })
+            .ok();
+        });
+        Self { commit, changes: Changes::Loading, _read: Some(read) }
+    }
+}
+
+/// "A", "M", "D", "R" with the color that says what happened to the file.
+fn status_chip(status: char, p: &Palette) -> gpui::Div {
+    let color = match status {
+        'A' => p.success,
+        'D' => p.danger,
+        'M' => p.accent,
+        _ => p.info,
+    };
+    div()
+        .w(px(14.))
+        .flex_none()
+        .flex()
+        .justify_center()
+        .font_family(ui::MONO_FONT)
+        .text_size(px(text::XS.0))
+        .text_color(c(ui::ensure_contrast(color, p.text, &[p.surface_raised], 4.6)))
+        .child(status.to_string())
+}
+
+/// The rest of the message under its subject line, cut to what a card can hold.
+fn message_body(message: &str) -> Vec<String> {
+    let mut lines: Vec<String> =
+        message.lines().skip(1).map(str::trim_end).skip_while(|l| l.is_empty()).map(|l| l.chars().take(CARD_LINE_CHARS).collect()).collect();
+    while lines.last().is_some_and(String::is_empty) {
+        lines.pop();
+    }
+    if lines.len() > CARD_MESSAGE_LINES {
+        lines.truncate(CARD_MESSAGE_LINES);
+        lines.push("…".into());
+    }
+    lines
+}
+
+impl CommitCard {
+    /// The files and counts part of the card.
+    fn changes_section(&self, p: &Palette) -> gpui::Div {
+        let muted = |t: String| div().text_size(px(text::XXS.0)).text_color(c(p.text_muted)).child(t);
+        let section = div().flex().flex_col().gap(px(theme::SPACE[2])).pt(px(theme::SPACE[3])).border_t_1().border_color(c(p.border));
+        let detail = match &self.changes {
+            Changes::Loading => return section.child(muted(t("Reading the changes…").into())),
+            Changes::Failed => return section.child(muted(t("The changes could not be read.").into())),
+            Changes::Ready(detail) => detail,
+        };
+        if detail.files.is_empty() {
+            return section.child(muted(t("No files changed").into()));
+        }
+        let (added, deleted) = detail.totals();
+        let danger = ui::ensure_contrast(p.danger, p.text, &[p.surface_raised], 4.6);
+        let success = ui::ensure_contrast(p.success, p.text, &[p.surface_raised], 4.6);
+        let counts = |a: Option<usize>, d: Option<usize>| match (a, d) {
+            (Some(a), Some(d)) => div()
+                .flex_none()
+                .flex()
+                .gap(px(theme::SPACE[3]))
+                .child(div().text_color(c(success)).child(format!("+{a}")))
+                .child(div().text_color(c(danger)).child(format!("−{d}"))),
+            _ => div().flex_none().text_color(c(p.text_muted)).child(t("binary")),
+        };
+        let rows = detail.files.iter().take(CARD_FILES).enumerate().map(|(i, f)| {
+            div()
+                .debug_selector(move || format!("commit-card-file-{i}"))
+                .flex()
+                .items_center()
+                .gap(px(theme::SPACE[3]))
+                .text_size(px(text::XS.0))
+                .child(status_chip(f.status, p))
+                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(f.path.clone()))
+                .child(counts(f.added, f.deleted))
+        });
+        let more = detail.files.len().saturating_sub(CARD_FILES);
+        section
+            .child(
+                div()
+                    .debug_selector(|| "commit-card-summary".to_string())
+                    .flex()
+                    .items_center()
+                    .gap(px(theme::SPACE[3]))
+                    .text_size(px(text::XS.0))
+                    .child(div().child(tn("{} file changed", "{} files changed", detail.files.len(), &[])))
+                    .child(div().text_color(c(success)).child(format!("+{added}")))
+                    .child(div().text_color(c(danger)).child(format!("−{deleted}"))),
+            )
+            .children(rows)
+            .when(more > 0, |d| {
+                d.child(div().debug_selector(|| "commit-card-more".to_string()).child(muted(tn("and {} more file", "and {} more files", more, &[]))))
+            })
+    }
 }
 
 impl Render for CommitCard {
@@ -54,6 +218,10 @@ impl Render for CommitCard {
         let p = *palette(cx);
         let k = &self.commit;
         let refs = ordered_refs(k);
+        let body = match &self.changes {
+            Changes::Ready(detail) => message_body(&detail.message),
+            _ => Vec::new(),
+        };
         let muted = |t: String| div().text_size(px(text::XXS.0)).text_color(c(p.text_muted)).child(t);
         div()
             .w(px(340.))
@@ -80,6 +248,14 @@ impl Render for CommitCard {
                 ),
             )
             .child(div().font_weight(gpui::FontWeight::MEDIUM).child(k.subject.clone()))
+            .children((!body.is_empty()).then(|| {
+                div()
+                    .flex()
+                    .flex_col()
+                    .text_size(px(text::XS.0))
+                    .text_color(c(p.text_muted))
+                    .children(body.iter().map(|l| div().whitespace_normal().child(if l.is_empty() { " ".to_string() } else { l.clone() })))
+            }))
             .when(!refs.is_empty(), |d| d.child(div().flex().flex_wrap().gap(px(theme::SPACE[2])).children(refs.iter().map(|r| ref_chip(r, &p)))))
             .child(
                 div()
@@ -110,6 +286,11 @@ impl Render for CommitCard {
                     .child(div().flex_1())
                     .child(muted(k.email.clone())),
             )
+            .when(k.parents.len() > 1, |d| {
+                let parents = k.parents.iter().map(|h| h.chars().take(7).collect::<String>()).collect::<Vec<_>>().join(" · ");
+                d.child(muted(tf("Parents: {}", &[&parents])))
+            })
+            .child(self.changes_section(&p))
             .child(
                 div()
                     .pt(px(theme::SPACE[2]))
@@ -395,6 +576,7 @@ impl ScmPanel {
                         let st = cx.global::<crate::settings::Settings>();
                         (st.graph_show_author, st.graph_show_hash)
                     };
+                    let tooltips = this.status.as_ref().map(|s| CardSource::new(this.host.clone(), s.root.clone(), this.card_cache.clone()));
                     range
                         .map(|i| {
                             let (row, key) = match &items[i] {
@@ -402,9 +584,9 @@ impl ScmPanel {
                                 GraphItem::Commit(ix) => {
                                     let is_sel = selected.as_deref() == Some(g.commits[*ix].hash.as_str());
                                     let row = if mode == GraphView::Graph {
-                                        graph_row(&g, *ix, flat, is_sel, show_author, show_hash, !this.menu_open, &p, cx)
+                                        graph_row(&g, *ix, flat, is_sel, show_author, show_hash, tooltips.clone(), !this.menu_open, &p, cx)
                                     } else {
-                                        compact_row(&g, *ix, is_sel, !this.menu_open, &p, cx)
+                                        compact_row(&g, *ix, is_sel, tooltips.clone(), !this.menu_open, &p, cx)
                                     };
                                     (row, g.commits[*ix].hash.clone())
                                 }
@@ -479,7 +661,16 @@ fn day_header(label: &str, count: usize, h: f32, p: &Palette) -> AnyElement {
 }
 
 /// Shared row shell: selected highlight, hover, click, right click and hover card.
-fn row_shell(ix: usize, k: &GraphCommit, h: f32, is_sel: bool, show_tooltips: bool, p: &Palette, cx: &mut Context<ScmPanel>) -> gpui::Stateful<gpui::Div> {
+fn row_shell(
+    ix: usize,
+    k: &GraphCommit,
+    h: f32,
+    is_sel: bool,
+    tooltips: Option<CardSource>,
+    show_tooltips: bool,
+    p: &Palette,
+    cx: &mut Context<ScmPanel>,
+) -> gpui::Stateful<gpui::Div> {
     let (entry, menu_entry, card) = (k.clone(), k.clone(), k.clone());
     div()
         .id(("scm-graph", ix))
@@ -495,7 +686,7 @@ fn row_shell(ix: usize, k: &GraphCommit, h: f32, is_sel: bool, show_tooltips: bo
         .border_color(c(if is_sel { p.accent } else { p.surface }))
         .when(is_sel, |d| d.bg(c(p.surface_active)))
         .hover(|d| d.bg(c(p.surface_hover)))
-        .when(show_tooltips, |d| d.tooltip(move |_, cx| cx.new(|_| CommitCard { commit: card.clone() }).into()))
+        .when(show_tooltips, |d| d.tooltip(move |_, cx| cx.new(|cx| CommitCard::new(card.clone(), tooltips.clone(), cx)).into()))
         .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, _, cx| {
             this.select_commit(entry.clone(), cx);
             if ev.click_count() >= 2 {
@@ -517,6 +708,7 @@ fn graph_row(
     is_sel: bool,
     show_author: bool,
     show_hash: bool,
+    tooltips: Option<CardSource>,
     show_tooltips: bool,
     p: &Palette,
     cx: &mut Context<ScmPanel>,
@@ -526,7 +718,7 @@ fn graph_row(
     let merge = commit.parents.len() > 1;
     let refs = ordered_refs(commit);
     let more = refs.len().saturating_sub(1);
-    row_shell(ix, commit, graph::ROW_H, is_sel, show_tooltips, p, cx)
+    row_shell(ix, commit, graph::ROW_H, is_sel, tooltips, show_tooltips, p, cx)
         .pr(px(theme::SPACE[3]))
         .child(if flat {
             // Rows are skipped, so lines would break: a dot in the commit's lane color stands in for the graph.
@@ -598,13 +790,21 @@ fn graph_row(
 
 /// Compact and by-day views: single line, dot in the lane's color, subject, one label, time. The author is in the hover card
 /// (an avatar would take space and truncate the subject).
-fn compact_row(g: &GraphData, ix: usize, is_sel: bool, show_tooltips: bool, p: &Palette, cx: &mut Context<ScmPanel>) -> AnyElement {
+fn compact_row(
+    g: &GraphData,
+    ix: usize,
+    is_sel: bool,
+    tooltips: Option<CardSource>,
+    show_tooltips: bool,
+    p: &Palette,
+    cx: &mut Context<ScmPanel>,
+) -> AnyElement {
     let (commit, row) = (&g.commits[ix], &g.rows[ix]);
     let head = commit.refs.iter().any(|r| r.kind == RefKind::Head);
     let merge = commit.parents.len() > 1;
     let refs = ordered_refs(commit);
     let color = graph::lane_color(p, row.color);
-    row_shell(ix, commit, GraphView::Compact.row_height(), is_sel, show_tooltips, p, cx)
+    row_shell(ix, commit, GraphView::Compact.row_height(), is_sel, tooltips, show_tooltips, p, cx)
         .gap(px(theme::SPACE[3]))
         .pl(px(theme::SPACE[4]))
         .pr(px(theme::SPACE[4]))
@@ -633,4 +833,20 @@ fn compact_row(g: &GraphData, ix: usize, is_sel: bool, show_tooltips: bool, p: &
             div().flex_none().w(px(26.)).flex().justify_end().text_size(px(text::XXS.0)).text_color(c(p.text_muted)).child(crate::git::short_ago(&commit.when)),
         )
         .into_any_element()
+}
+
+#[cfg(test)]
+#[path = "scm_graph_card_tests.rs"]
+mod card_tests;
+
+/// What tests ask of the graph's selection (kept here so `scm.rs` stays within its line limit).
+#[cfg(test)]
+impl ScmPanel {
+    pub fn selected_hash(&self) -> Option<String> {
+        self.selected.as_ref().map(|c| c.hash.clone())
+    }
+
+    pub fn detail_for_test(&self) -> Option<Arc<CommitDetail>> {
+        self.detail.clone()
+    }
 }

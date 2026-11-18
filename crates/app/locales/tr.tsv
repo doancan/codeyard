@@ -4255,3 +4255,9 @@ Stage File	Dosyayı Stage'e Al
 Staged “{}”	“{}” Stage'e alındı
 Unstage File	Dosyayı Stage'den Çıkar
 Unstaged “{}”	“{}” Stage'den çıkarıldı
+No files changed	Değişen dosya yok
+Parents: {}	Ebeveynler: {}
+Reading the changes…	Değişiklikler okunuyor…
+The changes could not be read.	Değişiklikler okunamadı.
+and {} more file|and {} more files	ve {} dosya daha
+{} file changed|{} files changed	{} dosya değişti

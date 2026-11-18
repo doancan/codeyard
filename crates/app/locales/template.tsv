@@ -1694,6 +1694,7 @@ No favorites yet: right-click a file → Add to Favorites, or “Favorites: Togg
 No file is open in this folder.	
 No file is open.	
 No file “{}” in this project	
+No files changed	
 No files in this folder	
 No folder is open.	
 No git changes to revert	
@@ -1943,6 +1944,7 @@ Panel
 Panel: below the editor	
 Panel: left of the editor	
 Panel: right of the editor	
+Parents: {}	
 Passphrase	
 Password	
 Paste	
@@ -2133,6 +2135,7 @@ Read only
 Read the clipboard	
 Read {}	
 Reading folders… {0} and {1} entries	
+Reading the changes…	
 Reading the file…	
 Reading the registries…	
 Real location: {}	
@@ -2788,6 +2791,7 @@ The branch moved while the question was open. Nothing was changed.
 The build failed. See Output and Problems for the compiler errors.	
 The bundled service catalogue is invalid. Reinstall Codeyard before retrying.	
 The changes are too large for one patch.	
+The changes could not be read.	
 The clipboard has no text.	
 The commit stays on {}: the next Sync brings it back. To remove it there too, push with force after undoing (Git: Push (Force)…).	
 The complete file list is available in Output.	
@@ -3341,6 +3345,7 @@ a theme must be a JSON object
 about {0} MB · {1}	
 active	
 added	
+and {} more file|and {} more files	
 animated PNG, first frame shown	
 animated, {} frame|animated, {} frames	
 another Codeyard window has them; started new shells	
@@ -3879,6 +3884,7 @@ your words
 {} exited with {}	
 {} extension|{} extensions	
 {} failed	
+{} file changed|{} files changed	
 {} file operation|{} file operations	
 {} file skipped, binary or too large|{} files skipped, binary or too large	
 {} file skipped, parse errors|{} files skipped, parse errors	
