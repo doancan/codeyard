@@ -992,7 +992,7 @@ Evaluate
 Evaluate an expression (↵)	
 Every change in this file is staged	
 Every file of {} matches its package.	
-Every save of a file on this server would leave a copy of it in Codeyard's data folder here, for up to 30 days. Secrets in those files would be copied too. Change it later with localHistory.remote.	
+Every save of a file on this server would leave a copy of it in Codeyard's data folder here, for up to {} days. Secrets in those files would be copied too. Change it later with localHistory.remote.	
 Every setting, with comments	
 Every uncommitted change is lost. This can't be undone.	
 Everything resolved so far in this merge is discarded.	

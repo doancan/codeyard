@@ -325,3 +325,56 @@ fn a_merge_that_waits_for_the_user_blocks_the_rewrite() {
     f.assert_untouched(&before, "a merge in progress");
     assert!(f.dir.join(".git/MERGE_HEAD").exists(), "the merge is still waiting");
 }
+
+#[test]
+fn unusual_branch_and_author_names_survive_a_rewrite() {
+    let f = fixture("unusual-names");
+    f.git(&["checkout", "-q", "-b", "özellik/ünï-çödé"]);
+    std::fs::write(f.dir.join("a.txt"), "a").unwrap();
+    f.git(&["add", "a.txt"]);
+    f.git(&[
+        "-c",
+        "user.name=Ünal \"Q\" O'Brien",
+        "-c",
+        "user.email=ü@example.com",
+        "commit",
+        "-q",
+        "--author",
+        "Ünal \"Q\" O'Brien <ü@example.com>",
+        "-m",
+        "first",
+    ]);
+    let a = f.head();
+    let b = f.commit("b.txt", "b", "second");
+    let outcome = f.rewrite(&b, &squash(&[&a, &b], "both")).unwrap();
+    assert!(outcome.starts_with("Squashed 2 commits"), "{outcome}");
+    assert_eq!(f.git(&["log", "-1", "--format=%an <%ae>"]).trim(), "Ünal \"Q\" O'Brien <ü@example.com>", "the oldest commit's author, byte for byte");
+    assert_eq!(f.branch(), "özellik/ünï-çödé");
+    assert!(f.leftovers().is_empty());
+}
+
+#[test]
+fn a_message_git_cannot_take_is_refused_and_nothing_changes() {
+    let f = fixture("bad-message");
+    let (a, b) = (f.commit("a.txt", "a", "a"), f.commit("b.txt", "b", "b"));
+    let before = f.snapshot();
+    // An empty message and one with a NUL byte: git refuses or cuts them; either way the branch must not move half-way.
+    for message in ["", "\n\n", "a\0b"] {
+        let outcome = f.rewrite(&b, &squash(&[&a, &b], message));
+        if outcome.is_ok() {
+            assert!(!f.git(&["log", "-1", "--format=%B"]).trim().is_empty(), "a squash never makes a commit without a message");
+            f.git(&["reset", "-q", "--soft", &b]);
+            continue;
+        }
+        f.assert_untouched(&before, "a message git refuses");
+    }
+}
+
+#[test]
+fn a_commit_message_that_starts_with_a_dash_is_text_not_an_option() {
+    let f = fixture("dash-message");
+    let (a, b) = (f.commit("a.txt", "a", "a"), f.commit("b.txt", "b", "b"));
+    f.rewrite(&b, &squash(&[&a, &b], "--amend --no-verify\n\n-F /etc/passwd")).unwrap();
+    assert_eq!(f.git(&["log", "-1", "--format=%s"]).trim(), "--amend --no-verify");
+    assert!(!f.git(&["log", "-1", "--format=%B"]).contains("root:"), "no file was read as the message");
+}

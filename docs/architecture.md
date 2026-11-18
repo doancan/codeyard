@@ -91,6 +91,17 @@ per-folder grouping cache). The image viewer is `large_image.rs` (reading, decod
 Decoding happens off the UI thread after the header checks refuse what would take gigabytes; SVG is rasterised again per zoom
 through `SvgRenderer` (exported by a small GPUI patch, see `vendor/gpui/PATCHES.md`).
 
+Source Control's diff of a file that is not text is `diff_media.rs`, a child of `diff.rs`: both sides are read as bytes
+(`git::show_bytes_checked` keeps "not there" apart from "could not be read"), sorted by what they hold and not by the file name
+alone (an LFS pointer named `.png` stays a text diff), and decoded on the worker with the image tab's limits (`image_size`) before the
+view draws them. History is rewritten in `git/rewrite.rs`: the plan is checked without writing, the new commits are built in a
+temporary worktree and installed with one `update-ref` that names the old tip, so the checkout's index and files are never touched;
+the graph (`scm_graph.rs`) picks the run and the commit hover card, which reads a commit's changes once through `graph::commit_detail`
+when the tooltip shows. `git/explain.rs` holds the sentences for failures with a usual cause and `OpState` (`repos.rs`) is the one
+reader of "Git is in the middle of something"; `git::blocking_operation` is what the commands that would start another operation ask.
+Local History's rules are in `history.rs` (secret names, the user's patterns, deleting) and the decision per save in
+`workbench_history.rs`, for both ways a copy is written.
+
 `scripts/arch-check.sh` enforces size limits and only ever lowers them: `workbench.rs` ≤ 2600 lines,
 `editor.rs` ≤ 1700, `buffer/src/lib.rs` ≤ 1800, every other source file ≤ 1500 (`*_tests.rs` and test helpers ≤ 2500,
 `tests.rs` and `qa_*_tests.rs` ≤ 6000), `Workbench` struct ≤ 80 lines. When a

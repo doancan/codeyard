@@ -280,7 +280,10 @@ pub(crate) fn replace_on_transfer(existing: &[String]) -> Question {
 /// cancel button: Escape never starts copying secrets.
 pub(crate) fn remote_history(host: &str) -> Question {
     Question::new(PromptLevel::Warning, tf("Keep Local History of files on {} on this computer?", &[&host]))
-        .detail(t("Every save of a file on this server would leave a copy of it in Codeyard's data folder here, for up to 30 days. Secrets in those files would be copied too. Change it later with localHistory.remote."))
+        .detail(tf(
+            "Every save of a file on this server would leave a copy of it in Codeyard's data folder here, for up to {} days. Secrets in those files would be copied too. Change it later with localHistory.remote.",
+            &[&crate::history::KEEP_DAYS],
+        ))
         .button(t("Keep"))
         .cancel(t("Don't Keep"))
 }

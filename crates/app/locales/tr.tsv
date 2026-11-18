@@ -4231,7 +4231,7 @@ Delete History of “{}”	“{}” Geçmişini Sil
 Delete Local History?	Yerel Geçmiş silinsin mi?
 Deleted {} copy from Local History.|Deleted {} copies from Local History.	Yerel Geçmişten {} kopya silindi.
 Don't Keep	Tutma
-Every save of a file on this server would leave a copy of it in Codeyard's data folder here, for up to 30 days. Secrets in those files would be copied too. Change it later with localHistory.remote.	Bu sunucudaki bir dosyanın her kaydı, Codeyard'ın bu bilgisayardaki veri klasöründe 30 güne kadar bir kopya bırakır. Dosyalardaki gizli bilgiler de kopyalanır. Sonradan localHistory.remote ile değiştirebilirsin.
+Every save of a file on this server would leave a copy of it in Codeyard's data folder here, for up to {} days. Secrets in those files would be copied too. Change it later with localHistory.remote.	Bu sunucudaki bir dosyanın her kaydı, Codeyard'ın bu bilgisayardaki veri klasöründe {} güne kadar bir kopya bırakır. Dosyalardaki gizli bilgiler de kopyalanır. Sonradan localHistory.remote ile değiştirebilirsin.
 Keep Local History of files on servers	Sunucudaki dosyaların Yerel Geçmişini tut
 Keep Local History of files on {} on this computer?	{} üzerindeki dosyaların Yerel Geçmişi bu bilgisayarda tutulsun mu?
 Keep a copy of a file on every save (Local History)	Dosyanın her kaydında bir kopya tut (Yerel Geçmiş)

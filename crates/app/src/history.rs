@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 pub const KEEP: usize = 40;
 /// Files larger than this aren't copied.
 pub const MAX_BYTES: usize = 2 * 1024 * 1024;
-const MAX_AGE_MS: u64 = 30 * 24 * 3600 * 1000;
+/// Days a copy is kept (the question about a server's files and the user guide quote this number).
+pub const KEEP_DAYS: u64 = 30;
+const MAX_AGE_MS: u64 = KEEP_DAYS * 24 * 3600 * 1000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
@@ -316,5 +318,34 @@ mod tests {
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
         assert_eq!(outcome, Deleted { copies: 0, failed: 1 });
         assert_eq!(list(&dir).len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod hardening_tests {
+    use super::*;
+
+    #[test]
+    fn hostile_patterns_and_paths_neither_panic_nor_take_long() {
+        let started = std::time::Instant::now();
+        let long = format!("/{}/.env", "a/".repeat(5000));
+        for pattern in ["", "[", "[]", "\\", "**/**/**/**/**", "*".repeat(500).as_str(), "?*?*?*?*?*?*?*?*x", "[a-"] {
+            let _ = keeps(&long, &[pattern.to_string()]);
+            let _ = keeps("/p/\u{0}\n\t/x.txt", &[pattern.to_string()]);
+            let _ = keeps("", &[pattern.to_string()]);
+        }
+        assert!(!keeps(&long, &[]), "a secret file deep in a long path is still found");
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "matching is linear in the path, whatever the pattern: {:?}", started.elapsed());
+    }
+
+    #[test]
+    fn a_path_that_only_looks_like_a_secret_is_kept_and_one_that_is_one_is_not() {
+        for path in ["/p/.env.example/readme", "/p/dir.env/a.txt", "/p/key.md", "/p/.envrc", "/p/pem", "/p/my.keyboard"] {
+            assert!(keeps(path, &[]), "{path}");
+        }
+        // The name is what counts, wherever the folder is, even with a trailing slash from a caller or odd separators.
+        for path in ["/p/.env/", "//p//.env", "/p/sub/./.env", "C:/p/.ENV.local"] {
+            assert!(!keeps(path, &[]), "{path}");
+        }
     }
 }
