@@ -226,7 +226,7 @@ fn paint_checkerboard(window: &mut gpui::Window, pane: Bounds<Pixels>, (width, h
 
 impl DiffView {
     /// A diff of an image or another binary file.
-    pub fn new_media(path: String, staged: bool, media: Media, cx: &mut Context<Self>) -> Self {
+    pub(crate) fn new_media(path: String, staged: bool, media: Media, cx: &mut Context<Self>) -> Self {
         let mut view = Self::new(path, staged, "", "", cx);
         view.media = Some(media);
         view

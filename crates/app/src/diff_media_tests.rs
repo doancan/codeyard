@@ -114,7 +114,7 @@ fn the_same_pixels_in_different_files_are_a_metadata_only_change(cx: &mut TestAp
     let a = decode(fast.clone(), ImageFormat::Png, &svg);
     let b = decode(best.clone(), ImageFormat::Png, &svg);
     let (Side::Picture(a), Side::Picture(b)) = (a, b) else { panic!("both decode") };
-    assert_eq!(same_pixels(&a.render, &b.render), true);
+    assert!(same_pixels(&a.render, &b.render), "same pixels, different bytes");
     let Side::Picture(other) = decode(png(8, 8, [10, 20, 31, 255]), ImageFormat::Png, &svg) else { panic!() };
     assert!(!same_pixels(&a.render, &other.render), "one channel differs");
 }
