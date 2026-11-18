@@ -615,7 +615,10 @@ impl Workbench {
         use super::{MenuCmd, MenuTarget};
         use crate::graph::ResetMode;
         use crate::menu::MenuItem;
-        let rows: Vec<(MenuItem, MenuCmd)> = vec![
+        let run = self.scm.read(cx).range_run();
+        let squash = (run.len() >= 2 && run.contains(&commit.hash))
+            .then(|| (MenuItem::new(&crate::i18n::tn("Squash {} Commit…", "Squash {} Commits…", run.len(), &[])), MenuCmd::CommitSquash));
+        let mut rows: Vec<(MenuItem, MenuCmd)> = vec![
             (MenuItem::new(crate::i18n::t("Copy Commit Hash")), MenuCmd::CopyHash),
             (MenuItem::new(crate::i18n::t("Copy Message")), MenuCmd::CopySubject),
             (MenuItem::new(crate::i18n::t("Show Changed Files…")), MenuCmd::CommitFiles),
@@ -627,7 +630,10 @@ impl Workbench {
             (MenuItem::new(crate::i18n::t("Reset Soft to Here")).separator(), MenuCmd::CommitReset(ResetMode::Soft)),
             (MenuItem::new(crate::i18n::t("Reset Mixed to Here")), MenuCmd::CommitReset(ResetMode::Mixed)),
             (MenuItem::new(crate::i18n::t("Reset Hard to Here…")), MenuCmd::CommitReset(ResetMode::Hard)),
+            (MenuItem::new(crate::i18n::t("Move Commit Up")).separator(), MenuCmd::CommitMove { down: false }),
+            (MenuItem::new(crate::i18n::t("Move Commit Down")), MenuCmd::CommitMove { down: true }),
         ];
+        rows.extend(squash);
         let (items, commands): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
         let target = MenuTarget { path: commit.hash, is_dir: false, tab: None };
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);

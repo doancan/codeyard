@@ -17,6 +17,7 @@ A .git folder is never deleted by a refactoring.
 A command failed with code {}	
 A command finished	
 A command is running	
+A commit could not be made while rewriting ({}). Nothing was changed.	
 A compatible Node.js runtime could not be used on this host. Install Node.js 22.22.2 or newer with npm, then retry.	
 A container operation is running. Use Docker: Cancel Operation before starting another.	
 A file named “{}” is already there; a folder cannot replace it. Rename or remove it first.	
@@ -25,6 +26,7 @@ A folder cannot be moved into itself.
 A folder named “{}” is already there; a file cannot replace it. Rename or remove it first.	
 A git dependency: not looked up on crates.io.	
 A key that types text cannot be a shortcut on its own. Add Ctrl, Alt or Cmd, or press a function key.	
+A merge commit cannot be part of the run, or above it	
 A merge commit is created unless it can fast-forward. Conflicts are resolved in Source Control.	
 A part of the path is a file, not a folder.	
 A path dependency: not looked up on crates.io.	
@@ -317,6 +319,7 @@ Choose an action
 Choose an answer (Esc: none)	
 Choose an extension in the Extensions view.	
 Choose another name or remove the existing one first.	
+Choose at least two commits to squash.	
 Choose…	
 Clear	
 Clear Terminal	
@@ -414,6 +417,7 @@ Commit {}
 Commits	
 Commits after it leave this branch and every uncommitted change is lost. This can't be undone.	
 Commits as {0} <{1}>	
+Commits can only be rewritten on a branch, and HEAD is detached.	
 Commits drawn in the Source Control graph	
 Commits listed in the explorer's Timeline	
 Commits that exist only on the remote branch are lost for everyone using it.	
@@ -1576,6 +1580,8 @@ Mounted storage
 Mounts: {}	
 Mouse wheel and trackpad scroll speed multiplier	
 Move	
+Move Commit Down	
+Move Commit Up	
 Move Line Down	
 Move Line Up	
 Move Panel Right	
@@ -1587,6 +1593,8 @@ Move deleted local files to the Trash
 Move to Trash	
 Move “{0}” into “{1}”?	
 Move “{}” to the Trash?	
+Moved {}	
+Moving {0} would conflict with {1}: nothing was changed	
 Name	
 Name of the copy (it starts with the settings, keybindings and snippets in use)	
 Name of the new branch (from the current one)	
@@ -1828,6 +1836,8 @@ One quiet color, outline glyphs
 Only My Commits	
 Only When I Ask	
 Only a published branch can be force-pushed: use Publish Branch first.	
+Only commits that are not pushed can be moved	
+Only commits that are not pushed can be squashed	
 Only in the folder {}.	
 Only left	
 Only on the left	
@@ -2321,6 +2331,7 @@ Review a language server's rename or quick fix before it is applied: auto (when 
 Review every change before replacing (↵ in the field)	
 Review the Dev Container environment	
 Review…	
+Rewriting more than {} commits is refused	
 Right is writable	
 Right-click a commit in the Source Control graph to branch, tag, cherry-pick, revert or reset.	
 Right-click a folder and choose Find in Folder… to search only inside it.	
@@ -2596,6 +2607,9 @@ Spelling: {}. Run “Spelling: Install Dictionary…”.
 Spelling: “{}”	
 Split Editor	
 Split Terminal	
+Squash	
+Squash {} Commit…|Squash {} Commits…	
+Squashed {0} commit into {1}|Squashed {0} commits into {1}	
 Stage	
 Stage Change	
 Stage Lines	
@@ -2661,6 +2675,7 @@ String interpolation is not supported
 Structural pattern	
 Structural search	
 Structural search: the pattern is code; $X matches one node, $$$X several	
+Subject of the squashed commit; the other messages follow it	
 Suggest words from the file when there is no language server	
 Suggestions	
 Suggestions pop up while typing (off: only Ctrl+Space)	
@@ -2772,10 +2787,12 @@ The branch goes back to how it was before the rebase started.
 The branch is fully merged into the current branch.	
 The branch is removed from the remote repository for everyone. Local branches are not touched.	
 The branch moved while the question was open. Nothing was changed.	
+The branch {} is checked out in another worktree, so its commits cannot be rewritten here.	
 The build failed. See Output and Problems for the compiler errors.	
 The bundled service catalogue is invalid. Reinstall Codeyard before retrying.	
 The changes are too large for one patch.	
 The changes could not be read.	
+The chosen commits are not one run of this branch.	
 The clipboard has no text.	
 The commit stays on {}: the next Sync brings it back. To remove it there too, push with force after undoing (Git: Push (Force)…).	
 The complete file list is available in Output.	
@@ -2827,6 +2844,7 @@ The file to delete is not there.
 The file to rename is not there.	
 The file was edited while the language server was working, so its answer no longer fits. Try again.	
 The files changed since the preview. Discard this page and start the refactoring again.	
+The first commit of the repository cannot be rewritten	
 The first terminal opened in a window fills the whole editor area; restore it with the panel's maximize button	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
@@ -2835,6 +2853,7 @@ The folder is not empty.
 The folder it belongs in does not exist.	
 The folder of “{}” with its settings, keybindings and snippets is deleted. This cannot be undone.	
 The full report is in the crash reports folder and stays on this computer. Help: Report Issue… opens a new issue with the version filled in.	
+The graph does not show the current branch's latest commit. Reload it and try again.	
 The host name was not found. Check its spelling, your network and your VPN.	
 The host stopped responding. Installation files were retained because a process may still be running. Reconnect and inspect the destination before retrying.	
 The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	
@@ -2887,6 +2906,7 @@ The request failed.
 The response could not be saved (curl write error).	
 The response is larger than {} and was not downloaded.	
 The result would not parse in {0} file: {1}|The result would not parse in {0} files: {1}	
+The rewritten commits would end with different files. Nothing was changed.	
 The runtime checksum did not match. Nothing was activated. Check the connection and retry.	
 The saved editor layout could not be read: the files are shown in one group.	
 The search failed.	
@@ -2915,6 +2935,7 @@ The source and the target are on different disks.
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
 The state database {0} is damaged ({1}) and could not be moved aside. {2} Tabs, recent folders and backups will not be remembered this session.	
 The string is not closed	
+The subject of the squashed commit cannot be empty.	
 The system does not allow this: the item may be protected, locked or sandboxed.	
 The system reported an error: {}.	
 The tag disappears from the remote repository for everyone. Your local copy is kept.	
@@ -2956,6 +2977,8 @@ There are no staged changes to stash
 There are no stashes.	
 There is already a profile named “{}”. Names differ by more than letter case.	
 There is no breakpoint on this line (F9 adds one).	
+There is no commit above to swap with	
+There is no commit below to swap with	
 There is no commit to undo	
 There is no log file yet.	
 There is no profile named “{}”.	
@@ -3956,6 +3979,7 @@ your words
 {} was changed in the settings file since. Nothing was written.	
 {} was not installed from a registry	
 {} week ago|{} weeks ago	
+{} would conflict while the commits are rewritten: nothing was changed	
 {} year ago|{} years ago	
 {} · Color theme (opens the theme picker)	
 {} · extension {}	

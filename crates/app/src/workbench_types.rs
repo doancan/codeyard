@@ -377,6 +377,13 @@ pub(super) enum InputPurpose {
         hash: String,
         repo: Option<crate::scm::Target>,
     },
+    /// The subject of a squashed commit; its body is what is left of the squashed commits' messages.
+    SquashSubject {
+        run: Vec<String>,
+        tip: String,
+        body: String,
+        repo: Option<crate::scm::Target>,
+    },
     // --- git-refs ---
     /// Name of a new branch that starts at `start`.
     CreateBranchFrom {
@@ -463,6 +470,10 @@ pub(super) enum MenuCmd {
     CommitCherryPick,
     CommitRevert,
     CommitReset(crate::graph::ResetMode),
+    CommitSquash,
+    CommitMove {
+        down: bool,
+    },
     // --- git-refs ---
     GitIgnore,
     GitOpenChanges,

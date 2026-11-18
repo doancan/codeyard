@@ -34,7 +34,7 @@ pub use permalink::file_url as web_file_url;
 pub use pull::checkout_pull;
 pub use refs::*;
 pub use rewind::*;
-pub use rewrite::{MAX_COMMITS, Rewrite, default_squash_message, rewrite};
+pub use rewrite::{Rewrite, default_squash_message, rewrite};
 pub use stash::*;
 pub use status::*;
 pub use sync::*;

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Graph: squash and reorder the commits that are not pushed yet. Shift-click picks a run, *Squash N Commits…* makes one commit of it (the subject is asked for, the other messages become the body), *Move Commit Up / Down* swaps neighbours. The new history is built off to the side and installed with one ref update that names the old tip, so the branch is rewritten completely or not at all; the checkout's files, index and uncommitted changes are untouched. Pushed commits, merges, the first commit, a detached HEAD, a branch checked out in another worktree and a branch that moved are refused with the reason; a conflicting reorder names the two commits.
+
+### Added
+
 - Graph: hovering a commit shows what it changed: the number of files, the added and removed lines, and its first eight files with their status and counts, plus the rest of the message and the parents of a merge. The changes are read once per commit when the card shows (also over SSH).
 
 ## [0.11.1] - 2026-11-14

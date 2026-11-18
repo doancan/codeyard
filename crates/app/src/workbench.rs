@@ -175,6 +175,8 @@ mod refs_glue;
 mod render_glue;
 #[path = "workbench_replace.rs"]
 mod replace_glue;
+#[path = "workbench_rewrite.rs"]
+mod rewrite_glue;
 // --- structural ---
 #[path = "workbench_schema.rs"]
 mod schema_glue;

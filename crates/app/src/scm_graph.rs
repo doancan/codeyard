@@ -576,13 +576,14 @@ impl ScmPanel {
                         let st = cx.global::<crate::settings::Settings>();
                         (st.graph_show_author, st.graph_show_hash)
                     };
+                    let picked: std::collections::HashSet<String> = this.range_run().into_iter().collect();
                     let tooltips = this.status.as_ref().map(|s| CardSource::new(this.host.clone(), s.root.clone(), this.card_cache.clone()));
                     range
                         .map(|i| {
                             let (row, key) = match &items[i] {
                                 GraphItem::Day(label, count) => (day_header(label, *count, mode.row_height(), &p), format!("day:{label}")),
                                 GraphItem::Commit(ix) => {
-                                    let is_sel = selected.as_deref() == Some(g.commits[*ix].hash.as_str());
+                                    let is_sel = selected.as_deref() == Some(g.commits[*ix].hash.as_str()) || picked.contains(&g.commits[*ix].hash);
                                     let row = if mode == GraphView::Graph {
                                         graph_row(&g, *ix, flat, is_sel, show_author, show_hash, tooltips.clone(), !this.menu_open, &p, cx)
                                     } else {
@@ -688,7 +689,7 @@ fn row_shell(
         .hover(|d| d.bg(c(p.surface_hover)))
         .when(show_tooltips, |d| d.tooltip(move |_, cx| cx.new(|cx| CommitCard::new(card.clone(), tooltips.clone(), cx)).into()))
         .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, _, cx| {
-            this.select_commit(entry.clone(), cx);
+            this.pick_commit(entry.clone(), ev.modifiers().shift, cx);
             if ev.click_count() >= 2 {
                 cx.emit(ScmEvent::OpenCommit(entry.clone()));
             }
@@ -850,3 +851,79 @@ impl ScmPanel {
         self.detail.clone()
     }
 }
+
+impl ScmPanel {
+    /// The commits of the range picked with Shift-click, oldest first: the run of first parents between the two rows. Empty when
+    /// there is no range, or the rows do not lie on one such run (a squash needs one).
+    pub(crate) fn range_run(&self) -> Vec<String> {
+        let (Some((from, to)), Some(g)) = (&self.range, &self.graph) else { return Vec::new() };
+        let at = |hash: &str| g.commits.iter().position(|c| c.hash == hash);
+        let (Some(a), Some(b)) = (at(from), at(to)) else { return Vec::new() };
+        // Commits are listed newest first: walk from the newer row down the first parents to the older one.
+        let (older, mut current) = (a.max(b), a.min(b));
+        // Only the branch's own line (the checked-out commit and its first parents) can be rewritten.
+        let mut line = std::collections::HashSet::new();
+        let mut walk = self.head_hash().and_then(|head| at(&head));
+        while let Some(i) = walk.filter(|i| line.insert(*i)) {
+            walk = g.commits[i].parents.first().and_then(|p| at(p));
+        }
+        if !line.contains(&a) || !line.contains(&b) {
+            return Vec::new();
+        }
+        let mut run = Vec::new();
+        loop {
+            run.push(g.commits[current].hash.clone());
+            if current == older {
+                run.reverse();
+                return run;
+            }
+            match g.commits[current].parents.first().and_then(|p| at(p)) {
+                Some(next) if next > current && next <= older => current = next,
+                _ => return Vec::new(),
+            }
+        }
+    }
+
+    /// A click on a graph row: Shift extends the range, a plain click selects the commit alone.
+    pub(crate) fn pick_commit(&mut self, commit: GraphCommit, shift: bool, cx: &mut Context<Self>) {
+        if shift {
+            return self.extend_range(commit, cx);
+        }
+        self.range = None;
+        self.select_commit(commit, cx);
+    }
+
+    /// Shift-click: the range runs from the selected commit (or the range's start) to this one.
+    fn extend_range(&mut self, commit: GraphCommit, cx: &mut Context<Self>) {
+        let anchor = self.range.as_ref().map(|(from, _)| from.clone()).or_else(|| self.selected.as_ref().map(|c| c.hash.clone()));
+        let Some(anchor) = anchor else { return self.select_commit(commit, cx) };
+        self.range = Some((anchor, commit.hash.clone()));
+        self.select_commit(commit, cx);
+    }
+
+    /// The commit the checked-out branch was at when the graph was read: what a rewrite is pinned to.
+    pub(crate) fn head_hash(&self) -> Option<String> {
+        self.graph.as_ref()?.commits.iter().find(|c| c.refs.iter().any(|r| r.kind == RefKind::Head)).map(|c| c.hash.clone())
+    }
+
+    /// Rewrite the branch's unpushed commits in `repo`: what happens, and what is refused, is in `git::rewrite`. The graph
+    /// reads the new history afterwards and the old selection (whose hashes are gone) is dropped.
+    pub fn rewrite_in(&mut self, repo: Option<super::Target>, tip: String, what: crate::git::Rewrite, cx: &mut Context<Self>) {
+        let Some(target) = repo.or_else(|| self.history.clone()).or_else(|| self.target(None).ok()) else { return };
+        self.run_in(
+            target,
+            move |host, root| crate::git::rewrite(host, root, &tip, &what),
+            |this, _, cx| {
+                this.range = None;
+                this.selected = None;
+                this.detail = None;
+                cx.notify();
+            },
+            cx,
+        );
+    }
+}
+
+#[cfg(test)]
+#[path = "scm_graph_rewrite_tests.rs"]
+mod rewrite_tests;
