@@ -288,7 +288,7 @@ impl Render for CommitCard {
             )
             .when(k.parents.len() > 1, |d| {
                 let parents = k.parents.iter().map(|h| h.chars().take(7).collect::<String>()).collect::<Vec<_>>().join(" · ");
-                d.child(muted(tf("Parents: {}", &[&parents]).into()))
+                d.child(muted(tf("Parents: {}", &[&parents])))
             })
             .child(self.changes_section(&p))
             .child(

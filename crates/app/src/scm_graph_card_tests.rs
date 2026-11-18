@@ -18,7 +18,7 @@ fn source(dir: &std::path::Path) -> CardSource {
     CardSource::new(Arc::new(host::local()), ui::local_path(dir), CardCache::default())
 }
 
-fn card<'a>(cx: &'a mut TestAppContext, commit: GraphCommit, source: Option<CardSource>) -> (Entity<CommitCard>, &'a mut VisualTestContext) {
+fn card(cx: &mut TestAppContext, commit: GraphCommit, source: Option<CardSource>) -> (Entity<CommitCard>, &mut VisualTestContext) {
     globals(cx);
     let (card, cx) = cx.add_window_view(|_, cx| CommitCard::new(commit, source, cx));
     cx.run_until_parked();
