@@ -189,6 +189,8 @@ pub struct ScmPanel {
     has_remote: bool,
     /// Row tooltips must not cover a context menu opened above them.
     menu_open: bool,
+    /// What the commit hover cards already read (`scm_graph.rs`).
+    card_cache: graph_ui::CardCache,
     /// Folders that code extensions' providers claim (scm_ext.rs).
     ext: ext_ui::ExtSources,
     _subs: Vec<Subscription>,
@@ -287,6 +289,7 @@ impl ScmPanel {
             syncing: false,
             has_remote: false,
             menu_open: false,
+            card_cache: Default::default(),
             opened: None,
             ext: Default::default(),
             _subs: subs,

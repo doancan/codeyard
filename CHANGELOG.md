@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Graph: hovering a commit shows what it changed: the number of files, the added and removed lines, and its first eight files with their status and counts, plus the rest of the message and the parents of a merge. The changes are read once per commit when the card shows (also over SSH).
+
 ## [0.11.1] - 2026-11-14
 
 ### Changed
