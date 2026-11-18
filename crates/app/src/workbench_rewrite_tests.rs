@@ -124,3 +124,46 @@ fn an_empty_subject_is_refused_before_anything_runs(cx: &mut TestAppContext) {
     let notice = f.wb.read_with(f.cx, |wb, _| wb.notice_for_test());
     assert!(notice.is_some_and(|(error, text)| error && text.contains("cannot be empty")));
 }
+
+/// The same squash on a repository opened over SSH, against the throwaway `sshd`: every git command of the rewrite, the temporary
+/// worktree included, runs on the host through the agent.
+#[gpui::test]
+fn squashing_works_over_ssh_and_leaves_no_temporary_worktree(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("rewrite-ssh") else { return };
+    let _en = crate::i18n::LangGuard::set("en");
+    let dir = repo("rewrite-ui-ssh");
+    for (name, subject) in [("a.txt", "wip a"), ("b.txt", "wip b")] {
+        std::fs::write(dir.join(name), name).unwrap();
+        git_in(&dir, &["add", name]);
+        git_in(&dir, &["commit", "-q", "-m", subject]);
+    }
+    let (wb, cx) = setup(cx);
+    let wait = |cx: &mut VisualTestContext, what: &str, mut done: Box<dyn FnMut(&mut VisualTestContext) -> bool>| {
+        crate::qa_integration_tests::wait_secs(cx, 30, what, |cx| {
+            cx.executor().advance_clock(std::time::Duration::from_millis(300));
+            done(cx)
+        })
+    };
+    wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    let probe = wb.clone();
+    wait(cx, "connected", Box::new(move |cx| probe.read_with(cx, |wb, _| wb.ports_ready())));
+    wb.update_in(cx, |wb, window, cx| wb.open_path(&crate::ui::local_path(&dir), window, cx));
+    let tip = git_in(&dir, &["rev-parse", "HEAD"]).trim().to_string();
+    let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
+    let (probe, tip_hash) = (scm.clone(), tip.clone());
+    wait(cx, "the graph over SSH", Box::new(move |cx| probe.read_with(cx, |s, _| s.commit_by_hash(&tip_hash).is_some())));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.remote_host_label_for_test()), Some(format!("ssh://{}", crate::test_sshd::ALIAS)));
+    let (a, b) = (git_in(&dir, &["rev-parse", "HEAD~1"]).trim().to_string(), tip.clone());
+    scm.update(cx, |s, cx| {
+        s.pick_commit(s.commit_by_hash(&a).unwrap(), false, cx);
+        s.pick_commit(s.commit_by_hash(&b).unwrap(), true, cx)
+    });
+    wb.update(cx, |wb, cx| wb.vcs.menu_repo = wb.scm.read(cx).history_target());
+    let (run, repo_target) = wb.read_with(cx, |wb, cx| (wb.scm.read(cx).range_run(), wb.vcs.menu_repo.clone()));
+    assert_eq!(run.len(), 2);
+    wb.update(cx, |wb, cx| wb.finish_squash(run, tip, String::new(), repo_target, "Both".into(), cx));
+    let dir_for_probe = dir.clone();
+    wait(cx, "the squash", Box::new(move |_| git_in(&dir_for_probe, &["log", "--format=%s"]).lines().next() == Some("Both")));
+    assert_eq!(git_in(&dir, &["log", "--format=%s"]).lines().collect::<Vec<_>>(), vec!["Both", "ilk"]);
+    assert_eq!(git_in(&dir, &["worktree", "list"]).lines().count(), 1, "the temporary worktree is gone");
+}
