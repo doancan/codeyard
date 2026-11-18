@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-19
+
+### Fixed
+
+- Graph: *Squash N Commits…* never ran in a real window: it was refused with "Repository changed while the operation was pending." because it compared the repository pinned when the menu opened with the one Source Control reports at confirmation, and the two differ there. The squash now runs in the repository the menu was opened on, after the check that it is still the same repository. (*Move Commit Up / Down* was not affected.)
+- Image diff: the checkerboard under a transparent picture was almost invisible in a light theme. The image diff and the image tab draw the same greys now, visible in every built-in theme.
+
 ## [0.12.0] - 2026-11-18
 
 ### Added
@@ -2008,7 +2015,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/doancan/codeyard/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/doancan/codeyard/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/doancan/codeyard/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/doancan/codeyard/compare/v0.10.1...v0.11.0
