@@ -257,3 +257,34 @@ fn a_diff_that_finishes_after_another_was_asked_for_is_dropped(cx: &mut TestAppC
     cx.run_until_parked();
     assert_eq!(wb.read_with(cx, |wb, app| wb.diff_view().unwrap().read(app).path.clone()), "data.bin", "the last request wins");
 }
+
+/// A changed image and a changed binary file on a repository opened over SSH (the throwaway `sshd`): the bytes of both sides
+/// come through the agent, and the pictures decode from them.
+#[gpui::test]
+fn images_and_binary_files_diff_over_ssh(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("media-ssh") else { return };
+    let _en = crate::i18n::LangGuard::set("en");
+    let dir = repo("media-ssh");
+    std::fs::write(dir.join("logo.png"), png(4, 2, [255, 0, 0, 255])).unwrap();
+    std::fs::write(dir.join("data.bin"), b"\0\x01\x02").unwrap();
+    git_in(&dir, &["add", "-A"]);
+    git_in(&dir, &["commit", "-q", "-m", "media"]);
+    std::fs::write(dir.join("logo.png"), png(6, 3, [0, 0, 255, 255])).unwrap();
+    std::fs::write(dir.join("data.bin"), b"\0\x01\x02\x03\x04\x05").unwrap();
+    let (wb, cx) = setup(cx);
+    wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    crate::qa_integration_tests::wait_secs(cx, 30, "connected", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    wb.update_in(cx, |wb, window, cx| wb.open_path(&crate::ui::local_path(&dir), window, cx));
+    crate::qa_integration_tests::wait_secs(cx, 30, "status over SSH", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        changes(&wb, cx).is_some_and(|c| c.iter().any(|f| f.0 == "logo.png"))
+    });
+    assert_eq!(wb.read_with(cx, |wb, _| wb.remote_host_label_for_test()), Some(format!("ssh://{}", crate::test_sshd::ALIAS)));
+    let picture = show(&wb, "logo.png", false, cx).read_with(cx, |v, _| v.media.clone()).unwrap();
+    assert_eq!((picture_size(&picture.old), picture_size(&picture.new)), (Some((4, 2)), Some((6, 3))), "both versions arrive as bytes and decode");
+    let binary = show(&wb, "data.bin", false, cx).read_with(cx, |v, _| v.media.clone()).unwrap();
+    assert_eq!(binary_line(&binary.old, &binary.new), "Binary file changed (3 B → 6 B)");
+}
