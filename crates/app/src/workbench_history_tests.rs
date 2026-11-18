@@ -180,3 +180,38 @@ fn ac4_deleting_local_history_removes_one_file_or_all(cx: &mut TestAppContext) {
     cx.simulate_prompt_answer("Delete All Local History");
     wait_ticking(cx, "the history folder gone", |_| !data.join("history").exists());
 }
+
+/// A server's file over a real SSH connection (the throwaway `sshd`): the first save asks, nothing is written before the
+/// answer, *Keep* writes the copy on this computer under the server's name, and a secret file on the server is never copied.
+#[gpui::test]
+fn a_real_ssh_server_is_asked_once_and_secrets_on_it_are_not_copied(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("history-ssh") else { return };
+    let _en = crate::i18n::LangGuard::set("en");
+    let dir = project("history-ssh");
+    let data = data_dir("history-ssh");
+    std::fs::write(dir.join(".env"), "TOKEN=1\n").unwrap();
+    let (wb, cx) = setup(cx);
+    wb.update(cx, |wb, _| wb.set_data_dir(data.clone()));
+    wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    crate::qa_integration_tests::wait_secs(cx, 30, "connected", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    open(&wb, &dir, cx);
+    assert_eq!(wb.read_with(cx, |wb, _| wb.remote_host_label_for_test()), Some(format!("ssh://{}", crate::test_sshd::ALIAS)));
+    let alias = crate::test_sshd::ALIAS;
+    let main = dir.join("src/main.rs");
+    // A secret file on the server: no question and no copy.
+    save(&wb, cx, &dir.join(".env"), "TOKEN=2");
+    assert!(!cx.has_pending_prompt(), "a file Local History never keeps is not worth a question");
+    // An ordinary file: the question, nothing before the answer, then the copy.
+    save(&wb, cx, &main, "// one");
+    assert!(cx.has_pending_prompt(), "the first save on a server asks");
+    assert_eq!(copies(&data, alias, &main), 0);
+    cx.simulate_prompt_answer("Keep");
+    wait_ticking(cx, "the copy", |_| copies(&data, alias, &main) == 1);
+    save(&wb, cx, &main, "// two");
+    assert!(!cx.has_pending_prompt(), "the answer is remembered");
+    wait_ticking(cx, "the second copy", |_| copies(&data, alias, &main) == 2);
+    assert_eq!(copies(&data, alias, &dir.join(".env")), 0);
+}
