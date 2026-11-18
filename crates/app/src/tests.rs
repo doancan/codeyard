@@ -2878,6 +2878,11 @@ fn powershell_reports_commands_and_its_folder_with_shell_integration(cx: &mut Te
     let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
     // Enter as a key: PSReadLine reads a typed line break (Ctrl+J) as one more line of the same command.
     wait_for(cx, "the prompt", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l.starts_with("PS "))));
+    // A line typed before PSReadLine has drawn the next prompt can lose characters in a ConPTY, so each command waits until the
+    // last line of the screen is a prompt again.
+    let at_prompt = |cx: &mut VisualTestContext| {
+        term.read_with(cx, |t, _| t.screen_text().lines().rev().find(|l| !l.trim().is_empty()).is_some_and(|l| l.starts_with("PS ")))
+    };
     // The first prompt says where the shell is. A console host that drops OSC sequences (an older Windows) cannot carry
     // the integration: tell it from a broken script by writing one by hand.
     let said = |cx: &mut VisualTestContext| term.read_with(cx, |t, _| t.live_cwd());
@@ -2910,6 +2915,7 @@ fn powershell_reports_commands_and_its_folder_with_shell_integration(cx: &mut Te
     wait_for(cx, "the first command", |cx| term.read_with(cx, |t, _| t.command_count_for_test() >= 1 && t.last_exit_for_test().is_some()));
     assert_eq!(term.read_with(cx, |t, _| t.last_exit_for_test()), Some(Some(3)));
     // Output, success and a new folder (with a space and a Turkish letter).
+    wait_for(cx, "the prompt before the next command", |cx| at_prompt(cx));
     cx.simulate_input("cd 'alt klasör'; Write-Output marked-output");
     cx.simulate_keystrokes("enter");
     wait_for(cx, "the second command", |cx| {
@@ -2918,10 +2924,12 @@ fn powershell_reports_commands_and_its_folder_with_shell_integration(cx: &mut Te
     assert_eq!(term.read_with(cx, |t, _| t.last_exit_for_test()), Some(Some(0)));
     wait_for(cx, "the new folder", |cx| said(cx).as_deref() == Some(format!("{here}/alt klasör").as_str()));
     // A failed cmdlet has no exit code of its own: 1, not the 3 a program left behind.
+    wait_for(cx, "the prompt before the next command", |cx| at_prompt(cx));
     cx.simulate_input("Get-Item no-such-file-here");
     cx.simulate_keystrokes("enter");
     wait_for(cx, "the third command", |cx| term.read_with(cx, |t, _| t.command_count_for_test() >= 3 && t.last_exit_for_test() == Some(Some(1))));
     // The same program failing twice keeps its code.
+    wait_for(cx, "the prompt before the next command", |cx| at_prompt(cx));
     cx.simulate_input("cmd /c exit 3; cmd /c exit 3");
     cx.simulate_keystrokes("enter");
     wait_for(cx, "the fourth command", |cx| term.read_with(cx, |t, _| t.command_count_for_test() >= 4 && t.last_exit_for_test() == Some(Some(3))));

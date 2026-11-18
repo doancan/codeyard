@@ -177,12 +177,13 @@ mod tests {
         install(Some(dir.clone()));
         let r = std::thread::Builder::new().name("boom".into()).spawn(|| panic!("kaboom {}", 42)).unwrap().join();
         assert!(r.is_err());
-        // The hook is process-wide: another test running in parallel may write a report on panic too, so look for ours.
+        // The hook is process-wide: another test running in parallel may write a report on panic too, and its "last log lines"
+        // can quote our message. Ours is the report of our own thread.
         let text = std::fs::read_dir(&dir)
             .unwrap()
             .flatten()
             .filter_map(|e| std::fs::read_to_string(e.path()).ok())
-            .find(|t| t.contains("kaboom 42"))
+            .find(|t| t.contains("thread: boom") && t.contains("kaboom 42"))
             .expect("a report for our panic");
         assert!(text.contains("thread: boom"), "{text}");
         assert!(text.contains("crash.rs"), "{text}");
