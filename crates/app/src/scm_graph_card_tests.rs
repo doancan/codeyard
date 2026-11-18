@@ -146,3 +146,31 @@ fn a_long_message_body_is_cut_to_what_a_card_holds() {
     let wide = "x".repeat(CARD_LINE_CHARS * 3);
     assert_eq!(message_body(&format!("S\n\n{wide}"))[0].chars().count(), CARD_LINE_CHARS);
 }
+
+/// The card of a commit in a repository opened over SSH (the throwaway `sshd`): the changes are read through the agent.
+#[gpui::test]
+fn the_card_reads_a_commit_over_ssh(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("card-ssh") else { return };
+    let _en = crate::i18n::LangGuard::set("en");
+    let dir = repo("card-ssh");
+    std::fs::write(dir.join("one.txt"), "a\nb\n").unwrap();
+    std::fs::write(dir.join("two.txt"), "c\n").unwrap();
+    git_in(&dir, &["add", "-A"]);
+    git_in(&dir, &["commit", "-q", "-m", "two files"]);
+    let commit = commit_of(&dir, "HEAD");
+    globals(cx);
+    let (wb, wcx) = crate::qa_workbench_tests::setup(cx);
+    wb.update_in(wcx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    wait_ticking(wcx, "connected", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    let host = wb.read_with(wcx, |wb, _| wb.remote_host_for_test());
+    assert_eq!(wb.read_with(wcx, |wb, _| wb.remote_host_label_for_test()), Some(format!("ssh://{}", crate::test_sshd::ALIAS)));
+    let source = CardSource::new(host, ui::local_path(&dir), CardCache::default());
+    let card = wcx.update(|_, cx| cx.new(|cx| CommitCard::new(commit, Some(source), cx)));
+    let detail = ready(&card, wcx);
+    let (files, added, deleted) = git_totals(&dir, "HEAD");
+    assert_eq!((detail.files.len(), detail.totals()), (files, (added, deleted)));
+    assert_eq!(files, 2);
+}
