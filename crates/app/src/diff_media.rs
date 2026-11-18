@@ -367,7 +367,7 @@ impl DiffView {
             Side::Picture(picture) => {
                 let size = (picture.width.max(1), picture.height.max(1));
                 area.child(
-                    gpui::canvas(|_, _, _| {}, move |bounds, _, window, _| paint_checkerboard(window, bounds, size, (p.surface, p.surface_hover)))
+                    gpui::canvas(|_, _, _| {}, move |bounds, _, window, _| paint_checkerboard(window, bounds, size, crate::large::checker_colors(&p)))
                         .absolute()
                         .size_full(),
                 )

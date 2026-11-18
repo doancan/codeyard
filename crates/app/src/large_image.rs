@@ -509,7 +509,7 @@ impl LargeFileView {
         let paused = loaded.motion != Motion::Still && self.is_paused(cx);
         let shown = loaded.still.clone().filter(|_| paused).unwrap_or_else(|| loaded.picture.clone());
         let ready = viewport.0 > 0. && viewport.1 > 0.;
-        let (low, high) = (ui::mix(p.bg, p.text, 0.05), ui::mix(p.bg, p.text, 0.13));
+        let (low, high) = super::checker_colors(&p);
         let me = cx.entity().downgrade();
         let description = self.image_description();
         let name = self.name.to_string();
