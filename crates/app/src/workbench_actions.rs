@@ -211,6 +211,8 @@ impl Workbench {
             .on_action(cx.listener(|this, _: &GitRemoveRemote, window, cx| this.show_branch_op_picker(git_glue::BranchOp::RemoveRemote, window, cx)))
             .on_action(cx.listener(|this, _: &GitPublishBranch, _, cx| this.git_publish_branch(cx)))
             .on_action(cx.listener(|this, _: &GitAbortMerge, window, cx| this.git_abort_merge(window, cx)))
+            .on_action(cx.listener(|this, _: &GitContinueSequencer, _, cx| this.git_continue_sequencer(cx)))
+            .on_action(cx.listener(|this, _: &GitAbortSequencer, window, cx| this.git_abort_sequencer(window, cx)))
             .on_action(cx.listener(|this, _: &GitAddRemote, window, cx| this.git_add_remote(window, cx)))
             .on_action(cx.listener(|this, _: &GitCreateTag, window, cx| this.git_create_tag(window, cx)))
             .on_action(cx.listener(|this, _: &GitPull, _, cx| this.git_sync(vec![crate::git::SyncOp::Pull], cx)))

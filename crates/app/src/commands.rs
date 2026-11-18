@@ -351,6 +351,8 @@ registry! {
     "git.renameBranch" => wb::GitRenameBranch,
     "git.publish" => wb::GitPublishBranch,
     "git.abortMerge" => wb::GitAbortMerge,
+    "git.continueSequencer" => wb::GitContinueSequencer,
+    "git.abortSequencer" => wb::GitAbortSequencer,
     "git.addRemote" => wb::GitAddRemote,
     "git.removeRemote" => wb::GitRemoveRemote,
     "git.createTag" => wb::GitCreateTag,

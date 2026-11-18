@@ -4285,4 +4285,23 @@ The subject of the squashed commit cannot be empty.	Birleştirilen commit'in kon
 There is no commit above to swap with	Yer değiştirecek üstte commit yok
 There is no commit below to swap with	Yer değiştirecek altta commit yok
 {} would conflict while the commits are rewritten: nothing was changed	{}, commit'ler yeniden yazılırken çakışırdı: hiçbir şey değişmedi
+A merge, rebase or cherry-pick is waiting for its conflicts to be resolved: resolve and stage the files, or abort it, then try again.	Bir merge, rebase veya cherry-pick çakışmalarının çözülmesini bekliyor: dosyaları çöz ve stage'e al ya da işlemi iptal et, sonra tekrar dene.
+Abort the cherry-pick?	Cherry-pick iptal edilsin mi?
+Abort the revert?	Revert iptal edilsin mi?
+Aborting…	İptal ediliyor…
+Cherry-pick aborted	Cherry-pick iptal edildi
+Cherry-pick finished	Cherry-pick tamamlandı
+Continuing…	Devam ediliyor…
+Everything resolved so far is discarded and the files go back to how they were.	Şimdiye kadar çözülenlerin hepsi atılır ve dosyalar eski haline döner.
+Git: Abort Cherry-pick or Revert	Git: Cherry-pick veya Revert'i İptal Et
+Git: Continue Cherry-pick or Revert	Git: Cherry-pick veya Revert'e Devam Et
+HEAD is detached, not on a branch: check out a branch, or create one at this commit, before pulling or pushing.	HEAD ayrık, bir dalda değil: pull veya push öncesinde bir dala geç ya da bu commit'te yeni bir dal oluştur.
+No cherry-pick or revert is in progress.	Süren bir cherry-pick veya revert yok.
+Revert aborted	Revert iptal edildi
+Revert finished	Revert tamamlandı
+The branch name {0} clashes with {1}: a branch cannot also be a folder of branches. Delete or rename one of them (on the remote too), then fetch again.	{0} dal adı {1} ile çakışıyor: bir dal aynı zamanda başka dalların klasörü olamaz. Birini sil veya yeniden adlandır (uzakta da), sonra yeniden fetch et.
+These files would be overwritten ({0} and {1} more): commit or stash your changes first.	Bu dosyaların üzerine yazılırdı ({0} ve {1} tane daha): önce değişikliklerini commit et veya stash'e al.
+These files would be overwritten ({}): commit or stash your changes first.	Bu dosyaların üzerine yazılırdı ({}): önce değişikliklerini commit et veya stash'e al.
+This branch and its upstream both have new commits. Choose once how to combine them: in a terminal, git pull --rebase or git pull --no-rebase (or set pull.rebase).	Bu dalda da upstream'de de yeni commit'ler var. Nasıl birleştireceğini bir kez seç: terminalde git pull --rebase veya git pull --no-rebase (ya da pull.rebase ayarla).
+This branch has no upstream yet: publish it with Git: Publish Branch, or set one in a terminal with git branch --set-upstream-to.	Bu dalın henüz upstream'i yok: Git: Publish Branch ile yayınla ya da terminalde git branch --set-upstream-to ile ayarla.
 {}: finish or abort it first, then try again.	{}: önce bitir veya iptal et, sonra tekrar dene.

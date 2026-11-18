@@ -448,6 +448,8 @@ actions!(
         GitRenameBranch,
         GitPublishBranch,
         GitAbortMerge,
+        GitContinueSequencer,
+        GitAbortSequencer,
         GitAddRemote,
         GitRemoveRemote,
         GitCreateTag,

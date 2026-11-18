@@ -1043,6 +1043,46 @@ impl Workbench {
         );
     }
 
+    /// The cherry-pick or revert the repository is waiting in, if it is in one.
+    fn waiting_sequencer(&mut self, cx: &mut Context<Self>) -> Option<(String, git::Sequencer)> {
+        let root = self.repo_root(cx)?;
+        let which = match self.git_status().map(|s| s.op) {
+            Some(crate::repos::OpState::CherryPicking) => git::Sequencer::CherryPick,
+            Some(crate::repos::OpState::Reverting) => git::Sequencer::Revert,
+            _ => {
+                self.notify(NoticeSource::Git, Notice::Info(crate::i18n::t("No cherry-pick or revert is in progress.").into()));
+                cx.notify();
+                return None;
+            }
+        };
+        Some((root, which))
+    }
+
+    /// *Continue* once its conflicts are resolved and staged: the commit is made with the message the operation had.
+    pub(super) fn git_continue_sequencer(&mut self, cx: &mut Context<Self>) {
+        let Some((root, which)) = self.waiting_sequencer(cx) else { return };
+        let done = if which == git::Sequencer::CherryPick { crate::i18n::t("Cherry-pick finished") } else { crate::i18n::t("Revert finished") };
+        self.git_task(crate::i18n::t("Continuing…"), cx, move |h| git::sequencer(h, &root, which, git::Step::Continue).map(|_| done.to_string()));
+    }
+
+    pub(super) fn git_abort_sequencer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((root, which)) = self.waiting_sequencer(cx) else { return };
+        let (title, done) = match which {
+            git::Sequencer::CherryPick => (crate::i18n::t("Abort the cherry-pick?"), crate::i18n::t("Cherry-pick aborted")),
+            git::Sequencer::Revert => (crate::i18n::t("Abort the revert?"), crate::i18n::t("Revert aborted")),
+        };
+        self.confirm_git(
+            window,
+            title,
+            crate::i18n::t("Everything resolved so far is discarded and the files go back to how they were."),
+            crate::i18n::t("Abort"),
+            cx,
+            move |this, cx| {
+                this.git_task(crate::i18n::t("Aborting…"), cx, move |h| git::sequencer(h, &root, which, git::Step::Abort).map(|_| done.to_string()));
+            },
+        );
+    }
+
     pub(super) fn git_continue_rebase(&mut self, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
         self.git_task(crate::i18n::t("Continuing rebase…"), cx, move |h| match git::rebase_continue(h, &root) {

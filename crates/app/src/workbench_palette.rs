@@ -459,6 +459,8 @@ impl Workbench {
             Command::action("Git: Rename Branch…", GitRenameBranch),
             Command::action("Git: Publish Branch", GitPublishBranch),
             Command::action("Git: Abort Merge", GitAbortMerge),
+            Command::action("Git: Continue Cherry-pick or Revert", GitContinueSequencer),
+            Command::action("Git: Abort Cherry-pick or Revert", GitAbortSequencer),
             Command::action("Git: Add Remote…", GitAddRemote),
             Command::action("Git: Remove Remote…", GitRemoveRemote),
             Command::action("Git: Create Tag…", GitCreateTag),

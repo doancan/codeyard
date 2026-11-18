@@ -1444,6 +1444,24 @@ LFS pointer). It works the same over SSH.
 A file over 4 MB shows a message instead of a diff. A file with bytes that are not valid UTF-8 still
 shows, with a warning above it, and those bytes appear as replacement characters.
 
+**When Git is in the middle of something.** A merge, rebase, cherry-pick or revert that stopped on a conflict shows a banner
+above the changes ("Cherry-pick in progress · 2 conflicts") with **Continue** (once the files are resolved and staged) and
+**Abort** (it asks first; everything resolved so far is discarded). Commands that would start another operation do not run
+on top of it:
+
+| Git is in… | Graph cherry-pick / revert | Squash / Move | Pull, commit |
+| --- | --- | --- | --- |
+| a merge, cherry-pick or revert waiting | refused: "Merge in progress: finish or abort it first, then try again." The waiting operation is never aborted for you. | refused, same sentence | git's refusal is turned into "waiting for its conflicts to be resolved: resolve and stage the files, or abort it" |
+| a rebase | refused, same sentence | refused (HEAD is detached) | same as above |
+| a detached `HEAD` | works (the commits are applied to the detached head) | refused: it needs a branch | pull and push say HEAD is detached and what to do |
+| a repository without commits | the graph is empty, not an error | nothing to rewrite | commit works; pull and push say the branch has no upstream |
+
+Failures that have a usual cause say it in a sentence, with git's own text kept as the fallback: a push the remote rejects
+(pull first), a protected branch, a leftover `index.lock` (the file is named), a switch blocked by local changes (the files in
+the way are named, up to five), diverged branches (how to choose once), a branch with no upstream (*Git: Publish Branch*), a
+detached `HEAD`, two branch names that clash, and a server that cannot be reached. *Git: Continue Cherry-pick or Revert* and
+*Git: Abort Cherry-pick or Revert* are in the palette too.
+
 ### Log, diagnostics and crash reports
 
 Three things help to find out why something failed. All of them stay on your computer: nothing is sent anywhere, and you
