@@ -499,6 +499,7 @@ impl Render for Workbench {
             .children(self.notifications_panel(&p, cx))
             .children(self.update_dialog(&p, cx))
             .children(self.trust_dialog(&p, cx))
+            .children(self.message_dialog(&p, cx))
             // A menu or picker opened from an editor's own window is drawn there.
             .when(self.hosted_editor().is_none() && self.view_host_window().is_none(), |d| {
                 let menu_top = if self.menu.as_ref().is_some_and(|m| m.app_path.is_some()) { self.application_menu_bottom(window) } else { 0. };
