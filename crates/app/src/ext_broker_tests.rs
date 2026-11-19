@@ -324,3 +324,38 @@ fn uris_normalize() {
     assert_eq!(normalize("file:///../.."), None);
     assert_eq!(normalize("file:///a%00b"), None, "a NUL is never a path");
 }
+
+/// AC2 of #101 over SSH: the same broker, asked through the window's remote host, reads the file the extension declared, denies
+/// `not-declared` for another one and refuses what leaves the workspace; the answers are those of the local host.
+#[gpui::test]
+fn a_declared_file_is_read_and_another_is_denied_over_ssh(cx: &mut gpui::TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("broker-ssh") else { return };
+    let r = root("read-ssh");
+    crate::qa_workbench_tests::globals(cx);
+    let (wb, wcx) = crate::qa_workbench_tests::setup(cx);
+    wb.update_in(wcx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    crate::qa_integration_tests::wait_ticking(wcx, "connected", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    let host = wb.read_with(wcx, |wb, _| wb.remote_host_for_test());
+    assert_eq!(wb.read_with(wcx, |wb, _| wb.remote_host_label_for_test()), Some(format!("ssh://{}", crate::test_sshd::ALIAS)));
+    let s = scope(&r, perms(&["vercel.json"], &[], &[]), true);
+    let ask = |c: Start| {
+        let sink = Collect::default();
+        run(host.as_ref(), &s, &c, &sink, &AtomicBool::new(false)).expect("handled here")
+    };
+    assert_eq!(ask(Start::ReadFile { uri: uri(&format!("{r}/vercel.json")) }), Completion::Bytes(b"{}".to_vec()), "the declared file, over SSH");
+    let denied = ask(Start::ReadFile { uri: uri(&format!("{r}/src/a.rs")) });
+    assert_eq!(denied_why(&denied), Some(v::Why::NotDeclared));
+    match denied {
+        Completion::Failed(v::Error::Denied(d)) => assert_eq!(d.permission, "read = [\"src/a.rs\"]", "the same message as locally"),
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(
+        denied_why(&ask(Start::ReadFile { uri: uri(&format!("{r}/.env")) })),
+        Some(v::Why::NotDeclared),
+        "a secret file is not named, so it is not read"
+    );
+    assert!(denied_why(&ask(Start::ReadFile { uri: uri(&format!("{r}/../etc/passwd")) })).is_some(), "leaving the workspace is refused");
+}
