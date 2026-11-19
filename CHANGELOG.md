@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Graph: commits the upstream has and your branch does not yet (what a pull would bring in) are drawn in the warning colour (orange) instead of their lane's, in the graph and compact views. They appear after a fetch (the background fetch included) and turn back into ordinary commits once Sync pulls them.
+- Graph: commits the upstream has and your branch does not yet (what a pull would bring in) are drawn in the warning colour (orange) instead of their lane's, in the graph and compact views. They appear after a fetch (the background fetch included) and turn back into ordinary commits once Sync pulls them. The colour is not the only sign: the hover card says "Not pulled yet. Sync brings it in." and a screen reader hears "not pulled yet" in the row's description.
 
 ### Changed
 

@@ -181,31 +181,90 @@ fn commits_the_upstream_has_and_this_branch_does_not_are_incoming_until_they_are
     let (dir, _bare, other) = repo_with_remote("graph-incoming");
     let root = ui::local_path(&dir);
     let host = host::local();
-    assert!(graph::incoming(&host, &root).is_empty(), "nothing to pull in a repository that is level with its upstream");
+    assert!(graph::incoming(&host, &root, 1000).is_empty(), "nothing to pull in a repository that is level with its upstream");
 
     std::fs::write(other.join("theirs.txt"), "x\n").unwrap();
     git_in(&other, &["add", "-A"]);
     git_in(&other, &["commit", "-q", "-m", "theirs"]);
     git_in(&other, &["push", "-q"]);
     // Not fetched yet: this clone cannot know.
-    assert!(graph::incoming(&host, &root).is_empty());
+    assert!(graph::incoming(&host, &root, 1000).is_empty());
 
     git_in(&dir, &["fetch", "-q"]);
     let theirs = git_in(&dir, &["rev-parse", "origin/main"]).trim().to_string();
-    assert_eq!(graph::incoming(&host, &root), std::collections::HashSet::from([theirs.clone()]));
+    assert_eq!(graph::incoming(&host, &root, 1000), std::collections::HashSet::from([theirs.clone()]));
+    assert!(graph::incoming(&host, &root, 0).is_empty(), "the limit is the graph's: no rows, nothing to mark");
     // The commit is in the graph too, so the row can be drawn.
     assert!(graph::log(&host, &root, 50, Scope::All).unwrap().iter().any(|c| c.hash == theirs));
 
     git_in(&dir, &["pull", "-q"]);
-    assert!(graph::incoming(&host, &root).is_empty(), "pulled: drawn as ours again");
+    assert!(graph::incoming(&host, &root, 1000).is_empty(), "pulled: drawn as ours again");
 
     // Our own commit is ahead, not incoming.
     std::fs::write(dir.join("ours.txt"), "y\n").unwrap();
     git_in(&dir, &["add", "-A"]);
     git_in(&dir, &["commit", "-q", "-m", "ours"]);
-    assert!(graph::incoming(&host, &root).is_empty());
+    assert!(graph::incoming(&host, &root, 1000).is_empty());
 
     // No upstream, no HEAD: empty, never an error.
     git_in(&dir, &["branch", "--unset-upstream"]);
-    assert!(graph::incoming(&host, &root).is_empty());
+    assert!(graph::incoming(&host, &root, 1000).is_empty());
+}
+
+/// The panel marks what a pull would bring in (the dot, the hover card and the row's description for a screen reader all read
+/// this), takes the mark back once it is pulled, and never marks a commit the branch already has.
+#[gpui::test]
+fn the_graph_marks_the_commits_a_pull_would_bring_in(cx: &mut TestAppContext) {
+    use crate::qa_integration_tests::{repo_with_remote, wait_ticking};
+    let (dir, _bare, other) = repo_with_remote("graph-incoming-ui");
+    std::fs::write(other.join("theirs.txt"), "x\n").unwrap();
+    git_in(&other, &["add", "-A"]);
+    git_in(&other, &["commit", "-q", "-m", "theirs"]);
+    git_in(&other, &["push", "-q"]);
+    git_in(&dir, &["fetch", "-q"]);
+    let (theirs, ours) = (git_in(&dir, &["rev-parse", "origin/main"]).trim().to_string(), git_in(&dir, &["rev-parse", "HEAD"]).trim().to_string());
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    crate::qa_workbench_tests::open(&wb, &dir, cx);
+    let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
+    wait_ticking(cx, "the graph", |cx| scm.read_with(cx, |s, _| s.commit_by_hash(&theirs).is_some()));
+    assert!(scm.read_with(cx, |s, _| s.commit_by_hash(&theirs).unwrap().incoming), "the fetched commit is incoming");
+    assert!(!scm.read_with(cx, |s, _| s.commit_by_hash(&ours).unwrap().incoming), "a commit the branch has is not");
+    // A screen reader hears it too: colour alone says nothing to it.
+    let rows = cx.update(|window, app| scm.read(app).a11y_history(window, app).graph.rows);
+    let detail_of = |subject: &str| {
+        rows.iter().find_map(|r| match r {
+            crate::scm::AccessGraphRow::Commit { subject: s, detail, .. } if s == subject => Some(detail.clone()),
+            _ => None,
+        })
+    };
+    assert!(detail_of("theirs").is_some_and(|d| d.contains("not pulled yet")), "{:?}", detail_of("theirs"));
+    assert!(detail_of("ilk").is_some_and(|d| !d.contains("not pulled yet")), "{:?}", detail_of("ilk"));
+
+    // Pulled: the next reload of the graph takes the mark back.
+    git_in(&dir, &["pull", "-q"]);
+    wb.update(cx, |wb, cx| wb.refresh_git(0, cx));
+    wait_ticking(cx, "the mark to go", |cx| scm.read_with(cx, |s, _| s.commit_by_hash(&theirs).is_some_and(|c| !c.incoming)));
+}
+
+/// Over SSH the incoming commits are read on the remote machine by the same `git`, and the reply is the same.
+#[gpui::test]
+fn the_incoming_commits_are_read_over_ssh_too(cx: &mut TestAppContext) {
+    use crate::qa_integration_tests::repo_with_remote;
+    let Some(_sshd) = crate::test_sshd::start("incoming-ssh") else { return };
+    let (dir, _bare, other) = repo_with_remote("incoming-ssh");
+    std::fs::write(other.join("theirs.txt"), "x\n").unwrap();
+    git_in(&other, &["add", "-A"]);
+    git_in(&other, &["commit", "-q", "-m", "theirs"]);
+    git_in(&other, &["push", "-q"]);
+    git_in(&dir, &["fetch", "-q"]);
+    let theirs = git_in(&dir, &["rev-parse", "origin/main"]).trim().to_string();
+    globals(cx);
+    let (wb, wcx) = crate::qa_workbench_tests::setup(cx);
+    wb.update_in(wcx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    wait_ticking(wcx, "connected", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    let host = wb.read_with(wcx, |wb, _| wb.remote_host_for_test());
+    assert_eq!(graph::incoming(host.as_ref(), &ui::local_path(&dir), 1000), std::collections::HashSet::from([theirs]));
 }

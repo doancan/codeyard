@@ -1813,6 +1813,7 @@ Not in a git repository
 Not installed; open setup instructions	
 Not now	
 Not paused	
+Not pulled yet. Sync brings it in.	
 Not saved: {0} (U+{1}) cannot be written in {2}. Remove it, or save a copy as UTF-8.	
 Not saved: {0} cannot be written in {1}.	
 Not valid Base64: left unchanged	
@@ -3564,6 +3565,7 @@ not a PNG, JPEG, GIF, WebP or SVG image
 not available	
 not declared	
 not found on crates.io	
+not pulled yet	
 not run	
 not run: a dependency failed	
 not run: too many tasks in the background	

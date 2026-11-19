@@ -561,7 +561,7 @@ Make it yours:
 **Graph.** Source Control shows the history of all branches as colored lanes (at most seven
 columns), one line per commit: message, author and the most important branch/tag chip
 (`"git.graph.showHash"` adds the short hash). Every row is only as wide as the branches running
-next to it, so history reads from the left edge and side branches step to the right. Commits the upstream has and your branch does not (fetched but not pulled yet) have an orange dot instead of their lane's colour; Sync pulls them and the dot turns back. Hover a commit
+next to it, so history reads from the left edge and side branches step to the right. Commits the upstream has and your branch does not (fetched but not pulled yet) have an orange dot instead of their lane's colour; Sync pulls them and the dot turns back. The hover card and a screen reader's description of the row say "not pulled yet" too. Hover a commit
 for a card with its author, date, full message, labels, hash (and a merge's parents) and what it changed: the number of
 files, the added and removed lines, and its first eight files with their own counts ("and 12 more files" for the rest; a
 binary file says so; a merge shows what it brought in against its first parent). The changes are read when the card shows,
