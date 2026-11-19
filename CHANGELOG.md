@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Graph: commits the upstream has and your branch does not yet (what a pull would bring in) are drawn in the warning colour (orange) instead of their lane's, in the graph and compact views. They appear after a fetch (the background fetch included) and turn back into ordinary commits once Sync pulls them.
+
 ### Changed
 
 - Graph: *Squash N Commits…* opens a card with the messages of the squashed commits, oldest first, as one text to edit, instead of a one-line subject field. ↵ is a line break, ⌘↵ (Ctrl+↵) squashes and Esc cancels; the text in the card is the whole message of the new commit. An empty message keeps the card open (#324).
