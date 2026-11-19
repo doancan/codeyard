@@ -167,6 +167,8 @@ pub(crate) mod rust_glue;
 // --- git-refs ---
 #[path = "workbench_history.rs"]
 mod history_glue;
+#[path = "workbench_message_dialog.rs"]
+mod message_dialog_glue;
 #[path = "workbench_recover.rs"]
 mod recover_glue;
 #[path = "workbench_refactor.rs"]
@@ -1319,6 +1321,7 @@ impl Workbench {
                 tree_marks: Default::default(),
                 repos: Default::default(),
                 menu_repo: None,
+                message_dialog: None,
             },
             chrome: state_glue::ChromeLayout {
                 a11y_bounds: Default::default(),

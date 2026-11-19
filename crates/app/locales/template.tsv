@@ -1585,6 +1585,7 @@ Merged {}
 Merging {}…	
 Message	
 Message (↵ to commit)	
+Message of the squashed commit	
 Milliseconds between live preview checks	
 Mine	
 Minified	
@@ -2637,6 +2638,7 @@ Split Editor
 Split Terminal	
 Squash	
 Squash {} Commit…|Squash {} Commits…	
+Squash {} commits into one	
 Squashed {0} commit into {1}|Squashed {0} commits into {1}	
 Stage	
 Stage Change	
@@ -2705,7 +2707,6 @@ String interpolation is not supported
 Structural pattern	
 Structural search	
 Structural search: the pattern is code; $X matches one node, $$$X several	
-Subject of the squashed commit; the other messages follow it	
 Suggest words from the file when there is no language server	
 Suggestions	
 Suggestions pop up while typing (off: only Ctrl+Space)	
@@ -2901,6 +2902,7 @@ The last session ended without closing normally, and no crash report explains wh
 The local port is busy	
 The local port was not changed: {}. Back on localhost:{}	
 The managed installation is incomplete or belongs to another catalogue. Reinstall the services to repair it.	
+The message of the squashed commit cannot be empty.	
 The name has characters this system does not allow.	
 The name or the path is too long.	
 The new name is taken; Codeyard never overwrites a file in a refactoring.	
@@ -2967,7 +2969,6 @@ The source and the target are on different disks.
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
 The state database {0} is damaged ({1}) and could not be moved aside. {2} Tabs, recent folders and backups will not be remembered this session.	
 The string is not closed	
-The subject of the squashed commit cannot be empty.	
 The system does not allow this: the item may be protected, locked or sandboxed.	
 The system reported an error: {}.	
 The tag disappears from the remote repository for everyone. Your local copy is kept.	
@@ -4119,6 +4120,7 @@ your words
 … {} running	
 ← Containers	
 ↓ {} new line|↓ {} new lines	
+↵ for a new line, ⌘↵ to squash, Esc to cancel	
 ↵ next · ⇧↵ previous · Esc	
 ⇧⌘P opens the command palette: every feature has an entry there.	
 ⌘. offers quick fixes when a language server is running.	

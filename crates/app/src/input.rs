@@ -30,6 +30,8 @@ pub struct TextField {
     focus_handle: FocusHandle,
     /// Line breaks are kept (⇧↵ new line, pasted lines stay).
     multiline: bool,
+    /// ↵ is a line break and ⌘↵ (Ctrl+↵) submits: for a message of several paragraphs, where Return is typed often.
+    modifier_submits: bool,
 }
 
 impl EventEmitter<FieldEvent> for TextField {}
@@ -50,11 +52,19 @@ impl TextField {
             placeholder: placeholder.to_string().into(),
             focus_handle: cx.focus_handle(),
             multiline: false,
+            modifier_submits: false,
         }
     }
 
     pub fn multiline(mut self) -> Self {
         self.multiline = true;
+        self
+    }
+
+    /// A multi-line field in which ↵ starts a new line and ⌘↵ (Ctrl+↵) submits.
+    pub fn modifier_submits(mut self) -> Self {
+        self.multiline = true;
+        self.modifier_submits = true;
         self
     }
 
@@ -232,7 +242,11 @@ impl Render for TextField {
         let focus = self.focus_handle.clone();
         let caret = || div().flex_none().w(px(1.5)).h(px(15.)).when(focused, |d| d.bg(c(p.accent)));
         div()
-            .key_context(if self.multiline { "TextField multiline" } else { "TextField" })
+            .key_context(match (self.multiline, self.modifier_submits) {
+                (_, true) => "TextField multiline modifier_submits",
+                (true, false) => "TextField multiline",
+                (false, false) => "TextField",
+            })
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::left))
             .on_action(cx.listener(Self::right))

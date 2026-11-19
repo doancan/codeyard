@@ -138,6 +138,8 @@ pub(super) struct GitState {
     pub(super) repos: super::repos_glue::RepoState,
     /// The repository the open commit menu belongs to (its actions are pinned to it).
     pub(super) menu_repo: Option<crate::scm::Target>,
+    /// The card that edits the message of a squash (workbench_message_dialog.rs).
+    pub(super) message_dialog: Option<super::message_dialog_glue::MessageDialog>,
 }
 
 /// Layout: side panel, bottom panel, split editor, zoom, zen mode, window bounds.
