@@ -156,6 +156,58 @@ fn three_crashes_turn_an_extension_off(cx: &mut TestAppContext) {
     assert!(wb.read_with(cx, |wb, _| notice_has(wb, "turned off until Codeyard restarts")));
 }
 
+/// `timers.every` (#101): a request every 30 s of the window's clock, not before, and again 30 s after that. The probe counts
+/// the timer requests it gets (`Probe: Events`). The pause while the window is not focused cannot be shown here: the check is
+/// switched off under `cfg!(test)` (a test window is never "active").
+#[gpui::test]
+fn a_timer_fires_every_thirty_seconds_and_not_before(cx: &mut TestAppContext) {
+    if !crate::ext_runtime::code_runs_for_test() {
+        return;
+    }
+    let cfg = config_dir("timer");
+    let manifest = MANIFEST.replace(
+        "[[commands]]\nid = \"notice\"",
+        "[[commands]]\nid = \"every\"\ntitle = \"Probe: Every\"\n\n[[commands]]\nid = \"events\"\ntitle = \"Probe: Events\"\n\n[[commands]]\nid = \"notice\"",
+    );
+    assert!(manifest.contains("Probe: Every"));
+    let entries = vec![
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.into_bytes(), executable: false },
+        ext_pkg::Entry { path: "Cargo.toml".into(), data: Vec::new(), executable: false },
+        ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: PROBE.to_vec(), executable: false },
+    ];
+    let (bytes, _) = ext_pkg::write(entries).expect("the probe passes the import check");
+    crate::ext::store(&cfg).install(&bytes, ext_core::Source::File { path: "/downloads/probe.cyx".into() }).expect("installs");
+    let (wb, cx) = setup(cx, &cfg);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Every", window, cx));
+    wait_for(cx, &wb, |wb| wb.extension_answer_for_test("you.probe").is_some_and(|a| !a.is_empty()));
+
+    // What the probe has counted so far: the command is asked until the answer is the count (not an older one).
+    let events = |cx: &mut VisualTestContext, wb: &Entity<Workbench>, at_least: usize| -> usize {
+        let deadline = Instant::now() + Duration::from_secs(20 * crate::test_sshd::timeout_scale());
+        loop {
+            wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Events", window, cx));
+            let until = Instant::now() + Duration::from_millis(300);
+            while Instant::now() < until {
+                cx.run_until_parked();
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            let n = wb.read_with(cx, |wb, _| wb.extension_answer_for_test("you.probe")).and_then(|a| a.parse::<usize>().ok());
+            if let Some(n) = n.filter(|n| *n >= at_least) {
+                return n;
+            }
+            assert!(Instant::now() < deadline, "the probe counted {n:?} timer requests, wanted {at_least}");
+        }
+    };
+    cx.executor().advance_clock(Duration::from_secs(29));
+    assert_eq!(events(cx, &wb, 0), 0, "nothing before 30 s");
+    cx.executor().advance_clock(Duration::from_secs(2));
+    assert_eq!(events(cx, &wb, 1), 1, "one after 31 s");
+    cx.executor().advance_clock(Duration::from_secs(28));
+    assert_eq!(events(cx, &wb, 0), 1, "the next one is 30 s after that one, not sooner");
+    cx.executor().advance_clock(Duration::from_secs(3));
+    assert_eq!(events(cx, &wb, 2), 2, "and then it comes");
+}
+
 fn answer_is(wb: &Workbench, want: &str) -> bool {
     wb.extension_answer_for_test("you.probe").as_deref() == Some(want)
 }
