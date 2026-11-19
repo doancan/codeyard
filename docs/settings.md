@@ -77,7 +77,7 @@ status bar reports it.
 | `explorer.compactFolders` | `true` / `false` | `true` | Show folders that only hold one folder as one row |
 | `explorer.confirmDelete` | `true` / `false` | `true` | Ask before moving a file to the Trash |
 | `explorer.confirmDragAndDrop` | `true` / `false` | `true` | Ask before moving a file or folder by dragging it in the explorer |
-| `explorer.fileNesting.enabled` | `true` / `false` | `true` | Show related files under the file they belong to (Cargo.lock under Cargo.toml) |
+| `explorer.fileNesting.enabled` | `true` / `false` | `false` | Show related files under the file they belong to (Cargo.lock under Cargo.toml) |
 | `explorer.openEditors` | `true` / `false` | `true` | Show the Open Editors list in the explorer |
 | `explorer.sortOrder` | `default`, `filesFirst`, `mixed`, `type` | `default` | Order of files and folders in the explorer |
 

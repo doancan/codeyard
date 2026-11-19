@@ -31,7 +31,7 @@ pub(super) fn parse_nesting(s: &mut Settings, r: &mut Reader<'_>) {
     if enabled.is_none() && patterns.is_none() {
         return;
     }
-    let enabled = enabled.unwrap_or(true);
+    let enabled = enabled.unwrap_or(crate::tree::nesting::ENABLED_BY_DEFAULT);
     s.explorer_nesting = match patterns {
         None => crate::tree::nesting::Nesting::default().with_enabled(enabled),
         Some(value) => {
