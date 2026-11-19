@@ -119,6 +119,11 @@ impl ScmPanel {
             self.drafts.retain(|r, _| roots.contains(r.as_str()));
         }
         self.repos = repos;
+        // The graph may have been loaded before the inventory had this repository (discovery runs beside the first load):
+        // the target it keeps takes the identity from the inventory, so what a menu pins from it matches `target(None)`.
+        if let Some(history) = self.history.as_mut() {
+            history.id = self.repos.iter().find(|r| r.id.worktree == history.root.trim_end_matches('/')).map(|r| r.id.clone());
+        }
         cx.notify();
     }
 

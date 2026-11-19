@@ -2,7 +2,7 @@
 
 use gpui::{TestAppContext, VisualTestContext};
 
-use crate::qa_workbench_tests::{fresh, open, setup};
+use crate::qa_workbench_tests::{fresh, open, setup, setup_with_config};
 use crate::tree::TreeEvent;
 
 #[gpui::test]
@@ -293,7 +293,11 @@ fn explorer_filter_and_nesting_work_through_the_workbench(cx: &mut TestAppContex
     for name in ["Cargo.toml", "Cargo.lock", "a.txt", "b.rs"] {
         std::fs::write(dir.join(name), name).unwrap();
     }
-    let (wb, cx) = setup(cx);
+    // Nesting is off unless the user turns it on.
+    let config = fresh("explorer-filter-nesting-config");
+    std::fs::write(config.join("settings.jsonc"), r#"{ "explorer.fileNesting.enabled": true }"#).unwrap();
+    let (wb, cx) = setup_with_config(cx, &config);
+    wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));
     open(&wb, &dir, cx);
     let names = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, cx| wb.tree_names(cx));
     crate::qa_integration_tests::wait_ticking(cx, "the nested listing", |cx| names(cx) == ["a.txt", "b.rs", "Cargo.toml"]);
@@ -306,4 +310,19 @@ fn explorer_filter_and_nesting_work_through_the_workbench(cx: &mut TestAppContex
     crate::qa_integration_tests::wait_ticking(cx, "the box emptied", |cx| names(cx).len() == 3);
     cx.simulate_keystrokes("escape");
     crate::qa_integration_tests::wait_ticking(cx, "the whole tree", |cx| names(cx) == ["a.txt", "b.rs", "Cargo.toml"]);
+}
+
+/// Related files are listed as ordinary entries until the user turns nesting on (as in VS Code): `Cargo.lock` is not hidden
+/// under `Cargo.toml`, and `package.json` shows no `+1`.
+#[gpui::test]
+fn related_files_are_not_nested_unless_the_user_asks(cx: &mut TestAppContext) {
+    let dir = fresh("explorer-no-nesting-by-default");
+    for name in ["Cargo.toml", "Cargo.lock", "package.json", "bun.lock", "a.txt"] {
+        std::fs::write(dir.join(name), name).unwrap();
+    }
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    let names = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, cx| wb.tree_names(cx));
+    crate::qa_integration_tests::wait_ticking(cx, "the flat listing", |cx| names(cx).len() == 5);
+    assert_eq!(names(cx), ["a.txt", "bun.lock", "Cargo.lock", "Cargo.toml", "package.json"]);
 }

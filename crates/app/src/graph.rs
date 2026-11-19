@@ -32,6 +32,8 @@ pub struct GraphCommit {
     pub date: String,
     pub subject: String,
     pub refs: Vec<RefLabel>,
+    /// The upstream has this commit and the checked-out branch does not: a pull would bring it in.
+    pub incoming: bool,
 }
 
 /// Whose history is drawn.
@@ -207,6 +209,7 @@ pub fn parse_graph_log(out: &str) -> Vec<GraphCommit> {
                 date: date.into(),
                 subject: subject.into(),
                 refs: parse_refs(decor),
+                incoming: false,
             })
         })
         .collect()
@@ -231,6 +234,17 @@ pub fn log(host: &dyn Host, root: &str, limit: usize, scope: Scope) -> Result<Ve
         return Err(if err.is_empty() { "git log failed".into() } else { err });
     }
     Ok(parse_graph_log(&out.stdout_str()))
+}
+
+/// Commits the upstream has and the checked-out branch does not (`HEAD..@{upstream}`): what a pull would bring in. Empty without
+/// an upstream or a HEAD; the graph then simply draws nothing as incoming.
+pub fn incoming(host: &dyn Host, root: &str, limit: usize) -> std::collections::HashSet<String> {
+    // The graph shows `limit` commits at most, so a branch far behind its upstream does not read the rest.
+    let n = format!("-n{limit}");
+    match host.exec("git", &["rev-list", &n, "HEAD..@{upstream}"], Some(root), None) {
+        Ok(out) if out.ok() => out.stdout_str().lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
+        _ => Default::default(),
+    }
 }
 
 /// Files a commit changed: (status letter, path, old path).
@@ -708,8 +722,9 @@ fn x_of(left: Pixels, col: usize) -> Pixels {
     left + px(PAD + col as f32 * LANE_W)
 }
 
-/// Lane drawing for a row, as wide as the row's own lanes; `head`: the checked-out commit (ringed node), `merge`: merge.
-pub fn lane_element(row: GraphRow, head: bool, merge: bool, p: Palette) -> impl IntoElement {
+/// Lane drawing for a row, as wide as the row's own lanes; `head`: the checked-out commit (ringed node), `merge`: merge,
+/// `incoming`: not pulled yet (the node is drawn in the warning color instead of its lane's).
+pub fn lane_element(row: GraphRow, head: bool, merge: bool, incoming: bool, p: Palette) -> impl IntoElement {
     let w = width_px(row.width.max(row.col + 1));
     canvas(
         |_, _, _| {},
@@ -758,7 +773,7 @@ pub fn lane_element(row: GraphRow, head: bool, merge: bool, p: Palette) -> impl 
                     b.curve_to(point(x, bottom), point(x, mid));
                 });
             }
-            let color = lane_color(&p, row.color);
+            let color = if incoming { p.warning } else { lane_color(&p, row.color) };
             let dot = |window: &mut gpui::Window, r: f32, color: u32| {
                 let b = Bounds::new(point(nx - px(r), mid - px(r)), size(px(r * 2.), px(r * 2.)));
                 window.paint_quad(fill(b, ui::c(color)).corner_radii(px(r)));

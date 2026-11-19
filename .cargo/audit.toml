@@ -24,4 +24,18 @@ ignore = [
     # Neither Remote::list() nor BlameHunk signatures are called anywhere in this workspace or in GPUI.
     "RUSTSEC-2026-0183", # git2: Remote::list()
     "RUSTSEC-2026-0184", # git2: Signature from buffer-created BlameHunk
+    # unsound in heapless 0.7.17 (published 2026-11-18), pulled only by postcard 1.1.3 (crates/proto, ext-proto, ext-ui and the
+    # cranelift/wasmtime serializer). Every advisory is about a heapless collection (Spsc, IndexMap, Deque, BinaryHeap, ...); this
+    # workspace uses postcard through `to_stdvec` and `from_bytes` only (no heapless type is named in our code, `rg heapless crates`
+    # finds nothing), so none is reachable from our code. Triaged 2026-11-19; revisit when postcard drops heapless 0.7 (the entry
+    # above has the same condition).
+    "RUSTSEC-2026-0574",
+    "RUSTSEC-2026-0575",
+    "RUSTSEC-2026-0576",
+    "RUSTSEC-2026-0577",
+    "RUSTSEC-2026-0578",
+    "RUSTSEC-2026-0579",
+    "RUSTSEC-2026-0580",
+    "RUSTSEC-2026-0581",
+    "RUSTSEC-2026-0582",
 ]

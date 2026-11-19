@@ -39,6 +39,9 @@ pub(super) struct CodeState {
     pump: Option<gpui::Task<()>>,
     /// `timers.every`: dropping a task stops its timer.
     pub(super) timers: HashMap<(String, u64), gpui::Task<()>>,
+    /// Timers skip their tick while the window is not focused. A test window never is, so tests turn this off unless it is what they
+    /// check (`gate_timers_on_focus_for_test`).
+    pub(super) focus_gates_timers: bool,
     /// `workspace-contains` checks already made, per extension and workspace roots, so a reload does not repeat them.
     checked_workspace: HashSet<(String, Vec<String>)>,
     /// The setting values each running exthost has, to send only changes.
@@ -85,6 +88,7 @@ impl Default for CodeState {
             last_trap: HashMap::new(),
             pump: None,
             timers: HashMap::new(),
+            focus_gates_timers: !cfg!(test),
             sent_settings: HashMap::new(),
             checked_workspace: HashSet::new(),
             progress: HashMap::new(),
@@ -256,6 +260,7 @@ impl Workbench {
         let why = reason.clone();
         // The extension in development runs without the OS sandbox (its author's folder); everything installed runs in it.
         let sandbox = crate::ext::dev_dir().is_none_or(|d| d != active.dir);
+        let began = std::time::Instant::now();
         let task = cx.background_executor().spawn(async move {
             // Checked here, not at startup (`ext_runtime::code_loads_here`): the check runs a process.
             if sandbox {
@@ -287,6 +292,11 @@ impl Workbench {
         let ext = active.id().to_string();
         cx.spawn_in(window, async move |this, cx| {
             let started = task.await;
+            if started.is_ok() {
+                // The cold start of an extension: the sandbox check, reading and (cached) compiling the component, spawning the exthost
+                // and its handshake. Not the first request's own work.
+                crate::perf::sample("extensions.activation_ms", began.elapsed().as_secs_f64() * 1000.0);
+            }
             let _ = this.update(cx, |this, cx| {
                 let code = &mut this.cfg.exts.code;
                 let queued = code.queued.remove(&ext).unwrap_or_default();
@@ -749,7 +759,7 @@ impl Workbench {
             loop {
                 cx.background_executor().timer(every).await;
                 let alive = this.update_in(cx, |this, window, _| {
-                    if !window.is_window_active() && !cfg!(test) {
+                    if !window.is_window_active() && this.cfg.exts.code.focus_gates_timers {
                         return;
                     }
                     let Some(p) = this.cfg.exts.code.procs.get(&ext).cloned() else { return };

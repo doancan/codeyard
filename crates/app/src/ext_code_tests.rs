@@ -156,6 +156,80 @@ fn three_crashes_turn_an_extension_off(cx: &mut TestAppContext) {
     assert!(wb.read_with(cx, |wb, _| notice_has(wb, "turned off until Codeyard restarts")));
 }
 
+/// A window with the probe installed with `Probe: Every` (a 30 s timer) and `Probe: Events`, and the timer started.
+fn timer_window<'a>(cx: &'a mut TestAppContext, name: &str) -> (Entity<Workbench>, &'a mut VisualTestContext) {
+    let cfg = config_dir(name);
+    let manifest = MANIFEST.replace(
+        "[[commands]]\nid = \"notice\"",
+        "[[commands]]\nid = \"every\"\ntitle = \"Probe: Every\"\n\n[[commands]]\nid = \"events\"\ntitle = \"Probe: Events\"\n\n[[commands]]\nid = \"notice\"",
+    );
+    assert!(manifest.contains("Probe: Every"));
+    let entries = vec![
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.into_bytes(), executable: false },
+        ext_pkg::Entry { path: "Cargo.toml".into(), data: Vec::new(), executable: false },
+        ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: PROBE.to_vec(), executable: false },
+    ];
+    let (bytes, _) = ext_pkg::write(entries).expect("the probe passes the import check");
+    crate::ext::store(&cfg).install(&bytes, ext_core::Source::File { path: "/downloads/probe.cyx".into() }).expect("installs");
+    setup(cx, &cfg)
+}
+
+/// What the probe has counted so far (timer requests and settings changes). The last answer is forgotten before each ask:
+/// `Probe: Every` answered with the timer's id, and on a slow runner that old answer would be read as a count before the new one
+/// arrived.
+fn probe_events(cx: &mut VisualTestContext, wb: &Entity<Workbench>, at_least: usize) -> usize {
+    let deadline = Instant::now() + Duration::from_secs(20 * crate::test_sshd::timeout_scale());
+    loop {
+        wb.update(cx, |wb, _| wb.forget_extension_answer_for_test("you.probe"));
+        wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Events", window, cx));
+        wait_for(cx, wb, |wb| wb.extension_answer_for_test("you.probe").is_some());
+        let n = wb.read_with(cx, |wb, _| wb.extension_answer_for_test("you.probe")).and_then(|a| a.parse::<usize>().ok());
+        if let Some(n) = n.filter(|n| *n >= at_least) {
+            return n;
+        }
+        assert!(Instant::now() < deadline, "the probe counted {n:?} timer requests, wanted {at_least}");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// `timers.every` (#101): a request every 30 s of the window's clock, not before, and again 30 s after that. The probe counts
+/// the timer requests it gets (`Probe: Events`).
+#[gpui::test]
+fn a_timer_fires_every_thirty_seconds_and_not_before(cx: &mut TestAppContext) {
+    if !crate::ext_runtime::code_runs_for_test() {
+        return;
+    }
+    let (wb, cx) = timer_window(cx, "timer");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Every", window, cx));
+    wait_for(cx, &wb, |wb| wb.extension_answer_for_test("you.probe").is_some_and(|a| !a.is_empty()));
+    cx.executor().advance_clock(Duration::from_secs(29));
+    assert_eq!(probe_events(cx, &wb, 0), 0, "nothing before 30 s");
+    cx.executor().advance_clock(Duration::from_secs(2));
+    assert_eq!(probe_events(cx, &wb, 1), 1, "one after 31 s");
+    cx.executor().advance_clock(Duration::from_secs(28));
+    assert_eq!(probe_events(cx, &wb, 0), 1, "the next one is 30 s after that one, not sooner");
+    cx.executor().advance_clock(Duration::from_secs(3));
+    assert_eq!(probe_events(cx, &wb, 2), 2, "and then it comes");
+}
+
+/// A timer does not wake the extension while the window is not focused (a test window never is): with the gate on, two minutes
+/// of the clock bring no request. The test above, where the gate is off, shows the same timer does fire.
+#[gpui::test]
+fn a_timer_skips_its_tick_while_the_window_is_not_focused(cx: &mut TestAppContext) {
+    if !crate::ext_runtime::code_runs_for_test() {
+        return;
+    }
+    let (wb, cx) = timer_window(cx, "timer-unfocused");
+    wb.update(cx, |wb, _| wb.gate_timers_on_focus_for_test());
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Every", window, cx));
+    wait_for(cx, &wb, |wb| wb.extension_answer_for_test("you.probe").is_some_and(|a| !a.is_empty()));
+    for _ in 0..4 {
+        cx.executor().advance_clock(Duration::from_secs(31));
+        cx.run_until_parked();
+    }
+    assert_eq!(probe_events(cx, &wb, 0), 0, "no tick reached the extension while the window was not focused");
+}
+
 fn answer_is(wb: &Workbench, want: &str) -> bool {
     wb.extension_answer_for_test("you.probe").as_deref() == Some(want)
 }

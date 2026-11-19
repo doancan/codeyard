@@ -384,6 +384,11 @@ impl Workbench {
         self.cfg.exts.code.last_answer.get(id).cloned()
     }
 
+    /// Makes timers skip their tick while the window is not focused, as they do in the app (a test window never is focused).
+    pub fn gate_timers_on_focus_for_test(&mut self) {
+        self.cfg.exts.code.focus_gates_timers = true;
+    }
+
     /// Whether the extension's exthost is running in this window.
     pub fn extension_running_for_test(&self, id: &str) -> bool {
         self.cfg.exts.code.running(id)

@@ -58,12 +58,6 @@ impl Fixture<'_> {
     }
 }
 
-#[test]
-fn the_subject_is_the_first_line_and_the_body_is_the_rest() {
-    assert_eq!(split_message("wip a\n\nwip b\n\nlonger body"), ("wip a".to_string(), "wip b\n\nlonger body".to_string()));
-    assert_eq!(split_message("only one"), ("only one".to_string(), String::new()));
-}
-
 #[gpui::test]
 fn squashing_the_picked_run_makes_one_commit_with_the_subject_and_the_other_messages(cx: &mut TestAppContext) {
     let mut f = started(repo("rewrite-ui-squash"), &[("a.txt", "wip a"), ("b.txt", "wip b"), ("c.txt", "wip c")], cx);
@@ -73,7 +67,7 @@ fn squashing_the_picked_run_makes_one_commit_with_the_subject_and_the_other_mess
     f.open_menu_repo();
     let (run, tip, repo) = f.wb.read_with(f.cx, |wb, cx| (wb.scm.read(cx).range_run(), wb.scm.read(cx).head_hash().unwrap(), wb.vcs.menu_repo.clone()));
     assert_eq!(run.len(), 3);
-    f.wb.update(f.cx, |wb, cx| wb.finish_squash(run, tip, "wip b\n\nwip c".into(), repo, "Add a, b and c".into(), cx));
+    f.wb.update(f.cx, |wb, cx| wb.finish_squash(run, tip, repo, "Add a, b and c\n\nwip b\n\nwip c".into(), cx));
     let result = f.result();
     assert!(result.starts_with("Squashed 3 commits into "), "{result}");
     assert_eq!(f.subjects(), vec!["Add a, b and c", "ilk"]);
@@ -106,19 +100,19 @@ fn a_pushed_commit_in_the_run_is_refused_with_its_reason_and_nothing_changes(cx:
     f.pick_run(&a, &b);
     f.open_menu_repo();
     let (run, tip, repo) = f.wb.read_with(f.cx, |wb, cx| (wb.scm.read(cx).range_run(), wb.scm.read(cx).head_hash().unwrap(), wb.vcs.menu_repo.clone()));
-    f.wb.update(f.cx, |wb, cx| wb.finish_squash(run, tip, String::new(), repo, "x".into(), cx));
+    f.wb.update(f.cx, |wb, cx| wb.finish_squash(run, tip, repo, "x".into(), cx));
     assert_eq!(f.result(), "Only commits that are not pushed can be squashed");
     assert_eq!(f.hash("HEAD"), before);
 }
 
 #[gpui::test]
-fn an_empty_subject_is_refused_before_anything_runs(cx: &mut TestAppContext) {
+fn an_empty_message_is_refused_before_anything_runs(cx: &mut TestAppContext) {
     let mut f = started(repo("rewrite-ui-empty"), &[("a.txt", "a"), ("b.txt", "b")], cx);
     let before = f.hash("HEAD");
     f.open_menu_repo();
     let repo = f.wb.read_with(f.cx, |wb, _| wb.vcs.menu_repo.clone());
     let run = vec![f.hash("HEAD~1"), before.clone()];
-    f.wb.update(f.cx, |wb, cx| wb.finish_squash(run, before.clone(), String::new(), repo, "   ".into(), cx));
+    f.wb.update(f.cx, |wb, cx| wb.finish_squash(run, before.clone(), repo, "   ".into(), cx));
     f.cx.run_until_parked();
     assert_eq!(f.hash("HEAD"), before);
     let notice = f.wb.read_with(f.cx, |wb, _| wb.notice_for_test());
@@ -159,11 +153,153 @@ fn squashing_works_over_ssh_and_leaves_no_temporary_worktree(cx: &mut TestAppCon
         s.pick_commit(s.commit_by_hash(&b).unwrap(), true, cx)
     });
     wb.update(cx, |wb, cx| wb.vcs.menu_repo = wb.scm.read(cx).history_target());
-    let (run, repo_target) = wb.read_with(cx, |wb, cx| (wb.scm.read(cx).range_run(), wb.vcs.menu_repo.clone()));
-    assert_eq!(run.len(), 2);
-    wb.update(cx, |wb, cx| wb.finish_squash(run, tip, String::new(), repo_target, "Both".into(), cx));
+    // Through the card, as the user does: the messages arrive over SSH, the edited text is the new message.
+    wb.update_in(cx, |wb, window, cx| wb.squash_commits(window, cx));
+    let probe = wb.clone();
+    wait(cx, "the card", Box::new(move |cx| probe.read_with(cx, |wb, _| wb.message_dialog_field_for_test().is_some())));
+    let field = wb.read_with(cx, |wb, _| wb.message_dialog_field_for_test()).unwrap();
+    assert_eq!(field.read_with(cx, |t, _| t.text().to_string()), "wip a\n\nwip b");
+    field.update(cx, |t, cx| t.set_text("Both\n\nTwo paragraphs\n\nover SSH", cx));
+    cx.simulate_keystrokes("cmd-enter");
     let dir_for_probe = dir.clone();
     wait(cx, "the squash", Box::new(move |_| git_in(&dir_for_probe, &["log", "--format=%s"]).lines().next() == Some("Both")));
     assert_eq!(git_in(&dir, &["log", "--format=%s"]).lines().collect::<Vec<_>>(), vec!["Both", "ilk"]);
+    assert_eq!(git_in(&dir, &["log", "-1", "--format=%B"]).trim_end(), "Both\n\nTwo paragraphs\n\nover SSH");
     assert_eq!(git_in(&dir, &["worktree", "list"]).lines().count(), 1, "the temporary worktree is gone");
+}
+
+/// What the user does: right-click menu → *Squash N Commits…* opens the card with the commits' messages in order; the user edits
+/// the whole text (several paragraphs), ⌘↵ squashes, and the message of the new commit is that text, nothing more or less (#324).
+impl Fixture<'_> {
+    fn open_card(&mut self, from: &str, to: &str) -> Entity<crate::input::TextField> {
+        self.pick_run(from, to);
+        self.open_menu_repo();
+        self.wb.update_in(self.cx, |wb, window, cx| wb.squash_commits(window, cx));
+        let wb = self.wb.clone();
+        wait_ticking(self.cx, "the card", move |cx| wb.read_with(cx, |wb, _| wb.message_dialog_field_for_test().is_some()));
+        self.wb.read_with(self.cx, |wb, _| wb.message_dialog_field_for_test()).unwrap()
+    }
+}
+
+#[gpui::test]
+fn the_card_holds_every_message_in_order_and_the_edited_text_becomes_the_commit_message(cx: &mut TestAppContext) {
+    let mut f = started(repo("rewrite-ui-card"), &[("a.txt", "wip a"), ("b.txt", "wip b"), ("c.txt", "wip c")], cx);
+    let (a, c) = (f.hash("HEAD~2"), f.hash("HEAD"));
+    let field = f.open_card(&a, &c);
+    assert_eq!(field.read_with(f.cx, |t, _| t.text().to_string()), "wip a\n\nwip b\n\nwip c", "every message, oldest first");
+    // The user rewrites all of it: a new subject, two paragraphs, a line with Unicode, and a blank line between them.
+    field.update(f.cx, |t, cx| t.set_text("Add the three files\n\nFirst paragraph.\nSecond line of it.\n\nİkinci paragraf: çalışıyor ✓", cx));
+    f.cx.simulate_keystrokes("cmd-enter");
+    let result = f.result();
+    assert!(result.starts_with("Squashed 3 commits into "), "{result}");
+    assert_eq!(f.subjects(), vec!["Add the three files", "ilk"]);
+    assert_eq!(
+        git_in(&f.dir, &["log", "-1", "--format=%B"]).trim_end(),
+        "Add the three files\n\nFirst paragraph.\nSecond line of it.\n\nİkinci paragraf: çalışıyor ✓"
+    );
+    assert!(f.wb.read_with(f.cx, |wb, _| wb.message_dialog_field_for_test().is_none()), "the card is closed");
+}
+
+#[gpui::test]
+fn return_is_a_line_break_in_the_card_and_does_not_squash(cx: &mut TestAppContext) {
+    let mut f = started(repo("rewrite-ui-return"), &[("a.txt", "wip a"), ("b.txt", "wip b")], cx);
+    let before = f.hash("HEAD");
+    let (a, b) = (f.hash("HEAD~1"), before.clone());
+    let field = f.open_card(&a, &b);
+    field.update(f.cx, |t, cx| t.set_text("one", cx));
+    f.cx.simulate_keystrokes("end enter");
+    f.cx.simulate_input("two");
+    f.cx.run_until_parked();
+    assert_eq!(f.wb.read_with(f.cx, |wb, cx| wb.message_dialog_text_for_test(cx)), Some("one\ntwo".to_string()));
+    assert_eq!(f.hash("HEAD"), before, "Return squashed nothing");
+}
+
+#[gpui::test]
+fn escape_closes_the_card_and_changes_nothing(cx: &mut TestAppContext) {
+    let mut f = started(repo("rewrite-ui-escape"), &[("a.txt", "wip a"), ("b.txt", "wip b")], cx);
+    let before = f.hash("HEAD");
+    let (a, b) = (f.hash("HEAD~1"), before.clone());
+    let _card = f.open_card(&a, &b);
+    f.cx.simulate_keystrokes("escape");
+    f.cx.run_until_parked();
+    assert!(f.wb.read_with(f.cx, |wb, _| wb.message_dialog_field_for_test().is_none()));
+    assert_eq!(f.hash("HEAD"), before);
+    assert_eq!(f.subjects(), vec!["wip b", "wip a", "ilk"]);
+}
+
+#[gpui::test]
+fn an_empty_message_keeps_the_card_open_with_what_was_typed(cx: &mut TestAppContext) {
+    let mut f = started(repo("rewrite-ui-card-empty"), &[("a.txt", "wip a"), ("b.txt", "wip b")], cx);
+    let before = f.hash("HEAD");
+    let (a, b) = (f.hash("HEAD~1"), before.clone());
+    let field = f.open_card(&a, &b);
+    field.update(f.cx, |t, cx| t.set_text("  \n ", cx));
+    f.cx.simulate_keystrokes("cmd-enter");
+    f.cx.run_until_parked();
+    assert!(f.wb.read_with(f.cx, |wb, _| wb.message_dialog_field_for_test().is_some()), "still open");
+    assert_eq!(f.hash("HEAD"), before);
+    let notice = f.wb.read_with(f.cx, |wb, _| wb.notice_for_test());
+    assert!(notice.is_some_and(|(error, text)| error && text.contains("cannot be empty")));
+}
+
+/// What a screen reader gets while the card is open (#324): one modal dialog that names the card, a multi-line field with the
+/// message and the keyboard in it, and the two buttons; a button of an old tree answers nothing.
+#[gpui::test]
+fn the_card_is_a_modal_dialog_with_the_message_field_and_two_buttons(cx: &mut TestAppContext) {
+    use accesskit::{Action, ActionRequest, NodeId, Role, TreeId};
+    // The consumer's id packs the node's own id above the tree's.
+    let node_id = |n: &accesskit_consumer::NodeRef| NodeId((u128::from(n.id()) >> 64) as u64);
+    let mut f = started(repo("rewrite-ui-card-a11y"), &[("a.txt", "wip a"), ("b.txt", "wip b")], cx);
+    let (a, b) = (f.hash("HEAD~1"), f.hash("HEAD"));
+    f.open_card(&a, &b);
+    let snapshot = |f: &mut Fixture| f.wb.update_in(f.cx, |wb, window, cx| wb.a11y_snapshot(window, cx));
+    let snap = snapshot(&mut f);
+    let update = snap.to_tree();
+    let tree = accesskit_consumer::Tree::new(update.clone(), true);
+    let state = tree.state();
+    let dialog = state.root().children().find(|n| n.role() == Role::Dialog).expect("the card is in the tree");
+    assert_eq!(dialog.label().as_deref(), Some("Squash 2 commits into one"));
+    assert!(dialog.is_modal());
+    assert_eq!(dialog.description().as_deref(), Some("↵ for a new line, ⌘↵ to squash, Esc to cancel"));
+    let field = dialog.children().find(|n| n.role() == Role::MultilineTextInput).expect("the message field");
+    assert_eq!((field.label().as_deref(), field.value().as_deref()), (Some("Message of the squashed commit"), Some("wip a\n\nwip b")));
+    assert_eq!(update.focus, node_id(&field), "the keyboard is in the message");
+    let buttons: Vec<_> = dialog.children().filter(|n| n.role() == Role::Button).map(|n| (n.label().unwrap_or_default(), node_id(&n))).collect();
+    assert_eq!(buttons.iter().map(|(l, _)| l.as_str()).collect::<Vec<_>>(), ["Cancel", "Squash"]);
+
+    // What the user types is what the field says.
+    let typed = f.wb.read_with(f.cx, |wb, _| wb.message_dialog_field_for_test()).unwrap();
+    typed.update(f.cx, |t, cx| t.set_text("One commit\n\nçalışıyor", cx));
+    let snap2 = snapshot(&mut f);
+    let tree2 = accesskit_consumer::Tree::new(snap2.to_tree(), true);
+    let value = tree2
+        .state()
+        .root()
+        .children()
+        .find(|n| n.role() == Role::Dialog)
+        .and_then(|d| d.children().find(|n| n.role() == Role::MultilineTextInput))
+        .and_then(|n| n.value());
+    assert_eq!(value.as_deref(), Some("One commit\n\nçalışıyor"));
+
+    let press = |f: &mut Fixture, snap: &super::a11y::Snapshot, id, action| {
+        let request = ActionRequest { action, target_tree: TreeId::ROOT, target_node: id, data: None };
+        f.wb.update_in(f.cx, |wb, window, cx| wb.a11y_action_for_test(&request, snap, window, cx));
+        f.cx.run_until_parked();
+    };
+    // Focusing a button does nothing; Cancel closes the card and changes nothing.
+    press(&mut f, &snap2, buttons[1].1, Action::Focus);
+    assert!(f.wb.read_with(f.cx, |wb, _| wb.message_dialog_field_for_test().is_some()));
+    let before = f.hash("HEAD");
+    press(&mut f, &snap2, buttons[0].1, Action::Click);
+    assert!(f.wb.read_with(f.cx, |wb, _| wb.message_dialog_field_for_test().is_none()), "Cancel closed the card");
+    assert_eq!(f.hash("HEAD"), before);
+
+    // Squash squashes with the text in the field.
+    let field = f.open_card(&a, &b);
+    field.update(f.cx, |t, cx| t.set_text("Done by the screen reader", cx));
+    let snap3 = snapshot(&mut f);
+    press(&mut f, &snap3, buttons[1].1, Action::Click);
+    let result = f.result();
+    assert!(result.starts_with("Squashed 2 commits into "), "{result}");
+    assert_eq!(f.subjects(), vec!["Done by the screen reader", "ilk"]);
 }

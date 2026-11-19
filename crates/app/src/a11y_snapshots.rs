@@ -152,6 +152,16 @@ pub struct DialogSnap {
     /// Button labels in tab order, and the focused one.
     pub buttons: Vec<String>,
     pub focused: Option<usize>,
+    /// A multi-line text field in the dialog (the squash message card): its name and what it holds.
+    pub field: Option<DialogField>,
+}
+
+/// The text field of a dialog; `focused`: the keyboard is in it.
+#[derive(Clone, PartialEq, Debug)]
+pub struct DialogField {
+    pub label: String,
+    pub text: String,
+    pub focused: bool,
 }
 
 /// An editor tab of the focused group.

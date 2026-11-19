@@ -242,6 +242,11 @@ pub trait Host: Send + Sync + 'static {
     /// Name shown in the status bar: "Local", "ssh://node-dev".
     fn label(&self) -> String;
     fn is_remote(&self) -> bool;
+    /// How long a request to this host takes to be answered at the least (the last liveness probe of a remote connection),
+    /// `None` for the local machine and before the first probe.
+    fn round_trip(&self) -> Option<std::time::Duration> {
+        None
+    }
     fn call(&self, req: Request) -> Result<Response>;
     fn search(&self, query: SearchQuery) -> Result<SearchStream>;
     /// Folder comparison (see `Request::HashTree`). Stop it with `cancel(stream.id)`.
@@ -554,6 +559,8 @@ struct Shared {
     next_id: AtomicU32,
     /// Pin the call timeout (seconds; 0 = default table). For tests and diagnostics.
     call_limit_millis: AtomicU64,
+    /// How long the last `Ping` took to be answered, in microseconds (0: not measured yet).
+    round_trip_micros: AtomicU64,
 }
 
 /// Heartbeat interval and how long a single probe waits.
@@ -576,8 +583,12 @@ impl Shared {
             self.waiters.locked().remove(&id);
             return false;
         }
+        let sent = std::time::Instant::now();
         let ok = rx.recv_timeout(limit).is_ok();
-        if !ok {
+        if ok {
+            // At least 1 µs, so that a measured round trip is never mistaken for "not measured".
+            self.round_trip_micros.store(u64::try_from(sent.elapsed().as_micros()).unwrap_or(u64::MAX).max(1), Ordering::Relaxed);
+        } else {
             self.waiters.locked().remove(&id);
         }
         ok
@@ -1007,8 +1018,12 @@ impl RemoteHost {
                 .name("host-heartbeat".into())
                 .spawn(move || {
                     let mut misses = 0;
+                    let mut first = true;
                     loop {
-                        std::thread::sleep(HEARTBEAT_EVERY);
+                        // The first probe is at once: it is what the first round trip is measured by.
+                        if !std::mem::take(&mut first) {
+                            std::thread::sleep(HEARTBEAT_EVERY);
+                        }
                         let Some(shared) = weak.upgrade() else { return };
                         if shared.closing.load(Ordering::Relaxed) {
                             return;
@@ -1176,6 +1191,9 @@ fn reader_loop(shared: Arc<Shared>, mut reader: BufReader<Box<dyn Read + Send>>,
 impl Host for RemoteHost {
     fn info(&self) -> &HostInfo {
         &self.info
+    }
+    fn round_trip(&self) -> Option<std::time::Duration> {
+        Some(self.shared.round_trip_micros.load(Ordering::Relaxed)).filter(|m| *m > 0).map(std::time::Duration::from_micros)
     }
     fn pty_adopt(&self, pty: u32, instance: String, secret: String) -> Result<(Pty, u64)> {
         self.adopt(pty, instance, secret)

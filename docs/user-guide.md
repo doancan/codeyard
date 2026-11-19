@@ -185,8 +185,8 @@ folder was cut at 100,000 files. Selecting several results, copying, moving, del
 Enter moves the focus to the first file, Esc clears the text, and Esc again (or Esc in the tree) closes the box and shows
 the whole tree with the selected entry revealed. While a filter is on, file nesting is off and folders stay open.
 
-**Nested files.** With `"explorer.fileNesting.enabled": true` (the default) a file that belongs to another one is listed
-under it: `Cargo.lock` under `Cargo.toml`, `app.test.ts` and `app.d.ts` under `app.ts`, lock files under `package.json`.
+**Nested files.** Off by default, as in VS Code: every file is listed on its own. With `"explorer.fileNesting.enabled": true` a
+file that belongs to another one is listed under it: `Cargo.lock` under `Cargo.toml`, `app.test.ts` and `app.d.ts` under `app.ts`, lock files under `package.json`.
 The parent shows an arrow and the number of files it holds (`+3`); the arrow, or Right and Left on the parent, opens and
 closes them, and what you opened is remembered for the folder. Clicking the name still opens the file itself. A change in a
 hidden file shows as a dot on its parent. A nested file is an ordinary entry for selecting, dragging, renaming and deleting;
@@ -561,7 +561,7 @@ Make it yours:
 **Graph.** Source Control shows the history of all branches as colored lanes (at most seven
 columns), one line per commit: message, author and the most important branch/tag chip
 (`"git.graph.showHash"` adds the short hash). Every row is only as wide as the branches running
-next to it, so history reads from the left edge and side branches step to the right. Hover a commit
+next to it, so history reads from the left edge and side branches step to the right. Commits the upstream has and your branch does not (fetched but not pulled yet) have an orange dot instead of their lane's colour; Sync pulls them and the dot turns back. The hover card and a screen reader's description of the row say "not pulled yet" too. Hover a commit
 for a card with its author, date, full message, labels, hash (and a merge's parents) and what it changed: the number of
 files, the added and removed lines, and its first eight files with their own counts ("and 12 more files" for the rest; a
 binary file says so; a merge shows what it brought in against its first parent). The changes are read when the card shows,
@@ -576,8 +576,9 @@ only when some are already on the upstream, because the next Sync would bring th
 branch was at, so `git reset <hash>` returns there.
 **Squash and reorder.** The commits that are not pushed yet can be cleaned up without a terminal. Shift-click a second row to
 pick the run from the selected commit to it (rows of the branch's own line only), then right-click it: **Squash N Commits…**
-asks for the subject of the new commit (the oldest commit's subject to start with; the other commits' messages follow it as the
-body) and replaces the run with one commit that has the oldest commit's author and date. **Move Commit Up** / **Move Commit
+opens a card with the messages of the commits, oldest first, as one text to edit (several paragraphs are fine): ↵ is a line
+break, ⌘↵ (Ctrl+↵) squashes, Esc closes the card and changes nothing. What is in the card when you squash is the whole message
+of the new commit, which has the oldest commit's author and date. **Move Commit Up** / **Move Commit
 Down** swaps a commit with its newer or older neighbour. Commits above a squashed run are replayed on top of it, none is
 dropped. The new history is built in a temporary worktree and installed with one ref update that names the old tip, so the
 branch is either rewritten completely or untouched, and the checkout's files, index and uncommitted changes are never touched

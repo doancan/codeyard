@@ -554,3 +554,16 @@ fn a_broken_settings_file_names_the_line_after_a_block_comment() {
     assert!(message.contains("line 5 column"), "{message}");
     assert!(message.contains("previous settings kept"), "{message}");
 }
+
+/// Related files are not nested under their parent unless the user turns it on; custom patterns alone do not turn it on, and
+/// the built-in rules stay available for when it is on.
+#[test]
+fn file_nesting_is_off_by_default_and_on_when_asked() {
+    assert!(!Settings::default().explorer_nesting.enabled);
+    assert!(!parse("{}").0.explorer_nesting.enabled);
+    assert!(!parse(r#"{ "explorer.fileNesting.patterns": { "*.c": "${capture}.h" } }"#).0.explorer_nesting.enabled, "patterns alone");
+    assert!(parse(r#"{ "explorer.fileNesting.enabled": true }"#).0.explorer_nesting.enabled);
+    let on = parse(r#"{ "explorer.fileNesting.enabled": true, "explorer.fileNesting.patterns": { "*.c": "${capture}.h" } }"#).0;
+    assert!(on.explorer_nesting.enabled);
+    assert!(!parse(r#"{ "explorer.fileNesting.enabled": false }"#).0.explorer_nesting.enabled);
+}

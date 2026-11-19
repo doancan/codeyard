@@ -67,3 +67,20 @@ fn rows_that_are_not_one_run_pick_nothing(cx: &mut TestAppContext) {
     pick(&scm, cx, &side, true);
     assert!(scm.read_with(cx, |s, _| s.range_run().is_empty()), "a commit of the side branch is not on the branch's own line");
 }
+
+/// In a real window the inventory (with each repository's identity) arrives after the first graph load started, so the
+/// target the graph was loaded for has no identity. A menu opened on it must still match Source Control's target:
+/// otherwise a confirmation compared against it is refused ("Repository changed while the operation was pending.").
+#[gpui::test]
+fn the_graph_target_follows_the_inventory_that_arrives_after_it(cx: &mut TestAppContext) {
+    use crate::repos::{Repo, RepoId};
+    let (dir, _wb, scm, cx) = started("late-inventory", &["one", "two"], cx);
+    let root = scm.read_with(cx, |s, _| s.target(None).unwrap().root);
+    assert!(scm.read_with(cx, |s, _| s.history_target().is_some_and(|t| t.id.is_none())), "the graph was loaded before any inventory");
+    let id = Arc::new(RepoId { key: 1, host_gen: 0, root: root.clone(), worktree: root.clone(), git_dir: format!("{root}/.git"), fingerprint: 1 });
+    let status = scm.read_with(cx, |s, _| s.status.clone());
+    scm.update(cx, |s, cx| s.set_repos(Arc::new(vec![Repo { id, label: "r".into(), status, error: None, op: crate::repos::OpState::Idle }]), cx));
+    let (pinned, current) = scm.read_with(cx, |s, _| (s.history_target(), s.target(None).ok()));
+    assert!(current.as_ref().is_some_and(|t| t.id.is_some()), "Source Control's target has the identity now");
+    assert_eq!(pinned, current, "so does the target a graph menu pins ({})", dir.display());
+}

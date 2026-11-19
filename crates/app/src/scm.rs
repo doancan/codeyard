@@ -406,6 +406,11 @@ impl ScmPanel {
         let task = cx.background_executor().spawn(async move {
             let log = graph::log(host.as_ref(), &dir, limit, scope);
             let has_remote = git::remotes(host.as_ref(), &dir).is_ok_and(|r| !r.is_empty());
+            let incoming = graph::incoming(host.as_ref(), &dir, limit);
+            let log = log.map(|mut commits| {
+                commits.iter_mut().for_each(|c| c.incoming = incoming.contains(&c.hash));
+                commits
+            });
             (log, git::identity(host.as_ref(), &dir), git::stash_list(host.as_ref(), &dir).unwrap_or_default(), has_remote)
         });
         let loaded_from = self.host.clone();

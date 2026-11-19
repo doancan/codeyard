@@ -334,6 +334,7 @@ impl Workbench {
             progress: None,
             focused: d.focus.iter().take(labels.len()).position(|h| h.is_focused(window)),
             buttons: labels,
+            field: None,
         })
     }
 

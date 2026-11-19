@@ -48,6 +48,10 @@ pub struct Nesting {
     rules: Vec<Rule>,
 }
 
+/// Whether the explorer nests related files under their parent when the user has not said: no, as in VS Code. (`Nesting::default()`
+/// is the built-in rules, switched on: what the setting turns on.)
+pub const ENABLED_BY_DEFAULT: bool = false;
+
 impl Default for Nesting {
     fn default() -> Self {
         let rules = DEFAULT_PATTERNS.iter().filter_map(|(parent, children)| rule(parent, split_children(children))).collect();

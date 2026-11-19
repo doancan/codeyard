@@ -267,7 +267,8 @@ impl Workbench {
     ) -> oneshot::Receiver<Result<Response, v::Error>> {
         let ext = active.id().to_string();
         let running = self.cfg.exts.code.procs.contains_key(&ext);
-        let deadline = Duration::from_millis(limits::SCM_DEADLINE_MILLIS + if running { 0 } else { limits::ACTIVATE_MILLIS });
+        let deadline = Duration::from_millis(limits::SCM_DEADLINE_MILLIS + if running { 0 } else { limits::ACTIVATE_MILLIS })
+            + super::providers_glue::round_trip_allowance(self.remote.host.as_ref());
         let (id, answer) = self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).add(&ext);
         let msg = ToHost::Handle { id, deadline_ms: deadline.as_millis() as u32, request };
         self.send_to_extension(active, &format!("scm:{provider}"), Some(msg), window, cx);

@@ -212,6 +212,8 @@ fn a_filter_keeps_git_marks_and_finds_nested_files_by_name(cx: &mut gpui::TestAp
 #[gpui::test]
 fn fifty_thousand_entries_stay_responsive(cx: &mut gpui::TestAppContext) {
     crate::qa_workbench_tests::globals(cx);
+    // Nesting is off unless the user turns it on; this measures it on.
+    cx.update(|cx| cx.global_mut::<crate::settings::Settings>().explorer_nesting = nesting::Nesting::default());
     let (tree, cx) = cx.add_window_view(|_, cx| {
         let mut tree = FileTree::new(Arc::new(host::local()), cx);
         tree.root = Some("/fixture".into());

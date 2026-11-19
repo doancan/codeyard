@@ -159,6 +159,9 @@ impl ScmPanel {
                                 let k = &g.commits[*ix];
                                 let mut parts = vec![k.author.clone(), k.when.clone(), k.short.clone()];
                                 parts.extend(k.refs.iter().map(|r| r.name.clone()));
+                                if k.incoming {
+                                    parts.push(crate::i18n::t("not pulled yet").to_string());
+                                }
                                 if k.parents.len() > 1 {
                                     parts.push(crate::i18n::t("merge").to_string());
                                 }

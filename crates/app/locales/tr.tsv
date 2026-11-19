@@ -4275,13 +4275,11 @@ Rewriting more than {} commits is refused	{} commit'ten fazlasını yeniden yazm
 Squash	Birleştir
 Squash {} Commit…|Squash {} Commits…	{} Commit'i Birleştir…
 Squashed {0} commit into {1}|Squashed {0} commits into {1}	{0} commit {1} olarak birleştirildi
-Subject of the squashed commit; the other messages follow it	Birleştirilen commit'in konusu; diğer mesajlar ardından gelir
 The branch {} is checked out in another worktree, so its commits cannot be rewritten here.	{} dalı başka bir worktree'de açık, bu yüzden commit'leri burada yeniden yazılamaz.
 The chosen commits are not one run of this branch.	Seçilen commit'ler bu dalın kesintisiz bir aralığı değil.
 The first commit of the repository cannot be rewritten	Deponun ilk commit'i yeniden yazılamaz
 The graph does not show the current branch's latest commit. Reload it and try again.	Grafik, geçerli dalın son commit'ini göstermiyor. Yenileyip tekrar dene.
 The rewritten commits would end with different files. Nothing was changed.	Yeniden yazılan commit'lerin sonunda dosyalar farklı olurdu. Hiçbir şey değişmedi.
-The subject of the squashed commit cannot be empty.	Birleştirilen commit'in konusu boş olamaz.
 There is no commit above to swap with	Yer değiştirecek üstte commit yok
 There is no commit below to swap with	Yer değiştirecek altta commit yok
 {} would conflict while the commits are rewritten: nothing was changed	{}, commit'ler yeniden yazılırken çakışırdı: hiçbir şey değişmedi
@@ -4305,3 +4303,9 @@ These files would be overwritten ({}): commit or stash your changes first.	Bu do
 This branch and its upstream both have new commits. Choose once how to combine them: in a terminal, git pull --rebase or git pull --no-rebase (or set pull.rebase).	Bu dalda da upstream'de de yeni commit'ler var. Nasıl birleştireceğini bir kez seç: terminalde git pull --rebase veya git pull --no-rebase (ya da pull.rebase ayarla).
 This branch has no upstream yet: publish it with Git: Publish Branch, or set one in a terminal with git branch --set-upstream-to.	Bu dalın henüz upstream'i yok: Git: Publish Branch ile yayınla ya da terminalde git branch --set-upstream-to ile ayarla.
 {}: finish or abort it first, then try again.	{}: önce bitir veya iptal et, sonra tekrar dene.
+Not pulled yet. Sync brings it in.	Henüz çekilmedi. Sync bunu getirir.
+not pulled yet	henüz çekilmedi
+Message of the squashed commit	Birleştirilen commit'in mesajı
+Squash {} commits into one	{} commit'i tek commit'te birleştir
+The message of the squashed commit cannot be empty.	Birleştirilen commit'in mesajı boş olamaz.
+↵ for a new line, ⌘↵ to squash, Esc to cancel	↵ yeni satır, ⌘↵ birleştir, Esc iptal
