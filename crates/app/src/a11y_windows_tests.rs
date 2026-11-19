@@ -77,6 +77,7 @@ fn the_update_window_holds_the_dialog_alone() {
             progress: None,
             buttons: vec!["Install and Restart".into(), "Later".into()],
             focused: Some(1),
+            field: None,
         }),
         ..Snapshot::default()
     };

@@ -50,6 +50,8 @@ const SCM_COMMIT: NodeId = NodeId(20);
 const SCM_BRANCH: NodeId = NodeId(21);
 const SCM_RESULT: NodeId = NodeId(22);
 const SCM_EMPTY: NodeId = NodeId(23);
+/// The text field of the squash message card.
+const DIALOG_FIELD: NodeId = NodeId(460);
 const SCM_INIT: NodeId = NodeId(400);
 const SCM_CLONE: NodeId = NodeId(401);
 const SCM_OPERATION: NodeId = NodeId(402);
@@ -666,6 +668,14 @@ impl Snapshot {
                 children.push(UPDATE_PROGRESS);
                 nodes.push((UPDATE_PROGRESS, bar));
             }
+            if let Some(field) = &d.field {
+                let mut input = Node::new(Role::MultilineTextInput);
+                input.set_label(field.label.clone());
+                input.set_value(field.text.clone());
+                input.add_action(Action::Focus);
+                children.push(DIALOG_FIELD);
+                nodes.push((DIALOG_FIELD, input));
+            }
             for (i, label) in d.buttons.iter().enumerate() {
                 let id = NodeId(UPDATE_BUTTON + i as u64);
                 let mut b = Node::new(Role::Button);
@@ -685,6 +695,7 @@ impl Snapshot {
         nodes.push((ROOT, root));
 
         let focus = match self.focus {
+            _ if self.dialog.as_ref().is_some_and(|d| d.field.as_ref().is_some_and(|f| f.focused)) => DIALOG_FIELD,
             _ if self.dialog.is_some() => self.dialog.as_ref().and_then(|d| d.focused).map_or(UPDATE_DIALOG, |i| NodeId(UPDATE_BUTTON + i as u64)),
             _ if self.services.as_ref().is_some_and(|view| view.focused) => services_access::focus_node(self.services.as_ref().expect("focused page")),
             _ if self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).is_some() => {
@@ -827,9 +838,12 @@ impl Workbench {
             focused: self.update.focus.iter().position(|h| h.is_focused(window)).filter(|i| *i < model.buttons.len()),
             buttons: model.buttons.iter().map(|b| b.label.to_string()).collect(),
             title: model.title.to_string(),
+            field: None,
         });
         // The folder's trust question is a dialog too, and modal in the same way.
         let dialog = dialog.or_else(|| self.trust_dialog_snap(window));
+        // The squash message card is drawn over both, so it comes first.
+        let dialog = self.message_dialog_snap(window, cx).or(dialog);
 
         let find_bar = ed.and_then(|e| e.read(cx).find_bar());
         let find = find_bar.as_ref().map(|b| {
@@ -1094,9 +1108,14 @@ impl Workbench {
                 self.activate(index, window, cx);
                 window.focus(&ed.read(cx).focus_handle(cx));
             }
+            (Action::Focus, DIALOG_FIELD) => self.focus_message_field(window, cx),
             (Action::Focus | Action::Click, id) if id.0 >= UPDATE_BUTTON && id.0 < UPDATE_BUTTON + BLOCK => {
                 let (Some(snap), Some(index)) = (&last.dialog, id.0.checked_sub(UPDATE_BUTTON).map(|i| i as usize)) else { return };
                 // The tree may be a quarter of a second old: act only if that button is still there under the same name.
+                if self.vcs.message_dialog.is_some() {
+                    self.press_message_button(snap.buttons.get(index).map(String::as_str), req.action == Action::Click, window, cx);
+                    return;
+                }
                 if self.cfg.trust_ask.dialog.is_some() {
                     self.press_trust_button(index, snap.buttons.get(index).map(String::as_str), req.action == Action::Click, window, cx);
                     return;

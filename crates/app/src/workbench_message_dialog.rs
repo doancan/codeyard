@@ -136,6 +136,42 @@ impl Workbench {
         ))
     }
 
+    /// What a screen reader gets while the card is open: a modal dialog with the message field and its two buttons.
+    pub(in crate::workbench) fn message_dialog_snap(&self, window: &Window, cx: &App) -> Option<super::a11y::DialogSnap> {
+        let d = self.vcs.message_dialog.as_ref()?;
+        Some(super::a11y::DialogSnap {
+            title: crate::i18n::tf("Squash {} commits into one", &[&d.run.len()]),
+            description: t("↵ for a new line, ⌘↵ to squash, Esc to cancel").to_string(),
+            progress: None,
+            buttons: vec![t("Cancel").to_string(), t("Squash").to_string()],
+            focused: None,
+            field: Some(super::a11y::DialogField {
+                label: crate::i18n::tr("Message of the squashed commit").to_string(),
+                text: d.field.read(cx).text().to_string(),
+                focused: d.field.focus_handle(cx).is_focused(window),
+            }),
+        })
+    }
+
+    /// A screen reader moves to the message field.
+    pub(in crate::workbench) fn focus_message_field(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(d) = &self.vcs.message_dialog {
+            window.focus(&d.field.focus_handle(cx));
+        }
+    }
+
+    /// A screen reader presses a button of the card. The tree may be old: it acts only when that button still has that name.
+    pub(in crate::workbench) fn press_message_button(&mut self, label: Option<&str>, press: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if !press {
+            return;
+        }
+        match label {
+            Some(l) if l == t("Squash") => self.submit_squash_message(window, cx),
+            Some(l) if l == t("Cancel") => self.close_message_dialog(window, cx),
+            _ => {}
+        }
+    }
+
     #[cfg(test)]
     pub fn message_dialog_text_for_test(&self, cx: &App) -> Option<String> {
         self.vcs.message_dialog.as_ref().map(|d| d.field.read(cx).text().to_string())
