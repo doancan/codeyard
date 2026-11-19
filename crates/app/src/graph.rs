@@ -238,8 +238,10 @@ pub fn log(host: &dyn Host, root: &str, limit: usize, scope: Scope) -> Result<Ve
 
 /// Commits the upstream has and the checked-out branch does not (`HEAD..@{upstream}`): what a pull would bring in. Empty without
 /// an upstream or a HEAD; the graph then simply draws nothing as incoming.
-pub fn incoming(host: &dyn Host, root: &str) -> std::collections::HashSet<String> {
-    match host.exec("git", &["rev-list", "HEAD..@{upstream}"], Some(root), None) {
+pub fn incoming(host: &dyn Host, root: &str, limit: usize) -> std::collections::HashSet<String> {
+    // The graph shows `limit` commits at most, so a branch far behind its upstream does not read the rest.
+    let n = format!("-n{limit}");
+    match host.exec("git", &["rev-list", &n, "HEAD..@{upstream}"], Some(root), None) {
         Ok(out) if out.ok() => out.stdout_str().lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
         _ => Default::default(),
     }
