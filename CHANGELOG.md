@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Explorer: related files are no longer listed under their parent by default (`bun.lock` under `package.json`, `Cargo.lock` under `Cargo.toml`); every file is an ordinary entry, as in VS Code. The feature stays: set `"explorer.fileNesting.enabled": true` (or turn it on in Settings) and it works as before, with the same rules and `explorer.fileNesting.patterns`. Anyone who had it on without ever setting it will see the flat list and can switch it back on.
 - Graph: *Squash N Commits…* opens a card with the messages of the squashed commits, oldest first, as one text to edit, instead of a one-line subject field. ↵ is a line break, ⌘↵ (Ctrl+↵) squashes and Esc cancels; the text in the card is the whole message of the new commit. An empty message keeps the card open (#324).
 
 ### Fixed

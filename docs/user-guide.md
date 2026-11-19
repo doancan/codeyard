@@ -185,8 +185,8 @@ folder was cut at 100,000 files. Selecting several results, copying, moving, del
 Enter moves the focus to the first file, Esc clears the text, and Esc again (or Esc in the tree) closes the box and shows
 the whole tree with the selected entry revealed. While a filter is on, file nesting is off and folders stay open.
 
-**Nested files.** With `"explorer.fileNesting.enabled": true` (the default) a file that belongs to another one is listed
-under it: `Cargo.lock` under `Cargo.toml`, `app.test.ts` and `app.d.ts` under `app.ts`, lock files under `package.json`.
+**Nested files.** Off by default, as in VS Code: every file is listed on its own. With `"explorer.fileNesting.enabled": true` a
+file that belongs to another one is listed under it: `Cargo.lock` under `Cargo.toml`, `app.test.ts` and `app.d.ts` under `app.ts`, lock files under `package.json`.
 The parent shows an arrow and the number of files it holds (`+3`); the arrow, or Right and Left on the parent, opens and
 closes them, and what you opened is remembered for the folder. Clicking the name still opens the file itself. A change in a
 hidden file shows as a dot on its parent. A nested file is an ordinary entry for selecting, dragging, renaming and deleting;

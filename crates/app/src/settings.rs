@@ -432,7 +432,7 @@ impl Default for Settings {
             fallback_encoding: crate::encoding::Encoding::Windows1254,
             compact_folders: true,
             sort_order: "default".into(),
-            explorer_nesting: Default::default(),
+            explorer_nesting: crate::tree::nesting::Nesting::default().with_enabled(crate::tree::nesting::ENABLED_BY_DEFAULT),
             open_editors: true,
             rulers: Vec::new(),
             render_whitespace: "none".into(),
