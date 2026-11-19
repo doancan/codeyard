@@ -245,3 +245,26 @@ fn the_graph_marks_the_commits_a_pull_would_bring_in(cx: &mut TestAppContext) {
     wb.update(cx, |wb, cx| wb.refresh_git(0, cx));
     wait_ticking(cx, "the mark to go", |cx| scm.read_with(cx, |s, _| s.commit_by_hash(&theirs).is_some_and(|c| !c.incoming)));
 }
+
+/// Over SSH the incoming commits are read on the remote machine by the same `git`, and the reply is the same.
+#[gpui::test]
+fn the_incoming_commits_are_read_over_ssh_too(cx: &mut TestAppContext) {
+    use crate::qa_integration_tests::repo_with_remote;
+    let Some(_sshd) = crate::test_sshd::start("incoming-ssh") else { return };
+    let (dir, _bare, other) = repo_with_remote("incoming-ssh");
+    std::fs::write(other.join("theirs.txt"), "x\n").unwrap();
+    git_in(&other, &["add", "-A"]);
+    git_in(&other, &["commit", "-q", "-m", "theirs"]);
+    git_in(&other, &["push", "-q"]);
+    git_in(&dir, &["fetch", "-q"]);
+    let theirs = git_in(&dir, &["rev-parse", "origin/main"]).trim().to_string();
+    globals(cx);
+    let (wb, wcx) = crate::qa_workbench_tests::setup(cx);
+    wb.update_in(wcx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    wait_ticking(wcx, "connected", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    let host = wb.read_with(wcx, |wb, _| wb.remote_host_for_test());
+    assert_eq!(graph::incoming(host.as_ref(), &ui::local_path(&dir), 1000), std::collections::HashSet::from([theirs]));
+}
