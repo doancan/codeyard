@@ -78,6 +78,8 @@ pub struct State {
     /// Documents open in editors, for document watches.
     pub documents: BTreeMap<Uri, Document>,
     pub untrusted: bool,
+    /// The workspace's machine cannot be reached, as over an SSH connection that dropped.
+    pub host_away: bool,
     pub files: BTreeMap<Uri, Vec<u8>>,
     pub http: Vec<HttpFixture>,
     pub processes: Vec<(String, Vec<String>, ProcessFixture)>,
@@ -232,6 +234,24 @@ impl State {
     fn answer(&mut self, call: Call) -> (Vec<StreamEvent>, Completion) {
         let not_found = |what: String| Completion::Failed(Error::NotFound(what));
         let none = Vec::new();
+        // Only what is done on the workspace's machine fails while it is away; the window, the settings and the
+        // extension's own storage are on this computer. The permission check came first, as in the app.
+        let on_the_host = matches!(
+            call,
+            Call::ReadFile(_)
+                | Call::Stat(_)
+                | Call::ReadMany(_)
+                | Call::FindFiles { .. }
+                | Call::Search(_)
+                | Call::WriteFile { .. }
+                | Call::DeleteFile(_)
+                | Call::CreateDirectory(_)
+                | Call::Rename { .. }
+                | Call::Spawn(_)
+        );
+        if self.host_away && on_the_host {
+            return (none, Completion::Failed(Error::host_unavailable("the mock host is away (host.host_away(true))")));
+        }
         match call {
             Call::ShowNotice { severity, message, actions } => {
                 self.notices.push((severity, message));

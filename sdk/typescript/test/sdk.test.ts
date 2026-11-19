@@ -245,6 +245,50 @@ test("files, processes and progress go through the permissions", async () => {
   h.dispose();
 });
 
+// #338: the Rust SDK's `an_extension_sees_host_unavailable_while_the_host_is_away_and_recovers`, in TypeScript.
+test("calls that need the host fail as hostUnavailable while it is away, and work again after", async () => {
+  const h = host();
+  h.file("a.json", "{}");
+  h.process("git", ["status"], { stdout: "clean\n" });
+  await h.activate({
+    activate(ctx) {
+      ctx.command("read", (ctx) => ctx.readText(h.uri("a.json")));
+      ctx.command("env", (ctx) => ctx.readText(h.uri(".env")));
+      ctx.command("git", async (ctx) => (await ctx.run({ program: "git", args: ["status"] })).code);
+      ctx.command("count", async (ctx) => {
+        const n = JSON.parse(new TextDecoder().decode((await ctx.storage.get("n")) ?? new TextEncoder().encode("0"))) + 1;
+        await ctx.storage.set("n", new TextEncoder().encode(String(n)));
+        return n;
+      });
+    },
+  });
+  assert.equal(await h.command("read"), "{}");
+
+  h.hostAway();
+  const away = await h.command("read").then(
+    () => undefined,
+    (e: unknown) => e,
+  );
+  assert.ok(away instanceof CodeyardError && away.hostUnavailable, `${away}`);
+  assert.ok(away.message.startsWith("host unavailable: "), away.message);
+  assert.ok(!(away instanceof DeniedError));
+  const git = await h.command("git").then(
+    () => undefined,
+    (e: unknown) => e,
+  );
+  assert.ok(git instanceof CodeyardError && git.hostUnavailable, "a process on the host");
+  // Refused first, as in Codeyard: `.env` is not declared, and nothing says the host is away.
+  await assert.rejects(h.command("env"), DeniedError);
+  assert.equal(await h.command("count"), 1, "this computer's own state is not on the host");
+
+  h.hostAway(false);
+  assert.equal(await h.command("read"), "{}", "the same call, once the host is back");
+  assert.equal(CodeyardError.other("x").hostUnavailable, false);
+  assert.equal(CodeyardError.notFound("x").hostUnavailable, false);
+  assert.equal(CodeyardError.hostUnavailable("x").hostUnavailable, true);
+  h.dispose();
+});
+
 test("readMany, rename and createDirectory, as in the Rust SDK", async () => {
   const h = new MockHost({ manifest: MANIFEST.replace('read = ["**/*.json"]', 'read = ["**/*.json"]\nwrite = ["data/**"]') });
   h.file("data/a.json", "1").file("data/b.json", "2");

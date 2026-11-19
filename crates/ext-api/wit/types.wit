@@ -34,6 +34,9 @@ interface types {
     timeout,
     /// The call's arguments are wrong; the message says which.
     invalid(string),
+    /// Anything else. A message that starts with `host unavailable: ` means the workspace's machine cannot be reached
+    /// (an SSH connection that dropped, a container that stopped): the extension keeps running and the same call works
+    /// again after the reconnect. It stays an `other` because a new case would break components built against 1.x.
     other(string),
   }
 

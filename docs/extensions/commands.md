@@ -415,6 +415,17 @@ denied: read file:///etc/passwd
 
 A link inside the workspace is checked as the file it leads to: `src/settings.txt -> ../.env` needs `read = [".env"]`.
 
+When the workspace is on another machine (an SSH host, a container) and the connection drops, your extension keeps running. Calls that need that machine (files, search, processes) fail with an error for which `e.is_host_unavailable()` is true, and the message starts with `host unavailable:`. Nothing was lost and the call is safe to repeat: Codeyard reconnects when the machine is back (or the user picks Reconnect), and the same call works again afterwards. Wait and retry, or tell the user, rather than treating it as a failure of the call:
+
+```rust
+match ctx.read_text(&uri).await {
+    Err(e) if e.is_host_unavailable() => ctx.notice("The remote machine is away; try again once it is back."),
+    other => show(other?),
+}
+```
+
+A refused call is still `Denied` and a missing file still `NotFound`, whether or not the machine is away. Calls that do not use it (the window, settings, `ctx.storage()`, `ctx.state()`, `ctx.fetch` to the internet) go on working. `host.host_away(true)` in a unit test makes the mock host behave this way (see [Testing](testing.md)). It is an `Other` error on the wire because a new error case would break every extension built for 1.x; the check above is the typed way to read it.
+
 Other errors are `NotFound`, `Cancelled` (the user moved on), `Timeout`, `Invalid` (bad arguments; the message says which) and `Other`. A refusal for `revoked-by-user` means the user turned the permission off: tell them what stops working. In an untrusted folder an extension may read what it declared and show UI, but not send, write or run anything.
 
 ## Building and packaging

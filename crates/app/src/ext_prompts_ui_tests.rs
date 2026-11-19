@@ -193,8 +193,15 @@ fn denying_the_clipboard_says_revoked_by_user_and_is_listed(cx: &mut TestAppCont
     assert_eq!(wb.read_with(cx, |wb, _| wb.denials_for_test("you.probe")).len(), n + 1);
 }
 
-/// The local host, presented as a remote one.
-struct Remote(Arc<dyn host::Host>);
+/// The local host, presented as a remote one. While `.1` is set, the connection is gone: what needs the machine fails the
+/// way an SSH connection that dropped does.
+struct Remote(Arc<dyn host::Host>, Arc<std::sync::atomic::AtomicBool>);
+
+impl Remote {
+    fn away(&self) -> host::Result<()> {
+        if self.1.load(std::sync::atomic::Ordering::SeqCst) { Err(host::HostError::Disconnected("the agent closed the connection".into())) } else { Ok(()) }
+    }
+}
 
 impl host::Host for Remote {
     fn info(&self) -> &proto::HostInfo {
@@ -207,9 +214,11 @@ impl host::Host for Remote {
         true
     }
     fn call(&self, request: proto::Request) -> host::Result<proto::Response> {
+        self.away()?;
         self.0.call(request)
     }
     fn search(&self, q: proto::SearchQuery) -> host::Result<host::SearchStream> {
+        self.away()?;
         self.0.search(q)
     }
     fn hash_tree(&self, r: &str, i: Vec<String>, g: bool, l: u32, o: Option<Vec<String>>) -> host::Result<host::HashStream> {
@@ -240,6 +249,7 @@ impl host::Host for Remote {
         self.0.status_events()
     }
     fn proc_spawn(&self, p: &str, a: Vec<String>, c: Option<String>) -> host::Result<host::Proc> {
+        self.away()?;
         self.0.proc_spawn(p, a, c)
     }
     fn proc_input(&self, id: u32, data: Vec<u8>) {
@@ -249,6 +259,7 @@ impl host::Host for Remote {
         self.0.proc_kill(id)
     }
     fn exec(&self, program: &str, args: &[&str], cwd: Option<&str>, stdin: Option<Vec<u8>>) -> host::Result<host::ExecOutput> {
+        self.away()?;
         self.0.exec(program, args, cwd, stdin)
     }
 }
@@ -266,7 +277,7 @@ fn the_first_process_on_a_remote_host_asks_once_per_session(cx: &mut TestAppCont
     assert!(run(&wb, cx, "Probe: Run").contains("Exit(Some(0))"), "{}", answer(&wb, cx));
     assert!(!cx.has_pending_prompt());
 
-    wb.update(cx, |wb, _| wb.set_host_for_test(Arc::new(Remote(Arc::new(host::local())))));
+    wb.update(cx, |wb, _| wb.set_host_for_test(Arc::new(Remote(Arc::new(host::local()), Arc::default()))));
     assert_eq!(run(&wb, cx, "Probe: Echo"), "null");
     run(&wb, cx, "Probe: Run");
     let (title, detail) = cx.pending_prompt().expect("a dialog");
@@ -280,6 +291,38 @@ fn the_first_process_on_a_remote_host_asks_once_per_session(cx: &mut TestAppCont
     assert!(!cx.has_pending_prompt());
 }
 
+/// #338: the connection to the workspace's machine drops while the extension runs. The instance stays alive and answers
+/// its other commands, a call that needs the machine fails as `host unavailable` (not as a bare `other` or a trap), and the
+/// same call works again once the connection is back. The same through a real SSH connection and the broker:
+/// ext_broker_tests (`a_host_call_while_ssh_is_away_is_host_unavailable_and_works_again_after_the_reconnect`).
+#[gpui::test]
+fn an_extension_keeps_running_while_the_remote_host_is_away(cx: &mut TestAppContext) {
+    if skip() || cfg!(windows) {
+        return;
+    }
+    let cfg = config_dir("remote-away");
+    install(&cfg, MANIFEST);
+    let (wb, cx) = setup(cx, &cfg);
+    let remote = Remote(Arc::new(host::local()), Arc::default());
+    let away = remote.1.clone();
+    wb.update(cx, |wb, _| wb.set_host_for_test(Arc::new(remote)));
+
+    run(&wb, cx, "Probe: Run");
+    assert!(cx.has_pending_prompt(), "the first process on a remote host asks");
+    assert!(reply(&wb, cx, "Allow for this session").contains("Exit(Some(0))"), "{}", answer(&wb, cx));
+
+    away.store(true, std::sync::atomic::Ordering::SeqCst);
+    let gone = run(&wb, cx, "Probe: Run");
+    assert!(gone.contains("host unavailable: "), "the call says the host is away: {gone}");
+    assert!(!gone.contains("Exit("), "{gone}");
+    assert!(wb.read_with(cx, |wb, _| wb.extension_running_for_test("you.probe")), "the instance is still alive");
+    assert_eq!(run(&wb, cx, "Probe: Echo"), "null", "and answers what does not need the machine");
+
+    away.store(false, std::sync::atomic::Ordering::SeqCst);
+    assert!(run(&wb, cx, "Probe: Run").contains("Exit(Some(0))"), "the same call, once the connection is back");
+    assert!(!cx.has_pending_prompt(), "the user was not asked again");
+}
+
 #[gpui::test]
 fn denying_a_remote_process_refuses_it(cx: &mut TestAppContext) {
     if skip() || cfg!(windows) {
@@ -288,7 +331,7 @@ fn denying_a_remote_process_refuses_it(cx: &mut TestAppContext) {
     let cfg = config_dir("remote-deny");
     install(&cfg, MANIFEST);
     let (wb, cx) = setup(cx, &cfg);
-    wb.update(cx, |wb, _| wb.set_host_for_test(Arc::new(Remote(Arc::new(host::local())))));
+    wb.update(cx, |wb, _| wb.set_host_for_test(Arc::new(Remote(Arc::new(host::local()), Arc::default()))));
     run(&wb, cx, "Probe: Run");
     assert!(cx.has_pending_prompt());
     assert_eq!(reply(&wb, cx, "Deny"), "denied run Why::RevokedByUser");

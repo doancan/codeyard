@@ -1,6 +1,6 @@
 // Short snippets of developer-guide.md and typescript.md, each in a function that gives it a `ctx`.
 
-import { fetch, type Context } from "@codeyard/extension";
+import { CodeyardError, fetch, type Context } from "@codeyard/extension";
 
 /** developer-guide.md, "Your first command": state kept across a hot reload. */
 export function reloadState(ctx: Context) {
@@ -63,4 +63,16 @@ export async function longWork(ctx: Context) {
     for await (const chunk of build) if ("stdout" in chunk) ctx.log("info", new TextDecoder().decode(chunk.stdout));
     await build.wait();
   });
+}
+
+/** typescript.md, "Errors": the workspace's machine is away. */
+export async function hostAway(ctx: Context, uri: string) {
+  let text = "";
+  try {
+    text = await ctx.readText(uri);
+  } catch (e) {
+    if (e instanceof CodeyardError && e.hostUnavailable) return ctx.notice("The remote machine is away; try again once it is back.");
+    throw e;
+  }
+  return text;
 }

@@ -360,6 +360,67 @@ fn a_declared_file_is_read_and_another_is_denied_over_ssh(cx: &mut gpui::TestApp
     assert!(denied_why(&ask(Start::ReadFile { uri: uri(&format!("{r}/../etc/passwd")) })).is_some(), "leaving the workspace is refused");
 }
 
+/// #338: a call that needs the host while the SSH connection is gone fails as `host unavailable` (not as a bare `other` an
+/// extension would have to match on its text), and the same call answers again once the connection is back. The broker
+/// holds no state of its own, so the extension instance has nothing to lose; the instance itself is checked in
+/// ext_prompts_ui_tests (`an_extension_keeps_running_while_the_ssh_host_is_away`).
+#[gpui::test]
+fn a_host_call_while_ssh_is_away_is_host_unavailable_and_works_again_after_the_reconnect(cx: &mut gpui::TestAppContext) {
+    let Some(mut sshd) = crate::test_sshd::start("broker-away") else { return };
+    let r = root("read-away");
+    crate::qa_workbench_tests::globals(cx);
+    let (wb, wcx) = crate::qa_workbench_tests::setup(cx);
+    wb.update_in(wcx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    crate::qa_integration_tests::wait_ticking(wcx, "connected", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    let host = wb.read_with(wcx, |wb, _| wb.remote_host_for_test());
+    let s = scope(&r, perms(&["vercel.json"], &[], &[]), true);
+    let read = |host: &dyn host::Host| {
+        let sink = Collect::default();
+        run(host, &s, &Start::ReadFile { uri: uri(&format!("{r}/vercel.json")) }, &sink, &AtomicBool::new(false)).expect("handled here")
+    };
+    assert_eq!(read(host.as_ref()), Completion::Bytes(b"{}".to_vec()), "while connected");
+
+    sshd.stop_server();
+    let mut away = None;
+    crate::qa_integration_tests::wait_secs(wcx, 60, "the dropped connection to fail a call", |_| {
+        away = Some(read(host.as_ref()));
+        matches!(&away, Some(Completion::Failed(e)) if e.is_host_unavailable())
+    });
+    match away {
+        Some(Completion::Failed(e)) => assert!(e.to_string().starts_with("host unavailable: "), "{e}"),
+        other => panic!("{other:?}"),
+    }
+    // A refusal is still a refusal: the scope is checked before the host is asked, so a denied path is `denied`, not away.
+    let sink = Collect::default();
+    let denied = run(host.as_ref(), &s, &Start::ReadFile { uri: uri(&format!("{r}/.env")) }, &sink, &AtomicBool::new(false)).expect("handled here");
+    assert_eq!(denied_why(&denied), Some(v::Why::NotDeclared));
+
+    // The server is back. The window reconnects on its own when its attempt lands after that; when it had already given
+    // up (a refused connection is not retried for ever), the user's Reconnect does it. Either way the call works again.
+    sshd.restart_server();
+    let mut asked = false;
+    crate::qa_integration_tests::wait_secs_describing(
+        wcx,
+        120,
+        "reconnected",
+        |cx| wb.read_with(cx, |wb, _| wb.conn_for_test()),
+        |cx| {
+            cx.executor().advance_clock(std::time::Duration::from_secs(1));
+            let conn = wb.read_with(cx, |wb, _| wb.conn_for_test());
+            if conn.starts_with("failed") && !asked {
+                asked = true;
+                wb.update_in(cx, |wb, window, cx| wb.reconnect_lost_for_test(window, cx));
+            }
+            conn == "connected"
+        },
+    );
+    let host = wb.read_with(wcx, |wb, _| wb.remote_host_for_test());
+    assert_eq!(read(host.as_ref()), Completion::Bytes(b"{}".to_vec()), "the same call, after the reconnect");
+}
+
 /// An SSH connection measures its round trip with the liveness probe it makes when it opens, and provider deadlines over it get
 /// the allowance for it (the design: up to 4 round trips); the local host has none.
 #[gpui::test]

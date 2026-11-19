@@ -17,7 +17,7 @@
 // Design: docs/plugin-architecture.md §5.2.
 
 export { Context, Process, Progress, State, Storage, Timer, Watch } from "./context.ts";
-export { CodeyardError, DeniedError, type ErrorKind } from "./errors.ts";
+export { CodeyardError, DeniedError, HOST_UNAVAILABLE, type ErrorKind } from "./errors.ts";
 export { fetch, FetchHeaders, FetchResponse, hostOf, type FetchInit } from "./fetch.ts";
 export { RELOAD, RELOAD_STATE_KEY, type ExtensionModule } from "./guest.ts";
 export { scmArgs, type FileState, type ScmAction, type ScmArgs, type ScmGroup, type ScmInput, type ScmResource, type ScmState } from "./scm.ts";

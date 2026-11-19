@@ -212,6 +212,9 @@ pub fn uri(path: &str) -> String {
 }
 
 fn host_error(e: host::HostError) -> v::Error {
+    if let host::HostError::Disconnected(why) = &e {
+        return v::Error::host_unavailable(why);
+    }
     let s = e.to_string();
     if s.contains("not found") || s.contains("No such file") { v::Error::NotFound(s) } else { v::Error::Other(s) }
 }

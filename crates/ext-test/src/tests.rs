@@ -291,6 +291,32 @@ fn an_untrusted_folder_refuses_sending() {
     assert_eq!(e.denied().map(|d| d.why), Some(Why::UntrustedWorkspace));
 }
 
+/// #338: while the workspace's machine is away the calls that need it fail with `host unavailable`, a call that needs only
+/// this computer goes on, a refused call is still refused, and the same call works again once the host is back.
+#[test]
+fn an_extension_sees_host_unavailable_while_the_host_is_away_and_recovers() {
+    let h = host();
+    h.file("a.json", "{}");
+    assert_eq!(h.command("read", json!("a.json")).unwrap(), json!("{}"));
+
+    h.host_away(true);
+    let e = h.command("read", json!("a.json")).unwrap_err();
+    assert!(e.is_host_unavailable(), "{e:?}");
+    assert!(e.to_string().starts_with("host unavailable: "), "{e}");
+    assert!(!matches!(e, Error::Denied(_) | Error::NotFound(_)), "not mistaken for a refusal or a missing file");
+    let e = h.command("git", json!(null)).unwrap_err();
+    assert!(e.is_host_unavailable(), "a process on the host: {e:?}");
+    // Refused first, as in the app: `read = ["*.json"]` does not allow this one, and nothing says the host is away.
+    assert_eq!(h.command("read", json!("a.rs")).unwrap_err().denied().map(|d| d.why), Some(Why::NotDeclared));
+    // This computer's own state is not on the host.
+    assert_eq!(h.command("count", json!(null)).unwrap(), json!(1));
+    assert_eq!(h.command("echo", json!("still here")).unwrap(), json!("still here"));
+
+    h.host_away(false);
+    assert_eq!(h.command("read", json!("a.json")).unwrap(), json!("{}"), "the same call, once the host is back");
+    assert!(!Error::NotFound("x".into()).is_host_unavailable() && !Error::other("x").is_host_unavailable());
+}
+
 #[test]
 fn hover_and_completion_answer_for_a_position() {
     let h = host();

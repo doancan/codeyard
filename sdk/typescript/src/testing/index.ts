@@ -17,7 +17,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { CodeyardError, DeniedError, fromWit } from "../errors.ts";
+import { CodeyardError, DeniedError, fromWit, HOST_UNAVAILABLE } from "../errors.ts";
 import { activationOutcome, events as watchEvents, installGlobals, start, type ExtensionModule } from "../guest.ts";
 import { complete, event, install } from "../runtime.ts";
 import {
@@ -171,6 +171,20 @@ function isUserAction(r: W.Request): boolean {
 }
 
 /** The hosts `auth.fetch` signs requests to for the built-in GitHub account. */
+/** The calls done on the workspace's machine: they fail while it is away (`hostAway`). */
+const ON_THE_HOST = new Set([
+  "workspace/read-file",
+  "workspace/stat",
+  "workspace/read-many",
+  "workspace/find-files",
+  "workspace/search",
+  "workspace-write/write-file",
+  "workspace-write/delete",
+  "workspace-write/create-directory",
+  "workspace-write/rename",
+  "process/spawn",
+]);
+
 const GITHUB_HOSTS = ["api.github.com", "uploads.github.com"];
 
 /** A mock Codeyard for one extension. Set it up and inspect it in any order. */
@@ -194,6 +208,7 @@ export class MockHost {
   /** Hosts the user allowed for `net-from-setting`. */
   #allowedHosts = new Set<string>();
   #untrusted = false;
+  #hostAway = false;
   #nextTicket = 0n;
   #nextId = 0n;
   #nextRequest = 0n;
@@ -287,6 +302,16 @@ export class MockHost {
   /** Refuse sending, writing and running, as in an untrusted folder. */
   untrusted(): this {
     this.#untrusted = true;
+    return this;
+  }
+
+  /**
+   * The workspace's machine is away, as when an SSH connection drops: calls that need it (files, search, processes) fail
+   * with `host unavailable` (`CodeyardError.hostUnavailable`) until `hostAway(false)`. The extension keeps running and the
+   * same calls work again afterwards.
+   */
+  hostAway(away = true): this {
+    this.#hostAway = away;
     return this;
   }
 
@@ -1049,6 +1074,10 @@ export class MockHost {
     } else if (refused) {
       this.#denied.push(refused);
       this.#queue.push({ ticket, complete: { tag: "failed", val: { tag: "denied", val: { permission: refused.permission, why: refused.why } } } });
+    } else if (this.#hostAway && ON_THE_HOST.has(name)) {
+      // After the permission check, as in Codeyard: a refused call is refused, whether or not the host is away.
+      const val = `${HOST_UNAVAILABLE}the mock host is away (host.hostAway(true))`;
+      this.#queue.push({ ticket, complete: { tag: "failed", val: { tag: "other", val } } });
     } else {
       const [events, completion] = answer();
       for (const event of events) this.#queue.push({ ticket, event });
