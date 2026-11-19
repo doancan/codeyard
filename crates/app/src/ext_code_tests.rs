@@ -181,21 +181,20 @@ fn a_timer_fires_every_thirty_seconds_and_not_before(cx: &mut TestAppContext) {
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Every", window, cx));
     wait_for(cx, &wb, |wb| wb.extension_answer_for_test("you.probe").is_some_and(|a| !a.is_empty()));
 
-    // What the probe has counted so far: the command is asked until the answer is the count (not an older one).
+    // What the probe has counted so far. The last answer is forgotten before each ask: `Probe: Every` answered with the timer's id,
+    // and on a slow runner that old answer would be read as a count before the new one arrived.
     let events = |cx: &mut VisualTestContext, wb: &Entity<Workbench>, at_least: usize| -> usize {
         let deadline = Instant::now() + Duration::from_secs(20 * crate::test_sshd::timeout_scale());
         loop {
+            wb.update(cx, |wb, _| wb.forget_extension_answer_for_test("you.probe"));
             wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Events", window, cx));
-            let until = Instant::now() + Duration::from_millis(300);
-            while Instant::now() < until {
-                cx.run_until_parked();
-                std::thread::sleep(Duration::from_millis(20));
-            }
+            wait_for(cx, wb, |wb| wb.extension_answer_for_test("you.probe").is_some());
             let n = wb.read_with(cx, |wb, _| wb.extension_answer_for_test("you.probe")).and_then(|a| a.parse::<usize>().ok());
             if let Some(n) = n.filter(|n| *n >= at_least) {
                 return n;
             }
             assert!(Instant::now() < deadline, "the probe counted {n:?} timer requests, wanted {at_least}");
+            std::thread::sleep(Duration::from_millis(50));
         }
     };
     cx.executor().advance_clock(Duration::from_secs(29));
