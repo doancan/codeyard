@@ -310,6 +310,12 @@ jobs:
               "$(Get-Date -Format HH:mm:ss) free=$([int]($os.FreePhysicalMemory/1024))MB commitfree=$([int]($os.FreeVirtualMemory/1024))MB procs=$($procs.Count) handles=$(($procs | Measure-Object HandleCount -Sum).Sum)" | Add-Content $log
               $procs | Group-Object ProcessName | Sort-Object Count -Descending | Select-Object -First 5 | ForEach-Object { "   x$($_.Count) $($_.Name)" } | Add-Content $log
               $procs | Sort-Object CPU -Descending | Select-Object -First 5 | ForEach-Object { "   cpu=$([int]$_.CPU) ws=$([int]($_.WorkingSet64/1MB))MB $($_.ProcessName) $($_.Id)" } | Add-Content $log
+              # A console host that burns a core (#236): when it started, whose child it is and what started beside it.
+              $procs | Where-Object { $_.ProcessName -eq 'conhost' -and $_.CPU -gt 30 } | ForEach-Object {
+                $w = Get-CimInstance Win32_Process -Filter "ProcessId=$($_.Id)"
+                "   spinning conhost $($_.Id) cpu=$([int]$_.CPU) started=$($w.CreationDate.ToString('HH:mm:ss.fff')) parent=$($w.ParentProcessId)"
+                Get-CimInstance Win32_Process | Where-Object { [math]::Abs(($_.CreationDate - $w.CreationDate).TotalSeconds) -lt 2 -and $_.ProcessId -ne $w.ProcessId } | ForEach-Object { "      beside: $($_.ProcessId) $($_.Name) $("$($_.CommandLine)".Substring(0, [math]::Min(110, "$($_.CommandLine)".Length)))" }
+              } | Add-Content $log
               Start-Sleep 60
             }
           }
