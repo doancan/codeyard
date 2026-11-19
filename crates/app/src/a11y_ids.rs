@@ -54,6 +54,7 @@ const _: () = {
         STATUS,
         UPDATE_DIALOG,
         UPDATE_PROGRESS,
+        DIALOG_FIELD,
         TABS,
         NOTICE,
         PICKER,

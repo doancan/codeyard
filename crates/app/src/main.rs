@@ -356,6 +356,8 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-c", input::FieldCopy, Some("TextField")),
         KeyBinding::new("enter", input::FieldSubmit, Some("TextField")),
         KeyBinding::new("shift-enter", input::FieldNewline, Some("TextField && multiline")),
+        KeyBinding::new("enter", input::FieldNewline, Some("TextField && modifier_submits")),
+        KeyBinding::new("secondary-enter", input::FieldSubmit, Some("TextField && modifier_submits")),
         KeyBinding::new("escape", input::FieldEscape, Some("TextField")),
         KeyBinding::new("ctrl-`", ToggleTerminal, None),
         KeyBinding::new("ctrl-shift-`", NewTerminal, None),

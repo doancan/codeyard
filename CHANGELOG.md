@@ -11,7 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Graph: commits the upstream has and your branch does not yet (what a pull would bring in) are drawn in the warning colour (orange) instead of their lane's, in the graph and compact views. They appear after a fetch (the background fetch included) and turn back into ordinary commits once Sync pulls them. The colour is not the only sign: the hover card says "Not pulled yet. Sync brings it in." and a screen reader hears "not pulled yet" in the row's description.
 
+### Changed
+
+- Graph: *Squash N Commits…* opens a card with the messages of the squashed commits, oldest first, as one text to edit, instead of a one-line subject field. ↵ is a line break, ⌘↵ (Ctrl+↵) squashes and Esc cancels; the text in the card is the whole message of the new commit. An empty message keeps the card open (#324).
+
 ### Fixed
+
+- Accessibility: the squash message card is a modal dialog in the accessibility tree: it names itself ("Squash N commits into one"), exposes the message as a multi-line text field that holds the keyboard and its current text, and has Cancel and Squash buttons a screen reader can press (#324).
 
 - Source Control: the target a graph menu pins now follows the repository inventory. Discovery of repositories runs beside the first graph load, so the graph could keep a target without the repository's identity while Source Control's own target had one; every confirmation compared against it (the cause of the squash refusal fixed in 0.12.1) was refused with "Repository changed while the operation was pending." The target now takes the identity from the inventory when it arrives, so a comparison against it no longer depends on the order of the two.
 
