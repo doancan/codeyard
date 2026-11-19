@@ -35,6 +35,8 @@ mod bounds;
 pub(crate) use bounds::parse_bounds;
 pub use bounds::saved_window_bounds;
 pub(crate) use bounds::{WINDOW_BOUNDS_KEY, format_bounds, visible_enough};
+#[cfg(test)]
+pub(crate) use providers_glue::round_trip_allowance_for_test;
 // --- compare ---
 #[path = "workbench_compare.rs"]
 mod compare_glue;

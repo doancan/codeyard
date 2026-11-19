@@ -150,7 +150,10 @@ fn silent_spawn_requests_time_out_and_late_processes_are_cleaned_up() {
 #[test]
 fn ping_tells_a_live_agent_from_a_silent_one() {
     let live = piped_agent();
+    assert_eq!(live.round_trip(), None, "nothing is known before the first probe");
     assert!(live.shared.ping(std::time::Duration::from_secs(5)));
+    let measured = live.round_trip().expect("a probe that was answered measures the round trip");
+    assert!(measured > std::time::Duration::ZERO && measured < std::time::Duration::from_secs(5), "{measured:?}");
     assert!(live.shared.waiters.lock().unwrap().is_empty());
 
     let (req_r, req_w) = std::io::pipe().unwrap();
@@ -169,6 +172,7 @@ fn ping_tells_a_live_agent_from_a_silent_one() {
     let silent = RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "silent").unwrap();
     // Never answered, so any wait ends the same way.
     assert!(!silent.shared.ping(std::time::Duration::from_millis(1)));
+    assert_eq!(silent.round_trip(), None, "a probe nobody answered measures nothing");
     assert!(silent.shared.waiters.lock().unwrap().is_empty(), "no waiter is leaked by a missed ping");
 }
 

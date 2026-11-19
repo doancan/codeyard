@@ -191,7 +191,7 @@ impl Workbench {
     ) -> (u64, oneshot::Receiver<Result<Response, v::Error>>) {
         let ext = active.id().to_string();
         let running = self.cfg.exts.code.procs.contains_key(&ext);
-        let deadline = Duration::from_millis(deadline_ms + if running { 0 } else { limits::ACTIVATE_MILLIS });
+        let deadline = Duration::from_millis(deadline_ms + if running { 0 } else { limits::ACTIVATE_MILLIS }) + round_trip_allowance(self.remote.host.as_ref());
         let (id, answer) = self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).add(&ext);
         if request.is_user_action() {
             self.cfg.exts.code.user_action.insert(ext.clone(), id);
@@ -1205,5 +1205,35 @@ impl Workbench {
             let t = tasks.into_iter().find(|t| t.label == label).expect("task");
             this.run_task(t, window, cx);
         });
+    }
+}
+
+/// Room for the extension's own host calls over a remote link (docs/plugin-architecture.md, remote): up to 4 round trips of the
+/// last measured one on top of a deadline made for a local disk, and never more than the start-up allowance. Nothing for the
+/// local machine or before the connection has been probed.
+pub(super) fn round_trip_allowance(host: &dyn host::Host) -> Duration {
+    allowance_for(host.round_trip())
+}
+
+/// What the deadlines of providers over `host` get on top, for tests outside this module.
+#[cfg(test)]
+pub(crate) fn round_trip_allowance_for_test(host: &dyn host::Host) -> Duration {
+    round_trip_allowance(host)
+}
+
+fn allowance_for(round_trip: Option<Duration>) -> Duration {
+    round_trip.map_or(Duration::ZERO, |rtt| (rtt * 4).min(Duration::from_millis(limits::ACTIVATE_MILLIS)))
+}
+
+#[cfg(test)]
+mod round_trip_tests {
+    use super::*;
+
+    #[test]
+    fn a_remote_deadline_gets_four_round_trips_and_a_local_one_nothing() {
+        assert_eq!(allowance_for(None), Duration::ZERO, "local, or not probed yet");
+        assert_eq!(allowance_for(Some(Duration::from_millis(80))), Duration::from_millis(320));
+        assert_eq!(allowance_for(Some(Duration::from_secs(60))), Duration::from_millis(limits::ACTIVATE_MILLIS), "a link that bad is capped");
+        assert_eq!(round_trip_allowance(&host::local()), Duration::ZERO);
     }
 }
