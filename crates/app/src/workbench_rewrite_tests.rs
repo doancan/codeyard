@@ -241,3 +241,65 @@ fn an_empty_message_keeps_the_card_open_with_what_was_typed(cx: &mut TestAppCont
     let notice = f.wb.read_with(f.cx, |wb, _| wb.notice_for_test());
     assert!(notice.is_some_and(|(error, text)| error && text.contains("cannot be empty")));
 }
+
+/// What a screen reader gets while the card is open (#324): one modal dialog that names the card, a multi-line field with the
+/// message and the keyboard in it, and the two buttons; a button of an old tree answers nothing.
+#[gpui::test]
+fn the_card_is_a_modal_dialog_with_the_message_field_and_two_buttons(cx: &mut TestAppContext) {
+    use accesskit::{Action, ActionRequest, NodeId, Role, TreeId};
+    // The consumer's id packs the node's own id above the tree's.
+    let node_id = |n: &accesskit_consumer::NodeRef| NodeId((u128::from(n.id()) >> 64) as u64);
+    let mut f = started(repo("rewrite-ui-card-a11y"), &[("a.txt", "wip a"), ("b.txt", "wip b")], cx);
+    let (a, b) = (f.hash("HEAD~1"), f.hash("HEAD"));
+    f.open_card(&a, &b);
+    let snapshot = |f: &mut Fixture| f.wb.update_in(f.cx, |wb, window, cx| wb.a11y_snapshot(window, cx));
+    let snap = snapshot(&mut f);
+    let update = snap.to_tree();
+    let tree = accesskit_consumer::Tree::new(update.clone(), true);
+    let state = tree.state();
+    let dialog = state.root().children().find(|n| n.role() == Role::Dialog).expect("the card is in the tree");
+    assert_eq!(dialog.label().as_deref(), Some("Squash 2 commits into one"));
+    assert!(dialog.is_modal());
+    assert_eq!(dialog.description().as_deref(), Some("↵ for a new line, ⌘↵ to squash, Esc to cancel"));
+    let field = dialog.children().find(|n| n.role() == Role::MultilineTextInput).expect("the message field");
+    assert_eq!((field.label().as_deref(), field.value().as_deref()), (Some("Message of the squashed commit"), Some("wip a\n\nwip b")));
+    assert_eq!(update.focus, node_id(&field), "the keyboard is in the message");
+    let buttons: Vec<_> = dialog.children().filter(|n| n.role() == Role::Button).map(|n| (n.label().unwrap_or_default(), node_id(&n))).collect();
+    assert_eq!(buttons.iter().map(|(l, _)| l.as_str()).collect::<Vec<_>>(), ["Cancel", "Squash"]);
+
+    // What the user types is what the field says.
+    let typed = f.wb.read_with(f.cx, |wb, _| wb.message_dialog_field_for_test()).unwrap();
+    typed.update(f.cx, |t, cx| t.set_text("One commit\n\nçalışıyor", cx));
+    let snap2 = snapshot(&mut f);
+    let tree2 = accesskit_consumer::Tree::new(snap2.to_tree(), true);
+    let value = tree2
+        .state()
+        .root()
+        .children()
+        .find(|n| n.role() == Role::Dialog)
+        .and_then(|d| d.children().find(|n| n.role() == Role::MultilineTextInput))
+        .and_then(|n| n.value());
+    assert_eq!(value.as_deref(), Some("One commit\n\nçalışıyor"));
+
+    let press = |f: &mut Fixture, snap: &super::a11y::Snapshot, id, action| {
+        let request = ActionRequest { action, target_tree: TreeId::ROOT, target_node: id, data: None };
+        f.wb.update_in(f.cx, |wb, window, cx| wb.a11y_action_for_test(&request, snap, window, cx));
+        f.cx.run_until_parked();
+    };
+    // Focusing a button does nothing; Cancel closes the card and changes nothing.
+    press(&mut f, &snap2, buttons[1].1, Action::Focus);
+    assert!(f.wb.read_with(f.cx, |wb, _| wb.message_dialog_field_for_test().is_some()));
+    let before = f.hash("HEAD");
+    press(&mut f, &snap2, buttons[0].1, Action::Click);
+    assert!(f.wb.read_with(f.cx, |wb, _| wb.message_dialog_field_for_test().is_none()), "Cancel closed the card");
+    assert_eq!(f.hash("HEAD"), before);
+
+    // Squash squashes with the text in the field.
+    let field = f.open_card(&a, &b);
+    field.update(f.cx, |t, cx| t.set_text("Done by the screen reader", cx));
+    let snap3 = snapshot(&mut f);
+    press(&mut f, &snap3, buttons[1].1, Action::Click);
+    let result = f.result();
+    assert!(result.starts_with("Squashed 2 commits into "), "{result}");
+    assert_eq!(f.subjects(), vec!["Done by the screen reader", "ilk"]);
+}
