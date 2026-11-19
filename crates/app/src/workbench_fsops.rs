@@ -302,7 +302,6 @@ impl Workbench {
                     self.scm.update(cx, |s, cx| s.commit_op_in(repo, hash, crate::graph::CommitOp::Branch(name), window, cx));
                 }
             }
-            InputPurpose::SquashSubject { run, tip, body, repo } => self.finish_squash(run, tip, body, repo, name, cx),
             InputPurpose::CommitTag { hash, repo } => {
                 // Tag names cannot hold a space, so whatever follows the first word is the message of an annotated tag.
                 let op = match name.trim().split_once(char::is_whitespace) {

@@ -576,8 +576,9 @@ only when some are already on the upstream, because the next Sync would bring th
 branch was at, so `git reset <hash>` returns there.
 **Squash and reorder.** The commits that are not pushed yet can be cleaned up without a terminal. Shift-click a second row to
 pick the run from the selected commit to it (rows of the branch's own line only), then right-click it: **Squash N Commits…**
-asks for the subject of the new commit (the oldest commit's subject to start with; the other commits' messages follow it as the
-body) and replaces the run with one commit that has the oldest commit's author and date. **Move Commit Up** / **Move Commit
+opens a card with the messages of the commits, oldest first, as one text to edit (several paragraphs are fine): ↵ is a line
+break, ⌘↵ (Ctrl+↵) squashes, Esc closes the card and changes nothing. What is in the card when you squash is the whole message
+of the new commit, which has the oldest commit's author and date. **Move Commit Up** / **Move Commit
 Down** swaps a commit with its newer or older neighbour. Commits above a squashed run are replayed on top of it, none is
 dropped. The new history is built in a temporary worktree and installed with one ref update that names the old tip, so the
 branch is either rewritten completely or untouched, and the checkout's files, index and uncommitted changes are never touched
