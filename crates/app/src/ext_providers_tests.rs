@@ -528,3 +528,48 @@ fn extension_tasks_are_listed_and_run(cx: &mut TestAppContext) {
     wb.update_in(cx, |wb, window, cx| wb.run_task_for_test("Probe: Hello task", window, cx));
     wait_for(cx, "the task to run", |cx| notice(&wb, cx).contains("you.probe: Task hello ran"));
 }
+
+/// AC4 of #101: an extension that crashes three times in a minute is turned off, the app keeps running and the providers of
+/// other extensions answer again within 2 s. The crasher is the probe under another id with only its `trap` command.
+#[gpui::test]
+fn another_extensions_formatter_answers_within_two_seconds_of_a_crash_loop(cx: &mut TestAppContext) {
+    if exthost_missing() {
+        return;
+    }
+    let cfg = config_dir("crash-loop");
+    let (wb, cx) = setup(cx, &cfg, r#"{ "editor.formatOnSave": true }"#);
+    let crasher = crate::ext_code_tests::MANIFEST.replace("you.probe", "you.crasher").replace("Probe: Trap", "Crasher: Trap");
+    let entries = vec![
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: crasher.into_bytes(), executable: false },
+        ext_pkg::Entry { path: "Cargo.toml".into(), data: Vec::new(), executable: false },
+        ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: PROBE.to_vec(), executable: false },
+    ];
+    let (bytes, _) = ext_pkg::write(entries).expect("the probe passes the import check");
+    crate::ext::store(&cfg).install(&bytes, ext_core::Source::File { path: "/downloads/crasher.cyx".into() }).expect("installs");
+    wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));
+    cx.run_until_parked();
+
+    let dir = config_dir("crash-loop-files");
+    let file = dir.join("a.toml");
+    std::fs::write(&file, "a=1   \n").unwrap();
+    let ed = open(&wb, &file, cx);
+    // The formatter is running before the loop starts: that is what "answers again" is measured against.
+    ed.update(cx, |e, cx| e.insert_at_for_test(0, "# one\n", cx));
+    ed.update(cx, |e, cx| e.save_now(cx));
+    wait_for(cx, "the first formatted save", |_| std::fs::read_to_string(&file).unwrap_or_default() == "# one\na = 1\n");
+
+    for _ in 0..3 {
+        wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Crasher: Trap", window, cx));
+        wait_for(cx, "the crasher to stop", |cx| !wb.read_with(cx, |wb, _| wb.extension_running_for_test("you.crasher")));
+    }
+    wait_for(cx, "the crash notice", |cx| notice(&wb, cx).contains("crashed three times in a minute"));
+    assert!(wb.read_with(cx, |wb, _| !wb.extension_running_for_test("you.crasher")), "turned off");
+
+    ed.update(cx, |e, cx| e.insert_at_for_test(0, "# two\n", cx));
+    let started = Instant::now();
+    ed.update(cx, |e, cx| e.save_now(cx));
+    wait_for(cx, "the formatted save after the crash loop", |_| std::fs::read_to_string(&file).unwrap_or_default() == "# two\n# one\na = 1\n");
+    let took = started.elapsed();
+    assert!(took < Duration::from_secs(2 * crate::test_sshd::timeout_scale()), "the formatter of the other extension answered after {took:?}");
+    assert!(wb.read_with(cx, |wb, _| wb.extension_running_for_test("you.probe")), "the other extension was not restarted or stopped by the loop");
+}
