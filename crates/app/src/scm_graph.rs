@@ -247,6 +247,19 @@ impl Render for CommitCard {
                         .child(muted(format!("{} · {}", k.date, crate::git::short_ago(&k.when)))),
                 ),
             )
+            .when(k.incoming, |d| {
+                let warning = ui::ensure_contrast(p.warning, p.text, &[p.surface_raised], 4.6);
+                d.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(theme::SPACE[3]))
+                        .text_size(px(text::XS.0))
+                        .text_color(c(warning))
+                        .child(icon("arrow-down", 12., warning))
+                        .child(crate::i18n::t("Not pulled yet. Sync brings it in.")),
+                )
+            })
             .child(div().font_weight(gpui::FontWeight::MEDIUM).child(k.subject.clone()))
             .children((!body.is_empty()).then(|| {
                 div()
@@ -723,7 +736,7 @@ fn graph_row(
         .pr(px(theme::SPACE[3]))
         .child(if flat {
             // Rows are skipped, so lines would break: a dot in the commit's lane color stands in for the graph.
-            let color = if g.incoming.contains(&commit.hash) { p.warning } else { graph::lane_color(p, row.color) };
+            let color = if commit.incoming { p.warning } else { graph::lane_color(p, row.color) };
             div()
                 .w(px(graph::width_px(1)))
                 .flex_none()
@@ -732,7 +745,7 @@ fn graph_row(
                 .child(div().size(px(8.)).rounded_full().when(merge, |d| d.border_2().border_color(c(color))).when(!merge, |d| d.bg(c(color))))
                 .into_any_element()
         } else {
-            graph::lane_element(row.clone(), head, merge, g.incoming.contains(&commit.hash), *p).into_any_element()
+            graph::lane_element(row.clone(), head, merge, commit.incoming, *p).into_any_element()
         })
         .child(
             div()
@@ -804,7 +817,7 @@ fn compact_row(
     let head = commit.refs.iter().any(|r| r.kind == RefKind::Head);
     let merge = commit.parents.len() > 1;
     let refs = ordered_refs(commit);
-    let color = if g.incoming.contains(&commit.hash) { p.warning } else { graph::lane_color(p, row.color) };
+    let color = if commit.incoming { p.warning } else { graph::lane_color(p, row.color) };
     row_shell(ix, commit, GraphView::Compact.row_height(), is_sel, tooltips, show_tooltips, p, cx)
         .gap(px(theme::SPACE[3]))
         .pl(px(theme::SPACE[4]))

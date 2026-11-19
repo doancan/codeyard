@@ -4305,3 +4305,5 @@ These files would be overwritten ({}): commit or stash your changes first.	Bu do
 This branch and its upstream both have new commits. Choose once how to combine them: in a terminal, git pull --rebase or git pull --no-rebase (or set pull.rebase).	Bu dalda da upstream'de de yeni commit'ler var. Nasıl birleştireceğini bir kez seç: terminalde git pull --rebase veya git pull --no-rebase (ya da pull.rebase ayarla).
 This branch has no upstream yet: publish it with Git: Publish Branch, or set one in a terminal with git branch --set-upstream-to.	Bu dalın henüz upstream'i yok: Git: Publish Branch ile yayınla ya da terminalde git branch --set-upstream-to ile ayarla.
 {}: finish or abort it first, then try again.	{}: önce bitir veya iptal et, sonra tekrar dene.
+Not pulled yet. Sync brings it in.	Henüz çekilmedi. Sync bunu getirir.
+not pulled yet	henüz çekilmedi

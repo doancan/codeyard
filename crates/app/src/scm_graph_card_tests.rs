@@ -209,3 +209,38 @@ fn commits_the_upstream_has_and_this_branch_does_not_are_incoming_until_they_are
     git_in(&dir, &["branch", "--unset-upstream"]);
     assert!(graph::incoming(&host, &root).is_empty());
 }
+
+/// The panel marks what a pull would bring in (the dot, the hover card and the row's description for a screen reader all read
+/// this), takes the mark back once it is pulled, and never marks a commit the branch already has.
+#[gpui::test]
+fn the_graph_marks_the_commits_a_pull_would_bring_in(cx: &mut TestAppContext) {
+    use crate::qa_integration_tests::{repo_with_remote, wait_ticking};
+    let (dir, _bare, other) = repo_with_remote("graph-incoming-ui");
+    std::fs::write(other.join("theirs.txt"), "x\n").unwrap();
+    git_in(&other, &["add", "-A"]);
+    git_in(&other, &["commit", "-q", "-m", "theirs"]);
+    git_in(&other, &["push", "-q"]);
+    git_in(&dir, &["fetch", "-q"]);
+    let (theirs, ours) = (git_in(&dir, &["rev-parse", "origin/main"]).trim().to_string(), git_in(&dir, &["rev-parse", "HEAD"]).trim().to_string());
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    crate::qa_workbench_tests::open(&wb, &dir, cx);
+    let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
+    wait_ticking(cx, "the graph", |cx| scm.read_with(cx, |s, _| s.commit_by_hash(&theirs).is_some()));
+    assert!(scm.read_with(cx, |s, _| s.commit_by_hash(&theirs).unwrap().incoming), "the fetched commit is incoming");
+    assert!(!scm.read_with(cx, |s, _| s.commit_by_hash(&ours).unwrap().incoming), "a commit the branch has is not");
+    // A screen reader hears it too: colour alone says nothing to it.
+    let rows = cx.update(|window, app| scm.read(app).a11y_history(window, app).graph.rows);
+    let detail_of = |subject: &str| {
+        rows.iter().find_map(|r| match r {
+            crate::scm::AccessGraphRow::Commit { subject: s, detail, .. } if s == subject => Some(detail.clone()),
+            _ => None,
+        })
+    };
+    assert!(detail_of("theirs").is_some_and(|d| d.contains("not pulled yet")), "{:?}", detail_of("theirs"));
+    assert!(detail_of("ilk").is_some_and(|d| !d.contains("not pulled yet")), "{:?}", detail_of("ilk"));
+
+    // Pulled: the next reload of the graph takes the mark back.
+    git_in(&dir, &["pull", "-q"]);
+    wb.update(cx, |wb, cx| wb.refresh_git(0, cx));
+    wait_ticking(cx, "the mark to go", |cx| scm.read_with(cx, |s, _| s.commit_by_hash(&theirs).is_some_and(|c| !c.incoming)));
+}

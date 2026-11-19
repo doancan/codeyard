@@ -32,6 +32,8 @@ pub struct GraphCommit {
     pub date: String,
     pub subject: String,
     pub refs: Vec<RefLabel>,
+    /// The upstream has this commit and the checked-out branch does not: a pull would bring it in.
+    pub incoming: bool,
 }
 
 /// Whose history is drawn.
@@ -207,6 +209,7 @@ pub fn parse_graph_log(out: &str) -> Vec<GraphCommit> {
                 date: date.into(),
                 subject: subject.into(),
                 refs: parse_refs(decor),
+                incoming: false,
             })
         })
         .collect()
