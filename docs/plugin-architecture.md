@@ -400,8 +400,11 @@ How it works (`ext_accounts.rs`, `ext_fetch.rs` and `workbench_ext_accounts.rs` 
 - Native programs come only from per-platform packages (`<id>-<version>-<triple>.cyx`, static on Linux). The
   app pushes verified bytes with the same temp-file, `sha256sum`, `mv` path the agent install uses. The server
   downloads nothing.
-- On disconnect, instances stay alive and host calls return `HostUnavailable`. Containers and WSL work the
-  same way. Agent size limits live in `docs/remote.md`; extensions add nothing to the agent.
+- On disconnect, instances stay alive and host calls fail as *host unavailable*: an `other` error whose message
+  starts with `host unavailable: ` (`ext_api::value::HOST_UNAVAILABLE`), which the SDKs read as
+  `is_host_unavailable()` / `hostUnavailable`. It is not a case of `types.error` because a new case would break
+  every component built against 1.x (§5.2); making it one waits for 2.0. The same call works again after the
+  reconnect (automatic while the machine is reachable, or the user's Reconnect). Containers and WSL work the same way. Agent size limits live in `docs/remote.md`; extensions add nothing to the agent.
 
 ## 8. Registry and publishing
 

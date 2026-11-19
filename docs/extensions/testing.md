@@ -177,7 +177,7 @@ host.reload::<Counter>()?;
 assert_eq!(host.command("count", Value::Null)?, json!(2));   // ctx.state() came along
 ```
 
-`host.untrusted()` makes the mock behave like an untrusted folder (no sending, writing or running). `MockHost::allow_all()` allows everything, and `host.manifest(text)` checks against another manifest.
+`host.untrusted()` makes the mock behave like an untrusted folder (no sending, writing or running). `host.host_away(true)` makes it behave like a workspace whose machine cannot be reached, as over an SSH connection that dropped: calls that need it (files, search, processes) fail with `host unavailable` (`e.is_host_unavailable()`), a refused call is still refused, and `host.host_away(false)` brings it back. `MockHost::allow_all()` allows everything, and `host.manifest(text)` checks against another manifest.
 
 ## cyx test
 

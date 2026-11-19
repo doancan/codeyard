@@ -2171,6 +2171,7 @@ dependencies = [
 name = "ext-api"
 version = "0.12.1"
 dependencies = [
+ "codeyard-extension",
  "ext-manifest",
  "serde",
  "wit-parser 0.261.0",

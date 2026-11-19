@@ -12,4 +12,5 @@ ext-manifest = { version = "0.12.1", path = "../ext-manifest" }
 serde = { version = "1.0.229", features = ["derive"] }
 
 [dev-dependencies]
+codeyard-extension = { version = "0.12.1", path = "../ext-sdk" }
 wit-parser = "0.261.0"

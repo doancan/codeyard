@@ -87,6 +87,8 @@ impl fmt::Display for Denied {
     }
 }
 
+const HOST_UNAVAILABLE: &str = "host unavailable: ";
+
 /// `types.error`, plus the errors of the SDK itself (`Other`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -107,6 +109,19 @@ impl Error {
 
     pub fn invalid(message: impl fmt::Display) -> Error {
         Error::Invalid(message.to_string())
+    }
+
+    /// The error of a call that needs the workspace's machine while it is away (an SSH connection that dropped, a
+    /// container that stopped). On the wire it is `other` with this message prefix: a new case in `types.error` would
+    /// break every component built against 1.x. `ext_api::value::HOST_UNAVAILABLE` is the same prefix.
+    pub fn host_unavailable(reason: impl fmt::Display) -> Error {
+        Error::Other(format!("{HOST_UNAVAILABLE}{reason}"))
+    }
+
+    /// Whether the workspace's machine is away: the call may work again once Codeyard has reconnected, and the
+    /// extension keeps running meanwhile, so wait and retry, or say so, instead of treating it as a failure of the call.
+    pub fn is_host_unavailable(&self) -> bool {
+        matches!(self, Error::Other(s) if s.starts_with(HOST_UNAVAILABLE))
     }
 
     pub fn denied(&self) -> Option<&Denied> {
