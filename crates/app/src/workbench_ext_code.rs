@@ -39,6 +39,9 @@ pub(super) struct CodeState {
     pump: Option<gpui::Task<()>>,
     /// `timers.every`: dropping a task stops its timer.
     pub(super) timers: HashMap<(String, u64), gpui::Task<()>>,
+    /// Timers skip their tick while the window is not focused. A test window never is, so tests turn this off unless it is what they
+    /// check (`gate_timers_on_focus_for_test`).
+    pub(super) focus_gates_timers: bool,
     /// `workspace-contains` checks already made, per extension and workspace roots, so a reload does not repeat them.
     checked_workspace: HashSet<(String, Vec<String>)>,
     /// The setting values each running exthost has, to send only changes.
@@ -85,6 +88,7 @@ impl Default for CodeState {
             last_trap: HashMap::new(),
             pump: None,
             timers: HashMap::new(),
+            focus_gates_timers: !cfg!(test),
             sent_settings: HashMap::new(),
             checked_workspace: HashSet::new(),
             progress: HashMap::new(),
@@ -749,7 +753,7 @@ impl Workbench {
             loop {
                 cx.background_executor().timer(every).await;
                 let alive = this.update_in(cx, |this, window, _| {
-                    if !window.is_window_active() && !cfg!(test) {
+                    if !window.is_window_active() && this.cfg.exts.code.focus_gates_timers {
                         return;
                     }
                     let Some(p) = this.cfg.exts.code.procs.get(&ext).cloned() else { return };
