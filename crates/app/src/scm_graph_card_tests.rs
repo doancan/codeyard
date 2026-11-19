@@ -174,3 +174,38 @@ fn the_card_reads_a_commit_over_ssh(cx: &mut TestAppContext) {
     assert_eq!((detail.files.len(), detail.totals()), (files, (added, deleted)));
     assert_eq!(files, 2);
 }
+
+#[test]
+fn commits_the_upstream_has_and_this_branch_does_not_are_incoming_until_they_are_pulled() {
+    use crate::qa_integration_tests::repo_with_remote;
+    let (dir, _bare, other) = repo_with_remote("graph-incoming");
+    let root = ui::local_path(&dir);
+    let host = host::local();
+    assert!(graph::incoming(&host, &root).is_empty(), "nothing to pull in a repository that is level with its upstream");
+
+    std::fs::write(other.join("theirs.txt"), "x\n").unwrap();
+    git_in(&other, &["add", "-A"]);
+    git_in(&other, &["commit", "-q", "-m", "theirs"]);
+    git_in(&other, &["push", "-q"]);
+    // Not fetched yet: this clone cannot know.
+    assert!(graph::incoming(&host, &root).is_empty());
+
+    git_in(&dir, &["fetch", "-q"]);
+    let theirs = git_in(&dir, &["rev-parse", "origin/main"]).trim().to_string();
+    assert_eq!(graph::incoming(&host, &root), std::collections::HashSet::from([theirs.clone()]));
+    // The commit is in the graph too, so the row can be drawn.
+    assert!(graph::log(&host, &root, 50, Scope::All).unwrap().iter().any(|c| c.hash == theirs));
+
+    git_in(&dir, &["pull", "-q"]);
+    assert!(graph::incoming(&host, &root).is_empty(), "pulled: drawn as ours again");
+
+    // Our own commit is ahead, not incoming.
+    std::fs::write(dir.join("ours.txt"), "y\n").unwrap();
+    git_in(&dir, &["add", "-A"]);
+    git_in(&dir, &["commit", "-q", "-m", "ours"]);
+    assert!(graph::incoming(&host, &root).is_empty());
+
+    // No upstream, no HEAD: empty, never an error.
+    git_in(&dir, &["branch", "--unset-upstream"]);
+    assert!(graph::incoming(&host, &root).is_empty());
+}
