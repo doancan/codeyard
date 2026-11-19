@@ -6,6 +6,12 @@ export type { Why };
 
 export type ErrorKind = "denied" | "not-found" | "cancelled" | "timeout" | "invalid" | "other";
 
+/**
+ * What a message of kind `other` starts with when the workspace's machine cannot be reached. A new case in `types.error`
+ * would break every component built against 1.x, so the kind is this prefix; `hostUnavailable` reads it.
+ */
+export const HOST_UNAVAILABLE = "host unavailable: ";
+
 /** An error from Codeyard (`types.error`), or one the SDK raises itself (`other`). */
 export class CodeyardError extends Error {
   readonly kind: ErrorKind;
@@ -26,6 +32,20 @@ export class CodeyardError extends Error {
 
   static other(message: string): CodeyardError {
     return new CodeyardError("other", message);
+  }
+
+  /** The error of a call that needs the workspace's machine while it is away. */
+  static hostUnavailable(reason: string): CodeyardError {
+    return new CodeyardError("other", `${HOST_UNAVAILABLE}${reason}`);
+  }
+
+  /**
+   * The workspace's machine is away (an SSH connection that dropped, a container that stopped): the call may work again
+   * once Codeyard has reconnected, and the extension keeps running meanwhile, so wait and retry, or say so, instead of
+   * treating it as a failure of the call.
+   */
+  get hostUnavailable(): boolean {
+    return this.kind === "other" && this.message.startsWith(HOST_UNAVAILABLE);
   }
 }
 

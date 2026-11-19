@@ -147,6 +147,17 @@ impl Sshd {
         host::ssh::close_master(ALIAS);
     }
 
+    /// Start the server again on the same port, after `stop_server`: a window that is reconnecting gets its connection back.
+    pub fn restart_server(&mut self) {
+        let config = self.dir.join("sshd_config");
+        self.child = Command::new("/usr/sbin/sshd").arg("-D").arg("-f").arg(config).stderr(Stdio::null()).spawn().expect("spawn sshd");
+        let start = std::time::Instant::now();
+        while std::net::TcpStream::connect(("127.0.0.1", self.port)).is_err() {
+            assert!(start.elapsed().as_secs() <= 5, "sshd did not listen again within 5 s");
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+
     /// Second alias to the same server without the key (to provoke an auth failure).
     pub fn add_alias_without_key(&self, alias: &str) {
         use std::io::Write;

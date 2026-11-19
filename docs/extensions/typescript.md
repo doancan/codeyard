@@ -208,6 +208,19 @@ denied: the manifest does not declare net = ["api.github.com"]
 
 `e.permission` is the manifest line and `e.why` one of `not-declared`, `revoked-by-user`, `untrusted-workspace`, `revoked-extension`. Other errors from Codeyard are `CodeyardError`s with `e.kind` (`not-found`, `cancelled`, `timeout`, `invalid`, `other`).
 
+When the workspace is on another machine and the connection drops, the extension keeps running and calls that need that machine (files, search, processes) reject with a `CodeyardError` whose `e.hostUnavailable` is `true` (kind `other`, message starting `host unavailable:`). The call is safe to repeat: Codeyard reconnects when the machine is back (or the user picks Reconnect), and the same call works again afterwards.
+
+```ts
+try {
+  text = await ctx.readText(uri);
+} catch (e) {
+  if (e instanceof CodeyardError && e.hostUnavailable) return ctx.notice("The remote machine is away; try again once it is back.");
+  throw e;
+}
+```
+
+In a unit test, `host.hostAway()` makes the mock host behave this way and `host.hostAway(false)` brings it back.
+
 A command that throws or rejects answers with the error's message and stack trace. Stack traces name the bundle (`extension.js:120:9`); `cyx test` shows the TypeScript file and line instead (`src/extension.ts:12:5`), from the source map `cyx` writes next to `extension.wasm`. The map (`extension.js.map`) is packaged with the extension, so Codeyard can map traces the same way.
 
 ## Tests

@@ -49,6 +49,25 @@ pub enum Error {
     Other(String),
 }
 
+/// What a message of `other` starts with when the machine the workspace is on cannot be reached (an SSH connection that
+/// dropped, a container that stopped). The error stays `other` on the wire: a new case in `types.error` would break every
+/// component built against 1.x (docs/plugin-architecture.md §5.2), so the kind is this fixed prefix, and the SDKs read it
+/// back as `is_host_unavailable`. The text after it says why.
+pub const HOST_UNAVAILABLE: &str = "host unavailable: ";
+
+impl Error {
+    /// The error of a call that needs the workspace's machine while it is away. The instance keeps running, and the
+    /// same call works again once the connection is back.
+    pub fn host_unavailable(reason: impl std::fmt::Display) -> Error {
+        Error::Other(format!("{HOST_UNAVAILABLE}{reason}"))
+    }
+
+    /// Whether this is [`Error::host_unavailable`].
+    pub fn is_host_unavailable(&self) -> bool {
+        matches!(self, Error::Other(s) if s.starts_with(HOST_UNAVAILABLE))
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -621,4 +640,34 @@ pub enum FileChange {
 pub struct FileEvent {
     pub change: FileChange,
     pub uri: Uri,
+}
+
+#[cfg(test)]
+mod host_unavailable_tests {
+    use super::*;
+
+    /// The app writes the prefix, the SDK reads it: the two crates do not depend on each other, so this is the one place
+    /// that says they agree (and the TypeScript SDK's test reads the same text).
+    #[test]
+    fn the_app_and_the_sdk_agree_on_what_host_unavailable_looks_like() {
+        assert_eq!(HOST_UNAVAILABLE, "host unavailable: ");
+        let from_app = Error::host_unavailable("the connection dropped");
+        assert!(from_app.is_host_unavailable());
+        let Error::Other(text) = from_app else { panic!("an `other` on the wire") };
+        assert_eq!(text, "host unavailable: the connection dropped");
+        assert!(codeyard_extension::Error::Other(text).is_host_unavailable(), "the SDK reads what the app writes");
+
+        let from_sdk = codeyard_extension::Error::host_unavailable("x");
+        assert!(from_sdk.is_host_unavailable());
+        let codeyard_extension::Error::Other(text) = from_sdk else { panic!("`other`") };
+        assert!(Error::Other(text).is_host_unavailable(), "the app reads what the SDK writes");
+    }
+
+    #[test]
+    fn nothing_else_looks_like_it() {
+        for e in [Error::NotFound("host unavailable: x".into()), Error::Invalid("host unavailable: x".into()), Error::Cancelled, Error::Timeout] {
+            assert!(!e.is_host_unavailable(), "{e:?}");
+        }
+        assert!(!Error::Other("the host unavailable".into()).is_host_unavailable(), "only as the start of the message");
+    }
 }

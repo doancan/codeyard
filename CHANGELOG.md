@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-11-19
+
 ### Added
 
 - Graph: commits the upstream has and your branch does not yet (what a pull would bring in) are drawn in the warning colour (orange) instead of their lane's, in the graph and compact views. They appear after a fetch (the background fetch included) and turn back into ordinary commits once Sync pulls them. The colour is not the only sign: the hover card says "Not pulled yet. Sync brings it in." and a screen reader hears "not pulled yet" in the row's description.
+
+- Extensions: when the workspace is on another machine and its connection drops, a call that needs that machine (files, search, processes) now fails as *host unavailable* instead of a bare error whose text an extension had to match. The extension keeps running, the call is safe to repeat, and it works again once the connection is back (#338). It is an `other` error whose message starts with `host unavailable: `, because a new case in `types.error` would break every component built for API 1.x, so the API version does not change. The SDKs read it as `Error::is_host_unavailable()` (Rust) and `CodeyardError.hostUnavailable` (TypeScript), and the mock hosts of both have `host_away(true)` / `hostAway()` to test it. `docs/plugin-architecture.md` says what is built.
 
 ### Changed
 
@@ -2031,7 +2035,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.2...HEAD
+[0.12.2]: https://github.com/doancan/codeyard/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/doancan/codeyard/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/doancan/codeyard/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/doancan/codeyard/compare/v0.11.0...v0.11.1

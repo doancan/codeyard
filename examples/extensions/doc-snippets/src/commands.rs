@@ -203,3 +203,13 @@ let watch = ctx.on_files("src/**/*.rs", async |ctx, events| {
 watch.stop();
 Ok(())
 }
+
+fn show(text: String) {}
+
+async fn host_away(ctx: Context, uri: String) -> Result<()> {
+match ctx.read_text(&uri).await {
+    Err(e) if e.is_host_unavailable() => ctx.notice("The remote machine is away; try again once it is back."),
+    other => show(other?),
+}
+Ok(())
+}

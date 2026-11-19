@@ -107,6 +107,14 @@ impl MockHost {
         self
     }
 
+    /// The workspace's machine is away, as when an SSH connection drops: calls that need it (files, search, processes) fail
+    /// with `host unavailable` ([`Error::is_host_unavailable`](codeyard_extension::Error::is_host_unavailable)) until
+    /// `host_away(false)`. The extension keeps running and the same calls work again afterwards.
+    pub fn host_away(&self, away: bool) -> &Self {
+        self.state.borrow_mut().host_away = away;
+        self
+    }
+
     // ---- fixtures ----------------------------------------------------------------------------------------------------
 
     /// A workspace file. A path without a scheme is relative to the workspace folder.
