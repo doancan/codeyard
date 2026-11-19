@@ -277,7 +277,7 @@ for i in $(seq 1 "$runs"); do
       echo "perf: the decorations run of ${names[$k]} did not type 40 keys and ask the providers 40 times; is codeyard-exthost built and the window visible?" >&2
       exit 1
     fi
-    grep -e '"typing\.keystroke_frame_decorations_ms"' -e '"extensions\.provider_overhead_ms"' "$TMP/deco.jsonl" >> "$CODEYARD_PERF" || true
+    grep -e '"typing\.keystroke_frame_decorations_ms"' -e '"extensions\.provider_overhead_ms"' -e '"extensions\.activation_ms"' "$TMP/deco.jsonl" >> "$CODEYARD_PERF" || true
     # One extension completes Rust: 40 keys, a new word every third, keystroke to frame.
     cp crates/app/testdata/big.rs "$TMP/big.rs"
     : > "$TMP/comp.jsonl"

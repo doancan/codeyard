@@ -14,7 +14,8 @@
 //!   extension that provides them for the open file's language, then type `n` characters and record keystroke → frame
 //!   under `typing.keystroke_frame_lenses_ms` (each edit asks the provider again once typing pauses).
 //! - `CODEYARD_PERF_PROVIDERS=<n>`: ask the task providers for their tasks `n` times, one round after the other;
-//!   each answer records `extensions.provider_overhead_ms` (requests to a running extension only).
+//!   each answer records `extensions.provider_overhead_ms` (requests to a running extension only); each extension those
+//!   runs start records `extensions.activation_ms` (the sandbox check, compile cache, spawn and handshake).
 //! - `CODEYARD_PERF_COMPLETION=<n>`: after the first frame settles, type `n` keys into the focused editor, a new word
 //!   every third key, so the extensions that complete its language are asked again and again, and record keystroke
 //!   → frame under `typing.keystroke_frame_completion_ms`.

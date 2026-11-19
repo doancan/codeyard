@@ -260,6 +260,7 @@ impl Workbench {
         let why = reason.clone();
         // The extension in development runs without the OS sandbox (its author's folder); everything installed runs in it.
         let sandbox = crate::ext::dev_dir().is_none_or(|d| d != active.dir);
+        let began = std::time::Instant::now();
         let task = cx.background_executor().spawn(async move {
             // Checked here, not at startup (`ext_runtime::code_loads_here`): the check runs a process.
             if sandbox {
@@ -291,6 +292,11 @@ impl Workbench {
         let ext = active.id().to_string();
         cx.spawn_in(window, async move |this, cx| {
             let started = task.await;
+            if started.is_ok() {
+                // The cold start of an extension: the sandbox check, reading and (cached) compiling the component, spawning the exthost
+                // and its handshake. Not the first request's own work.
+                crate::perf::sample("extensions.activation_ms", began.elapsed().as_secs_f64() * 1000.0);
+            }
             let _ = this.update(cx, |this, cx| {
                 let code = &mut this.cfg.exts.code;
                 let queued = code.queued.remove(&ext).unwrap_or_default();
