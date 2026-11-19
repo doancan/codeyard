@@ -121,6 +121,8 @@ impl GraphKey {
 pub struct GraphData {
     commits: Vec<GraphCommit>,
     rows: Vec<GraphRow>,
+    /// Hashes the upstream has and this branch does not: drawn in the warning color until they are pulled.
+    incoming: HashSet<String>,
 }
 
 #[cfg(test)]
@@ -406,11 +408,12 @@ impl ScmPanel {
         let task = cx.background_executor().spawn(async move {
             let log = graph::log(host.as_ref(), &dir, limit, scope);
             let has_remote = git::remotes(host.as_ref(), &dir).is_ok_and(|r| !r.is_empty());
-            (log, git::identity(host.as_ref(), &dir), git::stash_list(host.as_ref(), &dir).unwrap_or_default(), has_remote)
+            let incoming = graph::incoming(host.as_ref(), &dir);
+            (log, git::identity(host.as_ref(), &dir), git::stash_list(host.as_ref(), &dir).unwrap_or_default(), has_remote, incoming)
         });
         let loaded_from = self.host.clone();
         cx.spawn(async move |this, cx| {
-            let (result, identity, stashes, has_remote) = task.await;
+            let (result, identity, stashes, has_remote, incoming) = task.await;
             this.update(cx, |this, cx| {
                 if !Arc::ptr_eq(&this.host, &loaded_from) || this.status.as_ref().is_none_or(|s| s.root != root) {
                     // Loaded for the repository that was selected before: thrown away, the current one is loaded.
@@ -430,7 +433,7 @@ impl ScmPanel {
                     Ok(commits) => {
                         let mut rows = graph::layout(&commits);
                         graph::cap_lanes(&mut rows, graph::MAX_COLS);
-                        this.graph = Some(Arc::new(GraphData { commits, rows }));
+                        this.graph = Some(Arc::new(GraphData { commits, rows, incoming }));
                         this.graph_error = None;
                     }
                     Err(e) => this.graph_error = Some(e.lines().next().unwrap_or("git log failed").to_string().into()),
