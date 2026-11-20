@@ -38,20 +38,34 @@ fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, p: &Palette
         Bottom::Terminal => "terminal-tab",
         Bottom::ExtView => "ext-view-tab",
     };
+    let glyph = match tab {
+        Bottom::Problems => "alert",
+        Bottom::Output => "file-text",
+        Bottom::Debug => "bug-play",
+        Bottom::Ports => "plug",
+        Bottom::Terminal => "terminal",
+        Bottom::ExtView => "blocks",
+    };
+    let tint = if active { p.text } else { p.text_muted };
+    // A tab: a frame of its own with the accent on top while it is in front; the others get theirs on hover.
     div()
         .id(id)
         .relative()
         .child(a11y::part_frame(a11y::Part::PanelTab(tab), cx))
-        .h(px(layout::VIEW_HEADER_H - 8.))
+        .h(px(layout::VIEW_HEADER_H - 6.))
         .flex()
         .items_center()
         .gap(px(theme::SPACE[2]))
-        .px(px(theme::SPACE[3]))
+        .px(px(theme::SPACE[4]))
         .cursor_pointer()
-        .rounded(px(theme::radius::SM))
-        .when(active, |d| d.bg(c(p.surface_active)))
-        .text_color(c(if active { p.text } else { p.text_muted }))
-        .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text))))
+        .rounded_t(px(theme::radius::SM))
+        .border_1()
+        .border_b_0()
+        .border_color(if active { gpui::Hsla::from(c(p.border)) } else { gpui::transparent_black() })
+        .when(active, |d| d.bg(c(p.bg)).child(div().absolute().top(px(-1.)).left_0().right_0().h(px(2.)).bg(c(p.accent))))
+        .text_color(c(tint))
+        .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text)).border_color(c(p.border))))
+        .child(icon(glyph, layout::ICON - 2., tint))
         .child(label)
         .when(badge > 0, |d| d.child(div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).child(badge.to_string())))
 }
