@@ -257,7 +257,8 @@ impl Workbench {
 /// A side view's title row.
 pub(super) fn view_header(title: impl Into<SharedString>, p: &Palette) -> impl IntoElement {
     div()
-        .h(px(layout::VIEW_HEADER_H))
+        .h(px(layout::VIEW_HEADER_H + theme::SPACE[3]))
+        .pt(px(theme::SPACE[3]))
         .flex_none()
         .flex()
         .items_center()
@@ -552,7 +553,8 @@ impl Workbench {
             .size_full()
             .child(
                 div()
-                    .h(px(layout::VIEW_HEADER_H))
+                    .h(px(layout::VIEW_HEADER_H + theme::SPACE[3]))
+                    .pt(px(theme::SPACE[3]))
                     .flex_none()
                     .flex()
                     .items_center()
