@@ -70,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: doancan/codeyard/actions/publish@6e4e889f7546e2e7633513e1d9a633cd364eee71 # v0.12.1
+      - uses: doancan/codeyard/actions/publish@b25750e9305718eea24f0f4ac08d6a7dae121766 # v0.12.2
 "#;
 
 const README: &str = "# NAME\n\nA Codeyard extension. Run it with `cyx dev`, check it with `cyx check`, publish it with `cyx publish` or by pushing a tag (`git tag v0.1.0 && git push --tags`).\n";
