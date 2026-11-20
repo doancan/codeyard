@@ -2785,6 +2785,9 @@ Terminal: New Terminal with Profile…
 Terminal: Rename…	
 Terminal: Reset Terminal	
 Terminal: Run Selected Text	
+Terminal: Scroll to Bottom	
+Terminal: Scroll to Top	
+Terminal: Select All	
 Terminal: Select Default Profile…	
 Terminal: Split	
 Terminal: Toggle	
