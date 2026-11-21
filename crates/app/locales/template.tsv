@@ -1166,6 +1166,7 @@ Forward a port:
 Forward ports opened on SSH hosts	
 Forwarded Address	
 Forwarded Ports	
+Forwarded port	
 Free some space and try again.	
 Friday	
 From the registry “{}”: not looked up.	
@@ -1726,6 +1727,7 @@ No file “{}” in this project
 No files changed	
 No files in this folder	
 No folder is open.	
+No forwarded port has a page to open.	
 No git changes to revert	
 No hosts in ~/.ssh/config. Add one with +.	
 No implementations found	
@@ -1753,6 +1755,8 @@ No outgoing calls found
 No outline for this file type.	
 No output yet. Language server logs appear here.	
 No parent module found	
+No port is forwarded yet.	
+No port is forwarded.	
 No previous version is in the store.	
 No problem at the cursor	
 No problems in this file	
@@ -2041,9 +2045,12 @@ Ports are forwarded while connected to an SSH host.
 Ports below 1024 need extra privileges on this computer	
 Ports opened on the server are forwarded automatically.	
 Ports opened on the server are no longer forwarded automatically.	
+Ports: Copy Local Address…	
 Ports: Forward a Port…	
+Ports: Open in Browser…	
 Ports: Retry Failed Forwards	
 Ports: Stop All Forwards	
+Ports: Stop Forwarding Port…	
 Ports: Toggle Automatic Forwarding	
 Ports: {}	
 Preferences: Apply Rust Setup…	
