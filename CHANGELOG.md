@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.5] - 2026-11-21
+
+### Added
+
+- Ports: three commands in the command palette that VS Code has: *Ports: Open in Browser…*, *Ports: Copy Local Address…* and *Ports: Stop Forwarding Port…*. Each lists the forwarded ports it can use (a notice when there is none) and does what the row's menu does.
+
+### Changed
+
+- Ports: the menu of a port row is built from one list of items and the commands they run, so an item can no longer run another item's command; it is covered by tests (the private/public and protocol marks, and which items are on for an active, a failed and a listening-only port).
+
 ## [0.12.4] - 2026-11-21
 
 ### Added
@@ -2074,7 +2084,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.4...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.5...HEAD
+[0.12.5]: https://github.com/doancan/codeyard/compare/v0.12.4...v0.12.5
 [0.12.4]: https://github.com/doancan/codeyard/compare/v0.12.3...v0.12.4
 [0.12.3]: https://github.com/doancan/codeyard/compare/v0.12.2...v0.12.3
 [0.12.2]: https://github.com/doancan/codeyard/compare/v0.12.1...v0.12.2
