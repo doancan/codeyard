@@ -111,7 +111,8 @@ pub fn port_rows(set: &ForwardSet, listening: &[ListeningPort], alias: &str) -> 
 const W_PORT: f32 = 96.;
 const W_LABEL: f32 = 140.;
 const W_ADDRESS: f32 = 170.;
-const W_ORIGIN: f32 = 90.;
+/// Wide enough for the longest label in the languages we ship ("Otomatik Yönlendirildi"); the table clips with no ellipsis.
+const W_ORIGIN: f32 = 156.;
 const W_ACTIONS: f32 = 132.;
 
 impl Workbench {
