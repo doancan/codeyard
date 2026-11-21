@@ -1650,14 +1650,15 @@ impl Workbench {
                     .px(px(theme::SPACE[4]))
                     .text_size(px(text::SM.0))
                     .line_height(px(text::SM.1))
-                    // The strip of tabs has a ground and a line of its own: the tabs stand on it, the page starts under it.
+                    // The strip of tabs has a ground of its own: the tabs stand on it and the page starts under it, with no
+                    // line between them (the change of ground is the edge, and the tab in front is the page's colour).
                     .bg(c(p.surface))
-                    .border_b_1()
-                    .border_color(c(p.border))
                     .overflow_hidden()
                     .children(self.panel_tabs(p, cx))
                     .children(self.ext_view_panel_tabs(p, cx))
                     .child(div().flex_1())
+                    // What the tab in front offers (Ports: forward, retry, stop all, automatic; Output: copy, clear; …).
+                    .children(self.panel_action_buttons(self.chrome.bottom, p, cx))
                     // The terminal's own actions only while the terminal is the panel's view.
                     .when(self.chrome.bottom == Bottom::Terminal, |d| {
                         d.child(

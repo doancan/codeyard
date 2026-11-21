@@ -336,6 +336,7 @@ Choose another name or remove the existing one first.
 Choose at least two commits to squash.	
 Choose…	
 Clear	
+Clear Output	
 Clear Terminal	
 Clear all notifications	
 Clear filter	
@@ -522,6 +523,7 @@ Copy Last Command Output
 Copy Line Down	
 Copy Line Up	
 Copy Message	
+Copy Output	
 Copy Path	
 Copy Port Number	
 Copy Problem	
@@ -1157,6 +1159,8 @@ Formatted
 Formatted by {}	
 Forward	
 Forward Port	
+Forward Ports Automatically	
+Forward a Port…	
 Forward a port:	
 Forward ports opened on SSH hosts	
 Forwarded Address	
@@ -2349,6 +2353,7 @@ Restricted Mode: tasks, debugging, and the project's terminal shell and language
 Result	
 Resume updates	
 Retry	
+Retry Failed Forwards	
 Reveal in Finder	
 Revert	
 Revert Change	
@@ -2697,6 +2702,7 @@ Step Over (F10)
 Still staging the previous change…	
 Stop	
 Stop (⇧F5)	
+Stop All Forwards	
 Stop Debugging	
 Stop Forwarding	
 Stop Pre-releases	

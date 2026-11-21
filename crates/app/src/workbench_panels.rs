@@ -76,11 +76,12 @@ fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, glyph_only:
 }
 
 /// The look of a tab of the bottom panel: a page tab. Every tab has a frame; the one in front is the colour of the page
-/// under it, joins it (no line between them) and carries the accent on its top edge, so the strip reads as tabs of a
-/// page and not as text on the window.
+/// under it (so the two read as one piece, with no line between them), carries a thick accent on its top edge, an
+/// accent-coloured glyph and a bold label. The others are quiet and light up on hover. The strip has no line under the
+/// tabs: the change of ground between the strip and the page is the edge.
 pub(super) fn page_tab(tab: gpui::Stateful<gpui::Div>, active: bool, p: &Palette) -> gpui::Stateful<gpui::Div> {
     let mut tab = tab.relative();
-    // The tabs stand on the strip's bottom line, not in the middle of it.
+    // The tabs stand on the page, not in the middle of the strip.
     tab.style().align_self = Some(gpui::AlignItems::End);
     tab.h(px(layout::VIEW_HEADER_H - 5.))
         .flex()
@@ -95,17 +96,16 @@ pub(super) fn page_tab(tab: gpui::Stateful<gpui::Div>, active: bool, p: &Palette
         .rounded_t(px(theme::radius::MD))
         .border_1()
         .border_b_0()
-        .border_color(c(p.border))
         .map(|d| {
             if active {
-                // One pixel down: over the strip's own bottom line, so the tab and the page are one piece.
-                d.top(px(1.))
+                d.border_color(c(p.border))
                     .bg(c(p.bg))
                     .text_color(c(p.text))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child(div().absolute().top(px(-1.)).left_0().right_0().h(px(2.)).bg(c(p.accent)))
+                    .child(div().absolute().top(px(-1.)).left(px(-1.)).right(px(-1.)).h(px(3.)).rounded_t(px(theme::radius::MD)).bg(c(p.accent)))
             } else {
-                d.bg(c(p.surface_raised))
+                d.border_color(c(p.border))
+                    .bg(c(p.surface_raised))
                     .text_color(c(p.text_muted))
                     .font_weight(gpui::FontWeight::MEDIUM)
                     .hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text)))
@@ -113,7 +113,92 @@ pub(super) fn page_tab(tab: gpui::Stateful<gpui::Div>, active: bool, p: &Palette
         })
 }
 
+/// A button at the right end of the tab strip, for the tab in front.
+pub(super) struct PanelAction {
+    id: &'static str,
+    glyph: &'static str,
+    label: &'static str,
+    /// `Some(on)`: a toggle that is on or off, not a command.
+    toggled: Option<bool>,
+    run: fn(&mut Workbench, &mut Window, &mut Context<Workbench>),
+}
+
+impl PanelAction {
+    fn command(id: &'static str, glyph: &'static str, label: &'static str, run: fn(&mut Workbench, &mut Window, &mut Context<Workbench>)) -> Self {
+        Self { id, glyph, label, toggled: None, run }
+    }
+
+    fn toggle(id: &'static str, glyph: &'static str, label: &'static str, on: bool, run: fn(&mut Workbench, &mut Window, &mut Context<Workbench>)) -> Self {
+        Self { id, glyph, label, toggled: Some(on), run }
+    }
+}
+
 impl Workbench {
+    /// What the tab in front offers at the right end of the strip. A new tab of the panel adds an arm here (and its
+    /// name and glyph in `panel_tabs`): the strip draws whatever list it gets, so nothing else changes. The Terminal's
+    /// own group (new, profiles, split, kill) is drawn beside these.
+    pub(super) fn panel_actions(&self, tab: Bottom, cx: &App) -> Vec<PanelAction> {
+        let t = crate::i18n::t;
+        match tab {
+            Bottom::Ports => vec![
+                PanelAction::command("ports-forward", "tb-plus", t("Forward a Port…"), |this, w, cx| this.forward_port_prompt(&ForwardPortPrompt, w, cx)),
+                PanelAction::command("ports-retry", "refresh-cw", t("Retry Failed Forwards"), |this, w, cx| {
+                    this.retry_failed_forwards(&RetryFailedForwards, w, cx)
+                }),
+                PanelAction::command("ports-stop-all", "circle-slash-2", t("Stop All Forwards"), |this, w, cx| this.stop_all_forwards(&StopAllForwards, w, cx)),
+                PanelAction::toggle("ports-auto", "rocket", t("Forward Ports Automatically"), cx.global::<Settings>().ports_auto_forward, |this, w, cx| {
+                    this.toggle_auto_forward(&ToggleAutoForward, w, cx)
+                }),
+            ],
+            Bottom::Output => vec![
+                PanelAction::command("output-copy", "copy", t("Copy Output"), |this, _, cx| this.copy_output(cx)),
+                PanelAction::command("output-clear", "eraser", t("Clear Output"), |this, _, cx| this.clear_output(cx)),
+            ],
+            Bottom::Terminal => {
+                vec![PanelAction::command("terminal-clear", "eraser", t("Clear Terminal"), |this, w, cx| this.dispatch_now(&crate::terminal::TermClear, w, cx))]
+            }
+            Bottom::Problems | Bottom::Debug | Bottom::ExtView => Vec::new(),
+        }
+    }
+
+    /// The buttons of `panel_actions`, with a divider after them when there are any.
+    pub(super) fn panel_action_buttons(&self, tab: Bottom, p: &Palette, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
+        let actions = self.panel_actions(tab, cx);
+        if actions.is_empty() {
+            return Vec::new();
+        }
+        let mut out: Vec<gpui::AnyElement> = actions
+            .into_iter()
+            .map(|a| {
+                let run = a.run;
+                let button = match a.toggled {
+                    Some(on) => ui::toggle_button(a.id, a.glyph, a.label, on, p),
+                    None => ui::icon_button(a.id, a.glyph, a.label, p),
+                };
+                button
+                    .flex_none()
+                    .relative()
+                    .child(self.ctl(crate::i18n::t("Panel"), a.id, a.label, cx, run))
+                    .on_click(cx.listener(move |this, _, w, cx| run(this, w, cx)))
+                    .into_any_element()
+            })
+            .collect();
+        out.push(div().w(px(1.)).h(px(16.)).mx(px(theme::SPACE[2])).flex_none().bg(c(p.border)).into_any_element());
+        out
+    }
+
+    /// The text of Output as one string, a line each.
+    pub(super) fn copy_output(&mut self, cx: &mut Context<Self>) {
+        let text = self.lsp.output.iter().map(String::as_str).collect::<Vec<_>>().join("\n");
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+    }
+
+    /// Empties Output.
+    pub(super) fn clear_output(&mut self, cx: &mut Context<Self>) {
+        self.lsp.output.clear();
+        cx.notify();
+    }
+
     /// The bottom panel's own tabs (Problems, Output, Debug Console while debugging, Ports, Terminal).
     pub(super) fn panel_tabs(&self, p: &Palette, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
         let (errors, warnings) = self.problem_counts();

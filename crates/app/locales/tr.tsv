@@ -4322,3 +4322,9 @@ Visibility: Public (every network interface)	Görünürlük: Herkese açık (tü
 Terminal: Change Icon…	Terminal: Simgeyi Değiştir…
 Change Icon…	Simgeyi Değiştir…
 Terminal icon	Terminal simgesi
+Forward Ports Automatically	Portları otomatik yönlendir
+Copy Output	Çıktıyı kopyala
+Clear Output	Çıktıyı temizle
+Forward a Port…	Port yönlendir…
+Retry Failed Forwards	Başarısız yönlendirmeleri yeniden dene
+Stop All Forwards	Tüm yönlendirmeleri durdur
