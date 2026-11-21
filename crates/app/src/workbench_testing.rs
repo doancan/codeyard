@@ -375,6 +375,11 @@ impl Workbench {
         self.cfg.exts.accounts.transport = transport;
     }
 
+    /// Confirms line `index` of the open picker, as Enter on it does.
+    pub fn confirm_overlay_item_for_test(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.on_overlay_event(&crate::picker::PickerEvent::Confirm(crate::picker::Pick::Item { source: 0, index }), window, cx);
+    }
+
     pub fn has_overlay_for_test(&self) -> bool {
         self.overlay.is_some()
     }

@@ -2537,6 +2537,53 @@ fn a_public_forward_stays_public_after_a_restart(cx: &mut TestAppContext) {
     assert_eq!(wb.read_with(cx, |wb, _| wb.forward_bind_for_test(remote)), Some(LocalBind::All), "public again after the restart");
 }
 
+/// The palette commands of Ports list the forwarded ports to pick from: *Copy Local Address…* puts the address on the
+/// clipboard and *Stop Forwarding Port…* ends the forward; without a forward they say so.
+#[cfg(unix)]
+#[gpui::test]
+fn ports_palette_commands_pick_a_forwarded_port(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("ports-palette") else { return };
+    let (wb, cx) = setup(cx);
+    let tick = |cx: &mut VisualTestContext| cx.executor().advance_clock(std::time::Duration::from_secs(5));
+    wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    wait_for(cx, "connected", |cx| {
+        tick(cx);
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    // Nothing forwarded by us yet (other programs on this machine may be): the pick says so or lists only forwards.
+    let app = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let remote = app.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for mut s in app.incoming().flatten() {
+            use std::io::Write;
+            let _ = s.write_all(b"pick");
+        }
+    });
+    wb.update(cx, |wb, cx| wb.forward_port(remote, cx));
+    wait_for(cx, "forwarded", |cx| {
+        cx.run_until_parked();
+        wb.read_with(cx, |wb, _| wb.forwards().iter().any(|f| f.remote == remote))
+    });
+    let local = wb.read_with(cx, |wb, _| wb.forwards()).into_iter().find(|f| f.remote == remote).unwrap().local;
+
+    // Copy Local Address…: the list is open; the first line is the lowest forwarded port, so pick ours by its position.
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Ports: Copy Local Address…", window, cx));
+    let index = wb.read_with(cx, |wb, _| wb.port_pick_ports_for_test()).iter().position(|p| *p == remote).expect("our port is listed");
+    wb.update_in(cx, |wb, window, cx| wb.confirm_overlay_item_for_test(index, window, cx));
+    cx.run_until_parked();
+    assert_eq!(cx.read_from_clipboard().and_then(|c| c.text()).as_deref(), Some(format!("localhost:{local}").as_str()));
+
+    // Stop Forwarding Port…: the forward ends.
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Ports: Stop Forwarding Port…", window, cx));
+    let index = wb.read_with(cx, |wb, _| wb.port_pick_ports_for_test()).iter().position(|p| *p == remote).expect("our port is listed");
+    wb.update_in(cx, |wb, window, cx| wb.confirm_overlay_item_for_test(index, window, cx));
+    wait_for(cx, "the forward ended", |cx| {
+        tick(cx);
+        cx.run_until_parked();
+        wb.read_with(cx, |wb, _| !wb.forwards().iter().any(|f| f.remote == remote))
+    });
+}
+
 /// "3000:8080" on a port that is forwarded already moves it; a local port that cannot be opened leaves the forward on the
 /// port it had, with a notice, and the busy port is not what the project remembers.
 #[cfg(unix)]

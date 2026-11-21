@@ -107,6 +107,32 @@ pub fn port_rows(set: &ForwardSet, listening: &[ListeningPort], alias: &str) -> 
     forwards
 }
 
+/// The menu of a PORTS row: each item with the command it runs, in one list so that the two cannot drift apart.
+pub fn port_menu(row: &PortRow) -> Vec<(MenuItem, PortMenuCmd)> {
+    let t = crate::i18n::t;
+    if row.state == RowState::Listening {
+        return vec![(MenuItem::new(t("Forward Port")), PortMenuCmd::Forward), (MenuItem::new(t("Copy Port Number")), PortMenuCmd::CopyPort)];
+    }
+    let active = row.state == RowState::Active;
+    vec![
+        (MenuItem::new(t("Open in Browser")).enabled(row.url().is_some()), PortMenuCmd::OpenBrowser),
+        (MenuItem::new(t("Copy Address")).enabled(active), PortMenuCmd::CopyAddress),
+        (MenuItem::new(t("Copy Port Number")), PortMenuCmd::CopyPort),
+        (MenuItem::new(t("Set Label…")).separator(), PortMenuCmd::SetLabel),
+        (MenuItem::new(t("Change Local Port…")), PortMenuCmd::ChangeLocal),
+        (
+            MenuItem::new(t("Visibility: Private (this computer)")).checked(row.bind == Some(LocalBind::Loopback)).separator(),
+            PortMenuCmd::Visibility(LocalBind::Loopback),
+        ),
+        (MenuItem::new(t("Visibility: Public (every network interface)")).checked(row.bind == Some(LocalBind::All)), PortMenuCmd::Visibility(LocalBind::All)),
+        (MenuItem::new(t("Protocol: HTTP")).checked(row.protocol == Protocol::Http).separator(), PortMenuCmd::Protocol(Protocol::Http)),
+        (MenuItem::new(t("Protocol: HTTPS")).checked(row.protocol == Protocol::Https), PortMenuCmd::Protocol(Protocol::Https)),
+        (MenuItem::new(t("Protocol: TCP")).checked(row.protocol == Protocol::Tcp), PortMenuCmd::Protocol(Protocol::Tcp)),
+        (MenuItem::new(t("Retry")).enabled(matches!(row.state, RowState::Failed(_))).separator(), PortMenuCmd::Retry),
+        (MenuItem::new(t("Stop Forwarding")), PortMenuCmd::Stop),
+    ]
+}
+
 /// Column widths (the process column takes the rest).
 const W_PORT: f32 = 96.;
 const W_LABEL: f32 = 140.;
@@ -124,43 +150,7 @@ impl Workbench {
         window: &mut gpui::Window,
         cx: &mut Context<Self>,
     ) {
-        let active = row.state == RowState::Active;
-        if row.state == RowState::Listening {
-            let items = vec![MenuItem::new(crate::i18n::t("Forward Port")), MenuItem::new(crate::i18n::t("Copy Port Number"))];
-            let target = MenuTarget { path: row.port.to_string(), is_dir: false, tab: None };
-            let commands = vec![MenuCmd::Port(PortMenuCmd::Forward), MenuCmd::Port(PortMenuCmd::CopyPort)];
-            return self.show_menu(items, commands, Vec::new(), target, position, window, cx);
-        }
-        let items = vec![
-            MenuItem::new(crate::i18n::t("Open in Browser")).enabled(row.url().is_some()),
-            MenuItem::new(crate::i18n::t("Copy Address")).enabled(active),
-            MenuItem::new(crate::i18n::t("Copy Port Number")),
-            MenuItem::new(crate::i18n::t("Set Label…")).separator(),
-            MenuItem::new(crate::i18n::t("Change Local Port…")),
-            MenuItem::new(crate::i18n::t("Visibility: Private (this computer)")).checked(row.bind == Some(LocalBind::Loopback)).separator(),
-            MenuItem::new(crate::i18n::t("Visibility: Public (every network interface)")).checked(row.bind == Some(LocalBind::All)),
-            MenuItem::new(crate::i18n::t("Protocol: HTTP")).checked(row.protocol == Protocol::Http).separator(),
-            MenuItem::new(crate::i18n::t("Protocol: HTTPS")).checked(row.protocol == Protocol::Https),
-            MenuItem::new(crate::i18n::t("Protocol: TCP")).checked(row.protocol == Protocol::Tcp),
-            MenuItem::new(crate::i18n::t("Retry")).enabled(matches!(row.state, RowState::Failed(_))).separator(),
-            MenuItem::new(crate::i18n::t("Stop Forwarding")),
-        ];
-        let commands = [
-            PortMenuCmd::OpenBrowser,
-            PortMenuCmd::CopyAddress,
-            PortMenuCmd::CopyPort,
-            PortMenuCmd::SetLabel,
-            PortMenuCmd::ChangeLocal,
-            PortMenuCmd::Visibility(LocalBind::Loopback),
-            PortMenuCmd::Visibility(LocalBind::All),
-            PortMenuCmd::Protocol(Protocol::Http),
-            PortMenuCmd::Protocol(Protocol::Https),
-            PortMenuCmd::Protocol(Protocol::Tcp),
-            PortMenuCmd::Retry,
-            PortMenuCmd::Stop,
-        ]
-        .map(MenuCmd::Port)
-        .to_vec();
+        let (items, commands): (Vec<MenuItem>, Vec<MenuCmd>) = port_menu(row).into_iter().map(|(item, cmd)| (item, MenuCmd::Port(cmd))).unzip();
         let target = MenuTarget { path: row.port.to_string(), is_dir: false, tab: None };
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
     }
@@ -421,5 +411,50 @@ mod tests {
         assert_eq!(rows[1].url().as_deref(), Some("http://localhost:8001"));
         assert_eq!(rows[2].state, RowState::Listening);
         assert_eq!(rows[2].url(), None);
+    }
+
+    fn row(state: RowState, bind: Option<LocalBind>, protocol: Protocol) -> PortRow {
+        PortRow {
+            port: 3000,
+            label: None,
+            address: Some("localhost:3001".into()),
+            process: None,
+            origin: Some(Origin::User),
+            protocol,
+            bind,
+            state,
+            listening: true,
+        }
+    }
+
+    #[test]
+    fn the_menu_of_a_private_http_forward_shows_what_is_set_and_what_can_be_done() {
+        let menu = port_menu(&row(RowState::Active, Some(LocalBind::Loopback), Protocol::Http));
+        let line = |cmd: PortMenuCmd| menu.iter().find(|(_, c)| *c == cmd).map(|(i, _)| (i.label.to_string(), i.enabled, i.checked)).unwrap();
+        assert_eq!(line(PortMenuCmd::Visibility(LocalBind::Loopback)).2, Some(true), "private is the one that is on");
+        assert_eq!(line(PortMenuCmd::Visibility(LocalBind::All)).2, Some(false));
+        assert_eq!(line(PortMenuCmd::Protocol(Protocol::Http)).2, Some(true));
+        assert_eq!(line(PortMenuCmd::Protocol(Protocol::Tcp)).2, Some(false));
+        assert!(line(PortMenuCmd::OpenBrowser).1, "an active HTTP forward opens in the browser");
+        assert!(line(PortMenuCmd::CopyAddress).1);
+        assert!(!line(PortMenuCmd::Retry).1, "nothing failed, so there is nothing to retry");
+        assert_eq!(menu.len(), 12);
+    }
+
+    #[test]
+    fn the_menu_of_a_public_forward_and_of_a_failed_one_differ_where_they_should() {
+        let public = port_menu(&row(RowState::Active, Some(LocalBind::All), Protocol::Tcp));
+        let checked = |cmd: PortMenuCmd| public.iter().find(|(_, c)| *c == cmd).and_then(|(i, _)| i.checked);
+        assert_eq!((checked(PortMenuCmd::Visibility(LocalBind::All)), checked(PortMenuCmd::Visibility(LocalBind::Loopback))), (Some(true), Some(false)));
+        assert!(!public.iter().find(|(_, c)| *c == PortMenuCmd::OpenBrowser).unwrap().0.enabled, "a TCP forward has no page to open");
+        let failed = port_menu(&row(RowState::Failed("busy".into()), Some(LocalBind::Loopback), Protocol::Http));
+        assert!(failed.iter().find(|(_, c)| *c == PortMenuCmd::Retry).unwrap().0.enabled, "a failed forward can be retried");
+        assert!(!failed.iter().find(|(_, c)| *c == PortMenuCmd::CopyAddress).unwrap().0.enabled, "and has no address to copy");
+    }
+
+    #[test]
+    fn a_port_that_is_only_listening_can_be_forwarded_or_copied() {
+        let menu = port_menu(&row(RowState::Listening, None, Protocol::Http));
+        assert_eq!(menu.iter().map(|(_, c)| *c).collect::<Vec<_>>(), [PortMenuCmd::Forward, PortMenuCmd::CopyPort]);
     }
 }
