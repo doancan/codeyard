@@ -1606,7 +1606,9 @@ impl Workbench {
                 (Some(size), _, true) => d.w(px(size)).flex_none().h_full(),
                 (Some(size), _, false) => d.h(px(size)).flex_none().border_t_1(),
                 (None, true, _) => d.flex_1().min_h_0().min_w_0(),
-                (None, false, true) => d.w(px(self.chrome.panel_w)).flex_none().h_full(),
+                // A window narrower than the sidebar and the panel together takes the room from the panel (down to twice
+                // its smallest size) instead of pushing the panel's right edge out of the window.
+                (None, false, true) => d.w(px(self.chrome.panel_w)).flex_shrink().min_w(px(PANEL_MIN * 2.)).h_full(),
                 (None, false, false) => d.h(px(self.chrome.panel_h)).flex_none().border_t_1(),
             })
             // Beside the editor, the border is on the editor's side.
@@ -1649,6 +1651,7 @@ impl Workbench {
                     .text_size(px(text::SM.0))
                     .line_height(px(text::SM.1))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .overflow_hidden()
                     .children(self.panel_tabs(p, cx))
                     .children(self.ext_view_panel_tabs(p, cx))
                     .child(div().flex_1())
@@ -1657,9 +1660,11 @@ impl Workbench {
                         d.child(
                             div()
                                 .flex()
+                                .flex_none()
                                 .items_center()
                                 .child(
                                     ui::icon_button("panel-new", "tb-plus", crate::i18n::t("New Terminal (⌃⇧`)"), p)
+                                        .flex_none()
                                         .relative()
                                         .child(self.ctl(crate::i18n::t("Panel"), "panel-new", crate::i18n::t("New Terminal (⌃⇧`)"), cx, |this, w, cx| {
                                             this.new_terminal(&NewTerminal, w, cx)
@@ -1668,6 +1673,7 @@ impl Workbench {
                                 )
                                 .child(
                                     ui::icon_button("panel-launch", "tb-dropdown", crate::i18n::t("Launch Profile…"), p)
+                                        .flex_none()
                                         .w(px(16.))
                                         .relative()
                                         .child(self.ctl(crate::i18n::t("Panel"), "panel-launch", crate::i18n::t("Launch Profile…"), cx, |this, w, cx| {
@@ -1683,6 +1689,7 @@ impl Workbench {
                         )
                         .child(
                             ui::icon_button("panel-split", "tb-split", crate::i18n::t("Split Terminal"), p)
+                                .flex_none()
                                 .relative()
                                 .child(self.ctl(crate::i18n::t("Panel"), "panel-split", crate::i18n::t("Split Terminal"), cx, |this, w, cx| {
                                     this.split_terminal(&SplitTerminal, w, cx)
@@ -1691,6 +1698,7 @@ impl Workbench {
                         )
                         .child(
                             ui::icon_button("panel-kill", "tb-trash", crate::i18n::t("Kill Terminal"), p)
+                                .flex_none()
                                 .relative()
                                 .child(self.ctl(crate::i18n::t("Panel"), "panel-kill", crate::i18n::t("Kill Terminal"), cx, |this, w, cx| {
                                     this.kill_terminal(&KillTerminal, w, cx)
@@ -1736,6 +1744,7 @@ impl Workbench {
                     )
                     .child(
                         ui::icon_button("panel-close", "tb-close", crate::i18n::t("Hide Panel (⌘J)"), p)
+                            .flex_none()
                             .relative()
                             .child(self.ctl(crate::i18n::t("Panel"), "panel-close", crate::i18n::t("Hide Panel (⌘J)"), cx, |this, w, cx| {
                                 this.toggle_panel(&TogglePanel, w, cx)
