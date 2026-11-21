@@ -394,6 +394,9 @@ impl Workbench {
             Command::action("Output: Clear", ClearOutput),
             Command::action("View: Ports (SSH port forwarding)", ShowPorts),
             Command::action("Ports: Forward a Port…", ForwardPortPrompt),
+            Command::action("Ports: Open in Browser…", OpenForwardedPort),
+            Command::action("Ports: Copy Local Address…", CopyForwardedAddress),
+            Command::action("Ports: Stop Forwarding Port…", StopForwardingPort),
             Command::action("Ports: Stop All Forwards", StopAllForwards),
             Command::action("Ports: Retry Failed Forwards", RetryFailedForwards),
             Command::action("Ports: Toggle Automatic Forwarding", ToggleAutoForward),
@@ -944,6 +947,13 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.set_terminal_color(terminal, color, cx);
             }
+            (OverlayKind::PortPick { what, ports }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (what, port) = (*what, ports.get(*index).copied());
+                self.close_overlay(window, cx);
+                if let Some(port) = port {
+                    self.finish_port_pick(what, port, window, cx);
+                }
+            }
             (OverlayKind::TerminalIcon { terminal }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let terminal = *terminal;
                 let icon = crate::terminal_profiles::ICONS[*index];
@@ -1140,6 +1150,7 @@ impl Workbench {
                 | OverlayKind::WorkspaceTrust { .. }
                 | OverlayKind::TerminalColor { .. }
                 | OverlayKind::TerminalIcon { .. }
+                | OverlayKind::PortPick { .. }
                 | OverlayKind::RemoveFolder(_)
                 | OverlayKind::CompareFolder { .. }
                 | OverlayKind::ExceptionFilters(_)

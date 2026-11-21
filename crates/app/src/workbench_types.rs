@@ -90,6 +90,11 @@ pub(super) enum OverlayKind {
     TerminalColor {
         terminal: gpui::EntityId,
     },
+    /// "Ports: Open in Browser…", "Copy Local Address…" and "Stop Forwarding Port…": the forwarded server ports listed.
+    PortPick {
+        what: ports_glue::PortPick,
+        ports: Vec<u16>,
+    },
     /// "Terminal: Change Icon…".
     TerminalIcon {
         terminal: gpui::EntityId,

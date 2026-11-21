@@ -8,12 +8,13 @@
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
 
-use gpui::{App, Context, SharedString, Window};
+use gpui::{App, AppContext as _, Context, SharedString, Window};
 use host::forward::{FailKind, LocalBind, RemoteTarget};
 
 use super::notifications_glue::model::{Action, Notification, Severity};
 use super::{
-    Conn, ForwardPortPrompt, InputPurpose, LOCAL_AGENT_ALIAS, Notice, NoticeSource, RetryFailedForwards, StopAllForwards, ToggleAutoForward, Workbench,
+    Conn, CopyForwardedAddress, ForwardPortPrompt, InputPurpose, LOCAL_AGENT_ALIAS, Notice, NoticeSource, OpenForwardedPort, OverlayKind, PickItem, PickSource,
+    Picker, RetryFailedForwards, StopAllForwards, StopForwardingPort, ToggleAutoForward, Workbench,
 };
 use crate::port_forwards::{Effect, ForwardRequest, ForwardSet, ForwardState, OnForward, Origin, Protocol, failure_text, rule_for};
 use crate::ports::{self, ListeningPort, ScanMethod};
@@ -502,6 +503,69 @@ impl Workbench {
         cx.notify();
     }
 
+    /// "Ports: Open in Browser…", "Copy Local Address…" and "Stop Forwarding Port…": the forwarded ports that the action can
+    /// use, to pick from. A message when there are none.
+    fn pick_forwarded_port(&mut self, what: PortPick, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(alias) = self.ssh_alias() else {
+            self.notify(NoticeSource::Remote, Notice::Info(crate::i18n::t("Ports are forwarded while connected to an SSH host.").into()));
+            return cx.notify();
+        };
+        let rows: Vec<_> = port_rows(&self.ports.set, &self.ports.listening, &alias)
+            .into_iter()
+            .filter(|r| r.origin.is_some())
+            .filter(|r| match what {
+                PortPick::OpenBrowser => r.url().is_some(),
+                PortPick::CopyAddress => r.state == RowState::Active,
+                PortPick::Stop => true,
+            })
+            .collect();
+        if rows.is_empty() {
+            let why = match what {
+                PortPick::OpenBrowser => crate::i18n::t("No forwarded port has a page to open."),
+                PortPick::CopyAddress => crate::i18n::t("No port is forwarded yet."),
+                PortPick::Stop => crate::i18n::t("No port is forwarded."),
+            };
+            self.notify(NoticeSource::Remote, Notice::Info(why.into()));
+            return cx.notify();
+        }
+        let items = rows
+            .iter()
+            .map(|r| {
+                let at = r.address.clone().unwrap_or_default();
+                let named = r.label.as_deref().map(|l| format!("  {l}")).unwrap_or_default();
+                PickItem { label: format!("{}{}  {}", r.port, named, at).trim_end().to_string().into(), detail: r.process.clone().map(Into::into), keys: None }
+            })
+            .collect();
+        let ports = rows.iter().map(|r| r.port).collect();
+        if self.overlay.is_some() {
+            self.close_overlay(window, cx);
+        }
+        let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Forwarded port"), "", None, cx));
+        self.show_overlay(picker, OverlayKind::PortPick { what, ports }, window, cx);
+    }
+
+    pub(super) fn open_forwarded_port(&mut self, _: &OpenForwardedPort, window: &mut Window, cx: &mut Context<Self>) {
+        self.pick_forwarded_port(PortPick::OpenBrowser, window, cx);
+    }
+
+    pub(super) fn copy_forwarded_address(&mut self, _: &CopyForwardedAddress, window: &mut Window, cx: &mut Context<Self>) {
+        self.pick_forwarded_port(PortPick::CopyAddress, window, cx);
+    }
+
+    pub(super) fn stop_forwarding_port(&mut self, _: &StopForwardingPort, window: &mut Window, cx: &mut Context<Self>) {
+        self.pick_forwarded_port(PortPick::Stop, window, cx);
+    }
+
+    /// The port picked from the list: the same action as the row's menu.
+    pub(super) fn finish_port_pick(&mut self, what: PortPick, remote: u16, window: &mut Window, cx: &mut Context<Self>) {
+        let cmd = match what {
+            PortPick::OpenBrowser => PortMenuCmd::OpenBrowser,
+            PortPick::CopyAddress => PortMenuCmd::CopyAddress,
+            PortPick::Stop => PortMenuCmd::Stop,
+        };
+        self.run_port_menu(cmd, remote, window, cx);
+    }
+
     /// `Ports: Forward a Port…`
     pub(super) fn forward_port_prompt(&mut self, _: &ForwardPortPrompt, window: &mut Window, cx: &mut Context<Self>) {
         if self.ssh_alias().is_none() {
@@ -575,6 +639,18 @@ impl Workbench {
     #[cfg(test)]
     pub fn forward_label_for_test(&self, remote: u16) -> Option<String> {
         self.ports.set.get(self.forward_id(remote)?)?.label.clone()
+    }
+
+    /// The ports a *Ports: …* pick lists, in order (test).
+    #[cfg(test)]
+    pub fn port_pick_ports_for_test(&self) -> Vec<u16> {
+        match &self.overlay {
+            Some(o) => match &o.kind {
+                OverlayKind::PortPick { ports, .. } => ports.clone(),
+                _ => Vec::new(),
+            },
+            None => Vec::new(),
+        }
     }
 
     #[cfg(test)]
@@ -825,4 +901,12 @@ mod tests {
             assert!(parse_forward_input(bad).is_err(), "{bad:?}");
         }
     }
+}
+
+/// What a pick from the forwarded ports does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PortPick {
+    OpenBrowser,
+    CopyAddress,
+    Stop,
 }
