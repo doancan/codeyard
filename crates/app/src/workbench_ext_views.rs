@@ -651,18 +651,8 @@ impl Workbench {
             .map(|(i, d)| {
                 let active = shown == Some(d.id.as_str());
                 let tip = crate::i18n::tf("{0}, from {1}", &[&d.title, &d.extension]);
-                div()
-                    .id(("ext-view-tab", i))
-                    .debug_selector(move || format!("ext-view-tab-{i}"))
-                    .h(px(layout::VIEW_HEADER_H - 8.))
-                    .flex()
-                    .items_center()
-                    .px(px(theme::SPACE[3]))
-                    .cursor_pointer()
-                    .rounded(px(theme::radius::SM))
-                    .when(active, |e| e.bg(c(p.surface_active)))
-                    .text_color(c(if active { p.text } else { p.text_muted }))
-                    .when(!active, |e| e.hover(|e| e.bg(c(p.surface_hover)).text_color(c(p.text))))
+                super::panels_glue::page_tab(div().id(("ext-view-tab", i)).debug_selector(move || format!("ext-view-tab-{i}")), active, p)
+                    .child(icon("blocks", layout::ICON - 2., if active { p.accent } else { p.text_muted }))
                     .child(d.title.clone())
                     .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone().into())).into())
                     .on_click(cx.listener(move |this, _, window, cx| this.open_ext_view(&d.id, window, cx)))
