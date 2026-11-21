@@ -32,7 +32,7 @@ pub(crate) fn interface_scale_notice(scale: f32) -> String {
 /// Room (logical pixels) the panel's own buttons and padding take at the right end of the tab row.
 const PANEL_BUTTONS_W: f32 = 165.;
 /// What a tab takes besides its label: padding, border, glyph and the gap after it.
-const PANEL_TAB_CHROME_W: f32 = 37.;
+const PANEL_TAB_CHROME_W: f32 = 46.;
 /// A rough width of one label character; only used to decide whether the labels fit.
 const PANEL_LABEL_CHAR_W: f32 = 6.8;
 
@@ -62,29 +62,10 @@ fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, glyph_only:
         Bottom::Terminal => "terminal",
         Bottom::ExtView => "blocks",
     };
-    let tint = if active { p.text } else { p.text_muted };
-    // A tab: a frame of its own with the accent on top while it is in front; the others get theirs on hover.
-    div()
-        .id(id)
-        .relative()
+    // The glyph of the tab in front carries the accent; the others are quiet.
+    let tint = if active { p.accent } else { p.text_muted };
+    page_tab(div().id(id), active, p)
         .child(a11y::part_frame(a11y::Part::PanelTab(tab), cx))
-        .h(px(layout::VIEW_HEADER_H - 6.))
-        .flex()
-        .items_center()
-        .gap(px(theme::SPACE[2]))
-        .px(px(theme::SPACE[4]))
-        // In a narrow panel the tabs give way (labels are cut with an ellipsis) before the panel's buttons do.
-        .flex_shrink()
-        .min_w_0()
-        .overflow_hidden()
-        .cursor_pointer()
-        .rounded_t(px(theme::radius::SM))
-        .border_1()
-        .border_b_0()
-        .border_color(if active { gpui::Hsla::from(c(p.border)) } else { gpui::transparent_black() })
-        .when(active, |d| d.bg(c(p.bg)).child(div().absolute().top(px(-1.)).left_0().right_0().h(px(2.)).bg(c(p.accent))))
-        .text_color(c(tint))
-        .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text)).border_color(c(p.border))))
         .child(div().flex_none().child(icon(glyph, layout::ICON - 2., tint)))
         .when(!glyph_only, |d| d.child(div().flex_shrink().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label.clone())))
         .when(glyph_only, |d| {
@@ -92,6 +73,44 @@ fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, glyph_only:
             d.tooltip(move |_, cx| cx.new(|_| Tooltip(hint.clone())).into())
         })
         .when(badge > 0, |d| d.child(div().flex_none().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).child(badge.to_string())))
+}
+
+/// The look of a tab of the bottom panel: a page tab. Every tab has a frame; the one in front is the colour of the page
+/// under it, joins it (no line between them) and carries the accent on its top edge, so the strip reads as tabs of a
+/// page and not as text on the window.
+pub(super) fn page_tab(tab: gpui::Stateful<gpui::Div>, active: bool, p: &Palette) -> gpui::Stateful<gpui::Div> {
+    let mut tab = tab.relative();
+    // The tabs stand on the strip's bottom line, not in the middle of it.
+    tab.style().align_self = Some(gpui::AlignItems::End);
+    tab.h(px(layout::VIEW_HEADER_H - 5.))
+        .flex()
+        .items_center()
+        .gap(px(theme::SPACE[3]))
+        .px(px(theme::SPACE[5]))
+        // In a narrow panel the tabs give way (labels are cut) before the panel's buttons do.
+        .flex_shrink()
+        .min_w_0()
+        .overflow_hidden()
+        .cursor_pointer()
+        .rounded_t(px(theme::radius::MD))
+        .border_1()
+        .border_b_0()
+        .border_color(c(p.border))
+        .map(|d| {
+            if active {
+                // One pixel down: over the strip's own bottom line, so the tab and the page are one piece.
+                d.top(px(1.))
+                    .bg(c(p.bg))
+                    .text_color(c(p.text))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .child(div().absolute().top(px(-1.)).left_0().right_0().h(px(2.)).bg(c(p.accent)))
+            } else {
+                d.bg(c(p.surface_raised))
+                    .text_color(c(p.text_muted))
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text)))
+            }
+        })
 }
 
 impl Workbench {
@@ -825,7 +844,7 @@ mod tests {
         ];
         assert!(!tab_labels_do_not_fit(&tabs, None), "not laid out yet: show the labels");
         assert!(!tab_labels_do_not_fit(&tabs, Some(900.)), "a wide panel shows every label");
-        assert!(!tab_labels_do_not_fit(&tabs, Some(600.)), "a panel this wide shows every label even with a badge");
+        assert!(!tab_labels_do_not_fit(&tabs, Some(640.)), "a panel this wide shows every label even with a badge");
         let plain = [
             (Bottom::Problems, "Problems".to_string(), 0),
             (Bottom::Output, "Output".into(), 0),
@@ -833,7 +852,7 @@ mod tests {
             (Bottom::Terminal, "Terminal".into(), 0),
         ];
         assert!(tab_labels_do_not_fit(&plain, Some(480.)), "beside the editor at the default 480 the buttons leave no room for four labels");
-        assert!(!tab_labels_do_not_fit(&plain, Some(520.)), "a little more room brings the labels back");
+        assert!(!tab_labels_do_not_fit(&plain, Some(560.)), "a little more room brings the labels back");
         assert!(tab_labels_do_not_fit(&tabs, Some(400.)), "a narrow panel shows glyphs");
         assert!(tab_labels_do_not_fit(&tabs, Some(0.)), "and so does a panel with no room");
     }
