@@ -415,3 +415,30 @@ fn a_new_name_cannot_move_the_file_out_of_its_folder(cx: &mut TestAppContext) {
         assert!(!root.join("escaped.txt").exists(), "{bad:?} must not move the file out of its folder");
     }
 }
+
+#[gpui::test]
+fn a_new_file_or_folder_name_cannot_leave_the_folder_it_is_created_in(cx: &mut TestAppContext) {
+    let root = crate::qa_workbench_tests::fresh("create-escape");
+    let inner = root.join("inner");
+    std::fs::create_dir(&inner).unwrap();
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    for (ix, bad) in ["../escaped.txt", "a/../../escaped.txt", "a/./../../escaped.txt", "..", "", "  "].into_iter().enumerate() {
+        for is_dir in [false, true] {
+            wb.update_in(cx, |wb, window, cx| {
+                wb.replace_root(crate::ui::local_path(&root), cx);
+                let dir = crate::ui::local_path(&inner);
+                wb.finish_input(InputPurpose::Create { dir, is_dir }, bad.into(), window, cx);
+            });
+            cx.run_until_parked();
+            assert!(!root.join("escaped.txt").exists(), "{bad:?} (folder {is_dir}, case {ix}) must not create outside the folder");
+        }
+    }
+    assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1, "nothing but `inner` exists in the root");
+    // Nested names are fine: that is how a path of new folders is made.
+    wb.update_in(cx, |wb, window, cx| {
+        let dir = crate::ui::local_path(&inner);
+        wb.finish_input(InputPurpose::Create { dir, is_dir: false }, "sub/new.txt".into(), window, cx);
+    });
+    cx.run_until_parked();
+    assert!(inner.join("sub/new.txt").exists() || inner.join("sub").exists(), "a nested name still creates inside the folder");
+}
