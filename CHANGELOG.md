@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.7] - 2026-11-21
+
+### Fixed
+
+- Bottom panel: the buttons at the right end of the tab strip have states. Without an SSH connection Ports shows none (the page says why; the automatic-forwarding toggle used to be drawn as on and did nothing). With a connection, *Retry failed* is off while no forward failed and *Stop all* while nothing is forwarded; Output's *Copy* and *Clear* are off while it is empty; the Terminal's *Clear* is off with no terminal. An off button is faint and does not answer a press.
+
 ## [0.12.6] - 2026-11-21
 
 ### Added
@@ -2090,7 +2096,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.6...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.7...HEAD
+[0.12.7]: https://github.com/doancan/codeyard/compare/v0.12.6...v0.12.7
 [0.12.6]: https://github.com/doancan/codeyard/compare/v0.12.5...v0.12.6
 [0.12.5]: https://github.com/doancan/codeyard/compare/v0.12.4...v0.12.5
 [0.12.4]: https://github.com/doancan/codeyard/compare/v0.12.3...v0.12.4
