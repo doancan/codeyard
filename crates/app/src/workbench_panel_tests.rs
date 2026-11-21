@@ -117,13 +117,10 @@ fn the_setting_chooses_what_a_maximized_terminal_does_when_something_opens(cx: &
 fn each_tab_offers_its_own_buttons_at_the_end_of_the_strip(cx: &mut gpui::TestAppContext) {
     let (wb, cx) = crate::qa_workbench_tests::setup(cx);
     let ids = |cx: &mut gpui::VisualTestContext, tab: Bottom| wb.read_with(cx, |wb, cx| wb.panel_actions(tab, cx).iter().map(|a| a.id).collect::<Vec<_>>());
-    assert_eq!(ids(cx, Bottom::Ports), ["ports-forward", "ports-retry", "ports-stop-all", "ports-auto"]);
+    assert!(ids(cx, Bottom::Ports).is_empty(), "without an SSH connection there is nothing to forward, so no buttons");
     assert_eq!(ids(cx, Bottom::Output), ["output-copy", "output-clear"]);
     assert_eq!(ids(cx, Bottom::Terminal), ["terminal-clear"]);
     assert!(ids(cx, Bottom::Problems).is_empty(), "Problems has its own filter bar in the page");
-    // Only the automatic forwarding button is a toggle.
-    let toggles = wb.read_with(cx, |wb, cx| wb.panel_actions(Bottom::Ports, cx).iter().filter(|a| a.toggled.is_some()).map(|a| a.id).collect::<Vec<_>>());
-    assert_eq!(toggles, ["ports-auto"]);
 }
 
 #[gpui::test]
@@ -137,4 +134,19 @@ fn output_can_be_copied_and_cleared_from_the_strip(cx: &mut gpui::TestAppContext
     assert_eq!(cx.read_from_clipboard().and_then(|c| c.text()).as_deref(), Some("first line\nsecond line"));
     wb.update(cx, |wb, cx| wb.clear_output(cx));
     assert!(wb.read_with(cx, |wb, _| wb.output_lines()).is_empty());
+}
+
+#[gpui::test]
+fn buttons_with_nothing_to_act_on_are_off_and_come_on_with_something_to_do(cx: &mut gpui::TestAppContext) {
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    let on = |cx: &mut gpui::VisualTestContext, tab: Bottom| {
+        wb.read_with(cx, |wb, cx| wb.panel_actions(tab, cx).iter().map(|a| (a.id, a.enabled)).collect::<Vec<_>>())
+    };
+    assert_eq!(on(cx, Bottom::Output), [("output-copy", false), ("output-clear", false)], "an empty Output has nothing to copy or clear");
+    wb.update(cx, |wb, _| wb.log_output("a line".into()));
+    assert_eq!(on(cx, Bottom::Output), [("output-copy", true), ("output-clear", true)]);
+    wb.update(cx, |wb, cx| wb.clear_output(cx));
+    assert!(on(cx, Bottom::Output).iter().all(|(_, enabled)| !enabled), "and off again once it is cleared");
+    wb.update(cx, |wb, _| wb.terminals.clear());
+    assert_eq!(on(cx, Bottom::Terminal), [("terminal-clear", false)], "no terminal, nothing to clear");
 }
