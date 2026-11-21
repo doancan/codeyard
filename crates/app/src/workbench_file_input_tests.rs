@@ -380,3 +380,38 @@ fn current_file_name_forms_work_without_a_git_repository(cx: &mut TestAppContext
         }
     }
 }
+
+#[gpui::test]
+fn renaming_onto_an_existing_name_keeps_both_files(cx: &mut TestAppContext) {
+    let root = crate::qa_workbench_tests::fresh("rename-onto-existing");
+    std::fs::write(root.join("old.txt"), "old\n").unwrap();
+    std::fs::write(root.join("taken.txt"), "taken\n").unwrap();
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    wb.update_in(cx, |wb, window, cx| {
+        wb.replace_root(crate::ui::local_path(&root), cx);
+        let path = crate::ui::local_path(&root.join("old.txt"));
+        wb.finish_input(InputPurpose::Rename { path }, "taken.txt".into(), window, cx);
+    });
+    cx.run_until_parked();
+    assert_eq!(std::fs::read_to_string(root.join("taken.txt")).unwrap(), "taken\n", "the existing file is not overwritten");
+    assert_eq!(std::fs::read_to_string(root.join("old.txt")).unwrap(), "old\n", "the renamed file stays where it was");
+}
+
+#[gpui::test]
+fn a_new_name_cannot_move_the_file_out_of_its_folder(cx: &mut TestAppContext) {
+    let root = crate::qa_workbench_tests::fresh("rename-escape");
+    let inner = root.join("inner");
+    std::fs::create_dir(&inner).unwrap();
+    std::fs::write(inner.join("old.txt"), "old\n").unwrap();
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    for bad in ["../escaped.txt", "a/b.txt", "", "  ", "."] {
+        wb.update_in(cx, |wb, window, cx| {
+            wb.replace_root(crate::ui::local_path(&root), cx);
+            let path = crate::ui::local_path(&inner.join("old.txt"));
+            wb.finish_input(InputPurpose::Rename { path }, bad.into(), window, cx);
+        });
+        cx.run_until_parked();
+        assert!(inner.join("old.txt").exists(), "{bad:?} must not rename the file");
+        assert!(!root.join("escaped.txt").exists(), "{bad:?} must not move the file out of its folder");
+    }
+}

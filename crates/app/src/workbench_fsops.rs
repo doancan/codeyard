@@ -339,6 +339,10 @@ impl Workbench {
             InputPurpose::Setting { key } => self.finish_setting_input(key, name, window, cx),
             InputPurpose::Profile(purpose) => self.finish_profile_input(purpose, name, window, cx),
             InputPurpose::Rename { path } => {
+                if let Some(problem) = rename_problem(&name) {
+                    self.notify(NoticeSource::Files, Notice::Error(problem.into()));
+                    return cx.notify();
+                }
                 let target = ui::join(&parent_of(&path), &name);
                 if target != path {
                     self.move_path(path, target, false, window, cx);
@@ -675,4 +679,17 @@ impl Workbench {
         self.favorites_moved(&path, None, cx);
         self.breakpoints_moved(&path, None, cx);
     }
+}
+
+/// Why `name` cannot be the new name of a file or folder in its own place: a rename never moves the entry (that is
+/// what dragging and cut and paste are for), so a path, an empty name or `.` and `..` are refused.
+fn rename_problem(name: &str) -> Option<String> {
+    let name = name.trim();
+    if name.is_empty() || name == "." || name == ".." {
+        return Some(crate::i18n::t("Enter a name for the file or folder.").into());
+    }
+    if name.contains(['/', '\\', '\0']) {
+        return Some(crate::i18n::t("A file or folder name cannot contain a slash.").into());
+    }
+    None
 }

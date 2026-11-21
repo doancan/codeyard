@@ -2349,6 +2349,9 @@ fn ssh_ports_are_forwarded_automatically(cx: &mut TestAppContext) {
         tick(cx);
         wb.read_with(cx, |wb, _| wb.forwards().iter().any(|f| f.remote == remote))
     });
+    // The status bar shows the plug icon and the count of active forwards, no words.
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("ports-indicator").is_some(), "the status bar shows the forwarded ports");
     // The server is this machine, so our own local port shows up as a "new port"; it must not be forwarded again.
     for _ in 0..3 {
         tick(cx);
