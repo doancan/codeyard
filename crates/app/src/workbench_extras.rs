@@ -105,7 +105,7 @@ impl Workbench {
 
     /// "Terminal: Run Active File": the open file's path, quoted for the shell, typed into the active terminal and run.
     pub(super) fn run_active_file(&mut self, _: &RunActiveFile, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(path) = self.active_path(cx) else {
+        let Some(path) = self.active_editor().map(|e| e.read(cx).path.clone()) else {
             self.notify(NoticeSource::Terminal, Notice::Info(crate::i18n::t("There is no open file to run.").into()));
             return cx.notify();
         };
