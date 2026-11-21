@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.6] - 2026-11-21
+
+### Added
+
+- Ports: a click on the Port, Label, Running Process or Origin header orders the table by it; a second click turns the order around and the ordering column shows an arrow. The forwards stay above the ports that only listen, and rows without a value go last. The keyboard, the accessibility tree and the row menu follow the order shown.
+
 ## [0.12.5] - 2026-11-21
 
 ### Added
@@ -2084,7 +2090,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.5...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.6...HEAD
+[0.12.6]: https://github.com/doancan/codeyard/compare/v0.12.5...v0.12.6
 [0.12.5]: https://github.com/doancan/codeyard/compare/v0.12.4...v0.12.5
 [0.12.4]: https://github.com/doancan/codeyard/compare/v0.12.3...v0.12.4
 [0.12.3]: https://github.com/doancan/codeyard/compare/v0.12.2...v0.12.3
