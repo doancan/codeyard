@@ -69,6 +69,7 @@ impl Workbench {
             .on_action(cx.listener(Self::configure_terminal_settings))
             .on_action(cx.listener(Self::rename_terminal))
             .on_action(cx.listener(Self::change_terminal_color))
+            .on_action(cx.listener(Self::change_terminal_icon))
             .on_action(cx.listener(Self::new_terminal_with_profile))
             .on_action(cx.listener(Self::select_default_terminal_profile))
             .on_action(cx.listener(Self::run_without_debugging))

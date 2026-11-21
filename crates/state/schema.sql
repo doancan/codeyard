@@ -106,3 +106,4 @@ create index history_recent on history (kind, used_at desc);
 --   at most 200 per workspace; restored when the workspace opens again.
 -- Version 7: breakpoints: debugger breakpoints per workspace (relative path, 0-based line, enabled, condition,
 --   hit count, log message).
+-- Version 8: port_forwards.bind: `loopback` (this computer only) or `all` (every network interface) for a saved forward.

@@ -25,6 +25,9 @@ pub struct SavedTerminal {
     pub shell: Option<String>,
     pub args: Option<Vec<String>>,
     pub color: Option<String>,
+    /// A glyph the user chose for it in the terminal list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     /// A title the user gave it (`None`: the shell sets it).
     pub title: Option<String>,
     /// The last lines of its history, as plain text (only with `terminal.persistentScrollback`).
@@ -55,7 +58,7 @@ impl SavedTerminal {
         history_lines: usize,
     ) -> Self {
         let history = (history_lines > 0).then(|| sanitize_history(history, history_lines)).flatten();
-        Self { cwd, shell: launched.0, args: launched.1, color, title, history, token: None }
+        Self { cwd, shell: launched.0, args: launched.1, color, icon: None, title, history, token: None }
     }
 }
 
@@ -142,6 +145,8 @@ impl SavedTerminals {
                 *title = title.chars().filter(|c| !c.is_control()).collect();
             }
             t.history = t.history.as_deref().and_then(|h| sanitize_history(h, history_lines));
+            // A glyph name that is not a bundled one (a hand-edited file) is dropped.
+            t.icon = t.icon.take().filter(|i| crate::terminal_profiles::ICONS.contains(&i.as_str()));
         }
         saved.active = saved.active.min(saved.terminals.len().saturating_sub(1));
         // A token is only ever compared by the daemon, but a hand-edited file must not make it hold anything large.
@@ -190,5 +195,13 @@ mod tests {
         let t = SavedTerminal { history: Some("secret output".into()), ..Default::default() };
         let text = SavedTerminals { version: 1, active: 0, terminals: vec![t], session: None }.to_json().unwrap();
         assert_eq!(SavedTerminals::parse(&text, 0).unwrap().terminals[0].history, None);
+    }
+
+    #[test]
+    fn a_glyph_that_is_not_a_bundled_one_is_dropped_on_restore() {
+        let terminals = ["rocket", "../../etc/passwd", ""].map(|i| SavedTerminal { icon: Some(i.into()), ..Default::default() }).to_vec();
+        let text = SavedTerminals { version: 1, active: 0, terminals, session: None }.to_json().unwrap();
+        let icons: Vec<Option<String>> = SavedTerminals::parse(&text, 0).unwrap().terminals.into_iter().map(|t| t.icon).collect();
+        assert_eq!(icons, vec![Some("rocket".to_string()), None, None]);
     }
 }

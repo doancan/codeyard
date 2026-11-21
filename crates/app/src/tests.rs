@@ -2483,6 +2483,60 @@ fn a_forwarded_port_comes_back_with_its_project(cx: &mut TestAppContext) {
     assert_eq!(got, "saved");
 }
 
+/// Making a forward public re-opens it on every interface with the same local port; the choice is remembered with the
+/// project and a restart forwards it public again.
+#[cfg(unix)]
+#[gpui::test]
+fn a_public_forward_stays_public_after_a_restart(cx: &mut TestAppContext) {
+    use host::forward::LocalBind;
+    let Some(_sshd) = crate::test_sshd::start("ports-public") else { return };
+    let home = crate::qa_workbench_tests::project("ports-public-home");
+    let dir = crate::qa_workbench_tests::project("ports-public-repo");
+    let (wb, cx) = crate::qa_workbench_tests::setup_persistent(cx, &home);
+    let tick = |cx: &mut VisualTestContext| cx.executor().advance_clock(std::time::Duration::from_secs(5));
+    wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    wait_for(cx, "connected", |cx| {
+        tick(cx);
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    open(&wb, &dir, cx);
+    let app = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let remote = app.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for mut s in app.incoming().flatten() {
+            use std::io::Write;
+            let _ = s.write_all(b"open");
+        }
+    });
+    wb.update(cx, |wb, cx| wb.forward_port(remote, cx));
+    wait_for(cx, "forwarded", |cx| {
+        cx.run_until_parked();
+        wb.read_with(cx, |wb, _| wb.forwards().iter().any(|f| f.remote == remote))
+    });
+    assert_eq!(wb.read_with(cx, |wb, _| wb.forward_bind_for_test(remote)), Some(LocalBind::Loopback), "private by default");
+
+    wb.update_in(cx, |wb, window, cx| wb.set_forward_visibility_for_test(remote, LocalBind::All, window, cx));
+    wait_for(cx, "public", |cx| {
+        cx.run_until_parked();
+        wb.read_with(cx, |wb, _| wb.forwards().iter().any(|f| f.remote == remote) && wb.forward_spec_for_test(remote).is_some_and(|s| s.starts_with("0.0.0.0")))
+    });
+    let local = wb.read_with(cx, |wb, _| wb.forwards()).into_iter().find(|f| f.remote == remote).unwrap().local;
+    let read = |port: u16| {
+        use std::io::Read;
+        let mut got = String::new();
+        std::net::TcpStream::connect(("127.0.0.1", port)).unwrap().read_to_string(&mut got).unwrap();
+        got
+    };
+    assert_eq!(read(local), "open", "the forward still works after it was reopened");
+
+    let wb = crate::qa_workbench_tests::restart_with(wb, cx, &home, crate::settings::Startup::Continue);
+    wait_for(cx, "forwarded again after the restart", |cx| {
+        tick(cx);
+        wb.read_with(cx, |wb, _| wb.forwards().iter().any(|f| f.remote == remote))
+    });
+    assert_eq!(wb.read_with(cx, |wb, _| wb.forward_bind_for_test(remote)), Some(LocalBind::All), "public again after the restart");
+}
+
 /// "3000:8080" on a port that is forwarded already moves it; a local port that cannot be opened leaves the forward on the
 /// port it had, with a notice, and the busy port is not what the project remembers.
 #[cfg(unix)]

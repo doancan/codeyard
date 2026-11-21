@@ -36,6 +36,8 @@ pub(crate) struct SavedTerminal {
     title: Option<String>,
     #[serde(default)]
     color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    icon: Option<String>,
     #[serde(default)]
     cwd: Option<String>,
     /// The token to take it back from the window's session.
@@ -62,10 +64,12 @@ impl SavedTerminals {
             return None;
         }
         let fits = |s: &Option<String>, max: usize| s.as_ref().is_none_or(|s| s.len() <= max && !s.contains('\0'));
-        let valid = saved
-            .terminals
-            .iter()
-            .all(|t| fits(&t.title, MAX_TITLE) && fits(&t.cwd, MAX_CWD) && t.color.as_deref().is_none_or(|c| crate::terminal_profiles::COLORS.contains(&c)));
+        let valid = saved.terminals.iter().all(|t| {
+            fits(&t.title, MAX_TITLE)
+                && fits(&t.cwd, MAX_CWD)
+                && t.color.as_deref().is_none_or(|c| crate::terminal_profiles::COLORS.contains(&c))
+                && t.icon.as_deref().is_none_or(|i| crate::terminal_profiles::ICONS.contains(&i))
+        });
         let hex = |s: &str| s.len() <= 64 && s.bytes().all(|b| b.is_ascii_hexdigit());
         let valid = valid && saved.terminals.iter().filter_map(|t| t.token.as_ref()).all(|k| hex(&k.instance) && hex(&k.secret));
         valid.then_some(saved)
@@ -122,8 +126,9 @@ impl Workbench {
                 return;
             }
             let color = t.color.clone().filter(|c| crate::terminal_profiles::COLORS.contains(&c.as_str()));
+            let icon = t.icon.clone().filter(|i| crate::terminal_profiles::ICONS.contains(&i.as_str()));
             let cwd = fits(t.live_cwd().or_else(|| t.start_dir()), MAX_CWD);
-            terminals.push(SavedTerminal { place, title: fits(t.fixed_title(), MAX_TITLE), color, cwd, token: t.token().cloned() });
+            terminals.push(SavedTerminal { place, title: fits(t.fixed_title(), MAX_TITLE), color, icon, cwd, token: t.token().cloned() });
         };
         for id in self.tabs.layout.groups() {
             for term in self.tabs.group(id).map(|g| g.terminals.as_slice()).unwrap_or_default() {
@@ -196,6 +201,7 @@ impl Workbench {
                 let shown = crate::terminal_session::SavedTerminal {
                     cwd: saved.cwd.clone(),
                     color: saved.color.clone(),
+                    icon: saved.icon.clone(),
                     title: saved.title.clone(),
                     token: saved.token.clone(),
                     ..Default::default()
@@ -215,6 +221,7 @@ impl Workbench {
             }
             let Some(term) = self.spawn_terminal(cwd, launch, window, cx) else { break };
             term.update(cx, |t, cx| {
+                t.icon = saved.icon;
                 if let Some(title) = saved.title {
                     t.set_fixed_title(title);
                 }

@@ -76,8 +76,10 @@ const MIGRATIONS: &[(i64, &str)] = &[
            primary key (workspace_id, rel_path, line)
          );",
     ),
+    // Where a saved forward listens: this computer only, or every network interface ("public").
+    (8, "alter table port_forwards add column bind text not null default 'loopback' check (bind in ('loopback', 'all'));"),
 ];
-const SCHEMA_VERSION: i64 = 7;
+const SCHEMA_VERSION: i64 = 8;
 
 const DAY_MS: i64 = 86_400_000;
 const FILE_STATE_MAX_AGE_DAYS: i64 = 90;
@@ -136,6 +138,8 @@ pub struct SavedForward {
     pub label: Option<String>,
     /// `http`, `https` or `tcp`.
     pub protocol: String,
+    /// `loopback` (this computer only) or `all` (every network interface).
+    pub bind: String,
 }
 
 /// A saved debugger breakpoint (line 0-based).
@@ -566,20 +570,22 @@ impl State {
     pub fn port_forwards(&self, workspace: i64) -> Vec<SavedForward> {
         let read = || -> Result<Vec<SavedForward>, Error> {
             let mut stmt =
-                self.db.prepare("select remote_port, local_port, label, protocol from port_forwards where workspace_id = ?1 order by remote_port")?;
-            stmt.query_map([workspace], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<i64>>(1)?, r.get::<_, Option<String>>(2)?, r.get::<_, String>(3)?)))?
-                .collect::<Result<Vec<_>, _>>()
-                .map(|rows| {
-                    rows.into_iter()
-                        .filter_map(|(remote, local, label, protocol)| {
-                            let local = match local {
-                                Some(l) => Some(u16::try_from(l).ok().filter(|p| *p > 0)?),
-                                None => None,
-                            };
-                            Some(SavedForward { remote: u16::try_from(remote).ok().filter(|p| *p > 0)?, local, label, protocol })
-                        })
-                        .collect()
-                })
+                self.db.prepare("select remote_port, local_port, label, protocol, bind from port_forwards where workspace_id = ?1 order by remote_port")?;
+            stmt.query_map([workspace], |r| {
+                Ok((r.get::<_, i64>(0)?, r.get::<_, Option<i64>>(1)?, r.get::<_, Option<String>>(2)?, r.get::<_, String>(3)?, r.get::<_, String>(4)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map(|rows| {
+                rows.into_iter()
+                    .filter_map(|(remote, local, label, protocol, bind)| {
+                        let local = match local {
+                            Some(l) => Some(u16::try_from(l).ok().filter(|p| *p > 0)?),
+                            None => None,
+                        };
+                        Some(SavedForward { remote: u16::try_from(remote).ok().filter(|p| *p > 0)?, local, label, protocol, bind })
+                    })
+                    .collect()
+            })
         };
         read().unwrap_or_default()
     }
@@ -590,10 +596,11 @@ impl State {
         let label: Option<String> = f.label.as_deref().map(|l| l.chars().filter(|c| !c.is_control()).take(PORT_LABEL_MAX).collect());
         let tx = self.db.unchecked_transaction()?;
         tx.execute(
-            "insert into port_forwards (workspace_id, remote_port, local_port, label, protocol, updated_at) values (?1, ?2, ?3, ?4, ?5, ?6)
+            "insert into port_forwards (workspace_id, remote_port, local_port, label, protocol, bind, updated_at) values (?1, ?2, ?3, ?4, ?5, ?6, ?7)
              on conflict (workspace_id, remote_port) do update set
-               local_port = excluded.local_port, label = excluded.label, protocol = excluded.protocol, updated_at = excluded.updated_at",
-            params![workspace, f.remote, f.local, label, f.protocol, now_ms()],
+               local_port = excluded.local_port, label = excluded.label, protocol = excluded.protocol, bind = excluded.bind,
+               updated_at = excluded.updated_at",
+            params![workspace, f.remote, f.local, label, f.protocol, f.bind, now_ms()],
         )?;
         tx.execute(
             "delete from port_forwards where workspace_id = ?1 and remote_port not in (
@@ -793,20 +800,22 @@ mod tests {
         let s = State::in_memory().unwrap();
         let ws = s.record_workspace(Some("box"), "/srv/app").unwrap();
         let other = s.record_workspace(None, "/tmp/x").unwrap();
-        let web = SavedForward { remote: 3000, local: None, label: Some("web\u{1b}[2J".into()), protocol: "http".into() };
+        let web = SavedForward { remote: 3000, local: None, label: Some("web\u{1b}[2J".into()), protocol: "http".into(), bind: "loopback".into() };
         s.save_port_forward(ws, &web).unwrap();
-        s.save_port_forward(ws, &SavedForward { remote: 5432, local: Some(15432), label: None, protocol: "tcp".into() }).unwrap();
+        s.save_port_forward(ws, &SavedForward { remote: 5432, local: Some(15432), label: None, protocol: "tcp".into(), bind: "all".into() }).unwrap();
         s.save_port_forward(ws, &SavedForward { protocol: "https".into(), ..web.clone() }).unwrap();
         let saved = s.port_forwards(ws);
         assert_eq!(saved.len(), 2, "saving the same port replaces it");
         assert_eq!((saved[0].label.as_deref(), saved[0].protocol.as_str()), (Some("web[2J"), "https"), "control characters are dropped");
         assert_eq!(saved[1].local, Some(15432));
+        assert_eq!((saved[0].bind.as_str(), saved[1].bind.as_str()), ("loopback", "all"), "where a forward listens is saved");
+        assert!(s.save_port_forward(ws, &SavedForward { bind: "everywhere".into(), ..web.clone() }).is_err(), "the bind is checked");
         assert!(s.port_forwards(other).is_empty(), "per project");
         assert!(s.save_port_forward(ws, &SavedForward { protocol: "gopher".into(), ..web.clone() }).is_err(), "the protocol is checked");
         s.delete_port_forward(ws, 3000).unwrap();
         assert_eq!(s.port_forwards(ws).len(), 1);
         for p in 1..=(PORT_FORWARDS_PER_WORKSPACE as u16 + 20) {
-            s.save_port_forward(ws, &SavedForward { remote: 10_000 + p, local: None, label: None, protocol: "http".into() }).unwrap();
+            s.save_port_forward(ws, &SavedForward { remote: 10_000 + p, local: None, label: None, protocol: "http".into(), bind: "loopback".into() }).unwrap();
         }
         assert_eq!(s.port_forwards(ws).len(), PORT_FORWARDS_PER_WORKSPACE as usize, "capped per project");
         s.db.execute("delete from workspaces where id = ?1", [ws]).unwrap();

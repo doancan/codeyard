@@ -96,6 +96,8 @@ pub struct PortForward {
     missed: u8,
     /// While a changed local port opens: how to go back to the working one if the new one cannot be opened.
     revert: Option<Option<u16>>,
+    /// The visibility to go back to together with `revert` when the new one cannot be opened.
+    revert_bind: Option<LocalBind>,
     /// Why the last change of the local port failed and the old port was put back (shown once).
     reverted: Option<ForwardError>,
 }
@@ -343,6 +345,7 @@ impl ForwardSet {
             seq: 0,
             missed: 0,
             revert: None,
+            revert_bind: None,
             reverted: None,
         });
         (id, self.open(id))
@@ -356,6 +359,7 @@ impl ForwardSet {
         match (current, result) {
             (Some(f), Ok(opened)) => {
                 f.revert = None;
+                f.revert_bind = None;
                 f.local = Some(opened.local);
                 f.spec = Some(opened.spec);
                 f.state = ForwardState::Active;
@@ -365,6 +369,9 @@ impl ForwardSet {
             (Some(f), Err(e)) => match f.revert.take() {
                 Some(previous) => {
                     (f.wanted_local, f.strict, f.reverted) = (previous, false, Some(e));
+                    if let Some(bind) = f.revert_bind.take() {
+                        f.bind = bind;
+                    }
                     let id = f.id;
                     self.open(id)
                 }
@@ -441,12 +448,37 @@ impl ForwardSet {
         }
     }
 
+    /// Makes a forward private (this computer only) or public (every network interface): the listener is closed and
+    /// opened again on the same local port. If the new visibility cannot be opened, the working one is put back.
+    pub fn set_bind(&mut self, id: ForwardId, bind: LocalBind) -> Vec<Effect> {
+        let Some(f) = self.get_mut(id) else { return Vec::new() };
+        if f.bind == bind {
+            return Vec::new();
+        }
+        let previous = f.bind;
+        f.bind = bind;
+        f.origin = Origin::User;
+        f.revert = None;
+        f.revert_bind = None;
+        let mut out = Vec::new();
+        if let (ForwardState::Active, Some(spec)) = (&f.state, f.spec.take()) {
+            out.push(Effect::Cancel { alias: f.alias.clone(), spec });
+            f.revert = f.local.map(Some);
+            f.revert_bind = f.local.map(|_| previous);
+            (f.wanted_local, f.strict) = (f.local, true);
+        }
+        f.local = None;
+        out.extend(self.open(id));
+        out
+    }
+
     /// Moves a forward to the local port the user chose: the old one is cancelled, the new one must be exactly `port`.
     pub fn change_local(&mut self, id: ForwardId, port: u16) -> Vec<Effect> {
         let Some(f) = self.get_mut(id) else { return Vec::new() };
         let mut out = Vec::new();
         f.origin = Origin::User;
         f.revert = None;
+        f.revert_bind = None;
         if let (ForwardState::Active, Some(spec)) = (&f.state, f.spec.take()) {
             out.push(Effect::Cancel { alias: f.alias.clone(), spec });
             f.revert = f.local.map(Some);
@@ -482,6 +514,7 @@ impl ForwardSet {
                 f.stale = f.spec.take().or(f.stale.take());
                 f.seq = 0;
                 f.revert = None;
+                f.revert_bind = None;
             }
         }
     }
@@ -717,6 +750,35 @@ mod tests {
         assert!(matches!(&effects[0], Effect::Cancel { spec, .. } if spec.contains(":8080:")));
         let Effect::Open { req, .. } = &effects[1] else { panic!("{effects:?}") };
         assert_eq!((req.wanted_local, req.strict), (Some(9090), true));
+    }
+
+    #[test]
+    fn making_a_forward_public_reopens_it_on_the_same_local_port() {
+        let mut set = ForwardSet::default();
+        let (id, e) = set.request(req(8080));
+        set.on_result(id, open_of(&e).1, opened(8080));
+        assert!(set.set_bind(id, LocalBind::Loopback).is_empty(), "nothing changes when the visibility is the same");
+        let effects = set.set_bind(id, LocalBind::All);
+        assert!(matches!(&effects[0], Effect::Cancel { spec, .. } if spec.contains(":8080:")), "the private listener is closed first");
+        let Effect::Open { req, .. } = &effects[1] else { panic!("{effects:?}") };
+        assert_eq!((req.wanted_local, req.strict, req.bind), (Some(8080), true, LocalBind::All));
+        assert_eq!(set.get(id).unwrap().origin, Origin::User, "a forward the user changed is theirs");
+    }
+
+    #[test]
+    fn a_visibility_that_cannot_be_opened_puts_the_working_one_back() {
+        let mut set = ForwardSet::default();
+        let (id, e) = set.request(req(8080));
+        set.on_result(id, open_of(&e).1, opened(8080));
+        let (_, seq) = open_of(&set.set_bind(id, LocalBind::All));
+        let denied = ForwardError { kind: FailKind::AddrInUse, message: "busy".into() };
+        let back = set.on_result(id, seq, Err(denied.clone()));
+        let Effect::Open { seq: again, req: reopen, .. } = &back[0] else { panic!("{back:?}") };
+        assert_eq!((reopen.wanted_local, reopen.bind), (Some(8080), LocalBind::Loopback), "the old address and the old visibility");
+        assert_eq!(set.take_reverted(id), Some(denied));
+        set.on_result(id, *again, opened(8080));
+        assert!(set.get(id).unwrap().is_active());
+        assert_eq!(set.get(id).unwrap().bind, LocalBind::Loopback);
     }
 
     #[test]
