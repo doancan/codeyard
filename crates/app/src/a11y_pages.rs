@@ -6,7 +6,7 @@
 use super::row_menus::{MenuRow, add_menu, menu_request};
 use super::*;
 use crate::settings_page::{AccessControl, AccessPage, SettingsEvent};
-use crate::workbench::ports_glue::{RowState, port_rows};
+use crate::workbench::ports_glue::RowState;
 use serde_json::Value;
 
 const SETTINGS: NodeId = NodeId(54);
@@ -466,7 +466,7 @@ impl Workbench {
             return PortsSnap { rows: Vec::new(), empty: Some(t("Port forwarding works while connected to an SSH host.").into()), field: None };
         };
         let field = Some((self.ports.field.read(cx).text().to_string(), self.ports.field.focus_handle(cx).is_focused(window)));
-        let all = port_rows(&self.ports.set, &self.ports.listening, &alias);
+        let all = self.shown_port_rows(&alias);
         let note = self.ports_note();
         let empty = port_notes(all.len(), note.as_ref().map(|e| e.as_ref()));
         let rows = all
@@ -620,7 +620,7 @@ impl Workbench {
         let (Some(old), Some(alias)) = (old, self.ssh_alias()) else { return };
         let now = self.a11y_ports(window, cx);
         let Some(i) = now.rows.iter().position(|r| r == old) else { return };
-        let rows = port_rows(&self.ports.set, &self.ports.listening, &alias);
+        let rows = self.shown_port_rows(&alias);
         if let Some(row) = rows.get(i).filter(|r| r.port == old.port) {
             let at = self.row_menu_anchor(MenuRow::Port, i, window);
             self.open_port_menu(row, at, window, cx);
