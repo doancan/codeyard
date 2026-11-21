@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.4] - 2026-11-21
+
+### Added
+
+- Bottom panel: Ports, Output and the Terminal have buttons of their own at the right end of the tab strip. Ports: forward a port, retry failed forwards, stop all forwards and a toggle for automatic forwarding. Output: copy and clear. Terminal: clear, beside its own buttons. Problems keeps its filter bar.
+- Ports: the *Forward a port* field is a bar at the bottom of the panel, so the table starts right under the tabs.
+
+### Changed
+
+- Bottom panel: the tabs (Problems, Output, Ports, Terminal and extension views) are page tabs on a strip of their own, with no line under them. Every tab has a frame, a glyph and a label; the tab in front is the colour of the page, has a thick accent on its top edge, an accent glyph and a bold label. The terminal's text has a little room around it.
+- Bottom panel in a narrow window: a panel docked on the right shrinks with the window instead of leaving it, and when the four labels do not fit, the tabs that are not in front show only their glyph (with a hint on hover).
+
+### Fixed
+
+- Explorer: *New File* and *New Folder* refuse a name that is empty, starts with a slash or goes up with `..`; `../x.txt` used to create a file outside the folder. Names such as `a/b.txt` still work.
+- Ports: the Origin column no longer cuts its labels.
+
 ## [0.12.3] - 2026-11-21
 
 ### Added
@@ -2057,7 +2074,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.3...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.4...HEAD
+[0.12.4]: https://github.com/doancan/codeyard/compare/v0.12.3...v0.12.4
 [0.12.3]: https://github.com/doancan/codeyard/compare/v0.12.2...v0.12.3
 [0.12.2]: https://github.com/doancan/codeyard/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/doancan/codeyard/compare/v0.12.0...v0.12.1

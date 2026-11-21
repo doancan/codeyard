@@ -369,9 +369,13 @@ impl Workbench {
             .flex_col()
             .text_size(px(text::SM.0))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(header)
+            .child(body)
             .child(
                 div()
                     .h(px(layout::ROW_H + 8.))
+                    .border_t_1()
+                    .border_color(c(p.border))
                     .flex_none()
                     .flex()
                     .items_center()
@@ -381,8 +385,6 @@ impl Workbench {
                     .child(ui::input_box("ports-field-box", p, p.bg, false).w(px(200.)).child(self.ports.field.clone()))
                     .children(self.ports_note().map(|e| div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_color(c(p.warning)).child(e))),
             )
-            .child(header)
-            .child(body)
             .into_any_element()
     }
 }

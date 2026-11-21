@@ -31,6 +31,7 @@ A key that types text cannot be a shortcut on its own. Add Ctrl, Alt or Cmd, or 
 A merge commit cannot be part of the run, or above it	
 A merge commit is created unless it can fast-forward. Conflicts are resolved in Source Control.	
 A merge, rebase or cherry-pick is waiting for its conflicts to be resolved: resolve and stage the files, or abort it, then try again.	
+A new name cannot start with a slash or go up with two dots.	
 A part of the path is a file, not a folder.	
 A path dependency: not looked up on crates.io.	
 A pattern is one expression or statement, not several.	
@@ -336,6 +337,7 @@ Choose another name or remove the existing one first.
 Choose at least two commits to squash.	
 Choose…	
 Clear	
+Clear Output	
 Clear Terminal	
 Clear all notifications	
 Clear filter	
@@ -522,6 +524,7 @@ Copy Last Command Output
 Copy Line Down	
 Copy Line Up	
 Copy Message	
+Copy Output	
 Copy Path	
 Copy Port Number	
 Copy Problem	
@@ -1157,6 +1160,8 @@ Formatted
 Formatted by {}	
 Forward	
 Forward Port	
+Forward Ports Automatically	
+Forward a Port…	
 Forward a port:	
 Forward ports opened on SSH hosts	
 Forwarded Address	
@@ -2349,6 +2354,7 @@ Restricted Mode: tasks, debugging, and the project's terminal shell and language
 Result	
 Resume updates	
 Retry	
+Retry Failed Forwards	
 Reveal in Finder	
 Revert	
 Revert Change	
@@ -2697,6 +2703,7 @@ Step Over (F10)
 Still staging the previous change…	
 Stop	
 Stop (⇧F5)	
+Stop All Forwards	
 Stop Debugging	
 Stop Forwarding	
 Stop Pre-releases	
