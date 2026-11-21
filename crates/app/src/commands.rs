@@ -533,6 +533,7 @@ registry! {
     // --- compare ---
     "workbench.compareFolders" => wb::CompareFolders,
     "workbench.runSelectedText" => wb::RunSelectedText,
+    "workbench.runActiveFile" => wb::RunActiveFile,
     "workbench.goToLastEdit" => wb::GoToLastEdit,
     "workbench.newScratchFile" => wb::NewScratchFile,
     // --- data ---
