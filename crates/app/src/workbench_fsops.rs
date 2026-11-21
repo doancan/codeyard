@@ -231,6 +231,11 @@ impl Workbench {
             InputPurpose::PortLocal { remote } => self.finish_port_local(remote, name, cx),
             InputPurpose::DataBreakpoint => self.finish_data_breakpoint(name, cx),
             InputPurpose::NewFile { base } => {
+                // A path typed in full is the user's own choice; a name relative to the folder stays inside it.
+                if let Some(problem) = new_name_problem(&name).filter(|_| !name.starts_with('/')) {
+                    self.notify(NoticeSource::Files, Notice::Error(problem.into()));
+                    return cx.notify();
+                }
                 let target = if name.starts_with('/') { name.clone() } else { ui::join(&base, &name) };
                 let (t, parent) = (target.clone(), parent_of(&target));
                 self.fs_op_on(
@@ -320,6 +325,10 @@ impl Workbench {
             }
             InputPurpose::SaveProject { path } => self.save_project(path, name, cx),
             InputPurpose::Create { dir, is_dir } => {
+                if let Some(problem) = new_name_problem(&name) {
+                    self.notify(NoticeSource::Files, Notice::Error(problem.into()));
+                    return cx.notify();
+                }
                 let target = ui::join(&dir, &name);
                 let t = target.clone();
                 self.fs_op_on(
@@ -690,6 +699,19 @@ fn rename_problem(name: &str) -> Option<String> {
     }
     if name.contains(['/', '\\', '\0']) {
         return Some(crate::i18n::t("A file or folder name cannot contain a slash.").into());
+    }
+    None
+}
+
+/// Why `name` cannot be created inside the folder it is typed for: empty, or a path that goes up (`..`) or starts at the
+/// root. A name with slashes inside is fine: `a/b.txt` makes the folder `a` as well.
+fn new_name_problem(name: &str) -> Option<String> {
+    let name = name.trim();
+    if name.is_empty() || name == "." {
+        return Some(crate::i18n::t("Enter a name for the file or folder.").into());
+    }
+    if name.starts_with(['/', '\\']) || name.split(['/', '\\']).any(|part| part == "..") {
+        return Some(crate::i18n::t("A new name cannot start with a slash or go up with two dots.").into());
     }
     None
 }
