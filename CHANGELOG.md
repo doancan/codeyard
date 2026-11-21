@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-11-21
+
+### Added
+
+- Ports: a forwarded port can be made public (listening on every network interface) or private (this computer only) from its menu. The forward is opened again on the same local port; if the new visibility cannot be opened the working one is put back and a notice says so. The choice is saved with the project and comes back after a restart.
+- Ports: *Copy Port Number* is in the menu of forwarded ports too.
+- Terminal: *Terminal: Change Icon…* (palette and the terminal list's menu) gives a terminal one of eight glyphs in the terminal list; it is remembered across restarts.
+- Terminal: *Terminal: Run Active File* types the open file's path, quoted for the shell, into the active terminal and runs it. *Terminal: Scroll to Top*, *Scroll to Bottom* and *Select All* are in the command palette.
+
+### Changed
+
+- The panel tabs (Problems, Output, Ports, Terminal) have icons and a framed tab look with an accent line on the active one. The Explorer and the other side views have more room above their title.
+- The status bar shows the ports item as the plug icon and the number of active forwards, without words.
+
+### Fixed
+
+- Explorer: renaming a file or folder to a name with a slash, `..`, `.` or no name moved the entry out of its folder or did nothing useful; the name is refused now, with a message.
+
+### Security
+
+- Updated `wasmtime` to 50.0.3 (RUSTSEC-2026-0587: WASI filesystem sandbox escape on Windows through a drive-prefixed path component).
+
 ## [0.12.2] - 2026-11-19
 
 ### Added
@@ -2035,7 +2057,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.2...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.3...HEAD
+[0.12.3]: https://github.com/doancan/codeyard/compare/v0.12.2...v0.12.3
 [0.12.2]: https://github.com/doancan/codeyard/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/doancan/codeyard/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/doancan/codeyard/compare/v0.11.1...v0.12.0
