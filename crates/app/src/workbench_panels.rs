@@ -1,6 +1,7 @@
 //! Workbench: bottom panels (Output, Problems, Ports), zoom, diff and large-file tabs.
 
 use super::*;
+use crate::port_forwards::ForwardState;
 
 /// How long the panel takes to maximize or restore.
 const PANEL_ANIM: std::time::Duration = std::time::Duration::from_millis(180);
@@ -120,16 +121,23 @@ pub(super) struct PanelAction {
     label: &'static str,
     /// `Some(on)`: a toggle that is on or off, not a command.
     toggled: Option<bool>,
+    /// Off while there is nothing for the button to act on: it is drawn faint and does not answer a press.
+    enabled: bool,
     run: fn(&mut Workbench, &mut Window, &mut Context<Workbench>),
 }
 
 impl PanelAction {
     fn command(id: &'static str, glyph: &'static str, label: &'static str, run: fn(&mut Workbench, &mut Window, &mut Context<Workbench>)) -> Self {
-        Self { id, glyph, label, toggled: None, run }
+        Self { id, glyph, label, toggled: None, enabled: true, run }
     }
 
     fn toggle(id: &'static str, glyph: &'static str, label: &'static str, on: bool, run: fn(&mut Workbench, &mut Window, &mut Context<Workbench>)) -> Self {
-        Self { id, glyph, label, toggled: Some(on), run }
+        Self { id, glyph, label, toggled: Some(on), enabled: true, run }
+    }
+
+    fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
     }
 }
 
@@ -140,25 +148,53 @@ impl Workbench {
     pub(super) fn panel_actions(&self, tab: Bottom, cx: &App) -> Vec<PanelAction> {
         let t = crate::i18n::t;
         match tab {
-            Bottom::Ports => vec![
-                PanelAction::command("ports-forward", "tb-plus", t("Forward a Port…"), |this, w, cx| this.forward_port_prompt(&ForwardPortPrompt, w, cx)),
-                PanelAction::command("ports-retry", "refresh-cw", t("Retry Failed Forwards"), |this, w, cx| {
-                    this.retry_failed_forwards(&RetryFailedForwards, w, cx)
-                }),
-                PanelAction::command("ports-stop-all", "circle-slash-2", t("Stop All Forwards"), |this, w, cx| this.stop_all_forwards(&StopAllForwards, w, cx)),
-                PanelAction::toggle("ports-auto", "rocket", t("Forward Ports Automatically"), cx.global::<Settings>().ports_auto_forward, |this, w, cx| {
-                    this.toggle_auto_forward(&ToggleAutoForward, w, cx)
-                }),
-            ],
-            Bottom::Output => vec![
-                PanelAction::command("output-copy", "copy", t("Copy Output"), |this, _, cx| this.copy_output(cx)),
-                PanelAction::command("output-clear", "eraser", t("Clear Output"), |this, _, cx| this.clear_output(cx)),
-            ],
-            Bottom::Terminal => {
-                vec![PanelAction::command("terminal-clear", "eraser", t("Clear Terminal"), |this, w, cx| this.dispatch_now(&crate::terminal::TermClear, w, cx))]
+            // Without a connection there is nothing to forward: no buttons, the page says why.
+            Bottom::Ports if self.ssh_alias().is_none() => Vec::new(),
+            Bottom::Ports => {
+                let alias = self.ssh_alias().unwrap_or_default();
+                let forwards = self.ports.set.iter().filter(|f| f.alias == alias).count();
+                let waiting =
+                    self.ports.set.iter().filter(|f| f.alias == alias && matches!(f.state, ForwardState::Failed(_) | ForwardState::Interrupted)).count();
+                vec![
+                    PanelAction::command("ports-forward", "tb-plus", t("Forward a Port…"), |this, w, cx| this.forward_port_prompt(&ForwardPortPrompt, w, cx)),
+                    PanelAction::command("ports-retry", "refresh-cw", t("Retry Failed Forwards"), |this, w, cx| {
+                        this.retry_failed_forwards(&RetryFailedForwards, w, cx)
+                    })
+                    .enabled(waiting > 0),
+                    PanelAction::command("ports-stop-all", "circle-slash-2", t("Stop All Forwards"), |this, w, cx| {
+                        this.stop_all_forwards(&StopAllForwards, w, cx)
+                    })
+                    .enabled(forwards > 0),
+                    PanelAction::toggle("ports-auto", "rocket", t("Forward Ports Automatically"), cx.global::<Settings>().ports_auto_forward, |this, w, cx| {
+                        this.toggle_auto_forward(&ToggleAutoForward, w, cx)
+                    }),
+                ]
             }
+            Bottom::Output => {
+                let has_output = !self.lsp.output.is_empty();
+                vec![
+                    PanelAction::command("output-copy", "copy", t("Copy Output"), |this, _, cx| this.copy_output(cx)).enabled(has_output),
+                    PanelAction::command("output-clear", "eraser", t("Clear Output"), |this, _, cx| this.clear_output(cx)).enabled(has_output),
+                ]
+            }
+            Bottom::Terminal => vec![
+                PanelAction::command("terminal-clear", "eraser", t("Clear Terminal"), |this, w, cx| this.dispatch_now(&crate::terminal::TermClear, w, cx))
+                    .enabled(!self.terminals.is_empty()),
+            ],
             Bottom::Problems | Bottom::Debug | Bottom::ExtView => Vec::new(),
         }
+    }
+
+    /// The buttons of a tab with whether each is on (test).
+    #[cfg(test)]
+    pub fn panel_action_states_for_test(&self, tab: &str, cx: &App) -> Vec<(&'static str, bool)> {
+        let tab = match tab {
+            "ports" => Bottom::Ports,
+            "output" => Bottom::Output,
+            "terminal" => Bottom::Terminal,
+            _ => Bottom::Problems,
+        };
+        self.panel_actions(tab, cx).iter().map(|a| (a.id, a.enabled)).collect()
     }
 
     /// The buttons of `panel_actions`, with a divider after them when there are any.
@@ -175,6 +211,10 @@ impl Workbench {
                     Some(on) => ui::toggle_button(a.id, a.glyph, a.label, on, p),
                     None => ui::icon_button(a.id, a.glyph, a.label, p),
                 };
+                if !a.enabled {
+                    // Faint, no press and nothing for assistive technology to press; the hint stays to say what it is.
+                    return button.flex_none().opacity(0.35).cursor_default().into_any_element();
+                }
                 button
                     .flex_none()
                     .relative()

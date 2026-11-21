@@ -2565,6 +2565,10 @@ fn ports_palette_commands_pick_a_forwarded_port(cx: &mut TestAppContext) {
         wb.read_with(cx, |wb, _| wb.forwards().iter().any(|f| f.remote == remote))
     });
     let local = wb.read_with(cx, |wb, _| wb.forwards()).into_iter().find(|f| f.remote == remote).unwrap().local;
+    // With a forward, the panel's Ports buttons are there and "stop all" is on.
+    let states = wb.read_with(cx, |wb, cx| wb.panel_action_states_for_test("ports", cx));
+    assert_eq!(states.iter().map(|(id, _)| *id).collect::<Vec<_>>(), ["ports-forward", "ports-retry", "ports-stop-all", "ports-auto"]);
+    assert!(states.iter().any(|(id, on)| *id == "ports-stop-all" && *on), "a forward can be stopped: {states:?}");
 
     // Copy Local Address…: the list is open; the first line is the lowest forwarded port, so pick ours by its position.
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Ports: Copy Local Address…", window, cx));
