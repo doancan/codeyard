@@ -4328,3 +4328,4 @@ Clear Output	Çıktıyı temizle
 Forward a Port…	Port yönlendir…
 Retry Failed Forwards	Başarısız yönlendirmeleri yeniden dene
 Stop All Forwards	Tüm yönlendirmeleri durdur
+A new name cannot start with a slash or go up with two dots.	Yeni ad eğik çizgiyle başlayamaz ve iki nokta ile üst klasöre çıkamaz.
