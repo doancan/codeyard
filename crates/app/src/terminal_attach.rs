@@ -204,6 +204,7 @@ impl TerminalView {
         view.has_shell = true;
         view.pty = Some(pty.id);
         view.token = saved.token.clone();
+        view.icon = saved.icon.clone().filter(|i| crate::terminal_profiles::ICONS.contains(&i.as_str()));
         if let Some(title) = &saved.title {
             view.set_fixed_title(title.clone());
         }

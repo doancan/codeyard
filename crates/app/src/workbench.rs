@@ -655,8 +655,8 @@ pub struct OpenEditorAt {
 }
 pub use remote_glue::ShowRemoteExplorer;
 pub use terminals_glue::{
-    ChangeTerminalColor, ConfigureTerminalSettings, FocusNextTerminal, FocusPreviousTerminal, KillAllTerminals, KillOtherTerminals, MoveTerminalDown,
-    MoveTerminalUp, NewTerminalWithProfile, RenameTerminal, SelectDefaultTerminalProfile,
+    ChangeTerminalColor, ChangeTerminalIcon, ConfigureTerminalSettings, FocusNextTerminal, FocusPreviousTerminal, KillAllTerminals, KillOtherTerminals,
+    MoveTerminalDown, MoveTerminalUp, NewTerminalWithProfile, RenameTerminal, SelectDefaultTerminalProfile,
 };
 pub use tests_glue::{DebugTestAtCursor, RefreshTests, RunAllTests, RunFailedTests, ShowTesting, StopTests};
 pub use view_windows_glue::{MoveViewBackToSideBar, MoveViewIntoNewWindow};

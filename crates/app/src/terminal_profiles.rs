@@ -8,6 +8,9 @@ use serde_json::{Map, Value};
 /// Colours a terminal can be marked with (theme roles, so they follow the theme).
 pub const COLORS: [&str; 6] = ["accent", "success", "warning", "danger", "info", "muted"];
 
+/// Glyphs a terminal can carry in the terminal list (names of the bundled icons); the first is the default.
+pub const ICONS: [&str; 8] = ["terminal", "server", "code", "rocket", "bug-play", "flask-conical", "container", "git-branch"];
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Profile {
     pub name: String,

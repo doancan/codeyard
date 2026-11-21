@@ -177,11 +177,12 @@ impl Workbench {
                     // A change of the local port that failed: the forward is on its old port again.
                     if let Some(e) = this.ports.set.take_reverted(id) {
                         let why = failure_text(&e, None);
-                        let old = this.ports.set.get(id).and_then(|f| f.wanted_local).unwrap_or_default();
-                        this.notify(
-                            NoticeSource::Remote,
-                            Notice::Error(crate::i18n::tf("The local port was not changed: {}. Back on localhost:{}", &[&why, &old]).into()),
-                        );
+                        // The saved forward must not keep the visibility that could not be opened.
+                        if let Some(remote) = this.ports.set.get(id).map(|f| f.remote) {
+                            this.save_forward(remote);
+                        }
+                        let back = this.ports.set.get(id).map(|f| format!("{}:{}", bind_host(f.bind), f.wanted_local.unwrap_or_default())).unwrap_or_default();
+                        this.notify(NoticeSource::Remote, Notice::Error(crate::i18n::tf("The forward was not changed: {}. Back on {}", &[&why, &back]).into()));
                         continue;
                     }
                     let Some(f) = this.ports.set.get(id) else { continue };
@@ -577,6 +578,21 @@ impl Workbench {
     }
 
     #[cfg(test)]
+    pub fn forward_bind_for_test(&self, remote: u16) -> Option<LocalBind> {
+        self.ports.set.get(self.forward_id(remote)?).map(|f| f.bind)
+    }
+
+    #[cfg(test)]
+    pub fn forward_spec_for_test(&self, remote: u16) -> Option<String> {
+        self.ports.set.get(self.forward_id(remote)?)?.spec.clone()
+    }
+
+    #[cfg(test)]
+    pub fn set_forward_visibility_for_test(&mut self, remote: u16, bind: LocalBind, window: &mut Window, cx: &mut Context<Self>) {
+        self.run_port_menu(PortMenuCmd::Visibility(bind), remote, window, cx);
+    }
+
+    #[cfg(test)]
     pub fn set_forward_label_for_test(&mut self, remote: u16, label: &str, cx: &mut Context<Self>) {
         self.finish_port_label(remote, label.into(), cx);
     }
@@ -589,7 +605,13 @@ impl Workbench {
     fn save_forward(&self, remote: u16) {
         let (Some(state), Some(ws), Some(id)) = (self.persist.state.as_ref(), self.persist.workspace_id, self.forward_id(remote)) else { return };
         let Some(f) = self.ports.set.get(id) else { return };
-        let saved = state::SavedForward { remote, local: f.wanted_local.filter(|_| f.strict), label: f.label.clone(), protocol: f.protocol.as_str().into() };
+        let saved = state::SavedForward {
+            remote,
+            local: f.wanted_local.filter(|_| f.strict),
+            label: f.label.clone(),
+            protocol: f.protocol.as_str().into(),
+            bind: bind_name(f.bind).into(),
+        };
         let _ = state.save_port_forward(ws, &saved);
     }
 
@@ -610,13 +632,15 @@ impl Workbench {
         self.ports.restore_pending = false;
         let (Some(alias), Some(ws)) = (self.ssh_alias(), self.persist.workspace_id) else { return };
         let Some(saved) = self.persist.state.as_ref().map(|s| s.port_forwards(ws)) else { return };
-        let bind = self.port_bind(cx);
+        let default_bind = self.port_bind(cx);
         let mut effects = Vec::new();
         for f in saved {
             if self.ports.set.by_remote(&alias, f.remote).is_some() {
                 continue;
             }
             let target = self.ports.listening.iter().find(|p| p.port == f.remote).map_or(RemoteTarget::Localhost, |p| ports::forward_target(&p.binds));
+            // A forward the user made public stays public; the setting only decides for the others.
+            let bind = if f.bind == "all" { LocalBind::All } else { default_bind };
             let mut r = ForwardRequest::user(&alias, f.remote, target, bind);
             // The saved local port is preferred, not required: another program may hold it now.
             (r.wanted_local, r.label) = (f.local, f.label);
@@ -681,6 +705,11 @@ impl Workbench {
                 self.ports.set.set_protocol(id, p);
                 self.save_forward(remote);
             }
+            PortMenuCmd::Visibility(bind) => {
+                let effects = self.ports.set.set_bind(id, bind);
+                self.save_forward(remote);
+                self.run_port_effects(effects, false, cx);
+            }
             PortMenuCmd::Retry => self.retry_forward(remote, cx),
             PortMenuCmd::Stop => self.stop_forward(remote, cx),
             PortMenuCmd::Forward | PortMenuCmd::CopyPort => {}
@@ -717,6 +746,22 @@ pub fn parse_forward_input(text: &str) -> Result<(u16, Option<u16>), ()> {
     match t.split_once(':') {
         Some((remote, local)) => Ok((port(remote)?, Some(port(local)?))),
         None => Ok((port(t)?, None)),
+    }
+}
+
+/// How a forward's visibility is stored.
+fn bind_name(bind: LocalBind) -> &'static str {
+    match bind {
+        LocalBind::Loopback => "loopback",
+        LocalBind::All => "all",
+    }
+}
+
+/// The host part of a forward's local address as the table shows it.
+fn bind_host(bind: LocalBind) -> &'static str {
+    match bind {
+        LocalBind::Loopback => "localhost",
+        LocalBind::All => "0.0.0.0",
     }
 }
 

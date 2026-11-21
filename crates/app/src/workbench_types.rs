@@ -90,6 +90,10 @@ pub(super) enum OverlayKind {
     TerminalColor {
         terminal: gpui::EntityId,
     },
+    /// "Terminal: Change Icon…".
+    TerminalIcon {
+        terminal: gpui::EntityId,
+    },
     Stashes {
         refs: Vec<String>,
         /// Each stash's message (its position alone may shift) and the repository the list was read from.

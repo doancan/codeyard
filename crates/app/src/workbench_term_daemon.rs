@@ -474,6 +474,7 @@ impl Workbench {
         };
         shown.push_str(&format!("\x1b[2m{status}\x1b[0m\n"));
         term.update(cx, |term, cx| {
+            term.icon = t.icon.clone().filter(|i| crate::terminal_profiles::ICONS.contains(&i.as_str()));
             if let Some(title) = &t.title {
                 term.set_fixed_title(title.clone());
             }

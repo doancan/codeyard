@@ -185,6 +185,7 @@ registry! {
     "terminal.selectDefaultProfile" => wb::SelectDefaultTerminalProfile,
     "terminal.rename" => wb::RenameTerminal,
     "terminal.changeColor" => wb::ChangeTerminalColor,
+    "terminal.changeIcon" => wb::ChangeTerminalIcon,
     "terminal.killAll" => wb::KillAllTerminals,
     "terminal.killOthers" => wb::KillOtherTerminals,
     "terminal.focusNext" => wb::FocusNextTerminal,
