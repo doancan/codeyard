@@ -29,7 +29,23 @@ pub(crate) fn interface_scale_notice(scale: f32) -> String {
 }
 
 /// Panel views use quiet button backgrounds for selection and hover; the tab records where it is laid out.
-fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, p: &Palette, cx: &Context<Workbench>) -> gpui::Stateful<gpui::Div> {
+/// Room (logical pixels) the panel's own buttons and padding take at the right end of the tab row.
+const PANEL_BUTTONS_W: f32 = 165.;
+/// What a tab takes besides its label: padding, border, glyph and the gap after it.
+const PANEL_TAB_CHROME_W: f32 = 37.;
+/// A rough width of one label character; only used to decide whether the labels fit.
+const PANEL_LABEL_CHAR_W: f32 = 6.8;
+
+/// Whether the tab labels of `tabs` do not fit a panel `width` wide, so the tabs that are not in front show their glyph
+/// alone (cut letters read worse than a glyph with a hint). `None`: the panel has not been laid out yet.
+fn tab_labels_do_not_fit(tabs: &[(Bottom, String, usize)], width: Option<f32>) -> bool {
+    let Some(width) = width else { return false };
+    let needed: f32 =
+        tabs.iter().map(|(_, label, badge)| PANEL_TAB_CHROME_W + PANEL_LABEL_CHAR_W * label.chars().count() as f32 + if *badge > 0 { 20. } else { 0. }).sum();
+    needed > width - PANEL_BUTTONS_W
+}
+
+fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, glyph_only: bool, p: &Palette, cx: &Context<Workbench>) -> gpui::Stateful<gpui::Div> {
     let id = match tab {
         Bottom::Problems => "problems-tab",
         Bottom::Output => "output-tab",
@@ -70,7 +86,11 @@ fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, p: &Palette
         .text_color(c(tint))
         .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text)).border_color(c(p.border))))
         .child(div().flex_none().child(icon(glyph, layout::ICON - 2., tint)))
-        .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
+        .when(!glyph_only, |d| d.child(div().flex_shrink().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label.clone())))
+        .when(glyph_only, |d| {
+            let hint: SharedString = label.into();
+            d.tooltip(move |_, cx| cx.new(|_| Tooltip(hint.clone())).into())
+        })
         .when(badge > 0, |d| d.child(div().flex_none().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).child(badge.to_string())))
 }
 
@@ -84,9 +104,14 @@ impl Workbench {
         }
         tabs.push((Bottom::Ports, crate::i18n::t("Ports"), self.active_forwards()));
         tabs.push((Bottom::Terminal, crate::i18n::t("Terminal"), self.terminals_asking(cx)));
+        // The panel's width as last laid out (beside the editor the panel is its own width, below it the whole area).
+        let width = self.chrome.panel_area.map(|a| a.size.width / px(1.)).map(|w| if self.chrome.panel_dock.beside() { self.chrome.panel_w.min(w) } else { w });
+        let labels: Vec<(Bottom, String, usize)> = tabs.iter().map(|(tab, label, badge)| (*tab, label.to_string(), *badge)).collect();
+        let compact = tab_labels_do_not_fit(&labels, width);
         tabs.into_iter()
             .map(|(tab, label, badge)| {
-                panel_tab(tab, label.into(), self.chrome.bottom == tab, badge, p, cx)
+                let in_front = self.chrome.bottom == tab;
+                panel_tab(tab, label.into(), in_front, badge, compact && !in_front, p, cx)
                     .on_click(cx.listener(move |this, _, window, cx| {
                         if tab == Bottom::Terminal {
                             if this.terminals.is_empty() {
@@ -789,6 +814,30 @@ fn filter_log_lines(path: &str, pattern: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tab_labels_give_way_to_glyphs_only_when_they_do_not_fit() {
+        let tabs = [
+            (Bottom::Problems, "Problems".to_string(), 3),
+            (Bottom::Output, "Output".into(), 0),
+            (Bottom::Ports, "Ports".into(), 0),
+            (Bottom::Terminal, "Terminal".into(), 0),
+        ];
+        assert!(!tab_labels_do_not_fit(&tabs, None), "not laid out yet: show the labels");
+        assert!(!tab_labels_do_not_fit(&tabs, Some(900.)), "a wide panel shows every label");
+        assert!(!tab_labels_do_not_fit(&tabs, Some(600.)), "a panel this wide shows every label even with a badge");
+        let plain = [
+            (Bottom::Problems, "Problems".to_string(), 0),
+            (Bottom::Output, "Output".into(), 0),
+            (Bottom::Ports, "Ports".into(), 0),
+            (Bottom::Terminal, "Terminal".into(), 0),
+        ];
+        assert!(tab_labels_do_not_fit(&plain, Some(480.)), "beside the editor at the default 480 the buttons leave no room for four labels");
+        assert!(!tab_labels_do_not_fit(&plain, Some(520.)), "a little more room brings the labels back");
+        assert!(tab_labels_do_not_fit(&tabs, Some(400.)), "a narrow panel shows glyphs");
+        assert!(tab_labels_do_not_fit(&tabs, Some(0.)), "and so does a panel with no room");
+    }
+
     use crate::lsp::{Diagnostic, Related};
 
     /// The in-process filter (Windows' local files) gives what the server's grep pipeline does.

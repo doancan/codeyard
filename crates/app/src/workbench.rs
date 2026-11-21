@@ -1606,7 +1606,9 @@ impl Workbench {
                 (Some(size), _, true) => d.w(px(size)).flex_none().h_full(),
                 (Some(size), _, false) => d.h(px(size)).flex_none().border_t_1(),
                 (None, true, _) => d.flex_1().min_h_0().min_w_0(),
-                (None, false, true) => d.w(px(self.chrome.panel_w)).flex_none().h_full(),
+                // A window narrower than the sidebar and the panel together takes the room from the panel (down to twice
+                // its smallest size) instead of pushing the panel's right edge out of the window.
+                (None, false, true) => d.w(px(self.chrome.panel_w)).flex_shrink().min_w(px(PANEL_MIN * 2.)).h_full(),
                 (None, false, false) => d.h(px(self.chrome.panel_h)).flex_none().border_t_1(),
             })
             // Beside the editor, the border is on the editor's side.
