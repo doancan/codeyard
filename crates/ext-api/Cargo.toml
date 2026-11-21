@@ -8,9 +8,9 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-ext-manifest = { version = "0.12.2", path = "../ext-manifest" }
+ext-manifest = { version = "0.12.3", path = "../ext-manifest" }
 serde = { version = "1.0.229", features = ["derive"] }
 
 [dev-dependencies]
-codeyard-extension = { version = "0.12.2", path = "../ext-sdk" }
+codeyard-extension = { version = "0.12.3", path = "../ext-sdk" }
 wit-parser = "0.261.0"
