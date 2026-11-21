@@ -440,6 +440,7 @@ impl Workbench {
             // --- compare ---
             .on_action(cx.listener(Self::compare_folders))
             .on_action(cx.listener(Self::run_selected_text))
+            .on_action(cx.listener(Self::run_active_file))
             .on_action(cx.listener(Self::go_to_last_edit))
             .on_action(cx.listener(Self::new_scratch_file))
             // --- data ---
