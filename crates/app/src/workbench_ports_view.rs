@@ -133,6 +133,73 @@ pub fn port_menu(row: &PortRow) -> Vec<(MenuItem, PortMenuCmd)> {
     ]
 }
 
+/// A column of the PORTS table that can order its rows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PortSortKey {
+    Port,
+    Label,
+    Process,
+    Origin,
+}
+
+/// How the PORTS table is ordered: by `key`, ascending or descending. A click on a column header picks it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PortSort {
+    pub key: PortSortKey,
+    pub descending: bool,
+}
+
+impl Default for PortSort {
+    fn default() -> Self {
+        Self { key: PortSortKey::Port, descending: false }
+    }
+}
+
+impl PortSort {
+    /// A click on the header of `key`: the same column turns the order around, another one starts ascending.
+    pub fn clicked(self, key: PortSortKey) -> Self {
+        if self.key == key { Self { key, descending: !self.descending } } else { Self { key, descending: false } }
+    }
+}
+
+/// Orders `rows` inside their two groups (the forwards, then the ports that only listen): the groups stay in that
+/// order whatever the key, so a forward never sinks below a port nobody asked for. Rows without a value for the key
+/// (no label, no process) go last in either direction.
+pub fn sort_port_rows(rows: &mut [PortRow], sort: PortSort) {
+    use std::cmp::Ordering;
+    let text = |r: &PortRow| match sort.key {
+        PortSortKey::Label => r.label.as_deref().map(str::to_lowercase),
+        PortSortKey::Process => r.process.as_deref().map(str::to_lowercase),
+        PortSortKey::Origin => r.origin.map(|o| match o {
+            Origin::User => "0".to_string(),
+            Origin::Auto => "1".to_string(),
+        }),
+        PortSortKey::Port => None,
+    };
+    rows.sort_by(|a, b| {
+        let group = a.origin.is_none().cmp(&b.origin.is_none());
+        if group != Ordering::Equal {
+            return group;
+        }
+        let by_value = match sort.key {
+            PortSortKey::Port => {
+                let o = a.port.cmp(&b.port);
+                if sort.descending { o.reverse() } else { o }
+            }
+            _ => match (text(a), text(b)) {
+                (Some(x), Some(y)) => {
+                    let o = x.cmp(&y);
+                    if sort.descending { o.reverse() } else { o }
+                }
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            },
+        };
+        by_value.then(a.port.cmp(&b.port))
+    });
+}
+
 /// Column widths (the process column takes the rest).
 const W_PORT: f32 = 96.;
 const W_LABEL: f32 = 140.;
@@ -142,6 +209,14 @@ const W_ORIGIN: f32 = 156.;
 const W_ACTIONS: f32 = 132.;
 
 impl Workbench {
+    /// The rows of the PORTS table in the order shown (the order a click on a column header picked). Everything that
+    /// names a row by its place (the keyboard, the accessibility tree, the row menu) reads this list, so they agree.
+    pub(in crate::workbench) fn shown_port_rows(&self, alias: &str) -> Vec<PortRow> {
+        let mut rows = port_rows(&self.ports.set, &self.ports.listening, alias);
+        sort_port_rows(&mut rows, self.ports.sort);
+        rows
+    }
+
     /// Right-click or "…" on a row.
     pub(in crate::workbench) fn open_port_menu(
         &mut self,
@@ -300,9 +375,29 @@ impl Workbench {
         let Some(alias) = self.ssh_alias() else {
             return center(p).text_color(c(p.text_muted)).child(crate::i18n::t("Port forwarding works while connected to an SSH host.")).into_any_element();
         };
-        let rows = port_rows(&self.ports.set, &self.ports.listening, &alias);
-        let header_cell = |w: Option<f32>, label: &'static str| {
-            let d = div().min_w_0().overflow_hidden().whitespace_nowrap().pr(px(theme::SPACE[4])).child(crate::i18n::upper(crate::i18n::t(label)));
+        let rows = self.shown_port_rows(&alias);
+        let sort = self.ports.sort;
+        // A column header: a click orders the table by it (again: the other way round); the ordering column shows an arrow.
+        let header_cell = |w: Option<f32>, label: &'static str, key: Option<PortSortKey>, cx: &mut Context<Self>| {
+            let ordering = key.is_some_and(|k| k == sort.key);
+            let mut name = crate::i18n::upper(crate::i18n::t(label));
+            if ordering {
+                name.push_str(if sort.descending { " ▼" } else { " ▲" });
+            }
+            let d = div()
+                .id(("ports-header", w.map_or(0, |w| w as usize)))
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .pr(px(theme::SPACE[4]))
+                .when(ordering, |d| d.text_color(c(p.text)))
+                .child(name)
+                .when_some(key, |d, k| {
+                    d.cursor_pointer().hover(|d| d.text_color(c(p.text))).on_click(cx.listener(move |this, _, _, cx| {
+                        this.ports.sort = this.ports.sort.clicked(k);
+                        cx.notify();
+                    }))
+                });
             match w {
                 Some(w) => d.w(px(w)).flex_none(),
                 None => d.flex_1(),
@@ -319,11 +414,11 @@ impl Workbench {
             .text_size(px(text::XXS.0))
             .font_weight(gpui::FontWeight::SEMIBOLD)
             .text_color(c(p.text_muted))
-            .child(header_cell(Some(W_PORT), crate::i18n::tr("Port")))
-            .child(header_cell(Some(W_LABEL), crate::i18n::tr("Label")))
-            .child(header_cell(Some(W_ADDRESS), crate::i18n::tr("Forwarded Address")))
-            .child(header_cell(None, crate::i18n::tr("Running Process")))
-            .child(header_cell(Some(W_ORIGIN), crate::i18n::tr("Origin")))
+            .child(header_cell(Some(W_PORT), crate::i18n::tr("Port"), Some(PortSortKey::Port), cx))
+            .child(header_cell(Some(W_LABEL), crate::i18n::tr("Label"), Some(PortSortKey::Label), cx))
+            .child(header_cell(Some(W_ADDRESS), crate::i18n::tr("Forwarded Address"), None, cx))
+            .child(header_cell(None, crate::i18n::tr("Running Process"), Some(PortSortKey::Process), cx))
+            .child(header_cell(Some(W_ORIGIN), crate::i18n::tr("Origin"), Some(PortSortKey::Origin), cx))
             .child(div().w(px(W_ACTIONS)).flex_none());
         let body: AnyElement = if rows.is_empty() {
             div()
@@ -456,5 +551,70 @@ mod tests {
     fn a_port_that_is_only_listening_can_be_forwarded_or_copied() {
         let menu = port_menu(&row(RowState::Listening, None, Protocol::Http));
         assert_eq!(menu.iter().map(|(_, c)| *c).collect::<Vec<_>>(), [PortMenuCmd::Forward, PortMenuCmd::CopyPort]);
+    }
+
+    fn fwd(port: u16, label: Option<&str>, process: Option<&str>, origin: Origin) -> PortRow {
+        PortRow {
+            port,
+            label: label.map(str::to_string),
+            address: Some(format!("localhost:{port}")),
+            process: process.map(str::to_string),
+            origin: Some(origin),
+            protocol: Protocol::Http,
+            bind: Some(LocalBind::Loopback),
+            state: RowState::Active,
+            listening: true,
+        }
+    }
+
+    fn only_listening(port: u16, process: Option<&str>) -> PortRow {
+        PortRow {
+            port,
+            label: None,
+            address: None,
+            process: process.map(str::to_string),
+            origin: None,
+            protocol: Protocol::Http,
+            bind: None,
+            state: RowState::Listening,
+            listening: true,
+        }
+    }
+
+    fn ports(rows: &[PortRow]) -> Vec<u16> {
+        rows.iter().map(|r| r.port).collect()
+    }
+
+    #[test]
+    fn a_click_on_a_header_orders_by_it_and_a_second_click_turns_it_around() {
+        let by_port = PortSort::default();
+        assert_eq!((by_port.key, by_port.descending), (PortSortKey::Port, false));
+        let label = by_port.clicked(PortSortKey::Label);
+        assert_eq!((label.key, label.descending), (PortSortKey::Label, false), "another column starts ascending");
+        assert!(label.clicked(PortSortKey::Label).descending, "the same column again turns the order around");
+        assert!(!label.clicked(PortSortKey::Label).clicked(PortSortKey::Label).descending, "and a third click back");
+    }
+
+    #[test]
+    fn sorting_keeps_forwards_above_ports_that_only_listen_and_puts_empty_values_last() {
+        let mut rows = vec![
+            only_listening(22, Some("sshd")),
+            fwd(8080, Some("web"), Some("node"), Origin::User),
+            fwd(3000, None, Some("Python"), Origin::Auto),
+            only_listening(5432, None),
+            fwd(9000, Some("api"), None, Origin::User),
+        ];
+        sort_port_rows(&mut rows, PortSort::default());
+        assert_eq!(ports(&rows), [3000, 8080, 9000, 22, 5432], "forwards first, each group by port");
+        sort_port_rows(&mut rows, PortSort { key: PortSortKey::Port, descending: true });
+        assert_eq!(ports(&rows), [9000, 8080, 3000, 5432, 22]);
+        sort_port_rows(&mut rows, PortSort { key: PortSortKey::Label, descending: false });
+        assert_eq!(ports(&rows)[..3], [9000, 8080, 3000], "api, web, then the forward without a label; groups unchanged");
+        sort_port_rows(&mut rows, PortSort { key: PortSortKey::Label, descending: true });
+        assert_eq!(ports(&rows)[..3], [8080, 9000, 3000], "web, api, then the one without a label: empty values stay last");
+        sort_port_rows(&mut rows, PortSort { key: PortSortKey::Process, descending: false });
+        assert_eq!(ports(&rows), [8080, 3000, 9000, 22, 5432], "node, Python (case-insensitive), none; then sshd, none");
+        sort_port_rows(&mut rows, PortSort { key: PortSortKey::Origin, descending: false });
+        assert_eq!(ports(&rows)[..3], [8080, 9000, 3000], "user forwards before automatic ones");
     }
 }

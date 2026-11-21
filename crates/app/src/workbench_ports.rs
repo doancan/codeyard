@@ -21,7 +21,7 @@ use crate::ports::{self, ListeningPort, ScanMethod};
 
 #[path = "workbench_ports_view.rs"]
 mod view;
-pub use view::{PortMenuCmd, PortRow, RowState, port_rows};
+pub use view::{PortMenuCmd, PortRow, PortSort, RowState, port_rows};
 
 #[cfg(test)]
 pub use crate::port_forwards::Forward;
@@ -51,6 +51,8 @@ pub struct PortsState {
     pub scan_error: Option<SharedString>,
     pub task: Option<gpui::Task<()>>,
     pub field: gpui::Entity<crate::input::TextField>,
+    /// How the table is ordered (a click on a column header).
+    pub sort: PortSort,
 }
 
 impl PortsState {
@@ -69,6 +71,7 @@ impl PortsState {
             scan_error: None,
             task: None,
             field,
+            sort: PortSort::default(),
         }
     }
 }
