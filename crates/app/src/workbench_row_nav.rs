@@ -11,7 +11,6 @@ use gpui::{AnyElement, FocusHandle, ScrollStrategy, UniformListScrollHandle, div
 
 use super::a11y::{self, RowFrame};
 use super::debug::{StackRow, stack_rows, variable_rows};
-use super::ports_glue::port_rows;
 use super::remote_glue::tree::RemoteRow;
 use super::*;
 use crate::debug_model::BpRow;
@@ -166,7 +165,7 @@ impl Workbench {
             RowFrame::DebugBreakpoint => self.bp_rows().len(),
             RowFrame::Test => self.test_rows(cx).len(),
             RowFrame::Remote => self.remote_rows(cx).len(),
-            RowFrame::Port => self.ssh_alias().map_or(0, |alias| port_rows(&self.ports.set, &self.ports.listening, &alias).len()),
+            RowFrame::Port => self.ssh_alias().map_or(0, |alias| self.shown_port_rows(&alias).len()),
             RowFrame::Problem => self.problem_row_count(cx),
         }
     }
@@ -262,7 +261,7 @@ impl Workbench {
             },
             RowFrame::Port => {
                 let Some(alias) = self.ssh_alias() else { return false };
-                let Some(row) = port_rows(&self.ports.set, &self.ports.listening, &alias).into_iter().nth(ix) else { return false };
+                let Some(row) = self.shown_port_rows(&alias).into_iter().nth(ix) else { return false };
                 self.open_port_menu(&row, at, window, cx);
             }
             RowFrame::DebugWatch | RowFrame::Test | RowFrame::Problem => return false,
