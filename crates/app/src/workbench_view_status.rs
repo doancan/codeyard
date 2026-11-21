@@ -251,7 +251,7 @@ impl Workbench {
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .child(icon("plug", SB_ICON, p.text_muted))
-                        .when(labels, |d| d.child(div().max_w(px(80.)).truncate().child(crate::i18n::tf("{} forwarded", &[&n]))))
+                        .child(div().child(n.to_string()))
                         .on_click(cx.listener(|this, _, w, cx| this.show_ports(&ShowPorts, w, cx))),
                 )
             })

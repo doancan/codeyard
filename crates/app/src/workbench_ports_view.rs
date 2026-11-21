@@ -127,6 +127,7 @@ impl Workbench {
         let items = vec![
             MenuItem::new(crate::i18n::t("Open in Browser")).enabled(row.url().is_some()),
             MenuItem::new(crate::i18n::t("Copy Address")).enabled(active),
+            MenuItem::new(crate::i18n::t("Copy Port Number")),
             MenuItem::new(crate::i18n::t("Set Label…")).separator(),
             MenuItem::new(crate::i18n::t("Change Local Port…")),
             MenuItem::new(crate::i18n::t("Protocol: HTTP")).checked(row.protocol == Protocol::Http).separator(),
@@ -138,6 +139,7 @@ impl Workbench {
         let commands = [
             PortMenuCmd::OpenBrowser,
             PortMenuCmd::CopyAddress,
+            PortMenuCmd::CopyPort,
             PortMenuCmd::SetLabel,
             PortMenuCmd::ChangeLocal,
             PortMenuCmd::Protocol(Protocol::Http),

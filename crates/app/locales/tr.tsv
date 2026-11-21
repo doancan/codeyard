@@ -4309,3 +4309,6 @@ Message of the squashed commit	Birleştirilen commit'in mesajı
 Squash {} commits into one	{} commit'i tek commit'te birleştir
 The message of the squashed commit cannot be empty.	Birleştirilen commit'in mesajı boş olamaz.
 ↵ for a new line, ⌘↵ to squash, Esc to cancel	↵ yeni satır, ⌘↵ birleştir, Esc iptal
+Terminal: Scroll to Top	Terminal: En Üste Kaydır
+Terminal: Scroll to Bottom	Terminal: En Alta Kaydır
+Terminal: Select All	Terminal: Tümünü Seç
