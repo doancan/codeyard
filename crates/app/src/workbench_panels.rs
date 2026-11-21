@@ -57,6 +57,10 @@ fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, p: &Palette
         .items_center()
         .gap(px(theme::SPACE[2]))
         .px(px(theme::SPACE[4]))
+        // In a narrow panel the tabs give way (labels are cut with an ellipsis) before the panel's buttons do.
+        .flex_shrink()
+        .min_w_0()
+        .overflow_hidden()
         .cursor_pointer()
         .rounded_t(px(theme::radius::SM))
         .border_1()
@@ -65,9 +69,9 @@ fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, p: &Palette
         .when(active, |d| d.bg(c(p.bg)).child(div().absolute().top(px(-1.)).left_0().right_0().h(px(2.)).bg(c(p.accent))))
         .text_color(c(tint))
         .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text)).border_color(c(p.border))))
-        .child(icon(glyph, layout::ICON - 2., tint))
-        .child(label)
-        .when(badge > 0, |d| d.child(div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).child(badge.to_string())))
+        .child(div().flex_none().child(icon(glyph, layout::ICON - 2., tint)))
+        .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label))
+        .when(badge > 0, |d| d.child(div().flex_none().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).child(badge.to_string())))
 }
 
 impl Workbench {
