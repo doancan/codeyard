@@ -22,6 +22,7 @@ A commit could not be made while rewriting ({}). Nothing was changed.
 A compatible Node.js runtime could not be used on this host. Install Node.js 22.22.2 or newer with npm, then retry.	
 A container operation is running. Use Docker: Cancel Operation before starting another.	
 A file named “{}” is already there; a folder cannot replace it. Rename or remove it first.	
+A file or folder name cannot contain a slash.	
 A file you opened names a schema that is hosted on {}. Downloading it sends a request to that server (your IP address and the schema's address). Only allow it if you trust the file and the host.	
 A folder cannot be moved into itself.	
 A folder named “{}” is already there; a file cannot replace it. Rename or remove it first.	
@@ -979,6 +980,7 @@ Enables: {}
 Encoding for files that are not UTF-8	
 End files with a newline when saving	
 Enter a folder path on {}…	
+Enter a name for the file or folder.	
 Enter installs or retries. Escape cancels while installation is running.	
 Enter stages the picked lines	
 Enter the remote as: name url	
