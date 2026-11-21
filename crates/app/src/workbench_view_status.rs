@@ -247,6 +247,7 @@ impl Workbench {
                 d.child(
                     item()
                         .id("ports-indicator")
+                        .debug_selector(|| "ports-indicator".into())
                         .child(ctl("ports-indicator", crate::i18n::tf("{} forwarded", &[&n]), |this, w, cx| this.show_ports(&ShowPorts, w, cx)))
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
