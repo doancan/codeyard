@@ -19,6 +19,8 @@ pub enum PortMenuCmd {
     SetLabel,
     ChangeLocal,
     Protocol(Protocol),
+    /// Private (this computer only) or public (every network interface).
+    Visibility(LocalBind),
     Retry,
     Stop,
     /// A listening port that is not forwarded yet.
@@ -48,6 +50,8 @@ pub struct PortRow {
     pub process: Option<String>,
     pub origin: Option<Origin>,
     pub protocol: Protocol,
+    /// Where the forward listens locally; `None` for a port that is not forwarded.
+    pub bind: Option<LocalBind>,
     pub state: RowState,
     /// Something listens on the server port (a forward to a port nobody listens on yet is still shown).
     pub listening: bool,
@@ -77,6 +81,7 @@ pub fn port_rows(set: &ForwardSet, listening: &[ListeningPort], alias: &str) -> 
             process: process(f.remote),
             origin: Some(f.origin),
             protocol: f.protocol,
+            bind: Some(f.bind),
             state: match &f.state {
                 ForwardState::Active => RowState::Active,
                 ForwardState::Pending => RowState::Pending,
@@ -94,6 +99,7 @@ pub fn port_rows(set: &ForwardSet, listening: &[ListeningPort], alias: &str) -> 
         process: process(l.port),
         origin: None,
         protocol: Protocol::default(),
+        bind: None,
         state: RowState::Listening,
         listening: true,
     });
@@ -130,6 +136,8 @@ impl Workbench {
             MenuItem::new(crate::i18n::t("Copy Port Number")),
             MenuItem::new(crate::i18n::t("Set Label…")).separator(),
             MenuItem::new(crate::i18n::t("Change Local Port…")),
+            MenuItem::new(crate::i18n::t("Visibility: Private (this computer)")).checked(row.bind == Some(LocalBind::Loopback)).separator(),
+            MenuItem::new(crate::i18n::t("Visibility: Public (every network interface)")).checked(row.bind == Some(LocalBind::All)),
             MenuItem::new(crate::i18n::t("Protocol: HTTP")).checked(row.protocol == Protocol::Http).separator(),
             MenuItem::new(crate::i18n::t("Protocol: HTTPS")).checked(row.protocol == Protocol::Https),
             MenuItem::new(crate::i18n::t("Protocol: TCP")).checked(row.protocol == Protocol::Tcp),
@@ -142,6 +150,8 @@ impl Workbench {
             PortMenuCmd::CopyPort,
             PortMenuCmd::SetLabel,
             PortMenuCmd::ChangeLocal,
+            PortMenuCmd::Visibility(LocalBind::Loopback),
+            PortMenuCmd::Visibility(LocalBind::All),
             PortMenuCmd::Protocol(Protocol::Http),
             PortMenuCmd::Protocol(Protocol::Https),
             PortMenuCmd::Protocol(Protocol::Tcp),

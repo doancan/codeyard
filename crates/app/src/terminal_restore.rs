@@ -11,6 +11,7 @@ impl TerminalView {
         let history = if history_lines > 0 { self.scrollback_text() } else { String::new() };
         self.has_shell.then(|| SavedTerminal {
             token: self.token.clone(),
+            icon: self.icon.clone(),
             ..SavedTerminal::of(self.cwd.clone(), self.launched.clone(), self.color.clone(), title, &history, history_lines)
         })
     }

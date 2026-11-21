@@ -268,6 +268,8 @@ pub struct TerminalView {
     wheel: scroll::WheelScroll,
     /// Mark colour in the terminal list (a theme role from `terminal_profiles::COLORS`).
     pub color: Option<String>,
+    /// Glyph in the terminal list (a name from `terminal_profiles::ICONS`); `None` is the plain terminal glyph.
+    pub icon: Option<String>,
     /// Shell integration: sequences in the output and the commands they mark.
     osc: crate::terminal_osc::Scanner,
     marks: marks::Marks,
@@ -387,6 +389,7 @@ impl TerminalView {
             scrollback,
             wheel: Default::default(),
             color,
+            icon: None,
             osc: Default::default(),
             marks: Default::default(),
             focus_handle: cx.focus_handle(),

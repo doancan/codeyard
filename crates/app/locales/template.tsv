@@ -271,6 +271,7 @@ Categories
 Change	
 Change All Occurrences	
 Change Color…	
+Change Icon…	
 Change Local Port…	
 Change all files in the workspace	
 Change key	
@@ -2761,10 +2762,12 @@ Tasks: Terminate Task
 Temporary transfer data is removed. Changes already made at the destination may remain.	
 Terminal	
 Terminal colour	
+Terminal icon	
 Terminal row height, as a multiple of the font size	
 Terminal session could not be restored: {}	
 Terminal {0} of {1}	
 Terminal: Change Color…	
+Terminal: Change Icon…	
 Terminal: Clear	
 Terminal: Clear Saved Terminal History	
 Terminal: Close	
@@ -2893,6 +2896,7 @@ The folder is not empty and the server did not ask to delete what is in it.
 The folder is not empty.	
 The folder it belongs in does not exist.	
 The folder of “{}” with its settings, keybindings and snippets is deleted. This cannot be undone.	
+The forward was not changed: {}. Back on {}	
 The full report is in the crash reports folder and stays on this computer. Help: Report Issue… opens a new issue with the version filled in.	
 The graph does not show the current branch's latest commit. Reload it and try again.	
 The host name was not found. Check its spelling, your network and your VPN.	
@@ -2908,7 +2912,6 @@ The last background fetch failed: {}
 The last command exited with code {}	
 The last session ended without closing normally, and no crash report explains why.	
 The local port is busy	
-The local port was not changed: {}. Back on localhost:{}	
 The managed installation is incomplete or belongs to another catalogue. Reinstall the services to repair it.	
 The message of the squashed commit cannot be empty.	
 The name has characters this system does not allow.	
@@ -3304,6 +3307,8 @@ View: Zoom In
 View: Zoom Out	
 View: {}	
 Views	
+Visibility: Private (this computer)	
+Visibility: Public (every network interface)	
 Volume name	
 WSL Containers does not support Compose in this workflow. Choose Docker or Podman for a Compose project.	
 WSL Targets	

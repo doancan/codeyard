@@ -420,6 +420,7 @@ impl Workbench {
             Command::action("Terminal: Select Default Profile…", SelectDefaultTerminalProfile),
             Command::action("Terminal: Rename…", RenameTerminal),
             Command::action("Terminal: Change Color…", ChangeTerminalColor),
+            Command::action("Terminal: Change Icon…", ChangeTerminalIcon),
             Command::action("Terminal: Kill All Terminals", KillAllTerminals),
             Command::action("Terminal: Kill Other Terminals", KillOtherTerminals),
             Command::action("Terminal: Focus Next Terminal", FocusNextTerminal),
@@ -943,6 +944,12 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.set_terminal_color(terminal, color, cx);
             }
+            (OverlayKind::TerminalIcon { terminal }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let terminal = *terminal;
+                let icon = crate::terminal_profiles::ICONS[*index];
+                self.close_overlay(window, cx);
+                self.set_terminal_icon(terminal, icon, cx);
+            }
             (OverlayKind::LaunchTemplates(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let snippet = list[*index].clone();
                 self.close_overlay(window, cx);
@@ -1132,6 +1139,7 @@ impl Workbench {
                 | OverlayKind::TerminalDefaultProfile { .. }
                 | OverlayKind::WorkspaceTrust { .. }
                 | OverlayKind::TerminalColor { .. }
+                | OverlayKind::TerminalIcon { .. }
                 | OverlayKind::RemoveFolder(_)
                 | OverlayKind::CompareFolder { .. }
                 | OverlayKind::ExceptionFilters(_)

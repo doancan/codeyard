@@ -159,3 +159,36 @@ fn a_terminal_asked_for_during_an_empty_restore_opens(cx: &mut gpui::TestAppCont
     wait_ticking(cx, "a new terminal", |cx| wb.read_with(cx, |wb, cx| wb.terminals.len() == 1 && wb.terminals[0].read(cx).pty_handle().is_some()));
     wb.update(cx, |wb, cx| wb.close_all_terminals(cx));
 }
+
+#[gpui::test]
+fn a_terminal_icon_the_user_chose_comes_back_after_a_restart(cx: &mut gpui::TestAppContext) {
+    let home = crate::qa_workbench_tests::fresh("term-icon-home");
+    let dir = crate::qa_workbench_tests::project("term-icon");
+    {
+        let (wb, cx) = crate::qa_workbench_tests::setup_persistent(cx, &home);
+        with_history(cx, 0);
+        crate::qa_workbench_tests::open(&wb, &dir, cx);
+        for _ in 0..2 {
+            wb.update_in(cx, |wb, window, cx| wb.new_terminal_launch(None, crate::terminal::Launch::default(), window, cx));
+        }
+        wait_ticking(cx, "both shells running", |cx| wb.read_with(cx, |wb, cx| wb.terminals.iter().all(|t| t.read(cx).pty_handle().is_some())));
+        let second = wb.read_with(cx, |wb, _| wb.terminals[1].entity_id());
+        wb.update(cx, |wb, cx| wb.set_terminal_icon(second, "rocket", cx));
+        let first = wb.read_with(cx, |wb, _| wb.terminals[0].entity_id());
+        wb.update(cx, |wb, cx| {
+            wb.set_terminal_icon(first, "server", cx);
+            wb.set_terminal_icon(first, "terminal", cx);
+        });
+        assert_eq!(wb.read_with(cx, |wb, cx| wb.terminals[1].read(cx).icon.clone()).as_deref(), Some("rocket"));
+        assert_eq!(wb.read_with(cx, |wb, cx| wb.terminals[0].read(cx).icon.clone()), None, "the plain glyph is the default, not a choice");
+        wb.update(cx, |wb, cx| wb.persist_session(cx));
+    }
+    let (wb, cx) = crate::qa_workbench_tests::setup_persistent(cx, &home);
+    with_history(cx, 0);
+    crate::qa_workbench_tests::open(&wb, &dir, cx);
+    wait_ticking(cx, "the terminals restored", |cx| {
+        wb.read_with(cx, |wb, cx| wb.terminals.len() == 2 && wb.terminals.iter().all(|t| t.read(cx).pty_handle().is_some()))
+    });
+    let icons = wb.read_with(cx, |wb, cx| wb.terminals.iter().map(|t| t.read(cx).icon.clone()).collect::<Vec<_>>());
+    assert_eq!(icons, vec![None, Some("rocket".to_string())]);
+}

@@ -15,6 +15,7 @@ gpui::actions!(
         KillOtherTerminals,
         RenameTerminal,
         ChangeTerminalColor,
+        ChangeTerminalIcon,
         NewTerminalWithProfile,
         SelectDefaultTerminalProfile,
         ConfigureTerminalSettings,
@@ -96,6 +97,8 @@ fn launch_menu_entries(profiles: &[Profile], shells: &[String], default: Option<
 struct TermRow {
     label: String,
     mark: Option<String>,
+    /// The glyph the user chose (`None`: the plain terminal glyph).
+    icon: Option<String>,
     exited: bool,
     activity: crate::terminal::Activity,
     /// A long command finished while the terminal was out of sight.
@@ -110,6 +113,7 @@ impl TermRow {
         TermRow {
             label: if exited { crate::i18n::tf("{} (exited)", &[&t.title]) } else { t.title.to_string() },
             mark: t.color.clone(),
+            icon: t.icon.clone(),
             exited,
             activity: if exited { crate::terminal::Activity::Idle } else { t.activity() },
             unseen: if visible { None } else { t.unseen_finish() },
@@ -507,6 +511,25 @@ impl Workbench {
         self.show_overlay(picker, OverlayKind::TerminalColor { terminal }, window, cx);
     }
 
+    /// "Terminal: Change Icon…".
+    pub(super) fn change_terminal_icon(&mut self, _: &ChangeTerminalIcon, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(terminal) = self.terminals.get(self.active_terminal).map(|t| t.entity_id()) else { return };
+        if self.overlay.is_some() {
+            self.close_overlay(window, cx);
+        }
+        let items = crate::terminal_profiles::ICONS.iter().map(|i| PickItem { label: (*i).into(), detail: None, keys: None }).collect();
+        let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Terminal icon"), "", None, cx));
+        self.show_overlay(picker, OverlayKind::TerminalIcon { terminal }, window, cx);
+    }
+
+    pub(super) fn set_terminal_icon(&mut self, terminal: gpui::EntityId, icon: &str, cx: &mut Context<Self>) {
+        if let Some(t) = self.terminals.iter().find(|t| t.entity_id() == terminal) {
+            t.update(cx, |t, _| t.icon = (icon != crate::terminal_profiles::ICONS[0]).then(|| icon.to_string()));
+            self.persist_terminals(cx);
+            cx.notify();
+        }
+    }
+
     pub(super) fn set_terminal_color(&mut self, terminal: gpui::EntityId, color: &str, cx: &mut Context<Self>) {
         if let Some(t) = self.terminals.iter().find(|t| t.entity_id() == terminal) {
             t.update(cx, |t, _| t.color = (color != "muted").then(|| color.to_string()));
@@ -576,7 +599,7 @@ impl Workbench {
                 .text_color(c(fg))
                 // The active row carries the accent on its left edge, like the active editor tab.
                 .when(active, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(px(2.)).bg(c(p.accent))))
-                .child(icon(if paired { "tb-split" } else { "terminal" }, layout::ICON, glyph_color))
+                .child(icon(if paired { "tb-split" } else { row.icon.as_deref().unwrap_or("terminal") }, layout::ICON, glyph_color))
                 .children(row.indicator(p))
                 .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().when(row.exited, |d| d.italic()).child(row.label.clone()))
                 .child(
@@ -990,6 +1013,7 @@ impl Workbench {
             (crate::i18n::t("Move Terminal Down"), Box::new(MoveTerminalDown), false),
             (crate::i18n::t("Rename…"), Box::new(RenameTerminal), true),
             (crate::i18n::t("Change Color…"), Box::new(ChangeTerminalColor), false),
+            (crate::i18n::t("Change Icon…"), Box::new(ChangeTerminalIcon), false),
             (crate::i18n::t("Kill Terminal"), Box::new(KillTerminal), true),
             (crate::i18n::t("Kill All Terminals"), Box::new(KillAllTerminals), false),
             (crate::i18n::t("Configure Terminal Settings"), Box::new(ConfigureTerminalSettings), true),
@@ -1049,7 +1073,7 @@ mod tests {
     #[test]
     fn a_row_shows_what_its_terminal_is_doing() {
         use crate::terminal::{Activity, Finished};
-        let row = |activity, unseen| TermRow { label: "zsh".into(), mark: None, exited: false, activity, unseen, cwd: Some("/srv/app".into()) };
+        let row = |activity, unseen| TermRow { label: "zsh".into(), mark: None, icon: None, exited: false, activity, unseen, cwd: Some("/srv/app".into()) };
         let p = theme::DARK;
         assert!(row(Activity::Idle, None).indicator(&p).is_none(), "nothing to say");
         assert!(row(Activity::Running("$ make".into()), None).indicator(&p).is_some());
