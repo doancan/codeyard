@@ -12,4 +12,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: doancan/codeyard/actions/publish@b25750e9305718eea24f0f4ac08d6a7dae121766 # v0.12.2
+      - uses: doancan/codeyard/actions/publish@d94bb29f5fb48a2efcfa0dd9550c3eb73ab00221 # v0.12.3
