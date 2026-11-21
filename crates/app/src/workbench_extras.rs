@@ -6,7 +6,7 @@ use std::io::Write as _;
 
 use super::{
     CompareWithClipboard, CompareWithSaved, ConfigureSnippets, GoToLastEdit, InsertSnippet, NewScratchFile, NewTerminal, Notice, NoticeSource,
-    OpenThemesFolder, RunSelectedText, SaveThemeAs, Workbench,
+    OpenThemesFolder, RunActiveFile, RunSelectedText, SaveThemeAs, Workbench,
 };
 use crate::ui;
 
@@ -100,6 +100,26 @@ impl Workbench {
             cx.notify();
             return;
         }
+        self.type_into_terminal(text, window, cx);
+    }
+
+    /// "Terminal: Run Active File": the open file's path, quoted for the shell, typed into the active terminal and run.
+    pub(super) fn run_active_file(&mut self, _: &RunActiveFile, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(path) = self.active_editor().map(|e| e.read(cx).path.clone()) else {
+            self.notify(NoticeSource::Terminal, Notice::Info(crate::i18n::t("There is no open file to run.").into()));
+            return cx.notify();
+        };
+        match crate::terminal_paste::quote_path(&path, cfg!(windows)) {
+            Some(command) => self.type_into_terminal(command, window, cx),
+            None => {
+                self.notify(NoticeSource::Terminal, Notice::Error(crate::i18n::t("The file name has characters a shell cannot take safely.").into()));
+                cx.notify();
+            }
+        }
+    }
+
+    /// Type `text` into the active terminal, opening one first when there is none (a new shell needs a moment before it takes input).
+    fn type_into_terminal(&mut self, text: String, window: &mut Window, cx: &mut Context<Self>) {
         let existed = self.active_terminal().is_some();
         if !existed {
             self.new_terminal(&NewTerminal, window, cx);

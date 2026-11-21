@@ -2786,6 +2786,7 @@ Terminal: New
 Terminal: New Terminal with Profile…	
 Terminal: Rename…	
 Terminal: Reset Terminal	
+Terminal: Run Active File	
 Terminal: Run Selected Text	
 Terminal: Scroll to Bottom	
 Terminal: Scroll to Top	
@@ -2879,6 +2880,7 @@ The file is not open any more.
 The file is not tracked by Git.	
 The file is too large for an outline.	
 The file list could not be read: only opened folders are searched.	
+The file name has characters a shell cannot take safely.	
 The file to delete is not there.	
 The file to rename is not there.	
 The file was edited while the language server was working, so its answer no longer fits. Try again.	
@@ -3022,6 +3024,7 @@ There is no commit above to swap with
 There is no commit below to swap with	
 There is no commit to undo	
 There is no log file yet.	
+There is no open file to run.	
 There is no profile named “{}”.	
 There is no refactoring to undo.	
 There is no replacement to undo.	

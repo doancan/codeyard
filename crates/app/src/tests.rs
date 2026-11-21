@@ -646,6 +646,29 @@ fn compare_last_edit_scratch_and_run_selected_text(cx: &mut TestAppContext) {
     wait_ticking(cx, "terminal çıktısı", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(output)));
 }
 
+/// "Terminal: Run Active File" types the open file's path, quoted, and runs it: a name with a space still runs as one file.
+#[cfg(unix)]
+#[gpui::test]
+fn run_active_file_runs_the_open_file_in_the_terminal(cx: &mut TestAppContext) {
+    use std::os::unix::fs::PermissionsExt;
+    let cfg = config_dir("run-file");
+    let dir = project("run-file");
+    let script = dir.join("my run.sh");
+    std::fs::write(&script, "#!/bin/sh\necho ran-$((20+22))\n").unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let (wb, cx) = setup_with_config(cx, &cfg);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    open(&wb, &dir, cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Run Active File", window, cx));
+    cx.run_until_parked();
+    assert!(wb.read_with(cx, |wb, _| wb.notice_text()).is_some_and(|n| n.contains("no open file")), "nothing is open yet");
+    open(&wb, &script, cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Run Active File", window, cx));
+    let term = wait_term(cx, &wb);
+    let output = |l: &str| l.trim_end().ends_with("ran-42") && !l.contains("echo");
+    wait_ticking(cx, "terminal çıktısı", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(output)));
+}
+
 fn wait_term(cx: &mut VisualTestContext, wb: &Entity<Workbench>) -> Entity<crate::terminal::TerminalView> {
     let mut found = None;
     wait_ticking(cx, "terminal", |cx| {

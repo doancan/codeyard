@@ -538,6 +538,7 @@ actions!(
         // --- compare ---
         CompareFolders,
         RunSelectedText,
+        RunActiveFile,
         GoToLastEdit,
         NewScratchFile,
         ShowAbout,

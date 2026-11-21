@@ -350,6 +350,7 @@ impl Workbench {
             Command::action("Data: Copy Path at Cursor", DataCopyPath),
             Command::action("Data: Decode Selection…", DataDecode),
             Command::action("Terminal: Run Selected Text", RunSelectedText),
+            Command::action("Terminal: Run Active File", RunActiveFile),
             Command::action("Go: Last Edit Location", GoToLastEdit),
             Command::action("Git: Clone Repository…", CloneRepository),
             Command::action("Git: Initialize Repository", GitInitRepository),
