@@ -143,14 +143,19 @@ The job prints every test's output (`--nocapture`), so the `SKIPPED` lines are i
 
 ## CI build scheduling and caches
 
-What a pull request has to wait for is short, about four minutes: `macos-lint` (formatting, the architecture and
-documentation checks, clippy for the workspace; behind the `macos` check), `windows-check` (`cargo clippy --workspace --lib
---bins` on Windows, which fails on anything that no longer compiles there; behind the `windows` check) and `licenses`, `deny`
-and `audit`. The tests run on every pull request too, but they are advisory there: a red one shows in the pull request, it does
-not hold it up.
+What a pull request has to wait for is short, about three minutes: `fast-checks` (formatting, the architecture and documentation
+checks) and `clippy-linux` (clippy for the libraries and binaries of the workspace), both behind the `lint` check, `windows-check`
+(`cargo clippy --workspace --lib --bins` on Windows, which fails on anything that no longer compiles there; behind the `windows`
+check) and `licenses`, `deny` and `audit`. All of them run on plentiful Linux and Windows runners: the macOS ones are few, and a
+pull request that waited for one queued behind every other run. clippy on macOS (`macos-lint`, test code included) runs on every push.
+The tests run on every pull request too, but they are advisory there: a red one shows in the pull request, it does not hold it up.
 
-- `macos-shard`: the app crate's tests, which are nearly all of them, in three parallel jobs. `scripts/ci-shard.sh` lists the
-  tests, deals them out one by one so every module is spread over all shards, and runs each shard by exact name.
+- `linux-shard`: the app crate's tests, which are nearly all of them, in three parallel jobs on Linux (plentiful four-core runners;
+  macOS runners are few, and a pull request that needs several of them queues behind every other run). `scripts/ci-shard.sh` lists
+  the tests, deals them out one by one so every module is spread over all shards, and runs each shard by exact name. The test
+  binary is built incrementally: `linux-incremental` (a push to `develop` or `main`) saves the incremental build state under the
+  commit and the shards restore the newest one, so a pull request recompiles what it changed and not the whole app crate.
+  The same tests run on macOS (`macos-tests`) on every push.
 - `linux-tests`: the crates without GPUI, the extension SDKs and examples.
 
 Where the tests are the gate is `develop`. A push to `develop` or `main` also runs `macos-tests` (every test of the workspace),
@@ -161,7 +166,7 @@ shards and `linux-tests` itself. The nightly run and a manual run (`workflow_dis
 on Windows (`windows-tests`), the standalone Windows build (`windows-standalone`) and the full Linux app run (`linux-app`,
 which also runs the registry rehearsal). A release goes out from sources whose full run did not fail (`scripts/find-prebuilt.sh`).
 
-The checks branch protection asks for on `main` are `licenses`, `deny`, `audit`, `macos`, `windows` and `release-ready`.
+The checks branch protection asks for on `main` are `licenses`, `deny`, `audit`, `lint`, `windows` and `release-ready`.
 
 CI uses separate Rust dependency caches for macOS tests, macOS lint, Windows, Linux library tests, the Linux app and
 coverage. macOS memory/size checks use the production release dependency cache (`app-macos`) and the same macOS deployment

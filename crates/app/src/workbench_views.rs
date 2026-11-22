@@ -208,11 +208,14 @@ impl Workbench {
             });
             view
         });
-        if let Ok(handle) = &opened {
-            #[cfg(any(target_os = "macos", windows))]
-            a11y::platform::attach_with((*handle).into(), a11y::windows_access::TERMINAL_WINDOW, cx);
-            #[cfg(windows)]
-            handle.update(cx, |_, window, _| window.activate_window()).ok();
+        // Only macOS and Windows have a platform accessibility tree to attach the window to.
+        #[cfg(any(target_os = "macos", windows))]
+        {
+            if let Ok(handle) = &opened {
+                a11y::platform::attach_with((*handle).into(), a11y::windows_access::TERMINAL_WINDOW, cx);
+                #[cfg(windows)]
+                handle.update(cx, |_, window, _| window.activate_window()).ok();
+            }
         }
         opened
     }
