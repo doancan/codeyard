@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Dependencies: `url` 2.5.9 (RUSTSEC-2026-0592: `Url::origin()` on nested `blob:` URLs could overflow the stack). Codeyard does not call it on untrusted input, but the advisory check of the release gate fails on the old version.
+
 ### Fixed
 
 - Source Control: the window no longer closes at once when a list shows a long name with a letter such as `ğ`, `ş` or `ı` (a commit author, a file name) in a narrow column. Text cut with an ellipsis was cut from runs that an earlier measurement had already shortened, so the cut could land inside a letter.
