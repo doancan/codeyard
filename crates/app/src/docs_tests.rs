@@ -1,8 +1,11 @@
 //! Consistency tests between docs and code: the key table in the user guide must match the real bindings,
 //! and the built-in theme list and counts must match the themes.
 
+// Only the macOS tests below use them.
+#[cfg(target_os = "macos")]
 use gpui::TestAppContext;
 
+#[cfg(target_os = "macos")]
 use crate::qa_workbench_tests::setup;
 
 /// Modifier order, letter case and the ⌦/Tab spelling may differ: normalize to a single form for comparison.
