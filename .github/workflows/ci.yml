@@ -86,15 +86,17 @@ jobs:
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
         if: github.event_name != 'pull_request'
 
-  # The app crate holds nearly all of the tests. A pull request runs them in three parallel shards (scripts/ci-shard.sh)
-  # that share one warm build cache; the other crates' tests run on Linux and in the full run.
-  macos-shard:
+  # The app crate holds nearly all of the tests. A pull request runs them in three parallel shards (scripts/ci-shard.sh) on Linux:
+  # the runners there are plentiful and have four cores (a macOS runner has three, and a pull request that needs four of them
+  # queues behind every other run); macos-tests runs the same tests on macOS on every push. The test binary is built
+  # incrementally from the state the last push to develop saved (`linux-incremental`), so a pull request compiles what it changed.
+  linux-shard:
     if: github.event_name == 'pull_request' && !(github.base_ref == 'main' && github.head_ref == 'develop')
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
@@ -103,21 +105,20 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
         with:
-          shared-key: ci-macos-tests
+          shared-key: ci-linux-app
           save-if: "false"
-      - name: Metal toolchain (GPUI shaders)
+      - name: GPUI build dependencies
         run: |
-          if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
-            xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
-          fi
-          xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
-      # The app crate is compiled incrementally: the cache of the last push to develop holds what it compiled, so only what a
-      # pull request changed is compiled again (scripts/ci-shard.sh builds the test binary with CARGO_INCREMENTAL=1).
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config git openssh-server \
+            libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev \
+            libfontconfig-dev libfreetype-dev libwayland-dev libvulkan-dev
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/debug/incremental
-          key: incr-app-tests-${{ github.sha }}
-          restore-keys: incr-app-tests-
+          key: incr-app-tests-linux-${{ github.sha }}
+          restore-keys: incr-app-tests-linux-
       # The exthost and the agent are built first: the extension tests of the app run the real exthost inside the OS
       # sandbox, and the SSH tests start the agent through the throw-away sshd (`cargo test -p app` does not build them).
       - run: cargo build --locked -p ext-host -p agent
@@ -130,9 +131,9 @@ jobs:
 
   # Keeps the incremental build state of the app's test binary for the shards of the next pull requests: the same build a shard
   # does, saved under the commit. Pushes to develop and main only.
-  macos-incremental:
+  linux-incremental:
     if: github.event_name == 'push'
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
@@ -141,26 +142,27 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
         with:
-          shared-key: ci-macos-tests
-          save-if: "false"
-      - name: Metal toolchain (GPUI shaders)
+          shared-key: ci-linux-app
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' }}
+      - name: GPUI build dependencies
         run: |
-          if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
-            xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
-          fi
-          xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config git openssh-server \
+            libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev \
+            libfontconfig-dev libfreetype-dev libwayland-dev libvulkan-dev
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/debug/incremental
-          key: incr-app-tests-${{ github.sha }}
-          restore-keys: incr-app-tests-
+          key: incr-app-tests-linux-${{ github.sha }}
+          restore-keys: incr-app-tests-linux-
       - run: cargo test --locked -p app --bin codeyard --no-run
         env:
           CARGO_INCREMENTAL: "1"
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: target/debug/incremental
-          key: incr-app-tests-${{ github.sha }}
+          key: incr-app-tests-linux-${{ github.sha }}
 
   # Every test of the workspace: pushes to develop and main, the nightly run and manual runs.
   macos-tests:
@@ -519,7 +521,7 @@ jobs:
               echo "full run of $SHA on develop: ${state:-none yet}"
             else
               jobs=$(gh api "repos/$REPO/actions/runs/$RUN/jobs?per_page=100" \
-                --jq '[.jobs[] | select(.name | test("^(macos-shard|linux-tests)")) | .conclusion // "pending"] | join(",")')
+                --jq '[.jobs[] | select(.name | test("^(linux-shard|linux-tests)")) | .conclusion // "pending"] | join(",")')
               echo "tests of this run: ${jobs:-not started}"
               case ",$jobs," in
                 *,failure,*|*,cancelled,*) state="completed failure" ;;
