@@ -143,25 +143,25 @@ The job prints every test's output (`--nocapture`), so the `SKIPPED` lines are i
 
 ## CI build scheduling and caches
 
-CI has two tiers. A pull request runs the **fast gate**, which is meant to finish in about ten minutes:
+What a pull request has to wait for is short, about four minutes: `macos-lint` (formatting, the architecture and
+documentation checks, clippy for the workspace; behind the `macos` check), `windows-check` (`cargo clippy --workspace --lib
+--bins` on Windows, which fails on anything that no longer compiles there; behind the `windows` check) and `licenses`, `deny`
+and `audit`. The tests run on every pull request too, but they are advisory there: a red one shows in the pull request, it does
+not hold it up.
 
-- `macos-lint`: formatting, the architecture and documentation checks, and clippy for the workspace.
 - `macos-shard`: the app crate's tests, which are nearly all of them, in three parallel jobs. `scripts/ci-shard.sh` lists the
-  tests, deals them out one by one so every module is spread over all shards, and runs each shard by exact name. The shards
-  share one warm build cache.
-- `linux`: the crates without GPUI and the extension SDKs and examples (the agent size limit and the five-minute check run in the full tier).
-- `windows-check`: `cargo clippy --workspace --lib --bins` on Windows, which fails on anything that no longer compiles there.
-- `licenses`, `deny` and `audit`.
+  tests, deals them out one by one so every module is spread over all shards, and runs each shard by exact name.
+- `linux-tests`: the crates without GPUI, the extension SDKs and examples.
 
-A push to `develop` or `main`, the nightly run and a manual run (`workflow_dispatch`) run the **full tier** as well: every
-test of the workspace on macOS (`macos-tests`), on Linux (`linux-app`) and natively on Windows (`windows-tests`), the memory
-and size budgets (`macos-budgets`) and the standalone Windows release build (`windows-standalone`). A release goes out only
-from sources whose full tier did not fail (`scripts/find-prebuilt.sh`).
+Where the tests are the gate is `develop`. A push to `develop` or `main` also runs `macos-tests` (every test of the workspace),
+`macos-budgets` (the memory and size budgets, a release build) and `linux-tests`, about twenty minutes. A pull request from
+`develop` into `main` runs none of them again: `release-ready` passes when that run of `develop` succeeded for the same commit (it
+waits for the run if it is still going) and fails when it failed. A pull request into `main` from any other branch has to pass the
+shards and `linux-tests` itself. The nightly run and a manual run (`workflow_dispatch`) add the slowest checks: every test natively
+on Windows (`windows-tests`), the standalone Windows build (`windows-standalone`) and the full Linux app run (`linux-app`,
+which also runs the registry rehearsal). A release goes out from sources whose full run did not fail (`scripts/find-prebuilt.sh`).
 
-The checks branch protection asks for keep their names (`macos`, `windows`, `linux`, `licenses`, `deny`, `audit`). `macos`
-and `windows` are small jobs that require the jobs of the tier that ran: the shards and the lint job on a pull request, the
-whole-workspace tests, the budgets and the standalone build otherwise. A job of the tier that did not fail but was skipped
-does not count; a job the tier needs that fails, is cancelled or is skipped fails the check.
+The checks branch protection asks for on `main` are `licenses`, `deny`, `audit`, `macos`, `windows` and `release-ready`.
 
 CI uses separate Rust dependency caches for macOS tests, macOS lint, Windows, Linux library tests, the Linux app and
 coverage. macOS memory/size checks use the production release dependency cache (`app-macos`) and the same macOS deployment
