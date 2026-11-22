@@ -7,7 +7,8 @@ the tagged commit (the merge of `develop` into `main` has the tree of `develop`'
 running. If it finds one, the agent and Windows jobs are skipped; the macOS job takes the binaries, runs
 `PREBUILT=1 scripts/bundle-macos.sh` (bundle, Developer ID signature, DMG), notarizes, and the publish job takes the agents
 and the Windows files from that run, signs `SHA256SUMS.txt` and creates the release. That is about ten minutes, most of it
-Apple's notarization. Without a matching run (a commit made straight on `main`, a run older than 14 days, a failed prebuild)
+Apple's notarization. If the full CI run (`ci.yml`) of that commit on `develop` failed, the release stops instead: a build whose tests failed is not
+released; a full run that is still going is not waited for. Without a matching run (a commit made straight on `main`, a run older than 14 days, a failed prebuild)
 the workflow builds everything as described below. A manual run (Actions, release, Run workflow) takes the same path, short
 of publishing; tick "rebuild" to build everything instead.
 

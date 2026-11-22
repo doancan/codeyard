@@ -4,6 +4,7 @@
 # nearly always finished sooner than a new build would be. "The same sources" is the same git tree, whatever the commit: the
 # merge of develop into main has the tree of develop's last commit.
 #   scripts/find-prebuilt.sh [--wait-minutes N]
+# Exit status 3: a build of these sources exists but its full CI run failed (the release must stop).
 # Needs `gh` signed in (GH_TOKEN) and the recent history of develop (`git fetch --depth 100 origin develop`).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -22,7 +23,16 @@ while :; do
     git cat-file -e "$sha^{commit}" 2>/dev/null || continue
     [ "$(git rev-parse "$sha^{tree}")" = "$tree" ] || continue
     if [ "$status" = completed ]; then
-      if [ "$conclusion" = success ]; then echo "$id"; exit 0; fi
+      if [ "$conclusion" = success ]; then
+        # The full test run (ci.yml) of the same commit must not have failed. One that is still going is not waited for: a
+        # release should not sit behind the Windows tests; a failure of it is the signal not to release these sources.
+        if gh run list --workflow ci.yml --branch develop --commit "$sha" --json conclusion -q '.[].conclusion' | grep -qx failure; then
+          echo "the full CI run of develop failed for the commit $sha (same sources): fix it and push again" >&2
+          exit 3
+        fi
+        echo "$id"
+        exit 0
+      fi
     else
       pending=1
     fi
