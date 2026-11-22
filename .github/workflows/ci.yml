@@ -1,8 +1,10 @@
 name: ci
-# Two tiers. A pull request runs the fast gate (about ten minutes): formatting, clippy and the app's tests on macOS (in
-# parallel shards), the crates without GPUI on Linux, a Windows build check and the dependency and licence gates. A push
-# to develop or main, the nightly run and a manual run add everything slow: every test on macOS, Linux and Windows, the
-# memory budgets and the standalone Windows build. A release goes out only from a commit that passed the full run.
+# What a pull request has to wait for is short: formatting, clippy, a Windows build check and the dependency and licence
+# gates (about four minutes). The tests (the app's in parallel shards, the crates without GPUI on Linux) run on every pull
+# request too but are advisory there: a red one shows in the pull request, it does not hold it up. They are the gate where it
+# matters: a push to develop runs the whole workspace on macOS, the memory budgets and the Linux tests, and a pull request
+# from develop into main (`release-ready`) passes only when that run succeeded for the same commit. The nightly run and
+# a manual run add the slowest checks: every test natively on Windows, the standalone Windows build and the full Linux app run.
 on:
   push:
     branches: [main, develop]
@@ -25,28 +27,20 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # The check branch protection asks for. Which jobs it needs depends on the tier: a pull request runs the shards, every
-  # other event the whole workspace and the budgets.
+  # The check branch protection asks for: the part of macOS that a pull request waits for. The tests are advisory there
+  # (see the top of this file); `release-ready` is what holds main back.
   macos:
-    needs: [macos-lint, macos-shard, macos-tests, macos-budgets]
+    needs: [macos-lint]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require the macOS checks of this tier
+      - name: Require formatting, the architecture and documentation checks and clippy
         env:
-          EVENT: ${{ github.event_name }}
-          NEEDS: ${{ toJSON(needs) }}
+          RESULT: ${{ needs.macos-lint.result }}
         run: |
-          python3 -I - <<'PY'
-          import json, os, sys
-          needs = json.loads(os.environ["NEEDS"])
-          required = ["macos-lint", "macos-shard"] if os.environ["EVENT"] == "pull_request" else ["macos-lint", "macos-tests", "macos-budgets"]
-          bad = [n for n in required if needs[n]["result"] != "success"]
-          for n in required:
-              print(f"{n}: {needs[n]['result']}")
-          sys.exit(1 if bad else 0)
-          PY
+          echo "macOS lint: $RESULT"
+          test "$RESULT" = success
 
   # Formatting, the architecture and documentation checks and clippy: quick, and the first thing a pull request needs.
   macos-lint:
@@ -76,7 +70,7 @@ jobs:
   # The app crate holds nearly all of the tests. A pull request runs them in three parallel shards (scripts/ci-shard.sh)
   # that share one warm build cache; the other crates' tests run on Linux and in the full run.
   macos-shard:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && !(github.base_ref == 'main' && github.head_ref == 'develop')
     strategy:
       fail-fast: false
       matrix:
@@ -249,7 +243,9 @@ jobs:
   # The crates that do not depend on GPUI, plus the musl agent and its size limit
   # (the agent runs on Linux servers), and the extension SDKs and examples (the only job with the wasm32-wasip2 target
   # and Node.js for TypeScript extensions).
-  linux:
+  linux-tests:
+    # Not for the pull request from develop into main: develop's own full run already tested the same commit.
+    if: ${{ !(github.event_name == 'pull_request' && github.base_ref == 'main' && github.head_ref == 'develop') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -303,7 +299,7 @@ jobs:
   # Full workspace and GPUI on Linux. Promoted after four consecutive successful
   # workspace test runs; failures now fail CI instead of being converted to warnings.
   linux-app:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -345,33 +341,22 @@ jobs:
       # publish, install with the app, revoke, expired index.
       - run: deploy/rehearse.sh
 
-  # The check branch protection asks for. A pull request gets the build check below; every other event the native
-  # tests and the standalone release build (the same checks run locally with scripts/check-windows.ps1).
+  # The check branch protection asks for: does everything still compile and pass clippy on Windows (about three minutes
+  # with the warm cache). The native tests and the standalone build run in the nightly and manual runs.
   windows:
-    needs: [windows-check, windows-tests, windows-standalone]
+    needs: [windows-check]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require the Windows checks of this tier
+      - name: Require the Windows build check
         env:
-          EVENT: ${{ github.event_name }}
-          NEEDS: ${{ toJSON(needs) }}
+          RESULT: ${{ needs.windows-check.result }}
         run: |
-          python3 -I - <<'PY'
-          import json, os, sys
-          needs = json.loads(os.environ["NEEDS"])
-          required = ["windows-check"] if os.environ["EVENT"] == "pull_request" else ["windows-tests", "windows-standalone"]
-          bad = [n for n in required if needs[n]["result"] != "success"]
-          for n in required:
-              print(f"{n}: {needs[n]['result']}")
-          sys.exit(1 if bad else 0)
-          PY
+          echo "Windows build check: $RESULT"
+          test "$RESULT" = success
 
-  # Pull requests: does everything still compile and pass clippy on Windows (a few minutes with the warm cache of
-  # develop). The tests of Windows run in the full tier.
   windows-check:
-    if: github.event_name == 'pull_request'
     runs-on: windows-2022
     timeout-minutes: 25
     steps:
@@ -383,11 +368,11 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
         with:
           shared-key: ci-windows
-          save-if: "false"
+          save-if: ${{ github.event_name != 'pull_request' }}
       - run: cargo clippy --locked --workspace --lib --bins -- -D warnings
 
   windows-tests:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-2022
     # Every test of the workspace, one at a time, after a release build: about twice the old filtered run.
     timeout-minutes: 100
@@ -428,7 +413,7 @@ jobs:
           CODEYARD_TEST_TIMEOUT_SCALE: "4"
 
   windows-standalone:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-2022
     timeout-minutes: 60
     steps:
@@ -443,3 +428,49 @@ jobs:
       - name: Build and validate the standalone release EXE
         shell: pwsh
         run: ./scripts/build-windows.ps1 -Profile Release
+
+  # Holds main back; for any other pull request it passes at once. A pull request from develop into main passes when develop's
+  # own run of this workflow succeeded for the same commit (it tests the whole workspace and the memory budgets, so nothing is
+  # tested twice); it waits for that run if it is still going. Any other pull request into main has to pass the shards and the
+  # Linux tests of its own run. One job and no `needs`: a job waits for the jobs it needs even when it would be skipped.
+  release-ready:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Wait for the tests that gate main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+          RUN: ${{ github.run_id }}
+        run: |
+          if [ "$EVENT" != pull_request ] || [ "$BASE" != main ]; then echo "not a pull request into main: nothing to hold back"; exit 0; fi
+          for i in $(seq 1 80); do
+            if [ "$HEAD" = develop ]; then
+              state=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=develop&event=push&head_sha=$SHA" \
+                --jq '[.workflow_runs[] | select(.head_sha == env.SHA)] | sort_by(.created_at) | last | "\(.status) \(.conclusion)"')
+              echo "full run of $SHA on develop: ${state:-none yet}"
+            else
+              jobs=$(gh api "repos/$REPO/actions/runs/$RUN/jobs?per_page=100" \
+                --jq '[.jobs[] | select(.name | test("^(macos-shard|linux-tests)")) | .conclusion // "pending"] | join(",")')
+              echo "tests of this run: ${jobs:-not started}"
+              case ",$jobs," in
+                *,failure,*|*,cancelled,*) state="completed failure" ;;
+                *,pending,*|",,") state="in_progress" ;;
+                *) state="completed success" ;;
+              esac
+            fi
+            case "$state" in
+              "completed success") exit 0 ;;
+              "completed "*) echo "::error::The tests that gate main failed (see above): fix them first"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "::error::The tests that gate main did not finish in 40 minutes"
+          exit 1
