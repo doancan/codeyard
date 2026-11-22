@@ -130,15 +130,22 @@ impl Workbench {
             )
             .when(restricted, |d| {
                 let tip = crate::i18n::t("Restricted Mode: tasks, debugging, and the project's terminal shell and language servers are switched off until you trust this folder. Click to manage trust.");
+                // A soft warning tint with warning-coloured text: noticeable without being the loudest block in the window.
+                let tint = crate::ui::tinted_bg(p.surface, p.warning, 0.20, p.warning);
+                let fg = crate::ui::ensure_contrast(p.warning, p.text, &[tint], 4.5);
                 d.child(
                     item()
                         .id("sb-restricted")
                         .child(a11y::part_frame(a11y::Part::Status(a11y::StatusPart::Restricted), cx))
                         .flex_shrink()
                         .cursor_pointer()
-                        .bg(c(p.warning))
-                        .text_color(c(p.on_accent))
-                        .child(icon("lock", SB_ICON, p.on_accent))
+                        .h(px(layout::STATUSBAR_H - 8.))
+                        .rounded(px(theme::radius::MD))
+                        .mx(px(theme::SPACE[1]))
+                        .bg(c(tint))
+                        .text_color(c(fg))
+                        .hover(|d| d.opacity(0.85))
+                        .child(icon("lock", SB_ICON, fg))
                         .child(ctl("sb-restricted", format!("{}. {tip}", crate::i18n::t("Restricted Mode")), |this, w, cx| {
                             this.manage_workspace_trust(&ManageWorkspaceTrust, w, cx)
                         }))

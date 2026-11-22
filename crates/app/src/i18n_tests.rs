@@ -388,12 +388,10 @@ fn changing_the_setting_switches_the_language_without_restart(cx: &mut TestAppCo
 }
 
 #[test]
-fn headings_are_uppercased_with_the_language_rules() {
-    assert_eq!(i18n::upper("Recent"), "RECENT");
+fn headings_keep_the_case_of_their_translation() {
+    assert_eq!(i18n::heading("Recent"), "Recent");
     let _g = LangGuard::set("tr");
-    assert_eq!(i18n::upper("Özelleştir"), "ÖZELLEŞTİR");
-    assert_eq!(i18n::upper("Son Açılanlar"), "SON AÇILANLAR");
-    assert_eq!(i18n::upper("Öğren"), "ÖĞREN");
+    assert_eq!(i18n::heading("Son Açılanlar"), "Son Açılanlar");
 }
 
 #[gpui::test]
@@ -777,17 +775,11 @@ fn regional_variants_resolve_to_the_most_specific_language() {
 }
 
 #[test]
-fn every_language_has_its_own_case_rule_and_name() {
-    use crate::textcase::CaseLocale;
+fn every_language_has_a_name_and_a_trimmed_code() {
     for l in i18n::LANGUAGES {
         assert!(!l.name.trim().is_empty(), "{}: native name", l.code);
         assert_eq!(l.code, l.code.trim(), "{}", l.code);
     }
-    let _tr = LangGuard::set("tr");
-    assert_eq!(i18n::LANGUAGES[i18n::current()].case, CaseLocale::Turkish);
-    assert_eq!(i18n::upper("izle ılık"), "İZLE ILIK");
-    drop(_tr);
-    assert_eq!(i18n::upper("izle ılık"), "IZLE ILIK", "English uses the invariant mapping");
 }
 
 /// Menu and button labels (short texts) that open a dialog end with "…": the translation keeps this rule. Sentences

@@ -94,7 +94,9 @@ fn tabs_breadcrumbs_and_other_groups(cx: &mut TestAppContext) {
     std::fs::write(dir.join("src/a.txt"), "a\n").unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    open(&wb, &dir.join("src/a.txt"), cx);
+    // Opened inside the root, so the folder stays the root and `src` is one of the file's folders.
+    wb.update_in(cx, |wb, window, cx| wb.open_in_root(&dir.join("src/a.txt").to_string_lossy(), window, cx));
+    cx.run_until_parked();
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Preferences: Open Settings", window, cx));
     cx.run_until_parked();
     let snap = snapshot(&wb, cx);
@@ -121,7 +123,8 @@ fn tabs_breadcrumbs_and_other_groups(cx: &mut TestAppContext) {
     });
     cx.run_until_parked();
     let snap = snapshot(&wb, cx);
-    let (crumb, _) = get(&snap, Role::Link, "a.txt");
+    assert!(find(&snap, Role::Link, "a.txt").is_none(), "the file's own name is on its tab, not repeated in the breadcrumbs");
+    let (crumb, _) = get(&snap, Role::Link, "src");
     press(&wb, cx, &snap, crumb);
     assert!(wb.read_with(cx, |wb, _| wb.view_shown(Panel::Explorer)));
 

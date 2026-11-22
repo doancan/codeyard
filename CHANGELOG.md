@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.8] - 2026-11-22
+
+### Security
+
+- Dependencies: `url` 2.5.9 (RUSTSEC-2026-0592: `Url::origin()` on nested `blob:` URLs could overflow the stack). Codeyard does not call it on untrusted input, but the advisory check of the release gate fails on the old version.
+
+### Fixed
+
+- Source Control: the window no longer closes at once when a list shows a long name with a letter such as `ğ`, `ş` or `ı` (a commit author, a file name) in a narrow column. Text cut with an ellipsis was cut from runs that an earlier measurement had already shortened, so the cut could land inside a letter.
+
+### Changed
+
+- Themes: every built-in theme (except the two high-contrast ones) now separates the editor from the side bar and panels by at least 1.12:1, draws borders at about 1.55:1 and selections at 1.3:1 or more, so the window reads as clear areas instead of one grey block. The themes written for Codeyard also use calmer syntax, accent and status colours (lower chroma, even lightness); the themes based on a published palette keep their own syntax colours. All pairs still pass the contrast test.
+- Tabs: editor tabs and the tabs of the bottom panel are soft pills with a little air around them; the active one takes the colour of the editor. Corner radii are rounder (4, 6 and 10 px), list rows are taller (26 px) and the tab strips are a little higher.
+- View and section titles (Explorer, Outline, Timeline, Source Control, …) are written in normal case instead of capitals.
+- File icons: a calmer colour for every file type, drawn toward the theme's muted text colour, and new icons for configuration, lock, data and archive files, manifests (`Cargo.toml`, `package.json`, …), `README` and `LICENSE`.
+- The Restricted Mode item in the status bar is a soft warning-tinted pill instead of a solid block.
+- The breadcrumbs no longer repeat the file's name, which its tab already shows; the row is hidden when there is nothing else to show.
+- The commit hover card shows how much a commit changed (files, added and removed lines) but no longer lists files, so it keeps one size. It has links to the commit and, when the subject names one, to its pull request on GitHub, and stays open while the pointer is on it.
+
 ## [0.12.7] - 2026-11-21
 
 ### Fixed
@@ -2096,7 +2116,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.7...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.8...HEAD
+[0.12.8]: https://github.com/doancan/codeyard/compare/v0.12.7...v0.12.8
 [0.12.7]: https://github.com/doancan/codeyard/compare/v0.12.6...v0.12.7
 [0.12.6]: https://github.com/doancan/codeyard/compare/v0.12.5...v0.12.6
 [0.12.5]: https://github.com/doancan/codeyard/compare/v0.12.4...v0.12.5

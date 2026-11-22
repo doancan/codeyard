@@ -91,7 +91,7 @@ impl Workbench {
                 .flex()
                 .flex_col()
                 .size_full()
-                .child(self.view_header(crate::i18n::upper(crate::i18n::t("Search")), p))
+                .child(self.view_header(crate::i18n::heading(crate::i18n::t("Search")), p))
                 .child(div().flex_1().min_h_0().child(self.search.clone()))
                 .into_any_element(),
             Panel::Scm => self.scm.clone().into_any_element(),

@@ -500,10 +500,10 @@ impl Workbench {
             .justify_between()
             .pl(px(theme::SPACE[6]))
             .pr(px(theme::SPACE[3]))
-            .text_size(px(text::XXS.0))
+            .text_size(px(text::SM.0))
             .font_weight(gpui::FontWeight::SEMIBOLD)
-            .text_color(c(p.text_muted))
-            .child(crate::i18n::upper(crate::i18n::t("Testing")))
+            .text_color(c(p.text))
+            .child(crate::i18n::heading(crate::i18n::t("Testing")))
             .child(
                 div()
                     .flex()

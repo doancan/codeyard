@@ -234,7 +234,7 @@ Crates marked vendored live in `vendor/`.
 | foreign-types | 0.5.0 | MIT/Apache-2.0 |  |
 | foreign-types-macros | 0.2.4 | MIT/Apache-2.0 |  |
 | foreign-types-shared | 0.3.1 | MIT/Apache-2.0 |  |
-| form_urlencoded | 1.2.2 | MIT OR Apache-2.0 |  |
+| form_urlencoded | 1.2.3 | MIT OR Apache-2.0 |  |
 | fraction | 0.17.0 | MIT OR Apache-2.0 |  |
 | freetype-sys | 0.20.1 | MIT |  |
 | fs-set-times | 0.20.3 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
@@ -722,7 +722,7 @@ Crates marked vendored live in `vendor/`.
 | unicode-vo | 0.1.0 | MIT/Apache-2.0 |  |
 | unicode-width | 0.2.2 | MIT OR Apache-2.0 |  |
 | untrusted | 0.9.0 | ISC |  |
-| url | 2.5.8 | MIT OR Apache-2.0 |  |
+| url | 2.5.9 | MIT OR Apache-2.0 |  |
 | usvg | 0.45.1 | Apache-2.0 OR MIT |  |
 | utf-8 | 0.7.6 | MIT OR Apache-2.0 |  |
 | utf8_iter | 1.0.4 | Apache-2.0 OR MIT |  |

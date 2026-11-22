@@ -62,6 +62,9 @@ I compared the path data of each file with the Lucide `main` branch:
   `folder-solid.svg`, `folder-open-solid.svg`. They were drawn for this project and fall under the project licence,
   not under `icons/LICENSE`.
 
+- `file-archive.svg`, `file-config.svg`, `file-data.svg` and `file-lock.svg` were drawn for this project in the same style as the
+  Lucide file icons (same page outline and stroke); they fall under the project licence, not under `icons/LICENSE`.
+
 36 + 30 + 6 + 3 + 4 = 79. The icon files use a stroke width of 1.75, not Lucide's default of 2, so every stroked
 icon has been modified at least in that attribute.
 

@@ -377,10 +377,10 @@ impl Workbench {
             .child(
                 div()
                     .flex_1()
-                    .text_size(px(text::XXS.0))
+                    .text_size(px(text::SM.0))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(c(p.text_muted))
-                    .child(crate::i18n::upper(crate::i18n::t("Run and Debug"))),
+                    .text_color(c(p.text))
+                    .child(crate::i18n::heading(crate::i18n::t("Run and Debug"))),
             )
             .child(
                 ui::icon_button("dbg-open-launch", "settings", crate::i18n::t("Open Launch Configuration"), p)
