@@ -89,23 +89,14 @@ pub struct Language {
     /// Embedded translation files (none for English); multiple parts are merged, a duplicate key is an error.
     pub tables: &'static [&'static str],
     pub plural: Plural,
-    /// Rule used when uppercasing headings (Turkish `i` → `İ`).
-    pub case: crate::textcase::CaseLocale,
     #[allow(dead_code, reason = "tests read from here which checks are mandatory")]
     pub status: Status,
 }
 
 /// Supported languages; the order is the `current()` index and 0 is always English (the language of the keys).
 pub const LANGUAGES: &[Language] = &[
-    Language { code: "en", name: "English", tables: &[], plural: Plural::OneOther, case: crate::textcase::CaseLocale::Invariant, status: Status::Source },
-    Language {
-        code: "tr",
-        name: "Türkçe",
-        tables: &[include_str!("../locales/tr.tsv")],
-        plural: Plural::None,
-        case: crate::textcase::CaseLocale::Turkish,
-        status: Status::Complete,
-    },
+    Language { code: "en", name: "English", tables: &[], plural: Plural::OneOther, status: Status::Source },
+    Language { code: "tr", name: "Türkçe", tables: &[include_str!("../locales/tr.tsv")], plural: Plural::None, status: Status::Complete },
 ];
 
 /// Valid values for `ui.language`: `auto` and the `LANGUAGES` codes (a test verifies it matches `LANGUAGES`).
@@ -374,12 +365,9 @@ pub fn fill(template: &str, args: &[&dyn Display]) -> String {
     out
 }
 
-/// Uppercases headings with the language's rule; in Turkish `i` → `İ`, `ı` → `I`.
-pub fn upper(s: &str) -> String {
-    match LANGUAGES.get(current()).map(|l| l.case) {
-        Some(case @ crate::textcase::CaseLocale::Turkish) => crate::textcase::upper(s, case),
-        _ => s.to_uppercase(),
-    }
+/// A heading as written: view and section titles keep the case of their translation (no shouting capitals).
+pub fn heading(s: &str) -> String {
+    s.to_string()
 }
 
 /// Argument indices of the placeholders in the text (`{}` counted in order; for tests).

@@ -24,10 +24,10 @@ pub(super) fn section_title(title: &str, p: &Palette) -> gpui::Div {
     div()
         .pt(px(theme::SPACE[4]))
         .pb(px(theme::SPACE[1]))
-        .text_size(px(text::XXS.0))
+        .text_size(px(text::XS.0))
         .font_weight(gpui::FontWeight::SEMIBOLD)
         .text_color(c(p.text_muted))
-        .child(crate::i18n::upper(title))
+        .child(crate::i18n::heading(title))
 }
 
 /// A bulleted list of plain lines, or `empty` in muted text.
@@ -53,10 +53,10 @@ impl Workbench {
             .justify_between()
             .pl(px(theme::SPACE[6]))
             .pr(px(theme::SPACE[3]))
-            .text_size(px(text::XXS.0))
+            .text_size(px(text::SM.0))
             .font_weight(gpui::FontWeight::SEMIBOLD)
-            .text_color(c(p.text_muted))
-            .child(crate::i18n::upper(crate::i18n::t("Extensions")))
+            .text_color(c(p.text))
+            .child(crate::i18n::heading(crate::i18n::t("Extensions")))
             .when(!off, |d| {
                 let tool = |id: &'static str, glyph: &'static str, tip: &'static str| {
                     ui::icon_button(id, glyph, tip, p).tab_index(0).focus(|d| d.bg(c(p.surface_active)))

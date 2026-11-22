@@ -74,7 +74,7 @@ impl Render for ViewBody {
                 .flex()
                 .flex_col()
                 .size_full()
-                .child(view_explorer_glue::view_header(crate::i18n::upper(crate::i18n::t("Search")), &p))
+                .child(view_explorer_glue::view_header(crate::i18n::heading(crate::i18n::t("Search")), &p))
                 .child(div().flex_1().min_h_0().child(self.search.clone()))
                 .into_any_element(),
             panel => match (self.home.upgrade(), &self.view.ext) {

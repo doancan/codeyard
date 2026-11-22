@@ -263,9 +263,9 @@ pub(super) fn view_header(title: impl Into<SharedString>, p: &Palette) -> impl I
         .flex()
         .items_center()
         .px(px(theme::SPACE[6]))
-        .text_size(px(text::XXS.0))
+        .text_size(px(text::SM.0))
         .font_weight(gpui::FontWeight::SEMIBOLD)
-        .text_color(c(p.text_muted))
+        .text_color(c(p.text))
         .child(title.into())
 }
 
@@ -309,14 +309,14 @@ impl Workbench {
     }
 
     pub(super) fn explorer_panel(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let root = self.roots.primary.read(cx).root().map(|r| self.root_label(r).to_uppercase());
+        let root = self.roots.primary.read(cx).root().map(|r| self.root_label(r).to_string());
         let Some(root) = root else {
             // No folder: an empty state saying what to do.
             return div()
                 .flex()
                 .flex_col()
                 .size_full()
-                .child(self.view_header(crate::i18n::upper(crate::i18n::t("Explorer")), p))
+                .child(self.view_header(crate::i18n::heading(crate::i18n::t("Explorer")), p))
                 .child(
                     div()
                         .px(px(theme::SPACE[6]))
@@ -564,10 +564,10 @@ impl Workbench {
                     .child(
                         div()
                             .flex_1()
-                            .text_size(px(text::XXS.0))
+                            .text_size(px(text::SM.0))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(c(p.text_muted))
-                            .child(crate::i18n::upper(crate::i18n::t("Explorer"))),
+                            .text_color(c(p.text))
+                            .child(crate::i18n::heading(crate::i18n::t("Explorer"))),
                     )
                     .child(
                         ui::icon_button("exp-new-file", "file-plus", crate::i18n::t("New File… (⌘N)"), p)

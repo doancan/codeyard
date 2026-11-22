@@ -427,6 +427,7 @@ Commit ({})
 Commit All ({})	
 Commit Signed Off	
 Commit all tracked changes when nothing is staged	
+Commit on GitHub	
 Commit or stash your changes first	
 Commit {}	
 Commits	
@@ -2131,6 +2132,7 @@ Pull also fetches all tags
 Pull failed: {}	
 Pull from…	
 Pull has conflicts: resolve them in Source Control (or Git: Abort Merge)	
+Pull request #{}	
 Pull request #{} has no head on {} (it may have been closed or deleted); refresh the list	
 Pull request changes	
 Pull requests	
@@ -3416,7 +3418,6 @@ a theme must be a JSON object
 about {0} MB · {1}	
 active	
 added	
-and {} more file|and {} more files	
 animated PNG, first frame shown	
 animated, {} frame|animated, {} frames	
 another Codeyard window has them; started new shells	

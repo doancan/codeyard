@@ -336,6 +336,10 @@ impl Workbench {
             .bg(c(p.surface))
             .border_b_1()
             .border_color(c(p.border))
+            // Pill tabs: each tab floats in the bar with a little air around it; the active one takes the editor's colour.
+            .items_center()
+            .gap(px(theme::SPACE[1]))
+            .px(px(theme::SPACE[3]))
             .children(editors.iter().enumerate().map(|(ix, ed)| {
                 let ed = ed.read(cx);
                 let active = active_ix == Some(ix) && !diff_here;
@@ -383,18 +387,14 @@ impl Workbench {
                     .gap(px(theme::SPACE[3]))
                     .min_w(px(100.))
                     .max_w(px(220.))
-                    .pl(px(theme::SPACE[5]))
+                    .h(px(layout::TABBAR_H - 10.))
+                    .rounded(px(theme::radius::MD))
+                    .pl(px(theme::SPACE[4]))
                     .pr(px(theme::SPACE[2]))
-                    .border_r_1()
-                    .border_color(c(p.border))
                     .cursor_pointer()
                     .text_color(c(if active { p.text } else { p.text_muted }))
                     .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover))))
-                    .when(active, |d| {
-                        // Accent on the top edge only: border_color applies to all edges,
-                        // hence a separate line element.
-                        d.bg(c(p.bg)).child(div().absolute().top_0().left_0().right_0().h(px(1.)).bg(c(p.accent)))
-                    })
+                    .when(active, |d| d.bg(c(p.bg)).font_weight(gpui::FontWeight::MEDIUM))
                     .when(tab_icons, |d| d.child(crate::icon_theme::file_icon_el(&ed.name, layout::ICON, p)))
                     .child(
                         div()
@@ -405,7 +405,7 @@ impl Workbench {
                             .overflow_hidden()
                             .whitespace_nowrap()
                             .when(preview, |d| d.italic())
-                            // Like VS Code: the tab name of a modified/new file takes the git color.
+                            // The tab name of a modified or new file takes its git colour.
                             .when_some(self.git_mark_of(&ed.path), |d, m| d.text_color(c(m.color(p))))
                             .child(ed.name.clone())
                             .when_some(hint, |d, h| d.child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(h))),
@@ -492,8 +492,8 @@ impl Workbench {
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .rounded(px(theme::radius::SM))
-                                .hover(|d| d.bg(c(p.surface_hover)))
+                                .rounded(px(theme::radius::MD))
+                                .hover(|d| d.bg(c(p.surface_active)))
                                 .when(!active && !dirty && close_mode == "hover", |d| d.opacity(0.).group_hover(group.clone(), |s| s.opacity(1.)))
                                 .child(if dirty {
                                     div().size(px(8.)).rounded_full().bg(c(p.text)).into_any_element()
@@ -554,14 +554,14 @@ impl Workbench {
                     .items_center()
                     .gap(px(theme::SPACE[3]))
                     .max_w(px(260.))
-                    .pl(px(theme::SPACE[5]))
+                    .h(px(layout::TABBAR_H - 10.))
+                    .rounded(px(theme::radius::MD))
+                    .pl(px(theme::SPACE[4]))
                     .pr(px(theme::SPACE[2]))
-                    .border_r_1()
-                    .border_color(c(p.border))
                     .cursor_pointer()
                     .text_color(c(if active { p.text } else { p.text_muted }))
                     .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover))))
-                    .when(active, |d| d.bg(c(p.bg)).child(div().absolute().top_0().left_0().right_0().h(px(1.)).bg(c(p.accent))))
+                    .when(active, |d| d.bg(c(p.bg)).font_weight(gpui::FontWeight::MEDIUM))
                     .child(icon("search", layout::ICON, if stale { p.warning } else { p.accent }))
                     .child(div().overflow_hidden().whitespace_nowrap().child(title.clone()))
                     .child(
@@ -622,14 +622,14 @@ impl Workbench {
                         .flex_none()
                         .items_center()
                         .gap(px(theme::SPACE[3]))
-                        .pl(px(theme::SPACE[5]))
+                        .h(px(layout::TABBAR_H - 10.))
+                        .rounded(px(theme::radius::MD))
+                        .pl(px(theme::SPACE[4]))
                         .pr(px(theme::SPACE[2]))
-                        .border_r_1()
-                        .border_color(c(p.border))
                         .cursor_pointer()
                         .text_color(c(if active { p.text } else { p.text_muted }))
                         .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover))))
-                        .when(active, |d| d.bg(c(p.bg)).child(div().absolute().top_0().left_0().right_0().h(px(1.)).bg(c(p.accent))))
+                        .when(active, |d| d.bg(c(p.bg)).font_weight(gpui::FontWeight::MEDIUM))
                         .child(icon(glyph, layout::ICON, p.text_muted))
                         .child(div().whitespace_nowrap().child(format!("{name} ({suffix})")))
                         .child(
@@ -676,14 +676,14 @@ impl Workbench {
                         .flex_none()
                         .items_center()
                         .gap(px(theme::SPACE[3]))
-                        .pl(px(theme::SPACE[5]))
+                        .h(px(layout::TABBAR_H - 10.))
+                        .rounded(px(theme::radius::MD))
+                        .pl(px(theme::SPACE[4]))
                         .pr(px(theme::SPACE[2]))
-                        .border_r_1()
-                        .border_color(c(p.border))
                         .cursor_pointer()
                         .text_color(c(if active { p.text } else { p.text_muted }))
                         .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover))))
-                        .when(active, |d| d.bg(c(p.bg)).child(div().absolute().top_0().left_0().right_0().h(px(1.)).bg(c(p.accent))))
+                        .when(active, |d| d.bg(c(p.bg)).font_weight(gpui::FontWeight::MEDIUM))
                         .child(icon("git-compare", layout::ICON, p.info))
                         .child(div().italic().whitespace_nowrap().child(crate::i18n::tf("{} (diff)", &[&name])))
                         .child(
@@ -750,14 +750,14 @@ impl Workbench {
                         .flex_none()
                         .items_center()
                         .gap(px(theme::SPACE[3]))
-                        .pl(px(theme::SPACE[5]))
+                        .h(px(layout::TABBAR_H - 10.))
+                        .rounded(px(theme::radius::MD))
+                        .pl(px(theme::SPACE[4]))
                         .pr(px(theme::SPACE[2]))
-                        .border_r_1()
-                        .border_color(c(p.border))
                         .cursor_pointer()
                         .text_color(c(if active { p.text } else { p.text_muted }))
                         .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover))))
-                        .when(active, |d| d.bg(c(p.bg)).child(div().absolute().top_0().left_0().right_0().h(px(1.)).bg(c(p.accent))))
+                        .when(active, |d| d.bg(c(p.bg)).font_weight(gpui::FontWeight::MEDIUM))
                         .child(icon(glyph, layout::ICON, p.accent))
                         .child(div().whitespace_nowrap().child(title))
                         .child(
@@ -836,20 +836,18 @@ impl Workbench {
         cx.notify();
     }
 
-    /// File path relative to the root folder: src › app › main.rs
-    /// The path above the editor. A folder item shows that folder in the explorer, a file item shows the file.
+    /// The path above the editor: the folders of the open file (src › app), then the symbol it is in. The file's own
+    /// name is not repeated here: its tab already shows it. A folder item shows that folder in the explorer.
     pub(super) fn breadcrumbs(&self, p: &Palette, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let path = self.tab_editor()?.read(cx).path.clone();
         let root = self.roots.primary.read(cx).root().map(str::to_string);
-        let crumbs = crumb_paths(root.as_deref(), &path);
-        let last = crumbs.len().saturating_sub(1);
+        let mut crumbs = crumb_paths(root.as_deref(), &path);
+        crumbs.pop();
         let mut items = Vec::new();
-        for (i, (part, abs)) in crumbs.into_iter().enumerate() {
+        for (i, (part, target)) in crumbs.into_iter().enumerate() {
             if i > 0 {
                 items.push(icon("chevron-right", 12., p.text_muted).into_any_element());
             }
-            let file = i == last;
-            let target = abs;
             let reveal = target.clone();
             items.push(
                 div()
@@ -858,30 +856,32 @@ impl Workbench {
                     .child(crate::a11y_controls::control(
                         crate::a11y_controls::Control::new(crate::i18n::t("Breadcrumbs"), format!("{i}:{reveal}"), accesskit::Role::Link, part.clone())
                             .description(crate::i18n::t("Show in the Explorer"))
-                            .on_entity(cx.entity().downgrade(), move |this, window, cx| this.reveal_crumb(&reveal, file, window, cx)),
+                            .on_entity(cx.entity().downgrade(), move |this, window, cx| this.reveal_crumb(&reveal, false, window, cx)),
                     ))
                     .flex()
                     .items_center()
-                    .gap(px(theme::SPACE[1]))
-                    .px(px(theme::SPACE[1]))
-                    .rounded(px(theme::radius::SM))
+                    .px(px(theme::SPACE[2]))
+                    .h(px(layout::BREADCRUMBS_H - 6.))
+                    .rounded(px(theme::radius::MD))
                     .cursor_pointer()
                     .hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text)))
-                    .when(file, |d| d.text_color(c(p.text)).child(crate::icon_theme::file_icon_el(&part, 12., p)))
                     .child(part)
-                    .on_click(cx.listener(move |this, _, window, cx| this.reveal_crumb(&target, file, window, cx)))
+                    .on_click(cx.listener(move |this, _, window, cx| this.reveal_crumb(&target, false, window, cx)))
                     .into_any_element(),
             );
         }
         let symbols = self.symbol_crumbs(p, cx);
-        // On a narrow editor the folders give way (their start is cut off) so the file and its symbols stay visible.
+        if items.is_empty() && symbols.is_empty() {
+            return None;
+        }
+        // On a narrow editor the folders give way (their start is cut off) so the symbols stay visible.
         Some(
             div()
                 .h(px(layout::BREADCRUMBS_H))
                 .flex_none()
                 .flex()
                 .items_center()
-                .px(px(theme::SPACE[5]))
+                .px(px(theme::SPACE[4]))
                 .bg(c(p.bg))
                 .text_size(px(text::XS.0))
                 .text_color(c(p.text_muted))
@@ -1227,7 +1227,7 @@ impl Workbench {
                                     .flex()
                                     .flex_col()
                                     .gap(px(theme::SPACE[1]))
-                                    .child(heading(crate::i18n::upper(crate::i18n::t("Start"))))
+                                    .child(heading(crate::i18n::heading(crate::i18n::t("Start"))))
                                     .child(self.start_row("st-open", "folder", crate::i18n::t("Open Folder…"), OpenFolder, p, cx))
                                     .child(self.start_row("st-ssh", "server", crate::i18n::t("Connect over SSH"), ShowRemote, p, cx))
                                     .child(self.start_row("st-cmd", "search", crate::i18n::t("Command Palette"), CommandPalette, p, cx))
@@ -1240,7 +1240,7 @@ impl Workbench {
                                     .flex()
                                     .flex_col()
                                     .gap(px(theme::SPACE[1]))
-                                    .child(heading(crate::i18n::upper(crate::i18n::t("Recent"))))
+                                    .child(heading(crate::i18n::heading(crate::i18n::t("Recent"))))
                                     .when(recent.is_empty(), |d| {
                                         d.child(div().px(px(theme::SPACE[3])).text_color(c(p.text_muted)).child(crate::i18n::t("Nothing yet.")))
                                     })

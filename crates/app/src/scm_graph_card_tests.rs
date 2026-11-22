@@ -64,13 +64,12 @@ fn the_card_reads_the_files_and_counts_git_reports(cx: &mut TestAppContext) {
     assert_eq!(files, 3);
     assert!(detail.files.iter().any(|f| f.path == "yeni dosya ğ.txt" && f.status == 'A'), "a name with spaces and Turkish letters");
     assert!(cx.debug_bounds("commit-card-summary").is_some(), "the summary line is drawn");
-    assert!((0..3).all(|i| file_drawn(cx, i)));
-    assert!(!file_drawn(cx, 3) && cx.debug_bounds("commit-card-more").is_none());
+    assert!(!file_drawn(cx, 0), "the card gives the counts, not the list of files");
     assert_eq!(message_body(&detail.message), vec!["Gövde satırı bir", "Gövde satırı iki"], "the message under the subject");
 }
 
 #[gpui::test]
-fn a_huge_commit_lists_the_first_files_and_counts_the_rest(cx: &mut TestAppContext) {
+fn a_huge_commit_stays_as_small_as_any_other(cx: &mut TestAppContext) {
     let dir = repo("card-huge");
     for i in 0..600 {
         std::fs::write(dir.join(format!("f{i:03}.txt")), "x\n").unwrap();
@@ -80,9 +79,8 @@ fn a_huge_commit_lists_the_first_files_and_counts_the_rest(cx: &mut TestAppConte
     let (card, cx) = card(cx, commit_of(&dir, "HEAD"), Some(source(&dir)));
     let detail = ready(&card, cx);
     assert_eq!(detail.files.len(), 600);
-    assert!(file_drawn(cx, CARD_FILES - 1));
-    assert!(!file_drawn(cx, CARD_FILES), "only the first {CARD_FILES} are drawn");
-    assert!(cx.debug_bounds("commit-card-more").is_some(), "and the rest are counted");
+    assert!(cx.debug_bounds("commit-card-summary").is_some(), "the counts are drawn");
+    assert!(!file_drawn(cx, 0), "and no file row, however many files there are");
 }
 
 #[gpui::test]
@@ -127,13 +125,30 @@ fn a_commit_is_read_once_and_a_failure_is_a_failure(cx: &mut TestAppContext) {
     let commit = commit_of(&dir, "HEAD");
     let (first, cx) = card(cx, commit.clone(), Some(src.clone()));
     ready(&first, cx);
-    assert_eq!(src.cache.borrow().len(), 1);
+    assert_eq!(src.cache.details.borrow().len(), 1);
     let again = cx.update(|_, cx| cx.new(|cx| CommitCard::new(commit.clone(), Some(src.clone()), cx)));
     assert!(matches!(again.read_with(cx, |c, _| c.changes.clone()), Changes::Ready(_)), "ready the moment it is built: nothing is read again");
     let lost = CardSource::new(Arc::new(host::local()), "/no/such/repository".into(), CardCache::default());
     let failed = cx.update(|_, cx| cx.new(|cx| CommitCard::new(commit, Some(lost), cx)));
     wait_ticking(cx, "the failure", |cx| failed.read_with(cx, |c, _| !matches!(c.changes, Changes::Loading)));
     assert!(matches!(failed.read_with(cx, |c, _| c.changes.clone()), Changes::Failed), "an unreadable repository is not an empty commit");
+}
+
+#[test]
+fn the_pull_request_a_subject_names_is_found() {
+    assert_eq!(pull_number("Merge pull request #392 from doancan/fix/gpui-text-ellipsis"), Some(392));
+    assert_eq!(pull_number("fix(gpui): text cut with an ellipsis is measured again (#392)"), Some(392));
+    assert_eq!(pull_number("chore: pin the publish action to v0.12.7"), None);
+    assert_eq!(pull_number("mentions (#12) in the middle of the line"), None, "only a number at the end names the request");
+    assert_eq!(pull_number("not a number (#abc)"), None);
+    assert_eq!(pull_number("Merge pull request #"), None);
+}
+
+#[test]
+fn the_links_point_at_the_commit_and_the_pull_request_on_github() {
+    let repo = github::parse_remote("git@github.com:doancan/codeyard.git").unwrap();
+    assert_eq!(repo.commit_url("abc123"), "https://github.com/doancan/codeyard/commit/abc123");
+    assert_eq!(repo.pull_url(392), "https://github.com/doancan/codeyard/pull/392");
 }
 
 #[test]

@@ -15,6 +15,7 @@ use crate::graph::{self, CommitDetail, GraphCommit, GraphItem, GraphView, RefKin
 use crate::i18n::{t, tf, tn};
 use crate::sections;
 use crate::ui::{self, Palette, c, icon, palette, text};
+use crate::{git, github};
 
 /// Branch / tag chip: colors from `graph::ref_chip_colors` (AA in every theme).
 fn ref_chip(r: &RefLabel, p: &Palette) -> gpui::Div {
@@ -50,10 +51,8 @@ fn ordered_refs(commit: &GraphCommit) -> Vec<&RefLabel> {
     refs
 }
 
-/// Most files a hover card lists; the rest are counted.
-const CARD_FILES: usize = 8;
 /// Most lines of the message body a hover card shows, and the longest of those lines in characters.
-const CARD_MESSAGE_LINES: usize = 6;
+const CARD_MESSAGE_LINES: usize = 3;
 const CARD_LINE_CHARS: usize = 160;
 /// Details kept for hovered commits; the oldest are dropped when it is full (a commit's changes never change, so nothing else
 /// invalidates them).
@@ -68,7 +67,13 @@ pub(super) struct CardSource {
     cache: CardCache,
 }
 
-pub(super) type CardCache = Rc<RefCell<HashMap<String, Result<Arc<CommitDetail>, ()>>>>;
+/// What the cards have read so far: each commit's changes, and per repository the GitHub repo its remote points at (`None`:
+/// it has no GitHub remote), so the links are worked out once and not on every hover.
+#[derive(Clone, Default)]
+pub(super) struct CardCache {
+    details: Rc<RefCell<HashMap<String, Result<Arc<CommitDetail>, ()>>>>,
+    repos: Rc<RefCell<HashMap<String, Option<github::Repo>>>>,
+}
 
 impl CardSource {
     pub(super) fn new(host: Arc<dyn Host>, root: String, cache: CardCache) -> Self {
@@ -88,27 +93,36 @@ pub(super) enum Changes {
     Failed,
 }
 
-/// On commit hover: author and time, subject, the rest of the message, all branches/tags, hash, parents of a merge, and what the
-/// commit changed (counts and the first files with their own counts); a tidy card instead of a wall of plain text.
+/// On commit hover: author and time, subject, the start of the message, all branches/tags, hash, parents of a merge, how much the
+/// commit changed (files, added and removed lines, never the file list) and links to the commit and its pull request on
+/// GitHub; a short card instead of a wall of text. The card stays open while the pointer is on it, so the links can be clicked.
 pub struct CommitCard {
     commit: GraphCommit,
     pub(super) changes: Changes,
-    _read: Option<gpui::Task<()>>,
+    /// The GitHub repository of the remote, once it is known.
+    repo: Option<github::Repo>,
+    _reads: Vec<gpui::Task<()>>,
 }
 
 impl CommitCard {
     pub(super) fn new(commit: GraphCommit, source: Option<CardSource>, cx: &mut Context<Self>) -> Self {
-        let Some(source) = source else { return Self { commit, changes: Changes::Failed, _read: None } };
+        let Some(source) = source else { return Self { commit, changes: Changes::Failed, repo: None, _reads: Vec::new() } };
         let key = source.key(&commit.hash);
-        if let Some(known) = source.cache.borrow().get(&key).cloned() {
-            return Self { commit, changes: known.map_or(Changes::Failed, Changes::Ready), _read: None };
+        let known_repo = source.cache.repos.borrow().get(&source.root).cloned();
+        let mut card = Self { commit, changes: Changes::Loading, repo: known_repo.clone().flatten(), _reads: Vec::new() };
+        if known_repo.is_none() {
+            card.read_repo(&source, cx);
         }
-        let hash = commit.hash.clone();
+        if let Some(known) = source.cache.details.borrow().get(&key).cloned() {
+            card.changes = known.map_or(Changes::Failed, Changes::Ready);
+            return card;
+        }
+        let hash = card.commit.hash.clone();
         let (host, root) = (source.host.clone(), source.root.clone());
         let task = cx.background_executor().spawn(async move { graph::commit_detail(host.as_ref(), &root, &hash) });
         let read = cx.spawn(async move |this, cx| {
             let result = task.await.map(Arc::new).map_err(|_| ());
-            let mut cache = source.cache.borrow_mut();
+            let mut cache = source.cache.details.borrow_mut();
             if cache.len() >= CARD_CACHE {
                 cache.clear();
             }
@@ -120,27 +134,39 @@ impl CommitCard {
             })
             .ok();
         });
-        Self { commit, changes: Changes::Loading, _read: Some(read) }
+        card._reads.push(read);
+        card
+    }
+
+    /// Finds the GitHub repository behind the `origin` remote (with `insteadOf` applied) off the UI thread.
+    fn read_repo(&mut self, source: &CardSource, cx: &mut Context<Self>) {
+        let (host, root, cache) = (source.host.clone(), source.root.clone(), source.cache.repos.clone());
+        let task = cx.background_executor().spawn({
+            let root = root.clone();
+            async move { git::resolved_remote_url(host.as_ref(), &root, "origin").ok().and_then(|url| github::parse_remote(&url)) }
+        });
+        let read = cx.spawn(async move |this, cx| {
+            let repo = task.await;
+            cache.borrow_mut().insert(root, repo.clone());
+            this.update(cx, |this, cx| {
+                this.repo = repo;
+                cx.notify();
+            })
+            .ok();
+        });
+        self._reads.push(read);
     }
 }
 
-/// "A", "M", "D", "R" with the color that says what happened to the file.
-fn status_chip(status: char, p: &Palette) -> gpui::Div {
-    let color = match status {
-        'A' => p.success,
-        'D' => p.danger,
-        'M' => p.accent,
-        _ => p.info,
-    };
-    div()
-        .w(px(14.))
-        .flex_none()
-        .flex()
-        .justify_center()
-        .font_family(ui::MONO_FONT)
-        .text_size(px(text::XS.0))
-        .text_color(c(ui::ensure_contrast(color, p.text, &[p.surface_raised], 4.6)))
-        .child(status.to_string())
+/// The number of the pull request a commit subject names: `Merge pull request #12 from …` or a squash merge ending in `(#12)`.
+fn pull_number(subject: &str) -> Option<u64> {
+    if let Some(rest) = subject.strip_prefix("Merge pull request #") {
+        let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+        return digits.parse().ok();
+    }
+    let rest = subject.trim_end().strip_suffix(')')?;
+    let (_, number) = rest.rsplit_once("(#")?;
+    number.chars().all(|c| c.is_ascii_digit()).then(|| number.parse().ok()).flatten()
 }
 
 /// The rest of the message under its subject line, cut to what a card can hold.
@@ -158,10 +184,11 @@ fn message_body(message: &str) -> Vec<String> {
 }
 
 impl CommitCard {
-    /// The files and counts part of the card.
+    /// How much the commit changed: the number of files and the lines added and removed. The files themselves are in the
+    /// commit's details; a card that listed them grew as tall as the commit was big.
     fn changes_section(&self, p: &Palette) -> gpui::Div {
-        let muted = |t: String| div().text_size(px(text::XXS.0)).text_color(c(p.text_muted)).child(t);
-        let section = div().flex().flex_col().gap(px(theme::SPACE[2])).pt(px(theme::SPACE[3])).border_t_1().border_color(c(p.border));
+        let muted = |t: String| div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(t);
+        let section = div().flex().flex_col().gap(px(theme::SPACE[2]));
         let detail = match &self.changes {
             Changes::Loading => return section.child(muted(t("Reading the changes…").into())),
             Changes::Failed => return section.child(muted(t("The changes could not be read.").into())),
@@ -173,43 +200,45 @@ impl CommitCard {
         let (added, deleted) = detail.totals();
         let danger = ui::ensure_contrast(p.danger, p.text, &[p.surface_raised], 4.6);
         let success = ui::ensure_contrast(p.success, p.text, &[p.surface_raised], 4.6);
-        let counts = |a: Option<usize>, d: Option<usize>| match (a, d) {
-            (Some(a), Some(d)) => div()
-                .flex_none()
-                .flex()
-                .gap(px(theme::SPACE[3]))
-                .child(div().text_color(c(success)).child(format!("+{a}")))
-                .child(div().text_color(c(danger)).child(format!("−{d}"))),
-            _ => div().flex_none().text_color(c(p.text_muted)).child(t("binary")),
-        };
-        let rows = detail.files.iter().take(CARD_FILES).enumerate().map(|(i, f)| {
+        section.child(
             div()
-                .debug_selector(move || format!("commit-card-file-{i}"))
+                .debug_selector(|| "commit-card-summary".to_string())
                 .flex()
                 .items_center()
                 .gap(px(theme::SPACE[3]))
                 .text_size(px(text::XS.0))
-                .child(status_chip(f.status, p))
-                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(f.path.clone()))
-                .child(counts(f.added, f.deleted))
-        });
-        let more = detail.files.len().saturating_sub(CARD_FILES);
-        section
-            .child(
-                div()
-                    .debug_selector(|| "commit-card-summary".to_string())
-                    .flex()
-                    .items_center()
-                    .gap(px(theme::SPACE[3]))
-                    .text_size(px(text::XS.0))
-                    .child(div().child(tn("{} file changed", "{} files changed", detail.files.len(), &[])))
-                    .child(div().text_color(c(success)).child(format!("+{added}")))
-                    .child(div().text_color(c(danger)).child(format!("−{deleted}"))),
-            )
-            .children(rows)
-            .when(more > 0, |d| {
-                d.child(div().debug_selector(|| "commit-card-more".to_string()).child(muted(tn("and {} more file", "and {} more files", more, &[]))))
-            })
+                .child(icon("files", 12., p.text_muted))
+                .child(div().text_color(c(p.text_muted)).child(tn("{} file changed", "{} files changed", detail.files.len(), &[])))
+                .child(div().text_color(c(success)).child(format!("+{added}")))
+                .child(div().text_color(c(danger)).child(format!("−{deleted}"))),
+        )
+    }
+
+    /// Links to the commit and, when its subject names one, the pull request, on GitHub.
+    fn links(&self, repo: &github::Repo, p: &Palette) -> gpui::Div {
+        let link = |id: &'static str, label: String, url: String| {
+            div()
+                .id(id)
+                .flex()
+                .items_center()
+                .gap(px(theme::SPACE[2]))
+                .h(px(22.))
+                .px(px(theme::SPACE[3]))
+                .rounded(px(theme::radius::MD))
+                .cursor_pointer()
+                .text_size(px(text::XS.0))
+                .text_color(c(ui::ensure_contrast(p.accent, p.text, &[p.surface_raised], 4.6)))
+                .hover(|d| d.bg(c(p.surface_hover)))
+                .child(icon("external-link", 12., p.accent))
+                .child(label)
+                .on_click(move |_, _, cx| cx.open_url(&url))
+        };
+        div()
+            .flex()
+            .flex_wrap()
+            .gap(px(theme::SPACE[2]))
+            .child(link("commit-card-commit-link", t("Commit on GitHub").to_string(), repo.commit_url(&self.commit.hash)))
+            .children(pull_number(&self.commit.subject).map(|n| link("commit-card-pull-link", tf("Pull request #{}", &[&n]), repo.pull_url(n))))
     }
 }
 
@@ -224,7 +253,7 @@ impl Render for CommitCard {
         };
         let muted = |t: String| div().text_size(px(text::XXS.0)).text_color(c(p.text_muted)).child(t);
         div()
-            .w(px(340.))
+            .w(px(320.))
             .flex()
             .flex_col()
             .gap(px(theme::SPACE[4]))
@@ -232,7 +261,7 @@ impl Render for CommitCard {
             .bg(c(p.surface_raised))
             .border_1()
             .border_color(c(p.border))
-            .rounded(px(theme::radius::MD))
+            .rounded(px(theme::radius::LG))
             .shadow_md()
             .text_size(px(text::SM.0))
             .text_color(c(p.text))
@@ -304,6 +333,7 @@ impl Render for CommitCard {
                 d.child(muted(tf("Parents: {}", &[&parents])))
             })
             .child(self.changes_section(&p))
+            .children(self.repo.as_ref().map(|repo| self.links(repo, &p)))
             .child(
                 div()
                     .pt(px(theme::SPACE[2]))
@@ -700,7 +730,7 @@ fn row_shell(
         .border_color(c(if is_sel { p.accent } else { p.surface }))
         .when(is_sel, |d| d.bg(c(p.surface_active)))
         .hover(|d| d.bg(c(p.surface_hover)))
-        .when(show_tooltips, |d| d.tooltip(move |_, cx| cx.new(|cx| CommitCard::new(card.clone(), tooltips.clone(), cx)).into()))
+        .when(show_tooltips, |d| d.hoverable_tooltip(move |_, cx| cx.new(|cx| CommitCard::new(card.clone(), tooltips.clone(), cx)).into()))
         .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, _, cx| {
             this.pick_commit(entry.clone(), ev.modifiers().shift, cx);
             if ev.click_count() >= 2 {

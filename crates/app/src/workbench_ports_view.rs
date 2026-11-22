@@ -380,7 +380,7 @@ impl Workbench {
         // A column header: a click orders the table by it (again: the other way round); the ordering column shows an arrow.
         let header_cell = |w: Option<f32>, label: &'static str, key: Option<PortSortKey>, cx: &mut Context<Self>| {
             let ordering = key.is_some_and(|k| k == sort.key);
-            let mut name = crate::i18n::upper(crate::i18n::t(label));
+            let mut name = crate::i18n::heading(crate::i18n::t(label));
             if ordering {
                 name.push_str(if sort.descending { " ▼" } else { " ▲" });
             }
