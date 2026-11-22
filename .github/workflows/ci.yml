@@ -1,8 +1,14 @@
 name: ci
+# Two tiers. A pull request runs the fast gate (about ten minutes): formatting, clippy and the app's tests on macOS (in
+# parallel shards), the crates without GPUI on Linux, a Windows build check and the dependency and licence gates. A push
+# to develop or main, the nightly run and a manual run add everything slow: every test on macOS, Linux and Windows, the
+# memory budgets and the standalone Windows build. A release goes out only from a commit that passed the full run.
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
+  schedule:
+    - cron: "43 3 * * *"
   workflow_dispatch:
     inputs:
       coverage:
@@ -19,36 +25,42 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # The check branch protection asks for. Which jobs it needs depends on the tier: a pull request runs the shards, every
+  # other event the whole workspace and the budgets.
   macos:
-    needs: [macos-tests, macos-budgets]
+    needs: [macos-lint, macos-shard, macos-tests, macos-budgets]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require both macOS checks
+      - name: Require the macOS checks of this tier
         env:
-          TESTS_RESULT: ${{ needs.macos-tests.result }}
-          BUDGETS_RESULT: ${{ needs.macos-budgets.result }}
+          EVENT: ${{ github.event_name }}
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          echo "macOS tests: $TESTS_RESULT; memory/size budgets: $BUDGETS_RESULT"
-          test "$TESTS_RESULT" = success
-          test "$BUDGETS_RESULT" = success
+          python3 -I - <<'PY'
+          import json, os, sys
+          needs = json.loads(os.environ["NEEDS"])
+          required = ["macos-lint", "macos-shard"] if os.environ["EVENT"] == "pull_request" else ["macos-lint", "macos-tests", "macos-budgets"]
+          bad = [n for n in required if needs[n]["result"] != "success"]
+          for n in required:
+              print(f"{n}: {needs[n]['result']}")
+          sys.exit(1 if bad else 0)
+          PY
 
-  macos-tests:
+  # Formatting, the architecture and documentation checks and clippy: quick, and the first thing a pull request needs.
+  macos-lint:
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
         with:
           toolchain: stable
-      # Xcode 26+ ships the Metal compiler as a separate download; older Xcodes already have it and may refuse the
-      # download. So a failed download is only a warning, but the compiler must work afterwards: fail here with a
-      # clear message instead of minutes later inside gpui's build.rs.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
         with:
-          shared-key: ci-macos-tests
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+          shared-key: ci-macos-lint
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
       - name: Metal toolchain (GPUI shaders)
         run: |
           if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
@@ -60,6 +72,60 @@ jobs:
       - run: cargo fmt --all --check
       # Our crates only: the patched copies under vendor/ are not linted.
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+  # The app crate holds nearly all of the tests. A pull request runs them in three parallel shards (scripts/ci-shard.sh)
+  # that share one warm build cache; the other crates' tests run on Linux and in the full run.
+  macos-shard:
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: ci-macos-tests
+          save-if: "false"
+      - name: Metal toolchain (GPUI shaders)
+        run: |
+          if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
+          fi
+          xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
+      # The exthost is built first: the extension tests of the app run the real one inside the OS sandbox.
+      - run: cargo build --locked -p ext-host
+      - run: scripts/ci-shard.sh ${{ matrix.shard }} 3
+        env:
+          CODEYARD_REQUIRE_SSHD: "1"
+          CODEYARD_TEST_TIMEOUT_SCALE: "3"
+          CODEYARD_REQUIRE_TOOLS: codeyard-exthost
+
+  # Every test of the workspace: pushes to develop and main, the nightly run and manual runs.
+  macos-tests:
+    if: github.event_name != 'pull_request'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: ci-macos-tests
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
+      - name: Metal toolchain (GPUI shaders)
+        run: |
+          if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
+          fi
+          xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
       # macOS runners ship sshd: a skipped SSH test is a failure here, not a silent pass.
       # The scale only loosens the wall-clock budgets of the tests (debug builds on shared runners are several times
       # slower than a laptop); a quadratic blow-up still fails them.
@@ -70,7 +136,9 @@ jobs:
           # Code extensions run in codeyard-exthost inside the OS sandbox, which this runner has: their tests must run.
           CODEYARD_REQUIRE_TOOLS: codeyard-exthost
 
+  # Memory and size budgets (a release build): not part of the pull request gate.
   macos-budgets:
+    if: github.event_name != 'pull_request'
     runs-on: macos-latest
     timeout-minutes: 60
     env:
@@ -84,7 +152,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
         with:
           shared-key: app-macos
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
       - name: Metal toolchain (GPUI shaders)
         run: |
           if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
@@ -158,7 +226,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
         with:
           shared-key: ci-coverage
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
       - name: Metal toolchain (GPUI shaders)
         run: |
           if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
@@ -196,7 +264,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
         with:
           shared-key: ci-linux
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
       - name: TypeScript SDK (type check and tests)
         working-directory: sdk/typescript
         run: npm ci --ignore-scripts --no-audit --no-fund && npm run check && npm test
@@ -228,6 +296,7 @@ jobs:
   # Full workspace and GPUI on Linux. Promoted after four consecutive successful
   # workspace test runs; failures now fail CI instead of being converted to warnings.
   linux-app:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -238,7 +307,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
         with:
           shared-key: ci-linux-app
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
       - name: GPUI build dependencies
         run: |
           sudo apt-get update
@@ -269,23 +338,49 @@ jobs:
       # publish, install with the app, revoke, expired index.
       - run: deploy/rehearse.sh
 
-  # The same checks run locally with scripts/check-windows.ps1.
+  # The check branch protection asks for. A pull request gets the build check below; every other event the native
+  # tests and the standalone release build (the same checks run locally with scripts/check-windows.ps1).
   windows:
-    needs: [windows-tests, windows-standalone]
+    needs: [windows-check, windows-tests, windows-standalone]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require native tests and standalone release checks
+      - name: Require the Windows checks of this tier
         env:
-          TESTS_RESULT: ${{ needs.windows-tests.result }}
-          STANDALONE_RESULT: ${{ needs.windows-standalone.result }}
+          EVENT: ${{ github.event_name }}
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          echo "Windows tests: $TESTS_RESULT; standalone release: $STANDALONE_RESULT"
-          test "$TESTS_RESULT" = success
-          test "$STANDALONE_RESULT" = success
+          python3 -I - <<'PY'
+          import json, os, sys
+          needs = json.loads(os.environ["NEEDS"])
+          required = ["windows-check"] if os.environ["EVENT"] == "pull_request" else ["windows-tests", "windows-standalone"]
+          bad = [n for n in required if needs[n]["result"] != "success"]
+          for n in required:
+              print(f"{n}: {needs[n]['result']}")
+          sys.exit(1 if bad else 0)
+          PY
+
+  # Pull requests: does everything still compile and pass clippy on Windows (a few minutes with the warm cache of
+  # develop). The tests of Windows run in the full tier.
+  windows-check:
+    if: github.event_name == 'pull_request'
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+          components: clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: ci-windows
+          save-if: "false"
+      - run: cargo clippy --locked --workspace --lib --bins -- -D warnings
 
   windows-tests:
+    if: github.event_name != 'pull_request'
     runs-on: windows-2022
     # Every test of the workspace, one at a time, after a release build: about twice the old filtered run.
     timeout-minutes: 100
@@ -297,7 +392,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
         with:
           shared-key: ci-windows
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
       - name: Windows native checks
         shell: pwsh
         run: |
@@ -326,6 +421,7 @@ jobs:
           CODEYARD_TEST_TIMEOUT_SCALE: "4"
 
   windows-standalone:
+    if: github.event_name != 'pull_request'
     runs-on: windows-2022
     timeout-minutes: 60
     steps:
@@ -336,7 +432,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
         with:
           shared-key: app-windows
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
       - name: Build and validate the standalone release EXE
         shell: pwsh
         run: ./scripts/build-windows.ps1 -Profile Release
