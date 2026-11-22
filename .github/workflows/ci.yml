@@ -27,22 +27,50 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # The check branch protection asks for: the part of macOS that a pull request waits for. The tests are advisory there
-  # (see the top of this file); `release-ready` is what holds main back.
-  macos:
-    needs: [macos-lint, fast-checks]
+  # The check branch protection asks for: what a pull request waits for besides Windows and the dependency gates. The tests are
+  # advisory there (see the top of this file); `release-ready` is what holds main back. clippy runs on Linux for a pull request
+  # (plentiful runners; the macOS ones queue) and on macOS as well on every push, which lints the code only macOS builds.
+  lint:
+    needs: [clippy-linux, fast-checks]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require formatting, the architecture and documentation checks and clippy
+      - name: Require clippy, formatting, and the architecture and documentation checks
         env:
-          LINT: ${{ needs.macos-lint.result }}
+          CLIPPY: ${{ needs.clippy-linux.result }}
           FAST: ${{ needs.fast-checks.result }}
         run: |
-          echo "clippy on macOS: $LINT; formatting, architecture and documentation: $FAST"
-          test "$LINT" = success
+          echo "clippy: $CLIPPY; formatting, architecture and documentation: $FAST"
+          test "$CLIPPY" = success
           test "$FAST" = success
+
+  # clippy for the workspace on Linux: libraries and binaries on a pull request, test code too on a push.
+  clippy-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+          components: clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: ci-linux-clippy
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
+      - name: GPUI build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config git \
+            libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev \
+            libfontconfig-dev libfreetype-dev libwayland-dev libvulkan-dev
+      # Our crates only: the patched copies under vendor/ are not linted.
+      - run: cargo clippy --locked --workspace -- -D warnings
+        if: github.event_name == 'pull_request'
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+        if: github.event_name != 'pull_request'
 
   # Formatting, the architecture and documentation checks: no compiler and no GPUI needed, so a Linux runner has them done
   # in under a minute while clippy is still building.
@@ -59,9 +87,9 @@ jobs:
       - run: scripts/docs-check.sh
       - run: cargo fmt --all --check
 
-  # clippy for the workspace, the part of the pull request gate that needs the macOS toolchain. A pull request lints the
-  # libraries and binaries (what Windows lints too); the test code is linted on every push.
+  # clippy on macOS, on every push (not on a pull request: see `lint`): it lints what only macOS builds, test code included.
   macos-lint:
+    if: github.event_name != 'pull_request'
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
@@ -81,10 +109,7 @@ jobs:
           fi
           xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
       # Our crates only: the patched copies under vendor/ are not linted.
-      - run: cargo clippy --locked --workspace -- -D warnings
-        if: github.event_name == 'pull_request'
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
-        if: github.event_name != 'pull_request'
 
   # The app crate holds nearly all of the tests. A pull request runs them in three parallel shards (scripts/ci-shard.sh) on Linux:
   # the runners there are plentiful and have four cores (a macOS runner has three, and a pull request that needs four of them
