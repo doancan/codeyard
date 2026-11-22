@@ -67,9 +67,10 @@ jobs:
             libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev \
             libfontconfig-dev libfreetype-dev libwayland-dev libvulkan-dev
       # Our crates only: the patched copies under vendor/ are not linted.
-      - run: cargo clippy --locked --workspace -- -D warnings
+      # --keep-going: every finding of a run is reported, not only the first.
+      - run: cargo clippy --locked --workspace --keep-going -- -D warnings
         if: github.event_name == 'pull_request'
-      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - run: cargo clippy --locked --workspace --all-targets --keep-going -- -D warnings
         if: github.event_name != 'pull_request'
 
   # Formatting, the architecture and documentation checks: no compiler and no GPUI needed, so a Linux runner has them done
