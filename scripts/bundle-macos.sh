@@ -10,6 +10,8 @@
 # AGENTS_DIR=<dir>: the codeyard-agent-<triple> files whose SHA-256 the app records (crates/app/build.rs). The agents are
 # not put into the bundle: a server downloads them from the release of this version (or the app does and copies them over
 # ssh), so a release must publish these same files (release.yml, publish job).
+# PREBUILT=1: do not compile; bundle, sign and pack the codeyard, cyx and codeyard-exthost binaries that are already in
+# target/release (release.yml reuses the ones built from the same sources on develop, so a release only signs).
 # Licence texts (scripts/licenses.sh) go into Contents/Resources/licenses/ and the DMG's Licenses/ folder.
 # Icon source: crates/app/assets/macos/codeyard.svg (1024x1024, transparent corners).
 set -euo pipefail
@@ -17,7 +19,14 @@ cd "$(dirname "$0")/.."
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
 scripts/licenses.sh
-cargo build --release -q -p app -p cyx -p ext-host
+if [ "${PREBUILT:-0}" = 1 ]; then
+  # The three binaries are already in target/release (a release restores the ones an earlier build of the same sources made).
+  for f in codeyard cyx codeyard-exthost; do
+    [ -x "target/release/$f" ] || { echo "bundle-macos: PREBUILT=1 but target/release/$f is missing" >&2; exit 1; }
+  done
+else
+  cargo build --release -q -p app -p cyx -p ext-host
+fi
 BIN=target/release/codeyard
 VERSION=$(cargo metadata --no-deps --format-version 1 | python3 -c \
   'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"]=="app"))')

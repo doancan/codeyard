@@ -143,18 +143,40 @@ The job prints every test's output (`--nocapture`), so the `SKIPPED` lines are i
 
 ## CI build scheduling and caches
 
-CI uses separate Rust dependency caches for macOS tests, Windows checks, Linux library tests, the Linux
-app and coverage. macOS memory/size checks use the production release dependency cache (`app-macos`) and the same
-macOS deployment target as the release bundle. Workspace crates are rebuilt normally; Cargo invalidates changed
-dependencies, manifests, features, compiler versions and flags. Cache writes happen on main and explicit manual runs;
-PR jobs restore the default branch cache without saving a separate copy. Coverage artifacts use a separate key.
+What a pull request has to wait for is short, about three minutes: `fast-checks` (formatting, the architecture and documentation
+checks) and `clippy-linux` (clippy for the libraries and binaries of the workspace), both behind the `lint` check, `windows-check`
+(`cargo clippy --workspace --lib --bins` on Windows, which fails on anything that no longer compiles there; behind the `windows`
+check) and `licenses`, `deny` and `audit`. All of them run on plentiful Linux and Windows runners: the macOS ones are few, and a
+pull request that waited for one queued behind every other run. clippy on macOS (`macos-lint`, test code included) runs on every push.
+The tests run on every pull request too, but they are advisory there: a red one shows in the pull request, it does not hold it up.
 
-The `macos-tests` and `macos-budgets` jobs run concurrently. The existing `macos` check waits for both and explicitly
-fails for failure, cancellation or skipping of either job, so existing rules requiring `macos` still require the tests
-and real memory/size measurement. Budget values, release profiles and test coverage are unchanged.
+- `linux-shard`: the app crate's tests, which are nearly all of them, in three parallel jobs on Linux (plentiful four-core runners;
+  macOS runners are few, and a pull request that needs several of them queues behind every other run). `scripts/ci-shard.sh` lists
+  the tests, deals them out one by one so every module is spread over all shards, and runs each shard by exact name. The test
+  binary is built incrementally: `linux-incremental` (a push to `develop` or `main`) saves the incremental build state under the
+  commit and the shards restore the newest one, so a pull request recompiles what it changed and not the whole app crate.
+  The same tests run on macOS (`macos-tests`) on every push.
+- `linux-tests`: the crates without GPUI, the extension SDKs and examples.
 
-Windows native tests (`windows-tests`) and the actual release EXE (`windows-standalone`) also run in parallel. The existing
-`windows` check requires both. The standalone job reuses the production `app-windows` cache and invokes
+Where the tests are the gate is `develop`. A push to `develop` or `main` also runs `macos-tests` (every test of the workspace),
+`macos-budgets` (the memory and size budgets, a release build) and `linux-tests`, about twenty minutes. A pull request from
+`develop` into `main` runs none of them again: `release-ready` passes when that run of `develop` succeeded for the same commit (it
+waits for the run if it is still going) and fails when it failed. A pull request into `main` from any other branch has to pass the
+shards and `linux-tests` itself. The nightly run and a manual run (`workflow_dispatch`) add the slowest checks: every test natively
+on Windows (`windows-tests`), the standalone Windows build (`windows-standalone`) and the full Linux app run (`linux-app`,
+which also runs the registry rehearsal). A release goes out from sources whose full run did not fail (`scripts/find-prebuilt.sh`).
+
+The checks branch protection asks for on `main` are `licenses`, `deny`, `audit`, `lint`, `windows` and `release-ready`.
+
+CI uses separate Rust dependency caches for macOS tests, macOS lint, Windows, Linux library tests, the Linux app and
+coverage. macOS memory/size checks use the production release dependency cache (`app-macos`) and the same macOS deployment
+target as the release bundle. Workspace crates are rebuilt normally; Cargo invalidates changed dependencies, manifests,
+features, compiler versions and flags. Cache writes happen on `develop`, `main` and explicit manual runs; pull request jobs
+restore the cache of their base branch (`develop`) without saving a separate copy, so a pull request that does not touch
+`Cargo.lock` starts from a warm build. Coverage artifacts use a separate key.
+
+The Windows native tests and `windows-check` use the same `ci-windows` cache: the first thing `check-windows.ps1` runs is the
+clippy command of `windows-check`. The standalone job reuses the production `app-windows` cache and invokes
 `build-windows.ps1 -Profile Release`, including GUI/icon/embedded-agent verification. Only CI calls
 `check-windows.ps1 -SkipStandalone`; the default local command still runs every check.
 
