@@ -98,8 +98,9 @@ jobs:
             xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
           fi
           xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
-      # The exthost is built first: the extension tests of the app run the real one inside the OS sandbox.
-      - run: cargo build --locked -p ext-host
+      # The exthost and the agent are built first: the extension tests of the app run the real exthost inside the OS
+      # sandbox, and the SSH tests start the agent through the throw-away sshd (`cargo test -p app` does not build them).
+      - run: cargo build --locked -p ext-host -p agent
       - run: scripts/ci-shard.sh ${{ matrix.shard }} 3
         env:
           CODEYARD_REQUIRE_SSHD: "1"
