@@ -159,7 +159,7 @@ impl Workbench {
             .text_size(px(text::XXS.0))
             .text_color(c(p.text_muted))
             .child(div().min_w_0().truncate().font_weight(gpui::FontWeight::SEMIBOLD).child(if sidebar {
-                crate::i18n::upper(&d.title)
+                crate::i18n::heading(&d.title)
             } else {
                 d.title.clone()
             }))

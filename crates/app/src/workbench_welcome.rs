@@ -423,7 +423,7 @@ impl Workbench {
                 .text_size(px(text::XS.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(c(p.text_muted))
-                .child(crate::i18n::upper(h))
+                .child(crate::i18n::heading(h))
         };
         // Pinned ones at the very top (all visible), then filled up with recents to 6 in total.
         let mut ordered = super::projects::ordered_recent(&self.persist.recent, &self.persist.pinned);

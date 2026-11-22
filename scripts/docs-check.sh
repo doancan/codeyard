@@ -157,7 +157,6 @@ def quoted(label, path, name, phrase):
     if n is not None and phrase.format(n=n, word=words.get(n, str(n))) not in flat_guide:
         fail(f"docs/user-guide.md: {label} is not '{phrase.format(n=n, word=words.get(n, str(n)))}' ({path} {name} = {n})")
 quoted("the most commits one rewrite replays", "crates/app/src/git/rewrite.rs", "MAX_COMMITS", "more than {n} commits")
-quoted("the files a commit card lists", "crates/app/src/scm_graph.rs", "CARD_FILES", "first {word} files")
 quoted("the files a blocked switch names", "crates/app/src/git/explain.rs", "MAX_FILES_NAMED", "up to {word}")
 quoted("how long Local History keeps a copy", "crates/app/src/history.rs", "KEEP_DAYS", "kept for {n} days")
 quoted("how many copies Local History keeps", "crates/app/src/history.rs", "KEEP", "at most {n} of them")

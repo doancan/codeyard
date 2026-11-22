@@ -704,10 +704,10 @@ impl Render for ScmPanel {
             .flex()
             .items_center()
             .px(px(theme::SPACE[6]))
-            .text_size(px(text::XXS.0))
+            .text_size(px(text::SM.0))
             .font_weight(gpui::FontWeight::SEMIBOLD)
-            .text_color(c(p.text_muted))
-            .child(div().flex_1().child(crate::i18n::upper(crate::i18n::t("Source Control"))))
+            .text_color(c(p.text))
+            .child(div().flex_1().child(crate::i18n::heading(crate::i18n::t("Source Control"))))
             .child(
                 div()
                     .id("scm-refresh")

@@ -4259,7 +4259,8 @@ No files changed	Değişen dosya yok
 Parents: {}	Ebeveynler: {}
 Reading the changes…	Değişiklikler okunuyor…
 The changes could not be read.	Değişiklikler okunamadı.
-and {} more file|and {} more files	ve {} dosya daha
+Commit on GitHub	GitHub'da commit
+Pull request #{}	#{} numaralı pull request
 {} file changed|{} files changed	{} dosya değişti
 A commit could not be made while rewriting ({}). Nothing was changed.	Yeniden yazarken bir commit oluşturulamadı ({}). Hiçbir şey değişmedi.
 A merge commit cannot be part of the run, or above it	Birleştirme (merge) commit'i aralığın içinde veya üstünde olamaz

@@ -15,9 +15,18 @@ impl Repo {
         format!("{}/{}", self.owner, self.name)
     }
 
-    #[cfg(test)]
     pub fn url(&self) -> String {
         format!("https://github.com/{}/{}", self.owner, self.name)
+    }
+
+    /// The page of a commit on GitHub.
+    pub fn commit_url(&self, hash: &str) -> String {
+        format!("{}/commit/{hash}", self.url())
+    }
+
+    /// The page of a pull request on GitHub.
+    pub fn pull_url(&self, number: u64) -> String {
+        format!("{}/pull/{number}", self.url())
     }
 }
 

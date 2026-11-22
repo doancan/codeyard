@@ -76,40 +76,27 @@ fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, glyph_only:
         .when(badge > 0, |d| d.child(div().flex_none().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).child(badge.to_string())))
 }
 
-/// The look of a tab of the bottom panel: a page tab. Every tab has a frame; the one in front is the colour of the page
-/// under it (so the two read as one piece, with no line between them), carries a thick accent on its top edge, an
-/// accent-coloured glyph and a bold label. The others are quiet and light up on hover. The strip has no line under the
-/// tabs: the change of ground between the strip and the page is the edge.
+/// The look of a tab of the bottom panel, the same pill as the editor's tabs: the one in front takes the colour of the
+/// page under it and a medium weight, the others are quiet and light up on hover. There are no frames and no lines;
+/// the change of ground between the strip and the page is the edge.
 pub(super) fn page_tab(tab: gpui::Stateful<gpui::Div>, active: bool, p: &Palette) -> gpui::Stateful<gpui::Div> {
-    let mut tab = tab.relative();
-    // The tabs stand on the page, not in the middle of the strip.
-    tab.style().align_self = Some(gpui::AlignItems::End);
-    tab.h(px(layout::VIEW_HEADER_H - 5.))
+    tab.relative()
+        .h(px(layout::VIEW_HEADER_H - 10.))
         .flex()
         .items_center()
         .gap(px(theme::SPACE[3]))
-        .px(px(theme::SPACE[5]))
+        .px(px(theme::SPACE[4]))
         // In a narrow panel the tabs give way (labels are cut) before the panel's buttons do.
         .flex_shrink()
         .min_w_0()
         .overflow_hidden()
         .cursor_pointer()
-        .rounded_t(px(theme::radius::MD))
-        .border_1()
-        .border_b_0()
+        .rounded(px(theme::radius::MD))
         .map(|d| {
             if active {
-                d.border_color(c(p.border))
-                    .bg(c(p.bg))
-                    .text_color(c(p.text))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child(div().absolute().top(px(-1.)).left(px(-1.)).right(px(-1.)).h(px(3.)).rounded_t(px(theme::radius::MD)).bg(c(p.accent)))
+                d.bg(c(p.bg)).text_color(c(p.text)).font_weight(gpui::FontWeight::MEDIUM)
             } else {
-                d.border_color(c(p.border))
-                    .bg(c(p.surface_raised))
-                    .text_color(c(p.text_muted))
-                    .font_weight(gpui::FontWeight::MEDIUM)
-                    .hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text)))
+                d.text_color(c(p.text_muted)).hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text)))
             }
         })
 }
