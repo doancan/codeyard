@@ -204,6 +204,8 @@ mod imp {
         let mut ws = winsize(cols, rows);
         // SAFETY: `master`, `slave` and `ws` are valid for the call. Null name and termios mean "don't return a name" and "default
         // termios". `&mut ws` coerces to whichever pointer mutability this platform's libc declares, so no cast is needed.
+        // Linux's libc declares the window size `*const`, macOS's `*mut`: clippy sees only the one it is run on.
+        #[allow(clippy::unnecessary_mut_passed)]
         let rc = unsafe { libc::openpty(&mut master, &mut slave, std::ptr::null_mut(), std::ptr::null_mut(), &mut ws) };
         if rc != 0 {
             return Err(io::Error::last_os_error());

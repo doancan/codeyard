@@ -3,6 +3,7 @@
 # The tests are listed by the test binary, dealt out one by one (so every module is spread over all shards) and run by
 # exact name; the shards run in parallel jobs that share one warm build cache. A test run on its own passes or fails the
 # same as in the whole run: the few that share global state take `snippets::TEST_LOCK` or reset it themselves.
+# CI sets CARGO_INCREMENTAL=1 and restores the incremental state of the last push to develop first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
