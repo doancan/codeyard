@@ -149,7 +149,7 @@ CI has two tiers. A pull request runs the **fast gate**, which is meant to finis
 - `macos-shard`: the app crate's tests, which are nearly all of them, in three parallel jobs. `scripts/ci-shard.sh` lists the
   tests, deals them out one by one so every module is spread over all shards, and runs each shard by exact name. The shards
   share one warm build cache.
-- `linux`: the crates without GPUI, the extension SDKs and examples, and the agent size limit.
+- `linux`: the crates without GPUI and the extension SDKs and examples (the agent size limit and the five-minute check run in the full tier).
 - `windows-check`: `cargo clippy --workspace --lib --bins` on Windows, which fails on anything that no longer compiles there.
 - `licenses`, `deny` and `audit`.
 

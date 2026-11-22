@@ -283,12 +283,18 @@ jobs:
       # "A command in under 5 minutes" (docs/plugin-architecture.md §9): cyx new, unit tests and cyx test from an empty
       # folder, Rust and TypeScript, each step timed; fails past 300 s.
       - run: scripts/check-five-minutes.sh
+        if: github.event_name != 'pull_request'
       # The shipped Linux agents are built with cargo-zigbuild (release.yml, docs/releasing.md), so the size gate builds
       # the same way. A plain `cargo build` with the system linker produces a static-PIE (+170 KB of relocations) and
       # measures ~1.7 MB: not the artifact users get. pip installs cargo-zigbuild together with zig.
+      # The agent size gate and the five-minute check are part of the full tier: they take minutes and a pull request rarely
+      # touches what they measure.
       - run: pip3 install --user cargo-zigbuild
+        if: github.event_name != 'pull_request'
       - run: cargo zigbuild --locked --profile release-agent -p agent --target x86_64-unknown-linux-musl
+        if: github.event_name != 'pull_request'
       - name: Agent size budget
+        if: github.event_name != 'pull_request'
         run: |
           SIZE=$(du -k target/x86_64-unknown-linux-musl/release-agent/codeyard-agent | cut -f1)
           echo "agent: ${SIZE} KB (budget 1664 KB)"
