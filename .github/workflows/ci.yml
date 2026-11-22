@@ -429,64 +429,48 @@ jobs:
         shell: pwsh
         run: ./scripts/build-windows.ps1 -Profile Release
 
-  # Holds main back. A pull request from develop into main passes when develop's own run of this workflow succeeded for the
-  # same commit (it tests the whole workspace and the memory budgets, so nothing is tested twice); it waits for that run if it
-  # is still going. Any other pull request into main has to pass the tests itself.
-  release-ready-develop:
-    if: github.event_name == 'pull_request' && github.base_ref == 'main' && github.head_ref == 'develop'
+  # Holds main back; for any other pull request it passes at once. A pull request from develop into main passes when develop's
+  # own run of this workflow succeeded for the same commit (it tests the whole workspace and the memory budgets, so nothing is
+  # tested twice); it waits for that run if it is still going. Any other pull request into main has to pass the shards and the
+  # Linux tests of its own run. One job and no `needs`: a job waits for the jobs it needs even when it would be skipped.
+  release-ready:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
       actions: read
       contents: read
     steps:
-      - name: The full run on develop for this commit
+      - name: Wait for the tests that gate main
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
           SHA: ${{ github.event.pull_request.head.sha }}
           REPO: ${{ github.repository }}
+          RUN: ${{ github.run_id }}
         run: |
+          if [ "$EVENT" != pull_request ] || [ "$BASE" != main ]; then echo "not a pull request into main: nothing to hold back"; exit 0; fi
           for i in $(seq 1 80); do
-            line=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=develop&event=push&head_sha=$SHA" \
-              --jq '[.workflow_runs[] | select(.head_sha == env.SHA)] | sort_by(.created_at) | last | "\(.status) \(.conclusion)"')
-            echo "full run of $SHA on develop: ${line:-none yet}"
-            case "$line" in
+            if [ "$HEAD" = develop ]; then
+              state=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=develop&event=push&head_sha=$SHA" \
+                --jq '[.workflow_runs[] | select(.head_sha == env.SHA)] | sort_by(.created_at) | last | "\(.status) \(.conclusion)"')
+              echo "full run of $SHA on develop: ${state:-none yet}"
+            else
+              jobs=$(gh api "repos/$REPO/actions/runs/$RUN/jobs?per_page=100" \
+                --jq '[.jobs[] | select(.name | test("^(macos-shard|linux-tests)")) | .conclusion // "pending"] | join(",")')
+              echo "tests of this run: ${jobs:-not started}"
+              case ",$jobs," in
+                *,failure,*|*,cancelled,*) state="completed failure" ;;
+                *,pending,*|",,") state="in_progress" ;;
+                *) state="completed success" ;;
+              esac
+            fi
+            case "$state" in
               "completed success") exit 0 ;;
-              "completed "*) echo "::error::The full run on develop failed for this commit: fix it on develop first"; exit 1 ;;
+              "completed "*) echo "::error::The tests that gate main failed (see above): fix them first"; exit 1 ;;
             esac
             sleep 30
           done
-          echo "::error::No finished full run on develop for $SHA after 40 minutes"
+          echo "::error::The tests that gate main did not finish in 40 minutes"
           exit 1
-
-  release-ready-other:
-    needs: [macos-shard, linux-tests]
-    if: github.event_name == 'pull_request' && github.base_ref == 'main' && !(github.head_ref == 'develop')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - run: echo "the shards and the Linux tests passed"
-
-  release-ready:
-    needs: [release-ready-develop, release-ready-other]
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Require the tests of a pull request into main
-        env:
-          NEEDS: ${{ toJSON(needs) }}
-          EVENT: ${{ github.event_name }}
-          BASE: ${{ github.base_ref }}
-        run: |
-          python3 -I - <<'PY'
-          import json, os, sys
-          needs = json.loads(os.environ["NEEDS"])
-          # Not a pull request into main: nothing to hold back.
-          if os.environ["EVENT"] != "pull_request" or os.environ["BASE"] != "main":
-              print("not a pull request into main")
-              sys.exit(0)
-          results = [v["result"] for v in needs.values()]
-          print(results)
-          sys.exit(0 if "success" in results and not any(r in ("failure", "cancelled") for r in results) else 1)
-          PY
