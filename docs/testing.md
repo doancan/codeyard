@@ -143,14 +143,16 @@ The job prints every test's output (`--nocapture`), so the `SKIPPED` lines are i
 
 ## CI build scheduling and caches
 
-What a pull request has to wait for is short, about four minutes: `macos-lint` (formatting, the architecture and
-documentation checks, clippy for the workspace; behind the `macos` check), `windows-check` (`cargo clippy --workspace --lib
---bins` on Windows, which fails on anything that no longer compiles there; behind the `windows` check) and `licenses`, `deny`
-and `audit`. The tests run on every pull request too, but they are advisory there: a red one shows in the pull request, it does
-not hold it up.
+What a pull request has to wait for is short, about three minutes: `fast-checks` (formatting, the architecture and documentation
+checks; Linux, no compiler of GPUI needed) and `macos-lint` (clippy for the libraries and binaries of the workspace), both behind the
+`macos` check, `windows-check` (`cargo clippy --workspace --lib --bins` on Windows, which fails on anything that no longer compiles
+there; behind the `windows` check) and `licenses`, `deny` and `audit`. The tests run on every pull request too, but they are
+advisory there: a red one shows in the pull request, it does not hold it up. The test code is linted (`--all-targets`) on every push.
 
 - `macos-shard`: the app crate's tests, which are nearly all of them, in three parallel jobs. `scripts/ci-shard.sh` lists the
-  tests, deals them out one by one so every module is spread over all shards, and runs each shard by exact name.
+  tests, deals them out one by one so every module is spread over all shards, and runs each shard by exact name. The test binary
+  is built incrementally: `macos-incremental` (a push to `develop` or `main`) saves the incremental build state under the commit
+  and the shards restore the newest one, so a pull request recompiles what it changed and not the whole app crate.
 - `linux-tests`: the crates without GPUI, the extension SDKs and examples.
 
 Where the tests are the gate is `develop`. A push to `develop` or `main` also runs `macos-tests` (every test of the workspace),

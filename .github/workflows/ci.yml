@@ -30,19 +30,37 @@ jobs:
   # The check branch protection asks for: the part of macOS that a pull request waits for. The tests are advisory there
   # (see the top of this file); `release-ready` is what holds main back.
   macos:
-    needs: [macos-lint]
+    needs: [macos-lint, fast-checks]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require formatting, the architecture and documentation checks and clippy
         env:
-          RESULT: ${{ needs.macos-lint.result }}
+          LINT: ${{ needs.macos-lint.result }}
+          FAST: ${{ needs.fast-checks.result }}
         run: |
-          echo "macOS lint: $RESULT"
-          test "$RESULT" = success
+          echo "clippy on macOS: $LINT; formatting, architecture and documentation: $FAST"
+          test "$LINT" = success
+          test "$FAST" = success
 
-  # Formatting, the architecture and documentation checks and clippy: quick, and the first thing a pull request needs.
+  # Formatting, the architecture and documentation checks: no compiler and no GPUI needed, so a Linux runner has them done
+  # in under a minute while clippy is still building.
+  fast-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+          components: rustfmt
+      - run: scripts/arch-check.sh   # also checks the vendor patches (scripts/check-gpui-patches.sh)
+      - run: scripts/docs-check.sh
+      - run: cargo fmt --all --check
+
+  # clippy for the workspace, the part of the pull request gate that needs the macOS toolchain. A pull request lints the
+  # libraries and binaries (what Windows lints too); the test code is linted on every push.
   macos-lint:
     runs-on: macos-latest
     timeout-minutes: 30
@@ -51,6 +69,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
         with:
           toolchain: stable
+          components: clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
         with:
           shared-key: ci-macos-lint
@@ -61,11 +80,11 @@ jobs:
             xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
           fi
           xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
-      - run: scripts/arch-check.sh   # also checks the vendor patches (scripts/check-gpui-patches.sh)
-      - run: scripts/docs-check.sh
-      - run: cargo fmt --all --check
       # Our crates only: the patched copies under vendor/ are not linted.
+      - run: cargo clippy --locked --workspace -- -D warnings
+        if: github.event_name == 'pull_request'
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+        if: github.event_name != 'pull_request'
 
   # The app crate holds nearly all of the tests. A pull request runs them in three parallel shards (scripts/ci-shard.sh)
   # that share one warm build cache; the other crates' tests run on Linux and in the full run.
@@ -92,14 +111,56 @@ jobs:
             xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
           fi
           xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
+      # The app crate is compiled incrementally: the cache of the last push to develop holds what it compiled, so only what a
+      # pull request changed is compiled again (scripts/ci-shard.sh builds the test binary with CARGO_INCREMENTAL=1).
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/debug/incremental
+          key: incr-app-tests-${{ github.sha }}
+          restore-keys: incr-app-tests-
       # The exthost and the agent are built first: the extension tests of the app run the real exthost inside the OS
       # sandbox, and the SSH tests start the agent through the throw-away sshd (`cargo test -p app` does not build them).
       - run: cargo build --locked -p ext-host -p agent
       - run: scripts/ci-shard.sh ${{ matrix.shard }} 3
         env:
+          CARGO_INCREMENTAL: "1"
           CODEYARD_REQUIRE_SSHD: "1"
           CODEYARD_TEST_TIMEOUT_SCALE: "3"
           CODEYARD_REQUIRE_TOOLS: codeyard-exthost
+
+  # Keeps the incremental build state of the app's test binary for the shards of the next pull requests: the same build a shard
+  # does, saved under the commit. Pushes to develop and main only.
+  macos-incremental:
+    if: github.event_name == 'push'
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: ci-macos-tests
+          save-if: "false"
+      - name: Metal toolchain (GPUI shaders)
+        run: |
+          if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
+          fi
+          xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/debug/incremental
+          key: incr-app-tests-${{ github.sha }}
+          restore-keys: incr-app-tests-
+      - run: cargo test --locked -p app --bin codeyard --no-run
+        env:
+          CARGO_INCREMENTAL: "1"
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/debug/incremental
+          key: incr-app-tests-${{ github.sha }}
 
   # Every test of the workspace: pushes to develop and main, the nightly run and manual runs.
   macos-tests:
