@@ -1,5 +1,16 @@
 # Releasing
 
+**Prebuilt files.** Every push to `develop` runs `prebuild.yml`, which calls `release.yml` as a dry run and keeps its files as
+artifacts for 14 days: the SSH agents, the three macOS binaries (`prebuilt-macos`) and the Windows ZIP and setup EXE. When a tag
+is pushed, `release.yml` first runs `scripts/find-prebuilt.sh`: it looks for the prebuild run whose commit has the same git tree as
+the tagged commit (the merge of `develop` into `main` has the tree of `develop`'s last commit) and waits for it if it is still
+running. If it finds one, the agent and Windows jobs are skipped; the macOS job takes the binaries, runs
+`PREBUILT=1 scripts/bundle-macos.sh` (bundle, Developer ID signature, DMG), notarizes, and the publish job takes the agents
+and the Windows files from that run, signs `SHA256SUMS.txt` and creates the release. That is about ten minutes, most of it
+Apple's notarization. Without a matching run (a commit made straight on `main`, a run older than 14 days, a failed prebuild)
+the workflow builds everything as described below. A manual run (Actions, release, Run workflow) takes the same path, short
+of publishing; tick "rebuild" to build everything instead.
+
 The `release.yml` workflow builds and publishes a release when a `vX.Y.Z` tag is pushed. It builds the agents separately and then runs the platform builds in parallel:
 
 1. `verify` checks that the tag, the Cargo version and the changelog agree, then runs `arch-check`, `docs-check`, `licenses.sh`,

@@ -8,7 +8,11 @@ name: release
 # only ever given to a run for a tag, because files signed with it verify in every installed app, whichever branch built them.
 # Every release carries SHA256SUMS.txt.sig (Ed25519 over SHA256SUMS.txt, secret UPDATE_SIGNING_KEY) and RELEASE_NOTES.md:
 # see docs/releasing.md.
+# The files are built on every push to develop (prebuild.yml calls this workflow as a dry run and keeps them). A tag looks for the run
+# that built the same sources and only signs, notarizes and publishes its files (about ten minutes); without one it builds
+# everything itself. A manual run does the same as a tag, short of publishing, unless "rebuild" is ticked.
 on:
+  workflow_call:
   push:
     tags: ["v*"]
     # A push to main that changes the dependencies or this file runs the whole thing as a dry run (no tag, no release): it fills the
@@ -19,6 +23,10 @@ on:
     inputs:
       notarize:
         description: Sign and notarize with Apple credentials (main/develop only; publishes nothing)
+        type: boolean
+        default: false
+      rebuild:
+        description: Build everything again instead of reusing the files of the prebuild run of the same sources
         type: boolean
         default: false
 
@@ -90,7 +98,35 @@ jobs:
 
   # Build SSH agents separately so platform app builds start in parallel. Keep cargo-zigbuild
   # for Linux agents: its artifact size matches the release-agent budget checked in CI.
+  # Is there a build of exactly these sources (a prebuild run on develop)? Then the build jobs below are skipped and the files
+  # come from that run. Only tags and manual runs look; the prebuild run itself (a call from prebuild.yml) always builds.
+  prebuilt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      run: ${{ steps.find.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+        if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && !inputs.rebuild)
+        with:
+          fetch-depth: 1
+      - name: Find the prebuild run of these sources
+        id: find
+        if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && !inputs.rebuild)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --no-tags --depth=200 origin develop
+          run=$(scripts/find-prebuilt.sh)
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          if [ -n "$run" ]; then echo "Reusing the files built by prebuild run $run"; else echo "No prebuild run of these sources: building everything"; fi
+
   agents-linux:
+    needs: [prebuilt]
+    if: needs.prebuilt.outputs.run == ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -102,7 +138,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: agents-linux
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
       - name: Install the Linux agent toolchain
         run: pip3 install --user cargo-zigbuild
       - name: Build the Linux agents
@@ -120,6 +156,8 @@ jobs:
           if-no-files-found: error
 
   agent-macos:
+    needs: [prebuilt]
+    if: needs.prebuilt.outputs.run == ''
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
@@ -130,7 +168,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: agent-macos
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
       - name: Build the macOS agent
         run: |
           mkdir agents
@@ -143,11 +181,17 @@ jobs:
           if-no-files-found: error
 
   macos:
-    needs: [verify, agents-linux, agent-macos]
+    needs: [verify, prebuilt, agents-linux, agent-macos]
+    if: ${{ !cancelled() && needs.verify.result == 'success' && (needs.prebuilt.outputs.run != '' || (needs.agents-linux.result == 'success' && needs.agent-macos.result == 'success')) }}
     runs-on: macos-latest
     timeout-minutes: 90
+    permissions:
+      actions: read
+      contents: read
     env:
       NOTARIZE_RELEASE: ${{ github.ref_type == 'tag' || inputs.notarize == true }}
+      # The prebuild run whose files are signed here instead of building them ("" = build).
+      PREBUILT_RUN: ${{ needs.prebuilt.outputs.run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
 
@@ -163,12 +207,14 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        if: env.PREBUILT_RUN == ''
         with:
           shared-key: app-macos
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
       # A failed download is only a warning (older Xcodes ship `metal`); a missing compiler fails the release here,
       # with a clear message, not minutes later inside gpui's build.rs.
       - name: Metal toolchain (GPUI shaders)
+        if: env.PREBUILT_RUN == ''
         run: |
           xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
           xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
@@ -176,11 +222,29 @@ jobs:
       # SSH agents: only their SHA-256 goes into the app. Servers download them from this release (the publish job
       # attaches them), so they are not put into the DMG or the tar.gz.
       - name: Download the SSH agents
+        if: env.PREBUILT_RUN == ''
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
         with:
           pattern: agents-*
           merge-multiple: true
           path: agents
+      - name: Download the SSH agents and the binaries of the prebuild run
+        if: env.PREBUILT_RUN != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
+        with:
+          pattern: "{agents-*,prebuilt-macos}"
+          merge-multiple: false
+          path: prebuilt
+          run-id: ${{ needs.prebuilt.outputs.run }}
+          github-token: ${{ github.token }}
+      - name: Put the prebuilt files in place
+        if: env.PREBUILT_RUN != ''
+        run: |
+          mkdir -p agents target/release
+          cp prebuilt/agents-*/* agents/
+          cp prebuilt/prebuilt-macos/* target/release/
+          chmod +x target/release/codeyard target/release/cyx target/release/codeyard-exthost
+          ls -l agents target/release
 
       - name: Import Apple identity into a temporary keychain
         if: env.NOTARIZE_RELEASE == 'true'
@@ -192,11 +256,25 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: scripts/macos-signing-keychain.sh setup
 
+      # With a prebuild run PREBUILT=1: the binaries are bundled, signed and packed, not compiled again.
       - name: Build app, bundle and DMG
         run: |
+          if [ -n "$PREBUILT_RUN" ]; then export PREBUILT=1; fi
           AGENTS_DIR="$PWD/agents" scripts/bundle-macos.sh
           # The app must know every Linux agent's hash, or it could not connect to a server.
           target/release/codeyard --check-agent-bundle
+      # What a release reuses: the three binaries of this build (unsigned; the release signs its own copies in the bundle).
+      - name: Keep the binaries for a release
+        if: env.PREBUILT_RUN == '' && github.ref_type != 'tag'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
+        with:
+          name: prebuilt-macos
+          path: |
+            target/release/codeyard
+            target/release/cyx
+            target/release/codeyard-exthost
+          retention-days: 14
+          if-no-files-found: error
 
       - name: Collect release files
         run: |
@@ -262,7 +340,9 @@ jobs:
         run: scripts/macos-signing-keychain.sh cleanup
 
   windows:
-    needs: [verify, agents-linux, agent-macos]
+    needs: [verify, prebuilt, agents-linux, agent-macos]
+    # The files of a prebuild run are published as they are: nothing to build here.
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.prebuilt.outputs.run == '' && needs.agents-linux.result == 'success' && needs.agent-macos.result == 'success' }}
     runs-on: windows-2022
     timeout-minutes: 60
     defaults:
@@ -276,7 +356,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: app-windows
-          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
       # Only their SHA-256 goes into the EXE: servers download the agents from this release (the publish job attaches them).
       - name: Download SSH agents
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
@@ -313,11 +393,15 @@ jobs:
 
   # The only job that writes to the repository, and only once everything above succeeded.
   publish:
-    needs: [macos, windows]
+    needs: [prebuilt, macos, windows]
+    if: ${{ !cancelled() && needs.macos.result == 'success' && (needs.windows.result == 'success' || needs.prebuilt.outputs.run != '') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
+      actions: read
       contents: write
+    env:
+      PREBUILT_RUN: ${{ needs.prebuilt.outputs.run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
@@ -325,9 +409,18 @@ jobs:
           name: release-macos
           path: dist
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
+        if: env.PREBUILT_RUN == ''
         with:
           name: release-windows
           path: dist
+      # With a prebuild run the Windows files (ZIP, setup EXE and their checksums) are the ones that run built and checked.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
+        if: env.PREBUILT_RUN != ''
+        with:
+          name: release-windows
+          path: dist
+          run-id: ${{ needs.prebuilt.outputs.run }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
         with:
           name: release-notes
@@ -336,10 +429,19 @@ jobs:
       # them from releases/download/v<version>/codeyard-agent-<triple> (or the app does and copies them over ssh). These are
       # the same artifacts both app builds hashed, so the recorded hashes match.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
+        if: env.PREBUILT_RUN == ''
         with:
           pattern: agents-*
           merge-multiple: true
           path: dist
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
+        if: env.PREBUILT_RUN != ''
+        with:
+          pattern: agents-*
+          merge-multiple: true
+          path: dist
+          run-id: ${{ needs.prebuilt.outputs.run }}
+          github-token: ${{ github.token }}
       # The release body and the signed RELEASE_NOTES.md are the same file: what the app shows is what the release shows.
       - name: Merge checksums and verify every file against them
         working-directory: dist

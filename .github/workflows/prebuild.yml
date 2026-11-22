@@ -1,0 +1,23 @@
+name: prebuild
+# Every push to develop builds the release files once, unsigned (release.yml as a dry run), and keeps them as artifacts.
+# A release then finds the run that built the same sources (scripts/find-prebuilt.sh) and only signs, notarizes and publishes
+# them instead of compiling everything again. Without such a run (a commit made straight on main, an expired run) the release
+# builds as before.
+on:
+  push:
+    branches: [develop]
+
+# release.yml's publish job asks for contents: write (it only uses it for a tag); a called workflow cannot ask for more than
+# its caller allows.
+permissions:
+  actions: read
+  contents: write
+
+# One at a time; a push that arrives meanwhile waits and a newer one replaces it: only the tip of develop is released.
+concurrency:
+  group: prebuild
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/release.yml
