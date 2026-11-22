@@ -156,7 +156,7 @@ CI has two tiers. A pull request runs the **fast gate**, which is meant to finis
 A push to `develop` or `main`, the nightly run and a manual run (`workflow_dispatch`) run the **full tier** as well: every
 test of the workspace on macOS (`macos-tests`), on Linux (`linux-app`) and natively on Windows (`windows-tests`), the memory
 and size budgets (`macos-budgets`) and the standalone Windows release build (`windows-standalone`). A release goes out only
-from a commit that passed the full tier.
+from sources whose full tier did not fail (`scripts/find-prebuilt.sh`).
 
 The checks branch protection asks for keep their names (`macos`, `windows`, `linux`, `licenses`, `deny`, `audit`). `macos`
 and `windows` are small jobs that require the jobs of the tier that ran: the shards and the lint job on a pull request, the

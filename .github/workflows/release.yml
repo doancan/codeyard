@@ -120,6 +120,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           git fetch --no-tags --depth=200 origin develop
+          # Exit status 3 (the full CI run of these sources failed) stops the release here.
           run=$(scripts/find-prebuilt.sh)
           echo "run=$run" >> "$GITHUB_OUTPUT"
           if [ -n "$run" ]; then echo "Reusing the files built by prebuild run $run"; else echo "No prebuild run of these sources: building everything"; fi
