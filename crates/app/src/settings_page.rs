@@ -157,21 +157,25 @@ pub fn title_of(key: &str) -> String {
     }
 }
 
-/// Whether it matches the search (key, title, description).
+/// Every search word may match a different part of the key, title or translated description.
 pub fn matches_query(key: &str, about: &str, query: &str) -> bool {
     let q = query.trim().to_lowercase();
-    q.is_empty()
-        || key.to_lowercase().contains(&q)
-        || title_of(key).to_lowercase().contains(&q)
-        || about.to_lowercase().contains(&q)
-        || crate::i18n::t(about).to_lowercase().contains(&q)
+    if q.is_empty() {
+        return true;
+    }
+    let searchable = [key.to_lowercase(), title_of(key).to_lowercase(), about.to_lowercase(), crate::i18n::t(about).to_lowercase()];
+    q.split_whitespace().all(|word| searchable.iter().any(|part| part.contains(word)))
 }
 
 pub struct SettingsPage {
     query: Entity<TextField>,
     category: usize,
+    /// Recompose from the actual editor pane, including split editors and UI zoom.
+    compact: bool,
     /// Fields for number and text settings.
     fields: HashMap<&'static str, Entity<TextField>>,
+    /// Last committed text shown in each field; differing text is an unsaved draft.
+    synced_fields: HashMap<&'static str, String>,
     errors: HashMap<&'static str, String>,
     /// Where each setting's row was painted in the last frame (accessibility).
     bounds: crate::painted::RowBounds<SetFrame>,
@@ -251,6 +255,10 @@ impl SettingsPage {
             let field = cx.new(|cx| TextField::new(crate::i18n::tr("default"), cx));
             let (key, kind) = (e.key, e.kind);
             subs.push(cx.subscribe(&field, move |this, f, ev: &FieldEvent, cx| {
+                if matches!(ev, FieldEvent::Changed) {
+                    this.errors.remove(key);
+                    return cx.notify();
+                }
                 if !matches!(ev, FieldEvent::Submit) {
                     return;
                 }
@@ -258,6 +266,7 @@ impl SettingsPage {
                 match parse_setting_input(key, kind, &text) {
                     Ok(v) => {
                         this.errors.remove(key);
+                        f.update(cx, |field, cx| field.set_text(&shown(&v), cx));
                         cx.emit(SettingsEvent::Write(key.to_string(), v));
                     }
                     Err(msg) => {
@@ -268,8 +277,17 @@ impl SettingsPage {
             }));
             fields.insert(e.key, field);
         }
-        let mut page =
-            SettingsPage { query, category: 0, fields, errors: HashMap::new(), bounds: Default::default(), focus_handle: cx.focus_handle(), _subs: subs };
+        let mut page = SettingsPage {
+            query,
+            category: 0,
+            compact: true,
+            fields,
+            synced_fields: HashMap::new(),
+            errors: HashMap::new(),
+            bounds: Default::default(),
+            focus_handle: cx.focus_handle(),
+            _subs: subs,
+        };
         page.sync_fields(cx);
         page
     }
@@ -279,10 +297,25 @@ impl SettingsPage {
         let s = cx.global::<Settings>().clone();
         for (key, field) in &self.fields {
             let text = shown(&current(&s, key));
-            if field.read(cx).text() != text {
+            let draft = field.read(cx).text();
+            if self.synced_fields.get(key).is_some_and(|previous| previous != draft) && draft != text {
+                continue;
+            }
+            if draft != text {
                 field.update(cx, |f, cx| f.set_text(&text, cx));
             }
+            self.synced_fields.insert(key, text);
         }
+    }
+
+    /// Called only after an explicit reset has succeeded or when resetting one field.
+    pub fn discard_drafts(&mut self) {
+        self.synced_fields.clear();
+        self.errors.clear();
+    }
+
+    fn has_draft(&self, key: &str, cx: &App) -> bool {
+        self.fields.get(key).zip(self.synced_fields.get(key)).is_some_and(|(field, previous)| field.read(cx).text() != previous)
     }
 
     pub fn focus_search(&self, window: &mut Window, cx: &App) {
@@ -353,13 +386,15 @@ impl SettingsPage {
     pub fn visible_keys(&self, cx: &App) -> Vec<&'static str> {
         let query = self.query.read(cx).text().to_string();
         let searching = !query.trim().is_empty();
+        let modified_only = query.split_whitespace().any(|word| word.eq_ignore_ascii_case("@modified"));
+        let words = query.split_whitespace().filter(|word| !word.eq_ignore_ascii_case("@modified")).collect::<Vec<_>>().join(" ");
         let cat = CATEGORIES[self.category];
         let s = cx.global::<Settings>();
         let mut keys: Vec<_> = Self::all_entries()
             .into_iter()
             .filter(|(k, about)| {
                 if searching {
-                    matches_query(k, about, &query)
+                    (!modified_only || Self::is_modified(s, k)) && matches_query(k, about, &words)
                 } else if cat == "Commonly Used" {
                     COMMON.contains(k)
                 } else if cat == "Modified" {
@@ -372,6 +407,9 @@ impl SettingsPage {
             .collect();
         if !searching && cat == "Commonly Used" {
             keys.sort_by_key(|key| *key != "modules.containers.enabled");
+        } else if searching {
+            // Put settings named by the query before incidental mentions in descriptions.
+            keys.sort_by_key(|key| !matches_query(key, "", &words));
         }
         keys
     }
@@ -381,7 +419,7 @@ impl SettingsPage {
     pub fn access_view(&self, max: usize, window: &Window, cx: &App) -> AccessPage {
         let s = cx.global::<Settings>();
         let query = self.query.read(cx).text().to_string();
-        let searching = !query.is_empty();
+        let searching = !query.trim().is_empty();
         let keys = self.visible_keys(cx);
         let rows = keys
             .iter()
@@ -401,7 +439,11 @@ impl SettingsPage {
                 AccessSetting {
                     key,
                     title: row_title(key),
-                    about: crate::i18n::t(about).to_string(),
+                    about: if self.has_draft(key, cx) {
+                        format!("{} {}", crate::i18n::t(about), crate::i18n::t("Press Enter to apply"))
+                    } else {
+                        crate::i18n::t(about).to_string()
+                    },
                     control,
                     modified: Self::is_modified(s, key),
                     error: self.errors.get(key).cloned(),
@@ -463,7 +505,7 @@ impl SettingsPage {
                 .child(
                     div()
                         .id(("set-theme", ix))
-                        .h(px(26.))
+                        .h(px(32.))
                         .px(px(theme::SPACE[4]))
                         .flex()
                         .items_center()
@@ -501,7 +543,7 @@ impl SettingsPage {
             (_, Some(Kind::Choice(opts))) => div()
                 .flex()
                 .flex_wrap()
-                .gap(px(theme::SPACE[1]))
+                .gap(px(theme::SPACE[2]))
                 .children(opts.iter().enumerate().map(|(oi, o)| {
                     let active = now.as_str() == Some(*o);
                     let value = (*o).to_string();
@@ -509,7 +551,7 @@ impl SettingsPage {
                         .id((SharedString::from(format!("opt-{key}")), oi))
                         .relative()
                         .child(crate::painted::probe(&self.bounds, SetFrame::Option(key, oi)))
-                        .h(px(24.))
+                        .h(px(32.))
                         .px(px(theme::SPACE[4]))
                         .flex()
                         .items_center()
@@ -526,8 +568,10 @@ impl SettingsPage {
                 Some(f) => div()
                     .flex()
                     .items_center()
-                    .w(px(200.))
-                    .bg(c(p.bg))
+                    .w(px(if matches!(entry.map(|e| e.kind), Some(Kind::Text)) { 480. } else { 180. }))
+                    .max_w_full()
+                    .min_h(px(32.))
+                    .bg(c(p.surface))
                     .border_1()
                     .border_color(c(if self.errors.contains_key(key) { p.danger } else { p.border_input }))
                     .rounded(px(theme::radius::SM))
@@ -537,7 +581,7 @@ impl SettingsPage {
             },
             _ => div().into_any_element(),
         };
-        let reset = modified.then(|| {
+        let reset = (modified || self.has_draft(key, cx)).then(|| {
             div()
                 .id(("reset", ix))
                 .relative()
@@ -551,47 +595,62 @@ impl SettingsPage {
                 .tooltip(|_, cx| {
                     cx.new(|_| crate::workbench::Tooltip(crate::i18n::t("Back to the default (removes the value from settings.jsonc)").into())).into()
                 })
-                .on_click(cx.listener(move |_, _, _, cx| cx.emit(SettingsEvent::Write(key.to_string(), Value::Null))))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.synced_fields.remove(key);
+                    this.errors.remove(key);
+                    cx.emit(SettingsEvent::Write(key.to_string(), Value::Null));
+                }))
         });
         div()
             .id(("setting", ix))
+            .debug_selector(move || format!("setting-row-{key}"))
             .relative()
             .child(crate::painted::probe(&self.bounds, SetFrame::Row(key)))
             .w_full()
+            .min_w_0()
             .flex()
             .flex_col()
-            .gap(px(theme::SPACE[2]))
-            .py(px(theme::SPACE[5]))
+            .gap(px(10.))
+            .py(px(24.))
             .border_b_1()
             .border_color(c(p.border))
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap(px(8.))
+                    .children(modified.then(|| div().flex_none().size(px(6.)).rounded_full().bg(c(p.accent))))
+                    .child(div().font_weight(gpui::FontWeight::SEMIBOLD).text_size(px(text::SM.0)).child(row_title(key)))
+                    .children(reset),
+            )
+            .child(
+                div()
+                    .debug_selector(move || format!("setting-description-{key}"))
+                    .text_size(px(text::SM.0))
+                    .line_height(px(20.))
+                    .text_color(c(p.text_muted))
+                    .child(crate::i18n::t(about).to_string()),
+            )
+            .child(div().font_family(ui::MONO_FONT).text_size(px(text::XXS.0)).text_color(c(p.line_number)).child(key.to_string()))
+            .children(
+                source_note(key, cx)
+                    .map(|note| div().debug_selector(move || format!("setting-source-{key}")).text_size(px(text::XS.0)).text_color(c(p.accent)).child(note)),
+            )
+            .child(
+                div()
+                    .debug_selector(move || format!("setting-control-{key}"))
+                    .w_full()
+                    .min_w_0()
+                    .pt(px(4.))
+                    .flex()
+                    .flex_col()
                     .items_start()
-                    .gap(px(theme::SPACE[8]))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .gap(px(theme::SPACE[1]))
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(theme::SPACE[3]))
-                                    .children(modified.then(|| div().flex_none().size(px(6.)).rounded_full().bg(c(p.accent))))
-                                    .child(div().font_weight(gpui::FontWeight::SEMIBOLD).text_size(px(text::SM.0)).child(row_title(key)))
-                                    .children(reset),
-                            )
-                            .child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(crate::i18n::t(about).to_string()))
-                            .child(div().font_family(ui::MONO_FONT).text_size(px(text::XXS.0)).text_color(c(p.line_number)).child(key.to_string()))
-                            .children(source_note(key, cx).map(|note| {
-                                div().debug_selector(move || format!("setting-source-{key}")).text_size(px(text::XS.0)).text_color(c(p.accent)).child(note)
-                            })),
-                    )
-                    .child(div().w(px(240.)).flex_none().flex().justify_end().child(control)),
+                    .gap(px(8.))
+                    .child(control)
+                    .when(self.has_draft(key, cx), |d| {
+                        d.child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(crate::i18n::t("Press Enter to apply")))
+                    }),
             )
             .when_some(self.errors.get(key).cloned(), |d, e| d.child(div().text_size(px(text::XS.0)).text_color(c(p.danger)).child(e)))
             .into_any_element()
@@ -603,10 +662,11 @@ impl Render for SettingsPage {
         let p = *palette(cx);
         let s = cx.global::<Settings>().clone();
         let keys = self.visible_keys(cx);
-        let searching = !self.query.read(cx).text().is_empty();
-        // Rows record where they are painted in this frame.
+        let searching = !self.query.read(cx).text().trim().is_empty();
         self.bounds.borrow_mut().clear();
         let rows: Vec<gpui::AnyElement> = keys.iter().enumerate().map(|(i, k)| self.entry_view(k, i, &s, cx)).collect();
+        let compact = self.compact;
+        let entity = cx.weak_entity();
         let nav = CATEGORIES.iter().enumerate().map(|(i, name)| {
             let active = i == self.category && !searching;
             let count = Self::category_count(name, &s);
@@ -615,27 +675,86 @@ impl Render for SettingsPage {
                 .id(("set-cat", i))
                 .relative()
                 .child(crate::painted::probe(&self.bounds, SetFrame::Category(i)))
-                .h(px(28.))
-                .px(px(theme::SPACE[5]))
+                .flex_none()
+                .h(px(34.))
+                .px(px(12.))
                 .flex()
                 .items_center()
-                .gap(px(theme::SPACE[3]))
-                .rounded(px(theme::radius::SM))
+                .gap(px(12.))
+                .rounded(px(theme::radius::MD))
                 .cursor_pointer()
                 .text_size(px(text::SM.0))
                 .when(active, |d| d.bg(c(p.surface_active)).text_color(c(p.text)))
                 .when(!active, |d| d.text_color(c(p.text_muted)).hover(|d| d.bg(c(p.surface_hover))))
-                .child(div().flex_1().child(category_label(name)))
+                .child(div().when(!compact, |d| d.flex_1()).child(category_label(name)))
                 .child(div().flex_none().text_size(px(text::XXS.0)).text_color(c(if hot { p.accent } else { p.line_number })).child(count.to_string()))
                 .on_click(cx.listener(move |this, _, _, cx| this.select_category(i, cx)))
         });
         let heading =
             if searching { crate::i18n::tn("{} result", "{} results", rows.len(), &[]) } else { category_label(CATEGORIES[self.category]).to_string() };
+        let tools = [
+            ("set-open-json", "Open settings.jsonc", "file-json", SetFrame::Json),
+            ("set-open-keys", "Keyboard Shortcuts", "keyboard", SetFrame::Keys),
+            ("set-icon-theme", "File icon theme…", "folder-tree", SetFrame::Icons),
+            ("set-reset-all", "Reset All Settings…", "rotate-ccw", SetFrame::ResetAll),
+        ]
+        .into_iter()
+        .map(|(id, label, glyph, frame)| {
+            div()
+                .id(id)
+                .relative()
+                .child(crate::painted::probe(&self.bounds, frame))
+                .h(px(if compact { 28. } else { 30. }))
+                .px(px(if compact { 6. } else { 10. }))
+                .flex()
+                .items_center()
+                .rounded(px(theme::radius::SM))
+                .cursor_pointer()
+                .hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text)))
+                .text_size(px(text::XS.0))
+                .text_color(c(p.text_muted))
+                .when(compact, |d| d.child(icon(glyph, 14., p.text_muted)))
+                .when(!compact, |d| d.child(crate::i18n::t(label)))
+                .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(crate::i18n::t(label).into())).into())
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    cx.emit(match frame {
+                        SetFrame::Json => SettingsEvent::OpenJson,
+                        SetFrame::Keys => SettingsEvent::OpenKeybindings,
+                        SetFrame::Icons => SettingsEvent::PickIconTheme,
+                        _ => SettingsEvent::ResetAll,
+                    });
+                }))
+        });
         div()
             .id("settings-page")
+            .debug_selector(|| "settings-page".to_string())
+            .relative()
+            .child(
+                gpui::canvas(
+                    |bounds, _, _| bounds.size.width < px(760.),
+                    move |_, measured, _, cx| {
+                        if compact != measured {
+                            let entity = entity.clone();
+                            cx.defer(move |cx| {
+                                entity
+                                    .update(cx, |page, cx| {
+                                        if page.compact != measured {
+                                            page.compact = measured;
+                                            cx.notify();
+                                        }
+                                    })
+                                    .ok();
+                            });
+                        }
+                    },
+                )
+                .absolute()
+                .size_full(),
+            )
             .key_context("SettingsPage")
             .track_focus(&self.focus_handle)
             .size_full()
+            .min_w_0()
             .flex()
             .flex_col()
             .bg(c(p.bg))
@@ -643,132 +762,90 @@ impl Render for SettingsPage {
                 div()
                     .flex_none()
                     .flex()
-                    .items_center()
-                    .gap(px(theme::SPACE[5]))
-                    .px(px(theme::SPACE[9]))
-                    .py(px(theme::SPACE[5]))
+                    .flex_col()
+                    .gap(px(if compact { 12. } else { 16. }))
+                    .px(px(if compact { 12. } else { 32. }))
+                    .py(px(if compact { 12. } else { 24. }))
                     .border_b_1()
                     .border_color(c(p.border))
-                    .child(icon("settings", 20., p.accent))
-                    .child(div().text_size(px(text::LG.0)).font_weight(gpui::FontWeight::SEMIBOLD).child(crate::i18n::t("Settings")))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .gap(px(8.))
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(8.))
+                                    .child(icon("settings", if compact { 18. } else { 20. }, p.text_muted))
+                                    .child(
+                                        div()
+                                            .text_size(px(if compact { text::LG.0 } else { text::XL.0 }))
+                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .child(crate::i18n::t("Settings")),
+                                    ),
+                            )
+                            .child(div().min_w_0().flex().flex_wrap().justify_end().gap(px(if compact { 0. } else { 4. })).children(tools)),
+                    )
                     .child(
                         crate::ui::input_box("settings-search-box", &p, p.surface, self.query.focus_handle(cx).is_focused(window))
                             .relative()
                             .child(crate::painted::probe(&self.bounds, SetFrame::Search))
-                            .flex_1()
-                            .max_w(px(520.))
+                            .w_full()
+                            .min_h(px(36.))
                             .child(crate::ui::search_icon(&p))
                             .child(div().flex_1().min_w_0().child(self.query.clone())),
-                    )
-                    .child(div().flex_1())
-                    .child(
-                        div()
-                            .id("set-open-json")
-                            .relative()
-                            .child(crate::painted::probe(&self.bounds, SetFrame::Json))
-                            .h(px(26.))
-                            .px(px(theme::SPACE[4]))
-                            .flex()
-                            .items_center()
-                            .rounded(px(theme::radius::SM))
-                            .bg(c(p.surface_hover))
-                            .cursor_pointer()
-                            .hover(|d| d.bg(c(p.surface_active)))
-                            .text_size(px(text::XS.0))
-                            .child(crate::i18n::t("Open settings.jsonc"))
-                            .on_click(cx.listener(|_, _, _, cx| cx.emit(SettingsEvent::OpenJson))),
-                    )
-                    .child(
-                        div()
-                            .id("set-open-keys")
-                            .relative()
-                            .child(crate::painted::probe(&self.bounds, SetFrame::Keys))
-                            .h(px(26.))
-                            .px(px(theme::SPACE[4]))
-                            .flex()
-                            .items_center()
-                            .rounded(px(theme::radius::SM))
-                            .bg(c(p.surface_hover))
-                            .cursor_pointer()
-                            .hover(|d| d.bg(c(p.surface_active)))
-                            .text_size(px(text::XS.0))
-                            .child(crate::i18n::t("Keyboard Shortcuts"))
-                            .on_click(cx.listener(|_, _, _, cx| cx.emit(SettingsEvent::OpenKeybindings))),
-                    )
-                    .child(
-                        div()
-                            .id("set-reset-all")
-                            .relative()
-                            .child(crate::painted::probe(&self.bounds, SetFrame::ResetAll))
-                            .h(px(26.))
-                            .px(px(theme::SPACE[4]))
-                            .flex()
-                            .items_center()
-                            .rounded(px(theme::radius::SM))
-                            .bg(c(p.surface_hover))
-                            .cursor_pointer()
-                            .hover(|d| d.bg(c(p.surface_active)))
-                            .text_size(px(text::XS.0))
-                            .child(crate::i18n::t("Reset All Settings…"))
-                            .on_click(cx.listener(|_, _, _, cx| cx.emit(SettingsEvent::ResetAll))),
                     ),
             )
             .child(
                 div()
                     .flex_1()
                     .min_h_0()
+                    .min_w_0()
                     .flex()
+                    .when(compact, |d| d.flex_col())
                     .child(
                         div()
-                            .w(px(200.))
+                            .id("settings-categories")
+                            .debug_selector(|| "settings-categories".to_string())
                             .flex_none()
+                            .min_w_0()
                             .flex()
-                            .flex_col()
-                            .gap(px(theme::SPACE[1]))
-                            .p(px(theme::SPACE[4]))
-                            .border_r_1()
+                            .gap(px(4.))
+                            .p(px(if compact { 8. } else { 12. }))
+                            .when(compact, |d| d.w_full().overflow_x_scroll().border_b_1())
+                            .when(!compact, |d| d.w(px(208.)).h_full().flex_col().overflow_y_scroll().border_r_1())
                             .border_color(c(p.border))
-                            .children(nav)
-                            .child(div().flex_1())
-                            .child(
-                                div()
-                                    .id("set-icon-theme")
-                                    .relative()
-                                    .child(crate::painted::probe(&self.bounds, SetFrame::Icons))
-                                    .h(px(28.))
-                                    .px(px(theme::SPACE[5]))
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(theme::SPACE[3]))
-                                    .rounded(px(theme::radius::SM))
-                                    .cursor_pointer()
-                                    .text_size(px(text::XS.0))
-                                    .text_color(c(p.text_muted))
-                                    .hover(|d| d.bg(c(p.surface_hover)))
-                                    .child(icon("folder-tree", 14., p.text_muted))
-                                    .child(crate::i18n::t("File icon theme…"))
-                                    .on_click(cx.listener(|_, _, _, cx| cx.emit(SettingsEvent::PickIconTheme))),
-                            ),
+                            .children(nav),
                     )
                     .child(
                         div()
                             .id("settings-list")
+                            .debug_selector(|| "settings-list".to_string())
                             .flex_1()
+                            .min_h_0()
                             .min_w_0()
                             .overflow_y_scroll()
-                            .px(px(theme::SPACE[9]))
-                            .py(px(theme::SPACE[5]))
-                            .child(div().pb(px(theme::SPACE[3])).text_size(px(text::LG.0)).font_weight(gpui::FontWeight::SEMIBOLD).child(heading))
-                            .children(rows)
-                            .when(keys.is_empty(), |d| {
-                                d.child(div().pt(px(theme::SPACE[5])).text_color(c(p.text_muted)).child(
-                                    if CATEGORIES[self.category] == "Modified" && !searching {
-                                        crate::i18n::t("Nothing changed: every setting has its default value.")
-                                    } else {
-                                        crate::i18n::t("No setting matches.")
-                                    },
-                                ))
-                            }),
+                            .px(px(if compact { 20. } else { 32. }))
+                            .py(px(28.))
+                            .child(
+                                div()
+                                    .w_full()
+                                    .max_w(px(880.))
+                                    .mx_auto()
+                                    .child(div().pb(px(4.)).text_size(px(text::LG.0)).font_weight(gpui::FontWeight::SEMIBOLD).child(heading))
+                                    .children(rows)
+                                    .when(keys.is_empty(), |d| {
+                                        d.child(div().pt(px(24.)).text_color(c(p.text_muted)).child(if CATEGORIES[self.category] == "Modified" && !searching {
+                                            crate::i18n::t("Nothing changed: every setting has its default value.")
+                                        } else {
+                                            crate::i18n::t("No setting matches.")
+                                        }))
+                                    }),
+                            ),
                     ),
             )
     }
@@ -777,6 +854,61 @@ impl Render for SettingsPage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn settings_reflow_with_pane_width_and_zoom(cx: &mut gpui::TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        let (page, cx) = cx.add_window_view(|_, cx| SettingsPage::new(cx));
+        page.update(cx, |page, cx| page.set_query("terminal font", cx));
+        for scale in [1., 2.] {
+            cx.update(|_, cx| cx.set_ui_scale(scale));
+            for width in [480., 800., 1280.] {
+                cx.simulate_resize(gpui::size(px(width), px(1000.)));
+                cx.run_until_parked();
+                let pane = cx.debug_bounds("settings-page").expect("settings pane");
+                assert_eq!(page.read_with(cx, |page, _| page.compact), pane.size.width < px(760.));
+                let view = page.update_in(cx, |page, window, cx| page.access_view(256, window, cx));
+                let search = view.search_bounds.expect("visible search");
+                let physical_width = cx.update(|window, _| f64::from(pane.size.width / px(1.)) * f64::from(window.scale_factor()));
+                assert!(search.x0 >= 0. && search.x1 <= physical_width + 0.5, "search fits at {width}/{scale}: {search:?}");
+                for bounds in view.button_bounds {
+                    let b = bounds.expect("utility action visible");
+                    assert!(b.x0 >= 0. && b.x1 <= physical_width + 0.5, "utility fits at {width}/{scale}: {b:?}");
+                }
+                let description = cx.debug_bounds("setting-description-terminal.fontSize").expect("description");
+                let control = cx.debug_bounds("setting-control-terminal.fontSize").expect("control");
+                assert!(control.top() >= description.bottom(), "controls sit below readable descriptions");
+                assert!(control.left() >= pane.left() && control.right() <= pane.right(), "control stays within pane: {control:?}");
+                assert!(control.bottom() <= pane.bottom(), "first control is visible at {width}/{scale}: {control:?}");
+                let list = cx.debug_bounds("settings-list").expect("settings list");
+                assert!(list.size.height >= px(180.), "header leaves useful content space at {width}/{scale}: {list:?}");
+                let nav = cx.debug_bounds("settings-categories").expect("categories");
+                if pane.size.width < px(760.) {
+                    assert!(nav.size.height < px(70.), "compact categories form a horizontal strip");
+                } else {
+                    assert_eq!(nav.size.width, px(208.));
+                }
+            }
+        }
+    }
+
+    #[gpui::test]
+    fn compact_settings_keep_content_space_with_workbench_chrome_at_two_hundred_percent(cx: &mut gpui::TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        cx.update(|_, cx| cx.set_ui_scale(2.));
+        cx.simulate_resize(gpui::size(px(1280.), px(800.)));
+        wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Preferences: Open Settings", window, cx));
+        cx.run_until_parked();
+        let pane = cx.debug_bounds("settings-page").expect("settings pane");
+        let list = cx.debug_bounds("settings-list").expect("scrollable settings");
+        assert!(list.size.height >= px(120.), "the header leaves scrollable content in a short pane: {pane:?} {list:?}");
+        let page = wb.read_with(cx, |wb, _| wb.settings_page_for_test().unwrap());
+        let view = page.update_in(cx, |page, window, cx| page.access_view(256, window, cx));
+        for b in view.button_bounds {
+            let b = b.expect("utility action stays visible");
+            assert!(b.width() >= 24. && b.height() >= 24., "usable utility action: {b:?}");
+        }
+    }
 
     #[test]
     fn container_module_is_findable_without_search() {
@@ -871,5 +1003,70 @@ mod tests {
         assert!(matches_query("files.autoSave", "Save files automatically", "automatic"));
         assert!(!matches_query("editor.fontSize", "Font size", "terminal"));
         assert!(matches_query("x.y", "", "  "));
+    }
+
+    #[test]
+    fn settings_search_combines_words_across_fields_in_any_order() {
+        assert!(matches_query("terminal.fontSize", "Font size of the terminal", "terminal font"));
+        assert!(matches_query("terminal.fontSize", "Font size of the terminal", " SIZE\tterminal  font "));
+        assert!(matches_query("files.autoSaveDelay", "Delay for afterDelay (ms)", "files delay"));
+        assert!(!matches_query("terminal.fontSize", "Font size of the terminal", "terminal minimap"));
+        let _tr = crate::i18n::LangGuard::set("tr");
+        assert!(matches_query("terminal.fontSize", "Font size of the terminal", "terminal boyutu"));
+    }
+
+    #[gpui::test]
+    fn modified_search_filters_the_actual_settings_and_combines_with_words(cx: &mut gpui::TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        let (page, cx) = cx.add_window_view(|_, cx| SettingsPage::new(cx));
+        cx.update(|_, cx| cx.global_mut::<Settings>().terminal_font_size = 18.);
+        for query in ["@modified", "@modified terminal font", " FONT\t@MODIFIED terminal "] {
+            page.update(cx, |page, cx| page.set_query(query, cx));
+            assert_eq!(page.read_with(cx, |page, cx| page.visible_keys(cx)), ["terminal.fontSize"], "{query}");
+        }
+        page.update(cx, |page, cx| page.set_query("@modified minimap", cx));
+        assert!(page.read_with(cx, |page, cx| page.visible_keys(cx)).is_empty());
+        page.update(cx, |page, cx| page.set_query("terminal font", cx));
+        assert_eq!(page.read_with(cx, |page, cx| page.visible_keys(cx)).first(), Some(&"terminal.fontSize"));
+    }
+
+    #[gpui::test]
+    fn settings_reload_preserves_drafts_and_updates_untouched_fields(cx: &mut gpui::TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        let (page, cx) = cx.add_window_view(|_, cx| SettingsPage::new(cx));
+        page.update(cx, |page, cx| page.fields["editor.fontSize"].update(cx, |f, cx| f.set_text("18", cx)));
+        cx.update(|_, cx| {
+            let settings = cx.global_mut::<Settings>();
+            settings.minimap = !settings.minimap;
+            settings.terminal_font_size = 22.;
+        });
+        page.update(cx, |page, cx| page.sync_fields(cx));
+        page.read_with(cx, |page, cx| {
+            assert_eq!(page.fields["editor.fontSize"].read(cx).text(), "18");
+            assert!(page.has_draft("editor.fontSize", cx));
+            assert_eq!(page.fields["terminal.fontSize"].read(cx).text(), "22");
+            assert!(!page.has_draft("terminal.fontSize", cx));
+        });
+        // An acknowledged save makes that field clean; future changes can sync normally.
+        cx.update(|_, cx| cx.global_mut::<Settings>().editor_font_size = 18.);
+        page.update(cx, |page, cx| page.sync_fields(cx));
+        assert!(!page.read_with(cx, |page, cx| page.has_draft("editor.fontSize", cx)));
+        cx.update(|_, cx| cx.global_mut::<Settings>().editor_font_size = 20.);
+        page.update(cx, |page, cx| page.sync_fields(cx));
+        assert_eq!(page.read_with(cx, |page, cx| page.fields["editor.fontSize"].read(cx).text().to_string()), "20");
+    }
+
+    #[gpui::test]
+    fn explicit_settings_reset_discards_unsaved_drafts(cx: &mut gpui::TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        let (page, cx) = cx.add_window_view(|_, cx| SettingsPage::new(cx));
+        page.update(cx, |page, cx| {
+            page.fields["editor.fontSize"].update(cx, |f, cx| f.set_text("invalid draft", cx));
+            page.sync_fields(cx);
+            assert_eq!(page.fields["editor.fontSize"].read(cx).text(), "invalid draft");
+            page.discard_drafts();
+            page.sync_fields(cx);
+            assert_eq!(page.fields["editor.fontSize"].read(cx).text(), shown(&current(cx.global::<Settings>(), "editor.fontSize")));
+        });
     }
 }

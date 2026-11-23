@@ -122,6 +122,10 @@ fn settings_controls_have_their_painted_frames(cx: &mut TestAppContext) {
     let req = ActionRequest { action: Action::Click, target_tree: TreeId::ROOT, target_node: switch, data: None };
     wb.update_in(cx, |wb, window, cx| wb.a11y_action_for_test(&req, &snap, window, cx));
     cx.run_until_parked();
+    let settings = wb.read_with(cx, |wb, _| wb.settings_page_for_test().unwrap());
+    // Spacious rows scroll; bring each control into view before checking its painted frame.
+    settings.update(cx, |page, cx| page.set_query("editor.wordWrap", cx));
+    cx.run_until_parked();
     let (snap, tree) = nodes(&wb, cx);
     let page = tree.iter().find(|(_, n)| n.role() == Role::Group && n.label() == Some("Settings")).unwrap().0;
     let (wrap, row) = find(&tree, Role::RadioGroup, "Editor: Word Wrap");
@@ -129,6 +133,9 @@ fn settings_controls_have_their_painted_frames(cx: &mut TestAppContext) {
     let options = row.children().to_vec();
     assert!(options.len() >= 2, "{wrap:?}");
     hit(&snap, &options, Some(row_bounds));
+    settings.update(cx, |page, cx| page.set_query("editor.minimap.enabled", cx));
+    cx.run_until_parked();
+    let (snap, tree) = nodes(&wb, cx);
     let reset = tree.iter().find(|(_, n)| n.role() == Role::Button && n.label() == Some("Reset")).expect("Reset for the changed setting");
     let minimap_row = find(&tree, Role::CheckBox, "Editor › Minimap: Enabled").1.bounds().expect("its row's frame");
     hit(&snap, &[reset.0], Some(minimap_row));

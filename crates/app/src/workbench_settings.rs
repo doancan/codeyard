@@ -6,7 +6,7 @@ use gpui::{AppContext as _, Context, Window};
 use serde_json::Value;
 
 use super::notifications_glue::errors::Verb;
-use super::{InputPurpose, Notice, NoticeSource, OverlayKind, Workbench};
+use super::{InputPurpose, Notice, NoticeSource, OverlayKind, Page, Workbench};
 use crate::picker::{PickItem, Picker, Source as PickSource};
 use crate::settings::{self, AutoSave, Settings};
 
@@ -641,6 +641,9 @@ impl Workbench {
             this.update_in(cx, |this, window, cx| {
                 match write_default_settings(&spath) {
                     Ok(backup) => {
+                        if let Some(Page::Settings(page)) = &this.tabs.page {
+                            page.update(cx, |page, _| page.discard_drafts());
+                        }
                         match backup {
                             Some(b) => this.notify(
                                 NoticeSource::Settings,
