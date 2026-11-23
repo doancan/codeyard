@@ -14,17 +14,53 @@ use crate::ui::{self, Palette, c, icon, text};
 
 /// Counting stops here: the label then says "999+".
 const MAX_COUNT: usize = 999;
+const REFRESH_PAUSE: std::time::Duration = std::time::Duration::from_millis(150);
+/// Recount a long history in short UI turns, with a chance to cancel between them.
+const COUNT_ROWS_PER_TURN: usize = 64;
 
 pub(super) struct FindState {
     field: Entity<TextField>,
     /// `None` while the query is empty (or, defensively, if the escaped query does not compile).
     regex: Option<RegexSearch>,
+    query: String,
     current: Option<Match>,
     /// Matches in the whole buffer when the query last changed (capped at `MAX_COUNT + 1`).
     total: usize,
     /// A scan of a long history waits for the typing to pause; typing again drops it.
     pending: Option<gpui::Task<()>>,
+    refresh_pending: Option<gpui::Task<()>>,
+    refresh_dirty: bool,
+    generation: u64,
     _sub: Subscription,
+}
+
+struct CountScan {
+    regex: RegexSearch,
+    next: GridPoint,
+    bottom: Line,
+    overlap: usize,
+    total: usize,
+}
+
+impl CountScan {
+    fn advance<T>(&mut self, term: &alacritty_terminal::Term<T>) -> bool {
+        let last = Line(self.next.line.0 + COUNT_ROWS_PER_TURN as i32 - 1).min(self.bottom);
+        // A literal match can straddle a wrapped row at the boundary. Look ahead far
+        // enough for that query, counting it only in the batch where it starts.
+        let end = (last + self.overlap).min(self.bottom);
+        let end = GridPoint::new(end, term.last_column());
+        for found in
+            RegexIter::new(self.next, end, Direction::Right, term, &mut self.regex).take_while(|m| m.start().line <= last).take(MAX_COUNT + 1 - self.total)
+        {
+            self.total += 1;
+            // Continue after the last consumed match, even if it crossed the batch
+            // boundary. Restarting at Column(0) would count overlapping matches twice.
+            let end = *found.end();
+            self.next = if end.column < term.last_column() { GridPoint::new(end.line, end.column + 1) } else { GridPoint::new(end.line + 1, Column(0)) };
+        }
+        self.next = self.next.max(GridPoint::new(last + 1, Column(0)));
+        self.total > MAX_COUNT || self.next.line > self.bottom
+    }
 }
 
 impl FindState {
@@ -67,7 +103,18 @@ impl TerminalView {
                     FieldEvent::Submit => this.find_step(Direction::Left, cx),
                     FieldEvent::Escape => this.close_find(window, cx),
                 });
-                self.find = Some(FindState { field: field.clone(), regex: None, current: None, total: 0, pending: None, _sub: sub });
+                self.find = Some(FindState {
+                    field: field.clone(),
+                    regex: None,
+                    query: String::new(),
+                    current: None,
+                    total: 0,
+                    pending: None,
+                    refresh_pending: None,
+                    refresh_dirty: false,
+                    generation: 0,
+                    _sub: sub,
+                });
                 field
             }
         };
@@ -97,11 +144,65 @@ impl TerminalView {
         }
     }
 
-    /// The next step starts again from the bottom (after new output; the tint of the other matches is recomputed per frame).
+    /// Keep a surviving selected result at its new grid position after output; recount
+    /// later without selecting another result or moving the user's scroll position.
     pub(super) fn forget_find_match(&mut self) {
         if let Some(find) = &mut self.find {
-            find.current = None;
+            if find.current.is_some() {
+                find.current = self.term.selection.as_ref().and_then(|s| s.to_range(&self.term)).and_then(|range| {
+                    self.term
+                        .regex_search_right(find.regex.as_mut()?, range.start, range.end)
+                        .filter(|found| *found.start() == range.start && *found.end() == range.end)
+                });
+            }
+            find.generation = find.generation.wrapping_add(1);
+            find.refresh_pending = None;
+            find.refresh_dirty = find.regex.is_some();
         }
+    }
+
+    /// Schedule once per quiet output burst. Parsing only invalidates this work;
+    /// it never scans the scrollback for every PTY chunk.
+    pub(super) fn refresh_find_soon(&mut self, cx: &mut Context<Self>) {
+        let Some(find) = &mut self.find else { return };
+        if !find.refresh_dirty || find.pending.is_some() {
+            return;
+        }
+        find.refresh_dirty = false;
+        let Some(regex) = find.regex.clone() else { return };
+        let generation = find.generation;
+        let mut scan = CountScan {
+            regex,
+            next: GridPoint::new(self.term.topmost_line(), Column(0)),
+            bottom: self.term.bottommost_line(),
+            overlap: find.query.chars().count().saturating_mul(2).div_ceil(self.term.columns()).max(1),
+            total: 0,
+        };
+        find.refresh_pending = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(REFRESH_PAUSE).await;
+            loop {
+                let done = this
+                    .update(cx, |this, cx| {
+                        let Some(find) = &mut this.find else { return true };
+                        if find.generation != generation {
+                            return true;
+                        }
+                        if scan.advance(&this.term) {
+                            find.total = scan.total;
+                            find.refresh_pending = None;
+                            cx.notify();
+                            true
+                        } else {
+                            false
+                        }
+                    })
+                    .unwrap_or(true);
+                if done {
+                    break;
+                }
+                cx.background_executor().timer(std::time::Duration::from_millis(1)).await;
+            }
+        }));
     }
 
     /// The find field has focus: keys typed there are not for the shell.
@@ -113,6 +214,11 @@ impl TerminalView {
     fn find_query_changed_soon(&mut self, cx: &mut Context<Self>) {
         const PAUSE: std::time::Duration = std::time::Duration::from_millis(150);
         const LONG: usize = 5_000;
+        if let Some(find) = &mut self.find {
+            find.generation = find.generation.wrapping_add(1);
+            find.refresh_pending = None;
+            find.refresh_dirty = false;
+        }
         if cfg!(test) || self.term.grid().history_size() < LONG {
             if let Some(find) = &mut self.find {
                 find.pending = None;
@@ -139,6 +245,10 @@ impl TerminalView {
         let Some(find) = &mut self.find else { return };
         let query = find.field.read(cx).text().to_string();
         find.regex = compile(&query);
+        find.query = query;
+        find.generation = find.generation.wrapping_add(1);
+        find.refresh_pending = None;
+        find.refresh_dirty = false;
         find.current = None;
         find.total = 0;
         if let Some(regex) = &mut find.regex {
@@ -185,6 +295,7 @@ impl TerminalView {
         let button = |id: &'static str, glyph: &'static str, tip: &'static str| {
             div()
                 .id(id)
+                .debug_selector(move || id.into())
                 .size(px(22.))
                 .flex()
                 .flex_none()
@@ -197,70 +308,72 @@ impl TerminalView {
                 .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.into())).into())
         };
         Some(
-            div()
-                .absolute()
-                .top(px(theme::SPACE[2]))
-                .right(px(theme::SPACE[8]))
-                .w(px(320.))
-                .flex()
-                .items_center()
-                .gap(px(theme::SPACE[2]))
-                .p(px(theme::SPACE[2]))
-                .bg(c(p.surface_raised))
-                .border_1()
-                .border_color(c(p.border))
-                .rounded(px(theme::radius::MD))
-                .shadow_md()
-                .font_family(ui::UI_FONT)
-                .text_size(px(text::XS.0))
-                .child({
-                    let handle = find.field.focus_handle(cx);
-                    let press = handle.clone();
-                    ui::input_box("term-find-box", p, p.bg, focused)
-                        .flex_1()
-                        .min_w_0()
-                        .when(none, |d| d.border_color(c(p.danger)))
-                        .child(div().flex_1().min_w_0().child(find.field.clone()))
-                        .relative()
-                        .child(crate::a11y_controls::control(
-                            crate::a11y_controls::Control::new(
-                                crate::i18n::t("Find in Terminal"),
-                                "field",
-                                accesskit::Role::SearchInput,
-                                crate::i18n::t("Find"),
-                            )
-                            .value(find.field.read(cx).text().to_string())
-                            .focus(handle)
-                            .on_entity(cx.entity().downgrade(), move |_: &mut Self, w, _| w.focus(&press)),
-                        ))
-                })
-                .child(
-                    div()
-                        .flex_none()
-                        .min_w(px(64.))
-                        .text_color(c(if none { p.danger } else { p.text_muted }))
-                        .relative()
-                        .child(crate::a11y_controls::said(crate::i18n::t("Find in Terminal"), "count", accesskit::Role::Status, label.to_string()))
-                        .child(label),
-                )
-                .child(crate::a11y_controls::press_on(
-                    button("term-find-prev", "arrow-up", crate::i18n::t("Previous Match")),
-                    crate::a11y_controls::Control::button(crate::i18n::t("Find in Terminal"), "prev", crate::i18n::t("Previous Match"), |_, _| {}),
-                    cx,
-                    |this, _, cx| this.find_step(Direction::Left, cx),
-                ))
-                .child(crate::a11y_controls::press_on(
-                    button("term-find-next", "arrow-down", crate::i18n::t("Next Match")),
-                    crate::a11y_controls::Control::button(crate::i18n::t("Find in Terminal"), "next", crate::i18n::t("Next Match"), |_, _| {}),
-                    cx,
-                    |this, _, cx| this.find_step(Direction::Right, cx),
-                ))
-                .child(crate::a11y_controls::press_on(
-                    button("term-find-close", "x", crate::i18n::t("Close")),
-                    crate::a11y_controls::Control::button(crate::i18n::t("Find in Terminal"), "close", crate::i18n::t("Close"), |_, _| {}),
-                    cx,
-                    |this, window, cx| this.close_find(window, cx),
-                )),
+            div().absolute().top(px(theme::SPACE[2])).left(px(theme::SPACE[2])).right(px(theme::SPACE[2])).flex().justify_end().child(
+                div()
+                    .id("term-find-bar")
+                    .debug_selector(|| "term-find-bar".into())
+                    .w(px(320.))
+                    .max_w_full()
+                    .flex()
+                    .items_center()
+                    .gap(px(theme::SPACE[2]))
+                    .p(px(theme::SPACE[2]))
+                    .bg(c(p.surface_raised))
+                    .border_1()
+                    .border_color(c(p.border))
+                    .rounded(px(theme::radius::MD))
+                    .shadow_md()
+                    .font_family(ui::UI_FONT)
+                    .text_size(px(text::XS.0))
+                    .child({
+                        let handle = find.field.focus_handle(cx);
+                        let press = handle.clone();
+                        ui::input_box("term-find-box", p, p.bg, focused)
+                            .flex_1()
+                            .min_w_0()
+                            .when(none, |d| d.border_color(c(p.danger)))
+                            .child(div().flex_1().min_w_0().child(find.field.clone()))
+                            .relative()
+                            .child(crate::a11y_controls::control(
+                                crate::a11y_controls::Control::new(
+                                    crate::i18n::t("Find in Terminal"),
+                                    "field",
+                                    accesskit::Role::SearchInput,
+                                    crate::i18n::t("Find"),
+                                )
+                                .value(find.field.read(cx).text().to_string())
+                                .focus(handle)
+                                .on_entity(cx.entity().downgrade(), move |_: &mut Self, w, _| w.focus(&press)),
+                            ))
+                    })
+                    .child(
+                        div()
+                            .flex_none()
+                            .min_w(px(64.))
+                            .text_color(c(if none { p.danger } else { p.text_muted }))
+                            .relative()
+                            .child(crate::a11y_controls::said(crate::i18n::t("Find in Terminal"), "count", accesskit::Role::Status, label.to_string()))
+                            .child(label),
+                    )
+                    .child(crate::a11y_controls::press_on(
+                        button("term-find-prev", "arrow-up", crate::i18n::t("Previous Match")),
+                        crate::a11y_controls::Control::button(crate::i18n::t("Find in Terminal"), "prev", crate::i18n::t("Previous Match"), |_, _| {}),
+                        cx,
+                        |this, _, cx| this.find_step(Direction::Left, cx),
+                    ))
+                    .child(crate::a11y_controls::press_on(
+                        button("term-find-next", "arrow-down", crate::i18n::t("Next Match")),
+                        crate::a11y_controls::Control::button(crate::i18n::t("Find in Terminal"), "next", crate::i18n::t("Next Match"), |_, _| {}),
+                        cx,
+                        |this, _, cx| this.find_step(Direction::Right, cx),
+                    ))
+                    .child(crate::a11y_controls::press_on(
+                        button("term-find-close", "x", crate::i18n::t("Close")),
+                        crate::a11y_controls::Control::button(crate::i18n::t("Find in Terminal"), "close", crate::i18n::t("Close"), |_, _| {}),
+                        cx,
+                        |this, window, cx| this.close_find(window, cx),
+                    )),
+            ),
         )
     }
 
@@ -327,8 +440,14 @@ pub(super) fn visible_matches<T>(term: &alacritty_terminal::Term<T>, regex: &mut
         return Vec::new();
     }
     let (start, end) = (GridPoint::new(first, Column(0)), GridPoint::new(last, term.last_column()));
-    RegexIter::new(start, end, Direction::Right, term, regex).take(500).collect()
+    // A non-empty literal consumes at least one visible cell, so this is bounded
+    // by the viewport. An arbitrary match cap leaves the lower rows unhighlighted.
+    RegexIter::new(start, end, Direction::Right, term, regex).collect()
 }
+
+#[cfg(test)]
+#[path = "terminal_find_tests.rs"]
+mod live_tests;
 
 #[cfg(test)]
 mod tests {

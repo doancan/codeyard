@@ -76,6 +76,32 @@ fn rgb(r: Rgb) -> u32 {
     (r.r as u32) << 16 | (r.g as u32) << 8 | r.b as u32
 }
 
+/// OSC 4/10/11/12 queries use the same palette (and program overrides) as the renderer.
+/// Without these replies a TUI cannot discover a light terminal and may choose pale text.
+pub(super) fn queried(p: &Palette, index: usize, overrides: &alacritty_terminal::term::color::Colors) -> Option<Rgb> {
+    let color = match index {
+        0..=255 => Color::Indexed(index as u8),
+        256 => Color::Named(NamedColor::Foreground),
+        257 => Color::Named(NamedColor::Background),
+        258 => Color::Named(NamedColor::Cursor),
+        _ => return None,
+    };
+    let c = resolve(p, color, overrides);
+    Some(Rgb { r: (c >> 16) as u8, g: (c >> 8) as u8, b: c as u8 })
+}
+
+/// Keep ANSI, indexed and true-colour text readable on its final cell background,
+/// including selection, search matches, inverse video and SGR 2 (faint).
+/// Background colours and deliberately identical foreground/background pairs are preserved.
+pub(super) fn readable(fg: u32, bg: u32, dim: bool) -> u32 {
+    if fg == bg {
+        return fg;
+    }
+    let candidate = if dim { mix(fg, bg, 0.30) } else { fg };
+    let toward = crate::ui::readable_on(bg);
+    crate::ui::ensure_contrast(candidate, toward, &[bg], 4.5)
+}
+
 pub(super) fn resolve(p: &Palette, color: Color, overrides: &alacritty_terminal::term::color::Colors) -> u32 {
     match color {
         Color::Spec(r) => rgb(r),
