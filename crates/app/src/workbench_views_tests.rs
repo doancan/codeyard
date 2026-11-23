@@ -423,7 +423,11 @@ fn a_workbench_is_released_after_its_detached_windows_and_then_its_window_close(
     let handle = wb.read_with(vcx, |wb, _| wb.chrome.detached[0].window);
     let mut detached = gpui::VisualTestContext::from_window(handle.into(), vcx);
     assert!(detached.simulate_close(), "the terminal's window closes");
+    // The test platform only asks whether closing is allowed; the OS normally removes the accepted window.
+    // Remove it before rendering again so the terminal is not resized by both its old window and the panel.
+    detached.update(|window, _| window.remove_window());
     vcx.run_until_parked();
+    assert_eq!(vcx.cx.windows().len(), 1, "only the main window remains");
     let weak = wb.downgrade();
     drop(wb);
     vcx.update(|window, _| window.remove_window());
