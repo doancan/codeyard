@@ -520,6 +520,32 @@ mod resize_tests {
     use super::*;
     use gpui::{Modifiers, TestAppContext, VisualTestContext, point};
 
+    /// Compare rendered bounds rather than only the tokens: a stray padding or minimum
+    /// height must not put the Explorer rule below the neighbouring editor tabs again.
+    #[gpui::test]
+    fn primary_pane_headers_share_the_same_grid(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        let project = crate::qa_workbench_tests::project("header-alignment");
+        crate::qa_workbench_tests::open(&wb, &project, cx);
+        crate::qa_workbench_tests::open_in(&wb, &project.join("src/main.rs"), cx);
+        wb.update(cx, |wb, cx| {
+            wb.chrome.panel_open = true;
+            wb.chrome.bottom = Bottom::Output;
+            cx.notify();
+        });
+        for width in [800., 1280., 1600.] {
+            cx.simulate_resize(gpui::size(px(width), px(900.)));
+            cx.run_until_parked();
+            let explorer = cx.debug_bounds("explorer-header").expect("Explorer header");
+            let tabs = cx.debug_bounds("editor-tab-bar").expect("editor tabs");
+            let panel = cx.debug_bounds("panel-header").expect("panel toolbar");
+            assert_eq!(explorer.size.height, px(40.), "primary header design contract");
+            assert_eq!(explorer.top(), tabs.top(), "headers start on the same row at {width}");
+            assert_eq!(explorer.bottom(), tabs.bottom(), "separators meet at {width}");
+            assert_eq!(panel.size.height, tabs.size.height, "panel toolbar shares the header height");
+        }
+    }
+
     #[gpui::test]
     fn status_bar_keeps_resource_control_visible_with_long_content(cx: &mut TestAppContext) {
         let (wb, cx) = crate::qa_workbench_tests::setup(cx);
@@ -534,7 +560,9 @@ mod resize_tests {
             cx.simulate_resize(gpui::size(px(width), px(800.)));
             cx.run_until_parked();
             let bar = cx.debug_bounds("status-bar").unwrap();
-            assert_eq!(bar.size.height, px(28.));
+            assert_eq!(bar.size.height, px(layout::STATUSBAR_H));
+            let bell = cx.debug_bounds("sb-notifications").expect("notification control");
+            assert!(bar.contains(&bell.center()), "the notification control remains inside the status bar");
         }
     }
 

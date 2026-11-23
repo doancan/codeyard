@@ -42,31 +42,12 @@ it is out of date or a licence is not one `deny.toml` allows (plus BlueOak-1.0.0
 
 ## Icons
 
-`crates/app/assets/icons/*.svg` (79 files).
-
-Most are from [Lucide](https://lucide.dev) (ISC licence; the icons derived from Feather are MIT, Copyright (c)
-2013-present Cole Bemis). The upstream licence text is in `crates/app/assets/icons/LICENSE`, copied unchanged from
-the Lucide repository.
-
-I compared the path data of each file with the Lucide `main` branch:
-
-- 36 files have the same path data as the upstream icon of the same name.
-- 30 files have the same name upstream but different path data. They are Lucide icons that were edited, or an older
-  version of the icon. I did not check which.
-- 6 files have no icon of that name upstream: `alert`, `align-left`, `file-json`, `git-commit`, `history`,
-  `sliders`. Lucide has renamed icons of this kind (for example `triangle-alert`, `text-align-start`,
-  `file-braces`), so they are probably old or edited Lucide icons. This was not confirmed.
-- 3 files, `step-into`, `step-out` and `step-over`, have no upstream counterpart and look like Lucide-style
-  drawings made for this project.
-- 4 files are not Lucide: `codeyard-mark.svg` (the Codeyard logo) and the filled icons `file-solid.svg`,
-  `folder-solid.svg`, `folder-open-solid.svg`. They were drawn for this project and fall under the project licence,
-  not under `icons/LICENSE`.
-
-- `file-archive.svg`, `file-config.svg`, `file-data.svg` and `file-lock.svg` were drawn for this project in the same style as the
-  Lucide file icons (same page outline and stroke); they fall under the project licence, not under `icons/LICENSE`.
-
-36 + 30 + 6 + 3 + 4 = 79. The icon files use a stroke width of 1.75, not Lucide's default of 2, so every stroked
-icon has been modified at least in that attribute.
+The 112 interface and file glyphs in `crates/app/assets/icons/*.svg` are adapted from
+[Tabler Icons](https://github.com/tabler/tabler-icons), MIT, Copyright (c) 2020–2026 Paweł Kuna.
+Source revision: `85e870dbe8680c2d6deefd062122d30ef1544a41`. Outline glyphs use a normalized 1.65 px stroke on a 24 px grid.
+The upstream licence is preserved in `crates/app/assets/TABLER-LICENSE`.
+`codeyard-mark.svg` is the project's own logo and remains under the project licence.
+The previous Lucide licence remains in `crates/app/assets/icons/LICENSE` for provenance.
 
 ## Themes
 

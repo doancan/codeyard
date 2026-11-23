@@ -51,6 +51,7 @@ pub enum SearchEvent {
 enum Status {
     Idle,
     Searching,
+    Stopped,
     Done { files: u32, matches: u32, truncated: bool },
     Failed(SharedString),
 }
@@ -126,7 +127,7 @@ impl SearchPanel {
                     this.remember_query(cx);
                     this.start(cx)
                 }
-                FieldEvent::Escape => this.clear_query(cx),
+                FieldEvent::Escape => this.escape_query(cx),
             }));
         }
         // --- structural ---
@@ -134,7 +135,7 @@ impl SearchPanel {
         subs.push(cx.subscribe(&st.pattern, |this, _, ev: &FieldEvent, cx| match ev {
             FieldEvent::Changed => this.schedule(cx),
             FieldEvent::Submit => this.start(cx),
-            FieldEvent::Escape => this.clear_query(cx),
+            FieldEvent::Escape => this.escape_query(cx),
         }));
         subs.push(cx.subscribe(&replace, |this, _, ev: &FieldEvent, cx| {
             if matches!(ev, FieldEvent::Submit) {
@@ -406,7 +407,24 @@ impl SearchPanel {
         self.active_query().clone().update(cx, |q, cx| q.set_text("", cx));
     }
 
+    fn escape_query(&mut self, cx: &mut Context<Self>) {
+        if self.is_searching() {
+            self.cancel_search(cx);
+        } else {
+            self.clear_query(cx);
+        }
+    }
+
+    /// Stop the work while retaining the query, filters and results already received.
+    fn cancel_search(&mut self, cx: &mut Context<Self>) {
+        self.stop();
+        self.status = Status::Stopped;
+        cx.notify();
+    }
+
     fn stop(&mut self) {
+        // Invalidate buffer collection too, including after a workspace/host change.
+        self.st.generation = self.st.generation.wrapping_add(1);
         self.cancel_structural();
         if let Some((ids, _task)) = self.running.take() {
             for id in ids {
@@ -641,9 +659,8 @@ impl SearchPanel {
         self.results.iter().map(|f| (f.path.clone(), f.matches.iter().map(|m| m.line).collect())).collect()
     }
 
-    #[cfg(test)]
     pub fn is_searching(&self) -> bool {
-        self.running.is_some() || self.debounce.is_some() && matches!(self.status, Status::Idle)
+        self.running.is_some() || self.debounce.is_some() || matches!(self.status, Status::Searching)
     }
 
     #[cfg(test)]
@@ -827,6 +844,21 @@ impl Render for SearchPanel {
                                 .child(s)
                                 .child(self.probe(AccessFrame::Status)),
                         )
+                        .when(self.is_searching(), |d| {
+                            d.child(
+                                ui::icon_button("s-stop", "square", crate::i18n::t("Stop"), &p)
+                                    .debug_selector(|| "s-stop".into())
+                                    .relative()
+                                    .child(crate::a11y_controls::button_on(
+                                        cx,
+                                        crate::i18n::t("Search"),
+                                        "s-stop".into(),
+                                        crate::i18n::t("Stop"),
+                                        |this, _, cx| this.cancel_search(cx),
+                                    ))
+                                    .on_click(cx.listener(|this, _, _, cx| this.cancel_search(cx))),
+                            )
+                        })
                         .when(any, |d| {
                             d.child(
                                 ui::icon_button("s-prev", "arrow-up", crate::i18n::t("Previous result (⇧F4)"), &p)
@@ -1095,6 +1127,66 @@ pub(crate) fn trim_preview(preview: &str, ranges: &[(u32, u32)]) -> (String, Vec
     let shift = |at: usize| at + "…".len() - start;
     let ranges = ranges.into_iter().filter(|r| r.start >= start).map(|r| shift(r.start)..shift(r.end)).collect();
     (text, ranges)
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+
+    #[gpui::test]
+    fn stop_keeps_the_query_filters_and_partial_results(cx: &mut gpui::TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        let (panel, cx) = cx.add_window_view(|_, cx| SearchPanel::new(Arc::new(host::local()), cx));
+        panel.update_in(cx, |s, window, cx| {
+            s.query.update(cx, |q, cx| q.set_text("needle", cx));
+            s.include.update(cx, |q, cx| q.set_text("*.rs", cx));
+            s.status = Status::Searching;
+            s.results.push(FileResult {
+                path: "src/main.rs".into(),
+                matches: vec![proto::LineMatch { line: 1, preview: "needle".into(), ranges: vec![(0, 6)], column: 0 }],
+                collapsed: false,
+            });
+            s.rebuild_rows();
+            window.focus(&s.query.focus_handle(cx));
+            cx.notify();
+        });
+        cx.run_until_parked();
+        let stop = cx.debug_bounds("s-stop").expect("stop action is visible during a search");
+        cx.simulate_click(stop.center(), gpui::Modifiers::none());
+        cx.executor().advance_clock(Duration::from_secs(1));
+        cx.run_until_parked();
+        panel.read_with(cx, |s, cx| {
+            assert_eq!(s.query.read(cx).text(), "needle");
+            assert_eq!(s.include.read(cx).text(), "*.rs");
+            assert_eq!(s.result_summary(), [("src/main.rs".into(), vec![1])]);
+            assert!(!s.is_searching());
+            assert!(matches!(s.status, Status::Stopped));
+            assert_eq!(s.status_line(cx).unwrap().0, "Stopped.");
+        });
+    }
+
+    #[gpui::test]
+    fn escape_stops_before_clearing_and_rejects_late_structural_buffers(cx: &mut gpui::TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        let (panel, cx) = cx.add_window_view(|_, cx| SearchPanel::new(Arc::new(host::local()), cx));
+        panel.update_in(cx, |s, window, cx| {
+            s.query.update(cx, |q, cx| q.set_text("needle", cx));
+            s.status = Status::Searching;
+            s.st.generation = 7;
+            window.focus(&s.query.focus_handle(cx));
+        });
+        cx.simulate_keystrokes("escape");
+        panel.update(cx, |s, cx| {
+            assert_eq!(s.query.read(cx).text(), "needle");
+            assert!(matches!(s.status, Status::Stopped));
+            s.st.on = true;
+            s.run_structural(7, Default::default(), cx);
+            assert!(!s.is_searching(), "late buffer collection cannot restart a stopped search");
+            s.st.on = false;
+        });
+        cx.simulate_keystrokes("escape");
+        assert_eq!(panel.read_with(cx, |s, cx| s.query.read(cx).text().to_string()), "");
+    }
 }
 
 #[cfg(test)]

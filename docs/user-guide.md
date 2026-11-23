@@ -324,7 +324,7 @@ dropped connection reconnects to the shells that are still running on the server
 Terminal line editing works as in Terminal.app: ⌘← / ⌘→ jump to the start / end of the line, ⌥← / ⌥→ move by word,
 ⌘⌫ deletes to the start of the line, ⌘⌦ to its end and ⌥⌦ the next word (these are the shell's own keys, Ctrl+A, Ctrl+E,
 Esc b…, so they work in bash, zsh and fish; full-screen programs such as vim get the plain keys). ⌘F finds in the output and
-the scrollback: every match is tinted, ↵ steps to the previous one, ⌘G / ⇧⌘G to the next / previous (F3 / Shift+F3 on Linux and
+the scrollback: every match is tinted, the count follows new output without moving the selected result, ↵ steps to the previous one, ⌘G / ⇧⌘G to the next / previous (F3 / Shift+F3 on Linux and
 Windows) and Esc closes. ⇧PageUp / ⇧PageDown scroll a page, ⌘Home / ⌘End (Ctrl+Shift+Home / End) jump to the top or bottom.
 Right-click for copy, paste, select all, find and clear; the Terminal menu has them too. Find with several cursors: copy gives one
 line per cursor, and pasting the same number of lines puts one on each cursor.
@@ -390,6 +390,9 @@ by itself and works the same over SSH.
 **History.** ↑ and ↓ in the search field step through the searches you ran with ↵ (the last 30). Each one brings back
 the text, the Match case / Whole word / Regular expression / Preserve case options, the include and exclude filters and the
 scope it was run with, not just the text.
+
+While a search runs, **Stop** or Escape stops the work and keeps the query, filters and results already received.
+Press Enter to run it again. Escape when no search is running clears the query.
 
 ### Search Editors and replacement review
 
@@ -527,14 +530,18 @@ Color Theme, File Icon Theme, Keyboard Shortcuts and the Command Palette.
 **Settings** (⌘, or "Preferences: Open Settings") is a page with categories, search, switches,
 option buttons and number fields; every change is written to `settings.jsonc` (comments stay)
 and applies at once. A dot marks values that differ from the default, "Reset" removes them, and the **Modified** view lists them all.
+Text and number fields apply with Enter. Unsubmitted drafts survive unrelated settings changes; a hint marks them until applied or reset.
+Search words can appear in any order across a setting's name and description: `terminal font` finds terminal font settings.
+Use `@modified`, optionally followed by search words, to find changed settings across categories.
 "Preferences: Open Settings (JSON)" opens the file itself. The Uppercase / Lowercase / Title Case commands follow `editor.caseLocale`
 (`auto`: Turkish `i`/`İ`, `ı`/`I` rules when the text contains ı İ ş ğ).
 "Help: Keyboard Shortcuts Reference" lists every command with its keys (searchable, click to run).
 
 Make it yours:
 
-- **Colors:** pick one of 23 themes (the plain defaults Codeyard Dark and Codeyard Light, Codeyard One, Studio Dark, Midnight, Graphite, Ember, Fjord, Quarry,
-  Dracula, One Dark, Nord, Solarized Dark/Light, GitHub Dark/Light, Catppuccin Mocha, Tokyo Night, Gruvbox Dark, Daylight, Paper, high contrast…),
+- **Colors:** pick one of 31 themes (the plain defaults Codeyard Dark and Codeyard Light, Codeyard One, Studio Dark, Midnight, Graphite, Ember, Fjord, Quarry,
+  Dracula, One Dark, Nord, Solarized Dark/Light, GitHub Dark/Light, Catppuccin Mocha, Tokyo Night, Gruvbox Dark, Daylight, Paper, Basalt, Porcelain,
+  Canopy, Meadow, Deepwater, Shore, Mulberry, Vellum, high contrast…),
   change single colors with `"workbench.colorCustomizations": { "accent": "#ff8800",
   "[Quarry]": { "syntax-string": "#a6e22e" } }` (roles are the names in the theme files; an
   entry in `[brackets]` applies to that theme only), or "Theme: Save Current Colors as User
@@ -975,6 +982,7 @@ Built in: Codeyard Dark and Codeyard Light (the defaults, following the system a
 the icon), Studio Dark, Midnight,
 Graphite, Ember, Fjord, Quarry, Dracula, One Dark, Nord, Solarized Dark, Solarized Light, GitHub Dark, GitHub Light,
 Catppuccin Mocha (pastel mauve), Tokyo Night (indigo and blue), Gruvbox Dark (warm charcoal and amber), Daylight, Paper,
+Basalt, Porcelain (mineral and sage), Canopy, Meadow (forest and olive), Deepwater, Shore (slate and cyan), Mulberry, Vellum (plum and warm paper),
 High Contrast Dark and High Contrast Light. Every built-in theme passes WCAG AA for all text and UI pairs
 (`cargo test -p theme`).
 
@@ -1142,7 +1150,8 @@ permissions in plain words, who publishes it and how often it was downloaded, up
 *Install* opens the same consent sheet as above.
 
 Codeyard asks a registry nothing until you install from it or open the Market. After that it fetches the registry's
-whole list at most once a day, the same file for everyone, so the registry never learns what you have installed.
+whole list at most once a day, unless you explicitly refresh it. The same file is used for everyone, so the registry never learns what you have installed.
+The Extensions toolbar's Refresh button refreshes the current tab. In the Market it retries failed registries and checks for new releases, keeping your search.
 Opening an extension's page in the Market fetches that page once.
 
 **Updates.** Extensions from a registry stay current by themselves (`extensions.autoUpdate`, in your own settings):

@@ -48,6 +48,7 @@ Source: "..\..\LICENSE-APACHE"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "..\..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "..\..\THIRD_PARTY_CRATES.md"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "..\..\crates\app\assets\icons\LICENSE"; DestDir: "{app}\licenses"; DestName: "icons-LICENSE"; Flags: ignoreversion
+Source: "..\..\crates\app\assets\TABLER-LICENSE"; DestDir: "{app}\licenses"; DestName: "tabler-icons-LICENSE"; Flags: ignoreversion
 Source: "..\..\crates\syntax\grammars\dockerfile\LICENSE"; DestDir: "{app}\licenses"; DestName: "dockerfile-grammar-LICENSE"; Flags: ignoreversion
 Source: "..\..\vendor\gpui\LICENSE-APACHE"; DestDir: "{app}\licenses"; DestName: "gpui-LICENSE-APACHE"; Flags: ignoreversion
 Source: "..\..\vendor\xattr\LICENSE-MIT"; DestDir: "{app}\licenses"; DestName: "xattr-LICENSE-MIT"; Flags: ignoreversion

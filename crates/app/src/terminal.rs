@@ -435,6 +435,7 @@ impl TerminalView {
         let left = deadline.checked_duration_since(now);
         if left.is_none() {
             self.parser.stop_sync(&mut self.term);
+            self.forget_find_match();
         }
         left
     }
@@ -469,14 +470,19 @@ impl TerminalView {
         }
         let events: Vec<TermEvent> = std::mem::take(&mut *self.events.0.borrow_mut());
         for ev in events {
-            match ev.clone() {
+            match ev {
                 // The terminal is answering a query (like the cursor position): write it back to the shell.
                 TermEvent::PtyWrite(s) => self.write(s.into_bytes()),
+                TermEvent::ColorRequest(index, format) => {
+                    if let Some(rgb) = colors::queried(palette(cx), index, self.term.colors()) {
+                        self.write(format(rgb).into_bytes());
+                    }
+                }
                 TermEvent::Title(_) | TermEvent::ResetTitle if self.title_locked => {}
                 TermEvent::Title(t) => self.set_title(t.into(), cx),
                 TermEvent::ResetTitle => self.set_title("terminal".into(), cx),
                 // OSC 52: as the setting says; by default right after a copy in the program (terminal_mouse.rs).
-                TermEvent::ClipboardStore(..) => {
+                ev @ TermEvent::ClipboardStore(..) => {
                     let allowed = self.takes_clipboard_write(&cx.global::<crate::settings::Settings>().terminal_allow_clipboard_write);
                     if let Some(s) = clipboard_text(ev, allowed) {
                         cx.write_to_clipboard(ClipboardItem::new_string(s))
@@ -567,6 +573,7 @@ impl TerminalView {
         }
         self.size = TermSize { cols, rows };
         self.term.resize(self.size);
+        self.forget_find_match();
         if let Some(id) = self.pty {
             self.host.pty_resize(id, cols as u16, rows as u16);
         }
@@ -1000,6 +1007,7 @@ impl TerminalView {
     /// Clear scrollback and ask the shell to redraw the screen (Ctrl+L).
     pub fn clear_all(&mut self, cx: &mut Context<Self>) {
         self.term.grid_mut().clear_history();
+        self.forget_find_match();
         self.forget_marks();
         self.write(b"\x0c".to_vec());
         cx.notify();
@@ -1101,9 +1109,10 @@ impl Element for TerminalElement {
         let cols = ((bounds.size.width - px(PAD_X * 2.)) / cell_w).floor().max(2.) as usize;
         let rows = ((bounds.size.height - px(PAD_Y * 2.)) / line_h).floor().max(1.) as usize;
         let origin = grid_origin(bounds);
-        self.view.update(cx, |v, _| {
+        self.view.update(cx, |v, cx| {
             v.set_size(cols, rows);
             v.grid = (origin, cell_w);
+            v.refresh_find_soon(cx);
         });
 
         let p = self.palette;
@@ -1113,7 +1122,14 @@ impl Element for TerminalElement {
         let offset = content.display_offset as i32;
         let selection = content.selection;
         // Find bar open: every match on screen gets a tint (the current one is the selection).
-        let found = view.find.as_ref().and_then(|f| f.regex()).map(|mut regex| find::visible_matches(&view.term, &mut regex, offset, rows)).unwrap_or_default();
+        let mut found = view
+            .find
+            .as_ref()
+            .and_then(|f| f.regex())
+            .map(|mut regex| find::visible_matches(&view.term, &mut regex, offset, rows))
+            .unwrap_or_default()
+            .into_iter()
+            .peekable();
         let current = view.find.as_ref().and_then(|f| f.current());
         let (found_bg, current_bg) = (mix(p.bg, p.warning, 0.22), mix(p.bg, p.warning, 0.45));
         let mut frame = Frame {
@@ -1129,6 +1145,9 @@ impl Element for TerminalElement {
         // a full-screen program's frame has dozens of short runs per row.
         const RUN_ROOM: usize = 48;
         let cols_hint = cols;
+        // A screen normally contains only a handful of colour pairs. Resolve their contrast once
+        // per frame, rather than doing luminance calculations for every terminal cell.
+        let mut foregrounds = std::collections::HashMap::new();
         for cell in content.display_iter {
             let row = (cell.point.line.0 + offset) as usize;
             let col = cell.point.column.0;
@@ -1139,18 +1158,24 @@ impl Element for TerminalElement {
             if cell.flags.contains(Flags::INVERSE) {
                 std::mem::swap(&mut fg, &mut bg);
             }
-            if cell.flags.contains(Flags::DIM) {
-                fg = mix(fg, p.bg, 0.4);
+            // Both iterators are in grid order: advance once, instead of scanning
+            // every visible match for every cell (including selected cells).
+            while found.peek().is_some_and(|m| m.end() < &cell.point) {
+                found.next();
             }
-            if cell.flags.contains(Flags::HIDDEN) {
-                fg = bg;
-            }
+            let search_match = found.peek().is_some_and(|m| m.contains(&cell.point));
             if current.as_ref().is_some_and(|m| m.contains(&cell.point)) {
                 bg = current_bg;
             } else if selection.is_some_and(|s| s.contains(cell.point)) {
                 bg = p.selection;
-            } else if found.iter().any(|m| m.contains(&cell.point)) {
+            } else if search_match {
                 bg = found_bg;
+            }
+            if cell.flags.contains(Flags::HIDDEN) {
+                fg = bg;
+            } else {
+                let key = (fg, bg, cell.flags.contains(Flags::DIM));
+                fg = *foregrounds.entry(key).or_insert_with(|| colors::readable(key.0, key.1, key.2));
             }
             if bg != p.bg {
                 let end = if cell.flags.contains(Flags::WIDE_CHAR) { col + 2 } else { col + 1 };
@@ -1272,6 +1297,7 @@ impl Render for TerminalView {
         if scrollback != self.scrollback {
             self.scrollback = scrollback;
             self.term.set_options(Config { scrolling_history: scrollback, ..Config::default() });
+            self.forget_find_match();
         }
         let focused = self.focus_handle.is_focused(window);
         let find_focused = self.find_has_focus(window, cx);

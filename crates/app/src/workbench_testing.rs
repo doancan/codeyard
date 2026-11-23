@@ -876,6 +876,10 @@ impl Workbench {
         self.set_extensions_tab(tab, window, cx);
     }
 
+    pub fn refresh_extensions_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.refresh_extensions(window, cx);
+    }
+
     pub fn market_search_for_test(&mut self, text: &str, cx: &mut Context<Self>) {
         if let Some(f) = self.cfg.exts.market.search.clone() {
             f.update(cx, |f, cx| f.set_text(text, cx));

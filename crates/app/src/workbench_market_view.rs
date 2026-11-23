@@ -26,7 +26,7 @@ pub(super) fn market_status(m: &super::market_glue::MarketState) -> (String, boo
         (Some(q), 0) if !q.trim().is_empty() => crate::i18n::t("No extension matches the search.").to_string(),
         (_, n) => crate::i18n::tn("{} extension", "{} extensions", n, &[]),
     };
-    (text, false)
+    if m.errors.is_empty() { (text, false) } else { (format!("{text}\n{}", m.errors.join("\n")), true) }
 }
 
 impl Workbench {
@@ -98,7 +98,7 @@ impl Workbench {
                 .when(m.loading, |d| d.child(ui::spinner("market-loading", layout::ICON - 4., p.text_muted))),
         );
         if m.catalog.is_some() {
-            col = col.children(m.errors.iter().map(|e| line(e.clone(), p.danger))).children(stale.into_iter().map(|s| line(s, p.warning)));
+            col = col.children(stale.into_iter().map(|s| line(s, p.warning)));
         }
         let n = m.results.len();
         if n > 0 && m.catalog.is_some() {

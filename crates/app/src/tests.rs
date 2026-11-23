@@ -475,6 +475,10 @@ fn search_steps_through_results_remembers_queries_and_limits_to_a_folder(cx: &mu
     wb.update_in(cx, |wb, window, cx| {
         wb.search_panel().update(cx, |s, cx| s.limit_to("src/**", window, cx));
     });
+    // Field-change notifications may schedule a debounced refresh after the explicit run.
+    // Wait for that work too, rather than treating its presence as a completed search.
+    cx.run_until_parked();
+    cx.executor().advance_clock(std::time::Duration::from_millis(250));
     wait_for(cx, "klasör araması", |cx| search.read_with(cx, |s, _| !s.is_searching() && s.summary_for_test().is_some()));
     assert_eq!(search.read_with(cx, |s, cx| s.include_text(cx)), "src/**");
     let files: Vec<String> = search.read_with(cx, |s, _| s.result_summary().into_iter().map(|(p, _)| p).collect());

@@ -3,6 +3,58 @@ use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
 use super::*;
 use crate::ui::text;
 
+/// Real VT queries must reach the PTY response path. This is how a TUI discovers light mode;
+/// testing the palette alone would miss a dropped ColorRequest event.
+#[gpui::test]
+fn terminal_reports_its_active_theme_to_programs(cx: &mut gpui::TestAppContext) {
+    cx.update(|cx| cx.set_global(crate::settings::Settings::default()));
+    let view = cx.new(|cx| TerminalView::output_only(Arc::new(host::local()), "colour probe".into(), cx));
+    for theme in theme::themes::builtin() {
+        cx.update(|cx| cx.set_global(crate::ui::ActiveTheme(theme.palette)));
+        view.update(cx, |t, cx| {
+            t.starting = true;
+            t.pending_input.clear();
+            t.feed(b"\x1b]10;?\x07\x1b]11;?\x07\x1b]12;?\x07\x1b]4;2;?\x07");
+            t.drain_events(cx);
+            let replies = String::from_utf8(t.pending_input.clone()).unwrap();
+            let rgb = |c: u32| format!("rgb:{:04x}/{:04x}/{:04x}", ((c >> 16) & 255) * 257, ((c >> 8) & 255) * 257, (c & 255) * 257);
+            for (osc, color) in [("10", theme.palette.text), ("11", theme.palette.bg), ("12", theme.palette.accent)] {
+                assert!(replies.contains(&format!("]{osc};{}", rgb(color))), "{}: {osc} reply missing in {replies:?}", theme.id);
+            }
+            assert!(replies.contains("]4;2;rgb:"), "{}: indexed palette reply missing", theme.id);
+        });
+    }
+    view.update(cx, |t, cx| {
+        t.pending_input.clear();
+        t.feed(b"\x1b]11;#123456\x07\x1b]11;?\x07");
+        t.drain_events(cx);
+        assert!(String::from_utf8_lossy(&t.pending_input).contains("]11;rgb:1212/3434/5656"), "program background overrides are reported");
+    });
+}
+
+/// Pale true colour, xterm greys and ANSI faint text must remain readable in every theme,
+/// even when a selection or search match replaces the original background.
+#[test]
+fn terminal_text_has_aa_contrast_in_every_theme() {
+    let overrides = alacritty_terminal::term::color::Colors::default();
+    for theme in theme::themes::builtin() {
+        let p = theme.palette;
+        for bg in [p.bg, p.selection, mix(p.bg, p.warning, 0.45), 0x424242, 0xffffff, 0x000000] {
+            for fg in (0..=255).map(|i| resolve(&p, Color::Indexed(i), &overrides)).chain([0xcba6f7, 0xa6e3a1, 0x808080, p.text, p.text_muted]) {
+                for dim in [false, true] {
+                    let fixed = colors::readable(fg, bg, dim);
+                    if fg == bg {
+                        assert_eq!(fixed, fg, "deliberately hidden pairs stay hidden");
+                    } else {
+                        assert!(theme::themes::contrast(fixed, bg) >= 4.5, "{}: {fg:06x} on {bg:06x}, dim={dim} became {fixed:06x}", theme.id);
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(colors::readable(0x202630, 0xfdfdfe, false), 0x202630, "readable true colours are unchanged");
+}
+
 #[test]
 fn the_terminal_font_size_setting_sets_the_cell_size() {
     let (_, base) = metrics(text::CODE.0, LINE_HEIGHT);

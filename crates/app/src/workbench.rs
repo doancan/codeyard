@@ -1644,18 +1644,12 @@ impl Workbench {
                     ),
             )
             .child(
-                div()
-                    .h(px(layout::VIEW_HEADER_H))
-                    .flex_none()
-                    .flex()
-                    .items_center()
+                ui::pane_header(p)
+                    .debug_selector(|| "panel-header".into())
                     .gap(px(theme::SPACE[2]))
                     .px(px(theme::SPACE[4]))
                     .text_size(px(text::SM.0))
                     .line_height(px(text::SM.1))
-                    // The strip of tabs has a ground of its own: the tabs stand on it and the page starts under it, with no
-                    // line between them (the change of ground is the edge, and the tab in front is the page's colour).
-                    .bg(c(p.surface))
                     .overflow_hidden()
                     .children(self.panel_tabs(p, cx))
                     .children(self.ext_view_panel_tabs(p, cx))

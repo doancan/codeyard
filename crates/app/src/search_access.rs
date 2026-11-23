@@ -104,6 +104,7 @@ impl SearchPanel {
             Status::Idle if self.root.is_none() => Some((crate::i18n::t("Open a folder to search in it.").into(), false)),
             Status::Idle => None,
             Status::Searching => Some((crate::i18n::t("Searching…").into(), false)),
+            Status::Stopped => Some((crate::i18n::t("Stopped.").into(), false)),
             Status::Done { matches: 0, files, .. } => Some((crate::i18n::tn("No results in {} file.", "No results in {} files.", *files as usize, &[]), false)),
             Status::Done { files: _, matches, truncated } => {
                 let n = self.results.len();

@@ -97,15 +97,17 @@ impl Workbench {
                 // Hover: rounded background (same as the app's other icon buttons) + the icon brightens.
                 .child(
                     div()
-                        .size(px(layout::ACTIVITYBAR_W - 8.))
+                        .size(px(layout::ACTIVITYBAR_W - 12.))
                         .flex()
                         .items_center()
                         .justify_center()
                         .rounded(px(theme::radius::MD))
+                        .border_1()
+                        .border_color(ui::ca(p.border, if selected { 1. } else { 0. }))
                         // The selected view gets a permanent background (stronger than hover); hover only on unselected ones.
                         .when(selected, |d| d.bg(c(p.surface_active)))
                         .when(!selected, |d| d.group_hover(id, |s| s.bg(c(p.surface_hover))))
-                        .child(icon(name, layout::ICON_LG, if selected { p.text } else { p.text_muted }).group_hover(id, |s| s.text_color(c(p.text)))),
+                        .child(icon(name, layout::ICON_LG, if selected { p.accent } else { p.text_muted }).group_hover(id, |s| s.text_color(c(p.text)))),
                 )
                 .when(badge > 0, |d| {
                     d.child(
@@ -147,7 +149,7 @@ impl Workbench {
                 .cursor_pointer()
                 .child(
                     div()
-                        .size(px(layout::ACTIVITYBAR_W - 8.))
+                        .size(px(layout::ACTIVITYBAR_W - 12.))
                         .flex()
                         .items_center()
                         .justify_center()
@@ -256,17 +258,7 @@ impl Workbench {
 
 /// A side view's title row.
 pub(super) fn view_header(title: impl Into<SharedString>, p: &Palette) -> impl IntoElement {
-    div()
-        .h(px(layout::VIEW_HEADER_H + theme::SPACE[3]))
-        .pt(px(theme::SPACE[3]))
-        .flex_none()
-        .flex()
-        .items_center()
-        .px(px(theme::SPACE[6]))
-        .text_size(px(text::SM.0))
-        .font_weight(gpui::FontWeight::SEMIBOLD)
-        .text_color(c(p.text))
-        .child(title.into())
+    ui::pane_header(p).px(px(theme::SPACE[6])).text_size(px(text::SM.0)).font_weight(gpui::FontWeight::SEMIBOLD).text_color(c(p.text)).child(title.into())
 }
 
 impl Workbench {
@@ -552,12 +544,8 @@ impl Workbench {
             .flex_col()
             .size_full()
             .child(
-                div()
-                    .h(px(layout::VIEW_HEADER_H + theme::SPACE[3]))
-                    .pt(px(theme::SPACE[3]))
-                    .flex_none()
-                    .flex()
-                    .items_center()
+                ui::pane_header(p)
+                    .debug_selector(|| "explorer-header".into())
                     .gap(px(theme::SPACE[1]))
                     .pl(px(theme::SPACE[6]))
                     .pr(px(theme::SPACE[3]))
@@ -642,7 +630,7 @@ impl Workbench {
                 d.child(head("favorites", crate::i18n::t("★ Favorites"), Some(self.roots.favorites.len()), fav_open, cx))
                     .when(fav_open, |d| d.children(favorites))
             })
-            .child(head("folders", &root, None, tree_open, cx).font_weight(gpui::FontWeight::BOLD).text_color(c(p.text)))
+            .child(head("folders", &root, None, tree_open, cx).border_t_0().font_weight(gpui::FontWeight::BOLD).text_color(c(p.text)))
             .when(tree_open, |d| {
                 d.child(div().relative().flex_1().min_h(px(80.)).child(self.roots.primary.clone()).child(a11y::landmark(a11y::Landmark::Explorer, cx)))
             })

@@ -698,11 +698,7 @@ impl Render for ScmPanel {
             self.refresh_worktrees(cx);
         }
         let p = *palette(cx);
-        let header = div()
-            .h(px(layout::VIEW_HEADER_H))
-            .flex_none()
-            .flex()
-            .items_center()
+        let header = ui::pane_header(&p)
             .px(px(theme::SPACE[6]))
             .text_size(px(text::SM.0))
             .font_weight(gpui::FontWeight::SEMIBOLD)

@@ -6,6 +6,33 @@ fn snapshot(wb: &Entity<Workbench>, cx: &mut VisualTestContext) -> Snapshot {
     wb.update_in(cx, |wb, window, cx| wb.a11y_snapshot(window, cx))
 }
 
+/// A failed registry remains discoverable to assistive technology without hiding healthy results.
+#[gpui::test]
+fn partial_market_errors_are_announced_with_the_available_results(cx: &mut TestAppContext) {
+    let root = dir("a11y-partial-market");
+    let now = crate::ext_registry::now();
+    let (healthy, _) = registry(&root, "a11y-healthy", now);
+    let (unavailable, _) = registry(&root, "a11y-unavailable", now);
+    let cfg = root.join("cfg");
+    std::fs::write(cfg.join("settings.jsonc"), serde_json::json!({ "extensions.registries": [healthy.setting(), unavailable.setting()] }).to_string()).unwrap();
+    std::fs::rename(&unavailable.dir, root.join("temporarily-offline")).unwrap();
+    let (wb, cx) = setup(cx, &cfg);
+    open_market(&wb, cx);
+    let snap = snapshot(&wb, cx);
+    let view = snap.exts.as_ref().expect("Extensions view");
+    assert_eq!(view.list.rows.len(), 3, "healthy registry results remain usable");
+    assert!(
+        view.error && view.status.contains("3 extensions") && view.status.contains("a11y-unavailable"),
+        "the status retains count and failure: {}",
+        view.status
+    );
+    let tree = accesskit_consumer::Tree::new(snap.to_tree(), true);
+    let state = tree.state();
+    let alert = find(state.root(), &|n| n.role() == Role::Alert && n.label().is_some_and(|s| s.contains("a11y-unavailable")))
+        .expect("the registry failure is announced");
+    assert_eq!(alert.live(), Live::Assertive);
+}
+
 /// The first node under `node` (itself included) that `pred` accepts.
 fn find<'a>(node: accesskit_consumer::NodeRef<'a>, pred: &dyn Fn(&accesskit_consumer::NodeRef<'a>) -> bool) -> Option<accesskit_consumer::NodeRef<'a>> {
     if pred(&node) {

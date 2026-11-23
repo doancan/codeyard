@@ -19,7 +19,37 @@ use crate::ui::{c, ca, layout, palette, text};
 #[path = "picker_tests.rs"]
 mod tests;
 
-actions!(picker, [PickPrev, PickNext, PickConfirm, PickDismiss, PickBackspace, PickSelectAll, PickPaste, PickCopy, PickCut]);
+actions!(
+    picker,
+    [
+        PickPrev,
+        PickNext,
+        PickConfirm,
+        PickDismiss,
+        PickBackspace,
+        PickDelete,
+        PickLeft,
+        PickRight,
+        PickHome,
+        PickEnd,
+        PickSelectLeft,
+        PickSelectRight,
+        PickSelectHome,
+        PickSelectEnd,
+        PickSelectAll,
+        PickPaste,
+        PickCopy,
+        PickCut
+    ]
+);
+
+#[derive(Clone, Copy)]
+enum QueryMove {
+    Left,
+    Right,
+    Home,
+    End,
+}
 
 #[derive(Clone)]
 pub struct PickItem {
@@ -133,8 +163,9 @@ pub struct Picker {
     aliases: std::collections::HashMap<usize, Vec<SharedString>>,
     placeholder: SharedString,
     query: String,
-    /// Initial text selected in a name input: the first keystroke or delete replaces it.
-    initial_selected: bool,
+    /// UTF-8 boundaries. `anchor` stays fixed while Shift extends the query selection.
+    cursor: usize,
+    anchor: Option<usize>,
     marked: Option<Range<usize>>,
     rows: Vec<Row>,
     selected: usize,
@@ -171,7 +202,8 @@ impl Picker {
             aliases: std::collections::HashMap::new(),
             placeholder: placeholder.to_string().into(),
             query: query.to_string(),
-            initial_selected: false,
+            cursor: query.len(),
+            anchor: None,
             marked: None,
             rows: Vec::new(),
             selected: 0,
@@ -183,7 +215,7 @@ impl Picker {
             scroll: UniformListScrollHandle::new(),
             painted: Default::default(),
         };
-        p.initial_selected = !p.query.is_empty() && p.sources.iter().any(|s| matches!(s, Source::Input { .. }));
+        p.anchor = (!p.query.is_empty() && p.sources.iter().any(|s| matches!(s, Source::Input { .. }))).then_some(0);
         p.refilter();
         if let Some(initial) = initial {
             p.selected = p.rows.iter().position(|r| r.pick == Some(initial)).unwrap_or(0);
@@ -255,7 +287,8 @@ impl Picker {
     pub fn set_query(&mut self, query: String, cx: &mut Context<Self>) {
         self.query = query;
         self.marked = None;
-        self.initial_selected = false;
+        self.cursor = self.query.len();
+        self.anchor = None;
         self.query_changed(cx);
     }
 
@@ -580,19 +613,67 @@ impl Picker {
         cx.emit(PickerEvent::Dismiss);
     }
 
-    fn backspace(&mut self, _: &PickBackspace, _: &mut Window, cx: &mut Context<Self>) {
-        if std::mem::take(&mut self.initial_selected) {
-            self.query.clear();
-            self.marked = None;
-            self.query_changed(cx);
-        } else if self.query.pop().is_some() {
-            self.marked = None;
-            self.query_changed(cx);
+    fn query_selection(&self) -> Range<usize> {
+        let anchor = self.anchor.unwrap_or(self.cursor);
+        anchor.min(self.cursor)..anchor.max(self.cursor)
+    }
+
+    fn prev_char(&self) -> usize {
+        self.query[..self.cursor].char_indices().next_back().map_or(0, |(at, _)| at)
+    }
+
+    fn next_char(&self) -> usize {
+        self.query[self.cursor..].chars().next().map_or(self.cursor, |c| self.cursor + c.len_utf8())
+    }
+
+    fn move_query(&mut self, direction: QueryMove, extend: bool, cx: &mut Context<Self>) {
+        let selection = self.query_selection();
+        let at = match direction {
+            QueryMove::Left if !extend && !selection.is_empty() => selection.start,
+            QueryMove::Right if !extend && !selection.is_empty() => selection.end,
+            QueryMove::Left => self.prev_char(),
+            QueryMove::Right => self.next_char(),
+            QueryMove::Home => 0,
+            QueryMove::End => self.query.len(),
+        };
+        if extend {
+            self.anchor.get_or_insert(self.cursor);
+        } else {
+            self.anchor = None;
         }
+        self.cursor = at;
+        self.marked = None;
+        // Moving within the query must not change the selected result or emit live preview/query events.
+        cx.notify();
+    }
+
+    fn edit_query(&mut self, range: Range<usize>, new: &str, cx: &mut Context<Self>) {
+        let new = new.replace(['\r', '\n'], "");
+        if range.is_empty() && new.is_empty() {
+            return;
+        }
+        self.query.replace_range(range.clone(), &new);
+        self.cursor = range.start + new.len();
+        self.anchor = None;
+        self.marked = None;
+        self.query_changed(cx);
+    }
+
+    fn backspace(&mut self, _: &PickBackspace, _: &mut Window, cx: &mut Context<Self>) {
+        let selection = self.query_selection();
+        let range = if selection.is_empty() { self.prev_char()..self.cursor } else { selection };
+        self.edit_query(range, "", cx);
+    }
+
+    fn delete(&mut self, _: &PickDelete, _: &mut Window, cx: &mut Context<Self>) {
+        let selection = self.query_selection();
+        let range = if selection.is_empty() { self.cursor..self.next_char() } else { selection };
+        self.edit_query(range, "", cx);
     }
 
     fn select_all(&mut self, _: &PickSelectAll, _: &mut Window, cx: &mut Context<Self>) {
-        self.initial_selected = !self.query.is_empty();
+        self.cursor = self.query.len();
+        self.anchor = (!self.query.is_empty()).then_some(0);
         self.marked = None;
         cx.notify();
     }
@@ -604,31 +685,46 @@ impl Picker {
     }
 
     fn copy(&mut self, _: &PickCopy, _: &mut Window, cx: &mut Context<Self>) {
-        if self.initial_selected && !self.masked() {
-            cx.write_to_clipboard(gpui::ClipboardItem::new_string(self.query.clone()));
+        let selection = self.query_selection();
+        if !selection.is_empty() && !self.masked() {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(self.query[selection].to_string()));
         }
     }
 
     fn cut(&mut self, _: &PickCut, window: &mut Window, cx: &mut Context<Self>) {
-        if self.initial_selected && !self.masked() {
+        let selection = self.query_selection();
+        if !selection.is_empty() && !self.masked() {
             self.copy(&PickCopy, window, cx);
-            self.backspace(&PickBackspace, window, cx);
+            self.edit_query(selection, "", cx);
         }
     }
 
-    fn utf16_len(&self) -> usize {
-        self.query.encode_utf16().count()
-    }
-
-    fn byte_of_utf16(&self, cu: usize) -> usize {
-        let mut units = 0;
-        for (b, ch) in self.query.char_indices() {
-            if units >= cu {
-                return b;
+    fn byte_of_utf16_in(text: &str, units: usize) -> usize {
+        let mut at = 0;
+        for (byte, ch) in text.char_indices() {
+            if at + ch.len_utf16() > units {
+                return byte;
             }
-            units += ch.len_utf16();
+            at += ch.len_utf16();
         }
-        self.query.len()
+        text.len()
+    }
+
+    fn byte_of_utf16(&self, units: usize) -> usize {
+        Self::byte_of_utf16_in(&self.query, units)
+    }
+
+    fn utf16_of(&self, byte: usize) -> usize {
+        self.query[..byte].encode_utf16().count()
+    }
+
+    fn query_range(&self, range: Range<usize>) -> Range<usize> {
+        self.byte_of_utf16(range.start.min(range.end))..self.byte_of_utf16(range.start.max(range.end))
+    }
+
+    fn shown_part(&self, range: Range<usize>) -> String {
+        let text = &self.query[range];
+        if self.masked() { "•".repeat(text.chars().count()) } else { text.to_string() }
     }
 
     fn empty_message(&self) -> &'static str {
@@ -647,24 +743,21 @@ impl Picker {
     }
 }
 
-/// The query box is only appended to; `marked` is kept for IME composition.
+/// UTF-16 is used at the platform/IME boundary; query state stays on valid UTF-8 boundaries.
 impl EntityInputHandler for Picker {
-    fn text_for_range(&mut self, r: Range<usize>, actual: &mut Option<Range<usize>>, _: &mut Window, _: &mut Context<Self>) -> Option<String> {
-        let (a, b) = (self.byte_of_utf16(r.start), self.byte_of_utf16(r.end));
-        actual.replace(r);
-        Some(self.query[a..b].to_string())
+    fn text_for_range(&mut self, range: Range<usize>, actual: &mut Option<Range<usize>>, _: &mut Window, _: &mut Context<Self>) -> Option<String> {
+        let range = self.query_range(range);
+        actual.replace(self.utf16_of(range.start)..self.utf16_of(range.end));
+        Some(self.query[range].to_string())
     }
 
     fn selected_text_range(&mut self, _: bool, _: &mut Window, _: &mut Context<Self>) -> Option<UTF16Selection> {
-        let n = self.utf16_len();
-        Some(UTF16Selection { range: if self.initial_selected { 0..n } else { n..n }, reversed: false })
+        let range = self.query_selection();
+        Some(UTF16Selection { range: self.utf16_of(range.start)..self.utf16_of(range.end), reversed: self.anchor.is_some_and(|anchor| self.cursor < anchor) })
     }
 
     fn marked_text_range(&self, _: &mut Window, _: &mut Context<Self>) -> Option<Range<usize>> {
-        self.marked.as_ref().map(|m| {
-            let to16 = |b: usize| self.query[..b].encode_utf16().count();
-            to16(m.start)..to16(m.end)
-        })
+        self.marked.as_ref().map(|range| self.utf16_of(range.start)..self.utf16_of(range.end))
     }
 
     fn unmark_text(&mut self, _: &mut Window, _: &mut Context<Self>) {
@@ -672,23 +765,26 @@ impl EntityInputHandler for Picker {
     }
 
     fn replace_text_in_range(&mut self, range: Option<Range<usize>>, new: &str, _: &mut Window, cx: &mut Context<Self>) {
-        if std::mem::take(&mut self.initial_selected) {
-            self.query.clear();
-        }
-        let r = range.map(|r| self.byte_of_utf16(r.start)..self.byte_of_utf16(r.end)).or(self.marked.take()).unwrap_or(self.query.len()..self.query.len());
-        self.query.replace_range(r, &new.replace(['\r', '\n'], ""));
-        self.marked = None;
-        self.query_changed(cx);
+        let range = range.map(|range| self.query_range(range)).or(self.marked.clone()).unwrap_or_else(|| self.query_selection());
+        self.edit_query(range, new, cx);
     }
 
-    fn replace_and_mark_text_in_range(&mut self, range: Option<Range<usize>>, new: &str, _sel: Option<Range<usize>>, _: &mut Window, cx: &mut Context<Self>) {
-        if std::mem::take(&mut self.initial_selected) {
-            self.query.clear();
-        }
-        let r = range.map(|r| self.byte_of_utf16(r.start)..self.byte_of_utf16(r.end)).or(self.marked.clone()).unwrap_or(self.query.len()..self.query.len());
-        let start = r.start;
-        self.query.replace_range(r, new);
-        self.marked = (!new.is_empty()).then(|| start..start + new.len());
+    fn replace_and_mark_text_in_range(
+        &mut self,
+        range: Option<Range<usize>>,
+        new: &str,
+        selected: Option<Range<usize>>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let range = range.map(|range| self.query_range(range)).or(self.marked.clone()).unwrap_or_else(|| self.query_selection());
+        let start = range.start;
+        let new = new.replace(['\r', '\n'], "");
+        self.query.replace_range(range, &new);
+        self.marked = (!new.is_empty()).then_some(start..start + new.len());
+        let selection = selected.map(|range| Self::byte_of_utf16_in(&new, range.start)..Self::byte_of_utf16_in(&new, range.end));
+        self.cursor = start + selection.as_ref().map_or(new.len(), |range| range.end);
+        self.anchor = selection.filter(|range| !range.is_empty()).map(|range| start + range.start);
         self.query_changed(cx);
     }
 
@@ -719,6 +815,15 @@ impl Render for Picker {
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::dismiss))
             .on_action(cx.listener(Self::backspace))
+            .on_action(cx.listener(Self::delete))
+            .on_action(cx.listener(|this, _: &PickLeft, _, cx| this.move_query(QueryMove::Left, false, cx)))
+            .on_action(cx.listener(|this, _: &PickRight, _, cx| this.move_query(QueryMove::Right, false, cx)))
+            .on_action(cx.listener(|this, _: &PickHome, _, cx| this.move_query(QueryMove::Home, false, cx)))
+            .on_action(cx.listener(|this, _: &PickEnd, _, cx| this.move_query(QueryMove::End, false, cx)))
+            .on_action(cx.listener(|this, _: &PickSelectLeft, _, cx| this.move_query(QueryMove::Left, true, cx)))
+            .on_action(cx.listener(|this, _: &PickSelectRight, _, cx| this.move_query(QueryMove::Right, true, cx)))
+            .on_action(cx.listener(|this, _: &PickSelectHome, _, cx| this.move_query(QueryMove::Home, true, cx)))
+            .on_action(cx.listener(|this, _: &PickSelectEnd, _, cx| this.move_query(QueryMove::End, true, cx)))
             .on_action(cx.listener(Self::select_all))
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::copy))
@@ -756,11 +861,19 @@ impl Render for Picker {
                             // Cursor at the start, placeholder dimmed.
                             d.child(caret).child(div().text_color(c(p.text_muted)).child(self.placeholder.clone()))
                         } else {
-                            let shown = self.shown_query();
-                            if self.initial_selected {
-                                d.text_color(c(p.text)).child(div().bg(c(p.selection)).child(shown)).child(caret)
+                            let selection = self.query_selection();
+                            let before = self.shown_part(0..selection.start);
+                            let after = self.shown_part(selection.end..self.query.len());
+                            let d = d.text_color(c(p.text)).child(before);
+                            if selection.is_empty() {
+                                d.child(caret).child(after)
                             } else {
-                                d.text_color(c(p.text)).child(shown).child(caret)
+                                let selected = div().bg(c(p.selection)).child(self.shown_part(selection.clone()));
+                                if self.cursor == selection.start {
+                                    d.child(caret).child(selected).child(after)
+                                } else {
+                                    d.child(selected).child(caret).child(after)
+                                }
                             }
                         }
                     })

@@ -1,6 +1,6 @@
 //! Workbench: the Market tab of the Extensions view (#68). Lists every extension of the user's registries from their
 //! signed indexes and searches them locally, off the UI thread, on every keystroke; a registry is asked for its index
-//! at most once a day (the cached copy is used within the day) and never while searching. An extension's page shows
+//! at most once a day unless explicitly refreshed, and never while searching. An extension's page shows
 //! its README (no image is loaded), versions with their status, permissions in plain words, the publisher and the
 //! download count; Install goes through the consent sheet of `workbench_ext.rs`. Rendering is in
 //! `workbench_market_view.rs`.
@@ -89,6 +89,15 @@ pub(super) fn page_release<'a>(v: &'a Verified, id: &ExtId, entry: &'a Entry) ->
 }
 
 impl Workbench {
+    /// The Extensions toolbar refreshes the list on screen. Installed badges also follow lock-file changes.
+    pub(super) fn refresh_extensions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.refresh_extension_list();
+        if self.cfg.exts.tab == ExtTab::Market {
+            self.read_market(true, window, cx);
+        }
+        cx.notify();
+    }
+
     pub(super) fn show_market(&mut self, _: &ShowMarket, window: &mut Window, cx: &mut Context<Self>) {
         self.chrome.panel = Some(Panel::Extensions);
         self.extensions_opened(window, cx);
@@ -113,6 +122,10 @@ impl Workbench {
 
     /// The Market was opened: its search field exists, and the indexes are read when they were not read today.
     fn open_market(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.read_market(false, window, cx);
+    }
+
+    fn read_market(&mut self, force: bool, window: &mut Window, cx: &mut Context<Self>) {
         if self.cfg.exts.market.search.is_none() {
             let field = cx.new(|cx| TextField::new(crate::i18n::tr("Search the Market"), cx));
             self._subs.push(cx.subscribe_in(&field, window, |this, _, ev: &FieldEvent, window, cx| match ev {
@@ -126,7 +139,9 @@ impl Workbench {
         let m = &self.cfg.exts.market;
         let now = crate::ext_registry::now();
         let fresh = m.loaded_at.is_some_and(|t| now < t + ext_core::registry::REFRESH_SECS) && m.loaded_for == registries;
-        if m.loading || fresh || crate::ext::turned_off() {
+        // Serialize loads, including explicit retries: registries with the same label share a cache folder.
+        // A settings change is checked again before this request can publish its result.
+        if m.loading || (!force && fresh) || crate::ext::turned_off() {
             return;
         }
         let Some(dir) = self.cfg.dir.clone() else { return };
@@ -136,12 +151,25 @@ impl Workbench {
             m.catalog = None;
             m.listings = Arc::default();
             m.results = Arc::default();
+            m.loaded_at = None;
+            m.loaded_for = registries;
+            m.answered = None;
+            m.cursor = 0;
+            m.search_generation = m.search_generation.wrapping_add(1);
+            m.page = None;
+            cx.notify();
             return;
         }
         m.loading = true;
+        m.errors.clear();
         m.loaded_for = registries.clone();
+        let requested = registries.clone();
         let task = cx.background_executor().spawn(async move {
-            let (listed, errors) = crate::ext_registry::market(&dir, &registries, now);
+            let (listed, errors) = if force {
+                crate::ext_registry::market_with_refresh(&dir, &registries, now, true)
+            } else {
+                crate::ext_registry::market(&dir, &registries, now)
+            };
             let listings: Vec<Listing> = listed.into_iter().map(|(registry, verified)| Listing { registry, verified }).collect();
             let catalog = Catalog::new(listings.iter().map(|l| (l.registry.name.as_str(), &l.verified.index)));
             (Arc::new(listings), Arc::new(catalog), errors)
@@ -151,7 +179,23 @@ impl Workbench {
             this.update_in(cx, |this, window, cx| {
                 let m = &mut this.cfg.exts.market;
                 m.loading = false;
-                m.loaded_at = Some(now);
+                if crate::ext_registry::registries(cx.global::<Settings>()) != requested {
+                    // The old endpoint may have finished after the user's settings changed. Its answer is not
+                    // the active catalogue; finish its cache writes before reading the replacement registry.
+                    m.loaded_at = None;
+                    m.catalog = None;
+                    m.listings = Arc::default();
+                    m.results = Arc::default();
+                    m.answered = None;
+                    m.cursor = 0;
+                    m.page = None;
+                    m.search_generation = m.search_generation.wrapping_add(1);
+                    this.read_market(true, window, cx);
+                    cx.notify();
+                    return;
+                }
+                // A transient failure must not suppress retry for a day. Successful registries remain cached.
+                m.loaded_at = errors.is_empty().then_some(now);
                 m.listings = listings;
                 m.catalog = Some(catalog);
                 m.errors = errors;
@@ -170,7 +214,7 @@ impl Workbench {
         let m = &mut self.cfg.exts.market;
         let Some(catalog) = m.catalog.clone() else { return };
         let query = m.search.as_ref().map(|f| f.read(cx).text().to_string()).unwrap_or_default();
-        m.search_generation += 1;
+        m.search_generation = m.search_generation.wrapping_add(1);
         let generation = m.search_generation;
         let task = cx.background_executor().spawn({
             let query = query.clone();

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.9] - 2026-11-23
+
+### Changed
+
+- Appearance: refreshed every built-in theme, added eight palettes and replaced the interface icons with a consistent set. Panel headers and tabs now align, with quieter borders, balanced spacing and clearer focus, selection and text contrast.
+- Settings: a more spacious, responsive layout with grouped controls, clearer descriptions and validation, multi-word search and an `@modified` filter. Unsubmitted edits survive other setting changes and are marked as drafts.
+
+### Fixed
+
+- Terminal: readable foreground, background and selection colours in light and dark themes, including programs that query or override terminal colours through OSC sequences.
+- Terminal find: results update as output arrives without blocking input or moving the current match. Counts and highlights remain correct across resize, wrapped lines and case-insensitive matches; closing search cancels pending work, and the search bar fits narrow panels.
+- Pickers: edit queries at the caret, move and select text with the keyboard, and replace selected text with paste or IME input. Secret fields keep their contents masked and out of clipboard exports.
+- Search: Stop and Escape cancel pending work while retaining the query, filters and results already received; late responses cannot restart a cancelled search.
+- Marketplace: Refresh revalidates registry indexes immediately, retries failed requests and discards results from registries that have since changed.
+
 ## [0.12.8] - 2026-11-22
 
 ### Security
@@ -2116,7 +2131,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.8...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.9...HEAD
+[0.12.9]: https://github.com/doancan/codeyard/compare/v0.12.8...v0.12.9
 [0.12.8]: https://github.com/doancan/codeyard/compare/v0.12.7...v0.12.8
 [0.12.7]: https://github.com/doancan/codeyard/compare/v0.12.6...v0.12.7
 [0.12.6]: https://github.com/doancan/codeyard/compare/v0.12.5...v0.12.6

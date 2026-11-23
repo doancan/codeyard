@@ -533,33 +533,14 @@ mod tests {
         }
     }
 
-    /// `builtin()` runs every theme through `guard_contrast`, so `every_builtin_theme_passes_wcag_aa` cannot tell a broken colour in a file from a
-    /// repaired one. These themes are authored to pass as written: breaking one of their colours fails here. The others in `REPAIRED_AT_LOAD` were
-    /// adapted from upstream palettes and rely on the guard. A new theme file must be listed in one of the two, so the choice is made on purpose.
+    /// Every shipped palette must pass as authored; the import guard must never hide a broken built-in.
     #[test]
     fn authored_themes_pass_wcag_aa_before_the_guard_touches_them() {
-        const PASS_AS_WRITTEN: &[&str] = &[
-            "catppuccin-mocha",
-            "codeyard-dark",
-            "codeyard-light",
-            "codeyard-one",
-            "github-dark",
-            "gruvbox-dark",
-            "high-contrast-dark",
-            "high-contrast-light",
-            "quarry",
-            "tokyo-night",
-        ];
-        const REPAIRED_AT_LOAD: &[&str] =
-            &["dracula", "ember", "fjord", "github-light", "graphite", "nord", "one-dark", "paper", "solarized-dark", "solarized-light", "studio-dark"];
         for (id, _) in BUILTIN_JSON {
-            assert!(PASS_AS_WRITTEN.contains(id) || REPAIRED_AT_LOAD.contains(id), "{id}: add it to PASS_AS_WRITTEN (preferred) or REPAIRED_AT_LOAD");
-        }
-        for id in PASS_AS_WRITTEN {
-            assert!(BUILTIN_JSON.iter().any(|(i, _)| i == id), "{id} is listed but no such theme file exists");
             let t = Theme { id: id.to_string(), name: id.to_string(), dark: true, palette: raw(id), source: Source::Builtin };
             let failing: Vec<String> = t.contrast_failures().iter().map(|(fg, bg, r, min)| format!("{fg} on {bg} = {r:.2} (needs {min})")).collect();
             assert!(failing.is_empty(), "{id}.json fails WCAG AA as written (the load-time guard would hide this):\n{}", failing.join("\n"));
+            assert_eq!(guard_contrast(t.palette), t.palette, "{id}: built-in colours must not need runtime repair");
         }
     }
 

@@ -77,8 +77,8 @@ fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, glyph_only:
 }
 
 /// The look of a tab of the bottom panel, the same pill as the editor's tabs: the one in front takes the colour of the
-/// page under it and a medium weight, the others are quiet and light up on hover. There are no frames and no lines;
-/// the change of ground between the strip and the page is the edge.
+/// page under it and a medium weight, the others are quiet and light up on hover.
+/// A fine outline keeps the selected tab legible on low-contrast light surfaces.
 pub(super) fn page_tab(tab: gpui::Stateful<gpui::Div>, active: bool, p: &Palette) -> gpui::Stateful<gpui::Div> {
     tab.relative()
         .h(px(layout::VIEW_HEADER_H - 10.))
@@ -92,6 +92,8 @@ pub(super) fn page_tab(tab: gpui::Stateful<gpui::Div>, active: bool, p: &Palette
         .overflow_hidden()
         .cursor_pointer()
         .rounded(px(theme::radius::MD))
+        .border_1()
+        .border_color(ui::ca(p.border, if active { 1. } else { 0. }))
         .map(|d| {
             if active {
                 d.bg(c(p.bg)).text_color(c(p.text)).font_weight(gpui::FontWeight::MEDIUM)

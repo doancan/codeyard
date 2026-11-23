@@ -238,11 +238,10 @@ fn page_rows_have_their_painted_bounds_and_hidden_rows_none(cx: &mut gpui::TestA
     cx.run_until_parked();
     let (_, tree) = nodes(&wb, cx);
     let height = cx.update(|window, _| f64::from(window.viewport_size().height / gpui::px(1.)) * f64::from(window.scale_factor()));
-    let (_, theme) = find(&tree, Role::Button, "Theme");
-    let rect = theme.bounds().expect("the first setting is on screen");
-    assert!(rect.width() > 0. && rect.height() > 0. && rect.y1 <= height + 0.5, "{rect:?}");
     let rows: Vec<&Node> =
         tree.iter().filter(|(id, _)| id.0 >= SET_ROW && id.0 < SHORTCUT_ROW && (id.0 - SET_ROW).is_multiple_of(ROW_IDS)).map(|(_, n)| n).collect();
+    let rect = rows.first().expect("settings rows").bounds().expect("the first setting is on screen");
+    assert!(rect.width() > 0. && rect.height() > 0. && rect.y1 <= height + 0.5, "{rect:?}");
     assert!(rows.len() > 3, "{} rows", rows.len());
     assert!(rows.iter().any(|n| n.bounds().is_none()), "a row below the fold has no bounds");
     for b in rows.iter().filter_map(|n| n.bounds()) {

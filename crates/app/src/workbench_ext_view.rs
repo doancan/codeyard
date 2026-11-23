@@ -45,11 +45,7 @@ pub(super) fn line_list(lines: Vec<String>, empty: &str, p: &Palette) -> gpui::D
 impl Workbench {
     pub(super) fn extensions_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         let off = crate::ext::turned_off();
-        let header = div()
-            .h(px(layout::VIEW_HEADER_H))
-            .flex_none()
-            .flex()
-            .items_center()
+        let header = ui::pane_header(p)
             .justify_between()
             .pl(px(theme::SPACE[6]))
             .pr(px(theme::SPACE[3]))
@@ -88,14 +84,13 @@ impl Workbench {
                         )
                         .child(
                             tool("ext-refresh", "refresh-cw", crate::i18n::t("Refresh"))
+                                .debug_selector(|| "ext-refresh".into())
                                 .relative()
-                                .child(self.ctl(crate::i18n::t("Extensions"), "ext-refresh", crate::i18n::t("Refresh"), cx, |this, _, cx| {
-                                    this.refresh_extension_list();
-                                    cx.notify();
+                                .child(self.ctl(crate::i18n::t("Extensions"), "ext-refresh", crate::i18n::t("Refresh"), cx, |this, window, cx| {
+                                    this.refresh_extensions(window, cx);
                                 }))
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.refresh_extension_list();
-                                    cx.notify();
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.refresh_extensions(window, cx);
                                 })),
                         ),
                 )

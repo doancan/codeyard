@@ -227,6 +227,8 @@ fn changing_the_pattern_cancels_the_run_before_it(cx: &mut TestAppContext) {
     let hits = find_hits(&panel, cx);
     assert_eq!(hits.len(), 30);
     panel.update(cx, |s, cx| s.set_pattern_for_test("", cx));
+    cx.run_until_parked();
+    cx.executor().advance_clock(std::time::Duration::from_millis(250));
     wait(cx, "cleared", |cx| panel.read_with(cx, |s, _| !s.is_searching()));
 }
 
