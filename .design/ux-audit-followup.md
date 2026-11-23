@@ -54,3 +54,5 @@ A lifecycle regression fixture now completes an accepted detached-window close b
 The final `scripts/check.sh --strict --budgets` run passed: full workspace tests, formatting, strict Clippy, architecture/documentation/licence checks, dependency policies and vulnerability audit. Turkish translation coverage is 4,162/4,162 strings. The release verifier self-test passed all 23 cases.
 
 Retina memory measurements stayed within the existing budgets: terminal 81 MB, welcome 72 MB, Rust file 108 MB, 10k-line plain text 93 MB, highlighted 10k-line file 117 MB, first-run question 78 MB and idle remote agent 1 MB. The application binary is 76 MB.
+
+The interleaved comparison against v0.12.8 passed every blocking performance metric (five timing runs and three memory samples per scene). Median memory was 72 MB for the welcome screen, 117 MB for a highlighted 10k-line file and 80 MB for the terminal. Cold extension activation remains about 352 ms in both builds, above the advisory 150 ms target. Raw samples and the complete comparison are in `docs/benchmarks/perf-0.12.9.md`.
