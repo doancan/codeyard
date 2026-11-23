@@ -37,7 +37,7 @@ status bar reports it.
 | `editor.folding` | `true` / `false` | `true` | Show fold arrows in the gutter |
 | `editor.fontFamily` | text | empty | Editor font (empty: built-in monospace) |
 | `editor.fontLigatures` | `true` / `false` | `false` | Draw programming ligatures (=>, !=, …) in the editor font |
-| `editor.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the editor |
+| `editor.fontSize` | number 6–48 | `13` on macOS, `14` on Windows and Linux | Font size of the editor |
 | `editor.formatOnPaste` | `true` / `false` | `false` | Format pasted text with the language server |
 | `editor.formatOnSave` | `true` / `false` | `false` | Format with the language server when saving |
 | `editor.formatOnType` | `true` / `false` | `false` | Let the language server format while typing }, ; or Enter |
@@ -45,7 +45,7 @@ status bar reports it.
 | `editor.indentGuides` | `true` / `false` | `true` | Show indent guides |
 | `editor.inlayHints.enabled` | `true` / `false` | `true` | Show type and parameter name hints from the language server |
 | `editor.insertSpaces` | `true` / `false` | `true` | Indent with spaces instead of tabs |
-| `editor.lineHeight` | number 10–80 | `18` on macOS, `20` on Windows and Linux | Line height in pixels |
+| `editor.lineHeight` | number 10–80 | `20` on macOS, `20` on Windows and Linux | Line height in pixels |
 | `editor.lineNumbers` | `on`, `off`, `relative` | `on` | Line numbers in the gutter |
 | `editor.linkedEditing` | `true` / `false` | `true` | Rename the matching HTML/XML tag while you edit one |
 | `editor.matchBrackets` | `true` / `false` | `true` | Highlight the matching bracket |
@@ -202,7 +202,7 @@ status bar reports it.
 | `terminal.confirmOnClose` | `running`, `always`, `never` | `never` | Ask before closing a terminal |
 | `terminal.copyOnSelection` | `agents`, `always`, `off` | `agents` | Copy text selected with the mouse: while Claude Code or Codex runs, always, or never |
 | `terminal.defaultProfile` | text | empty | Profile new terminals use |
-| `terminal.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the terminal |
+| `terminal.fontSize` | number 6–48 | `13` on macOS, `14` on Windows and Linux | Font size of the terminal |
 | `terminal.lineHeight` | number 1–2 | `1.2` | Terminal row height, as a multiple of the font size |
 | `terminal.notifications` | `true` / `false` | `true` | Flag a terminal and the taskbar when its program rings the bell or asks for you |
 | `terminal.persistentScrollback` | number 0–10000 | `0` | Lines of each terminal's history kept for the next start, as plain text on this computer (0: none) |

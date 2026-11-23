@@ -7,7 +7,7 @@
     "surface-raised": "#141414",
     "surface-hover": "#1f1f1f",
     "surface-active": "#26364a",
-    "current-line": "#111111",
+    "current-line": "#141414",
     "selection": "#1f4a7a",
     "border": "#6b6b6b",
     "border-input": "#b0b0b0",
@@ -18,7 +18,7 @@
     "accent": "#ffd23f",
     "on-accent": "#000000",
     "focus-ring": "#ffd23f",
-    "danger": "#ff6e6e",
+    "danger": "#ff7272",
     "warning": "#ffd23f",
     "success": "#5cf08a",
     "info": "#6cc7ff",
@@ -30,7 +30,7 @@
     "syntax-function": "#8ad4ff",
     "syntax-type": "#6ff7e8",
     "syntax-comment": "#c0c0c0",
-    "syntax-tag": "#ff9f8a",
+    "syntax-tag": "#ffa18c",
     "syntax-punct": "#e0e0e0"
   }
 }

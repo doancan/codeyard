@@ -20,7 +20,7 @@ exact copy of the upstream theme.
 | `tokyo-night.json` | [Tokyo Night](https://github.com/tokyo-night/tokyo-night-vscode-theme) | Enkia | MIT |
 | `gruvbox-dark.json` | [Gruvbox Dark](https://github.com/morhetz/gruvbox) | morhetz | MIT/X11 |
 
-The four dark additions define all 30 roles and pass all 103 contrast pairs as written, before the runtime
+Every shipped theme defines all 30 roles and passes all 103 contrast pairs as written, before the runtime
 contrast guard. Mocha uses mauve accents and pastel syntax; Tokyo Night pairs indigo surfaces with blue accents;
 Gruvbox Dark uses warm charcoal, amber and earthy syntax; GitHub Dark uses neutral surfaces and restrained blue accents.
 Selection, gutter and comment colours are adjusted where necessary to keep them readable across Codeyard's surfaces.
@@ -32,3 +32,19 @@ Selection, gutter and comment colours are adjusted where necessary to keep them 
 The others were written for this project. No upstream palette is claimed for them. `quarry.json` is an original palette, designed from scratch and not derived from any existing theme.
 
 Licence texts and the full attribution are in `THIRD_PARTY_NOTICES.md` at the repository root.
+
+## Additional Codeyard palettes
+
+Eight original palettes extend the same surface, text and control system:
+
+| Dark | Light | Character |
+| --- | --- | --- |
+| Basalt | Porcelain | Neutral mineral surfaces and a restrained sage accent |
+| Canopy | Meadow | Forest and olive greens |
+| Deepwater | Shore | Ink, slate and muted cyan |
+| Mulberry | Vellum | Plum at night, warm paper in daylight |
+
+All 31 built-in choices (29 JSON palettes plus Midnight and Daylight) use the shared spacing and icon system.
+GitHub variants follow current Primer neutral surfaces and separators, adapted for editor and terminal contrast.
+Terminal text additionally receives a 4.5:1 contrast floor against its final cell background, including faint text,
+selection and search highlights. Explicit equal foreground/background pairs and hidden text remain hidden.
