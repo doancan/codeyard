@@ -492,11 +492,7 @@ impl Workbench {
         let rows = testexp::rows(&t.files, &t.results, &t.expanded, &filter, t.only_failed);
         let running = t.run.is_some();
         let (passed, failed, skipped, total) = testexp::summary(&t.files, &t.results);
-        let header = div()
-            .h(px(layout::VIEW_HEADER_H))
-            .flex_none()
-            .flex()
-            .items_center()
+        let header = ui::pane_header(p)
             .justify_between()
             .pl(px(theme::SPACE[6]))
             .pr(px(theme::SPACE[3]))

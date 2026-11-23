@@ -37,6 +37,12 @@ pub fn c(hex: u32) -> Rgba {
     rgb(hex)
 }
 
+/// Shared geometry for primary pane headers. Sidebar titles, editor tabs and panel
+/// toolbars meet on the same horizontal grid; separators span the entire pane.
+pub fn pane_header(p: &Palette) -> gpui::Div {
+    gpui::div().h(px(layout::VIEW_HEADER_H)).flex_none().flex().items_center().bg(c(p.surface)).border_b_1().border_color(c(p.border))
+}
+
 /// Perceived brightness is high (light theme background).
 pub fn luminance_is_light(hex: u32) -> bool {
     let (r, g, b) = (((hex >> 16) & 0xff) as f32, ((hex >> 8) & 0xff) as f32, (hex & 0xff) as f32);
@@ -232,7 +238,7 @@ pub fn activity_bars(id: impl Into<gpui::ElementId>, size: f32, color: u32) -> g
     div().size(px(size)).flex_none().flex().items_end().justify_between().children(bars).into_any_element()
 }
 
-/// Lucide (ISC) icons, embedded in the binary.
+/// Tabler (MIT) icons, optically normalized to a 24 px grid and embedded in the binary.
 pub struct Assets;
 
 macro_rules! icons {

@@ -321,6 +321,7 @@ impl Workbench {
         };
         div()
             .id(SharedString::from(format!("tabs-{}", key.id)))
+            .debug_selector(|| "editor-tab-bar".into())
             .h(px(layout::TABBAR_H))
             .flex_none()
             .flex()
@@ -389,6 +390,8 @@ impl Workbench {
                     .max_w(px(220.))
                     .h(px(layout::TABBAR_H - 10.))
                     .rounded(px(theme::radius::MD))
+                    .border_1()
+                    .border_color(ui::ca(p.border, if active { 1. } else { 0. }))
                     .pl(px(theme::SPACE[4]))
                     .pr(px(theme::SPACE[2]))
                     .cursor_pointer()
@@ -1113,18 +1116,18 @@ impl Workbench {
                             .child(a11y::part_frame(a11y::Part::Control("command-center"), cx))
                             .ml(px(theme::SPACE[2]))
                             // Sits a point below the middle, level with the traffic lights' optical centre.
-                            .mt(px(2.))
                             .w(gpui::relative(0.38))
                             .max_w(px(600.))
                             .min_w(px(160.))
-                            .h(px(24.))
+                            .h(px(26.))
                             .px(px(12.))
                             .flex()
                             .items_center()
                             .rounded(px(6.))
                             .border_1()
                             // Drawn on the title bar itself: only a faint outline marks the box until it is hovered.
-                            .border_color(c(ui::mix(p.surface, p.text, 0.08)))
+                            .border_color(c(p.border))
+                            .bg(c(p.bg))
                             .text_size(px(text::XS.0))
                             .text_color(c(p.text_muted))
                             .cursor_pointer()
@@ -1134,6 +1137,8 @@ impl Workbench {
                                 cx.stop_propagation();
                                 this.quick_open(&QuickOpen, w, cx);
                             }))
+                            .gap(px(theme::SPACE[3]))
+                            .child(icon("search", 13., p.text_muted))
                             .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label)),
                     ),
             )

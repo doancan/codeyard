@@ -14,6 +14,7 @@ FILES=(
   "THIRD_PARTY_NOTICES.md THIRD_PARTY_NOTICES.md"
   "THIRD_PARTY_CRATES.md THIRD_PARTY_CRATES.md"
   "crates/app/assets/icons/LICENSE icons-LICENSE"
+  "crates/app/assets/TABLER-LICENSE tabler-icons-LICENSE"
   "crates/syntax/grammars/dockerfile/LICENSE dockerfile-grammar-LICENSE"
   "vendor/gpui/LICENSE-APACHE gpui-LICENSE-APACHE"
   "vendor/xattr/LICENSE-MIT xattr-LICENSE-MIT"

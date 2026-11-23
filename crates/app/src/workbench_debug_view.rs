@@ -366,11 +366,7 @@ impl Workbench {
     }
 
     pub(in crate::workbench) fn run_debug_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let header = div()
-            .h(px(layout::VIEW_HEADER_H))
-            .flex_none()
-            .flex()
-            .items_center()
+        let header = ui::pane_header(p)
             .gap(px(theme::SPACE[1]))
             .pl(px(theme::SPACE[6]))
             .pr(px(theme::SPACE[3]))

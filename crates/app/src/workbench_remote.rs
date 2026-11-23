@@ -230,11 +230,7 @@ impl Workbench {
     pub(super) fn remote_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         let rows = self.remote_rows(cx);
         // Same look as `view_header`, with the view's buttons on the right.
-        let header = div()
-            .h(px(layout::VIEW_HEADER_H))
-            .flex_none()
-            .flex()
-            .items_center()
+        let header = ui::pane_header(p)
             .justify_between()
             .pl(px(theme::SPACE[6]))
             .pr(px(theme::SPACE[3]))

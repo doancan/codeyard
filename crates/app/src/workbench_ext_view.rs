@@ -45,11 +45,7 @@ pub(super) fn line_list(lines: Vec<String>, empty: &str, p: &Palette) -> gpui::D
 impl Workbench {
     pub(super) fn extensions_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         let off = crate::ext::turned_off();
-        let header = div()
-            .h(px(layout::VIEW_HEADER_H))
-            .flex_none()
-            .flex()
-            .items_center()
+        let header = ui::pane_header(p)
             .justify_between()
             .pl(px(theme::SPACE[6]))
             .pr(px(theme::SPACE[3]))
