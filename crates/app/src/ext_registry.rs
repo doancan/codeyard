@@ -330,10 +330,15 @@ pub fn find(cfg_dir: &Path, registries: &[Registry], spec: &str, target: &str, n
 /// Every registry's index for the Market: the cached copy when fetched within the day, else fetched now. A registry
 /// that cannot be read is reported and the others are listed.
 pub fn market(cfg_dir: &Path, registries: &[Registry], now: u64) -> (Vec<(Registry, ext_core::yard::Verified)>, Vec<String>) {
+    market_with_refresh(cfg_dir, registries, now, false)
+}
+
+/// Explicit refresh bypasses the daily cache shortcut, retaining signature checks and conditional requests.
+pub fn market_with_refresh(cfg_dir: &Path, registries: &[Registry], now: u64, force: bool) -> (Vec<(Registry, ext_core::yard::Verified)>, Vec<String>) {
     let (mut listed, mut errors) = (Vec::new(), Vec::new());
     for reg in registries {
         let dir = registry::cache_dir(&cache_root(cfg_dir), reg);
-        match with_fetch(|f| registry::index(reg, &dir, f, now, false)) {
+        match with_fetch(|f| registry::index(reg, &dir, f, now, force)) {
             Ok(v) => listed.push((reg.clone(), v)),
             Err(e) => errors.push(format!("{}: {e}", reg.name)),
         }

@@ -84,14 +84,13 @@ impl Workbench {
                         )
                         .child(
                             tool("ext-refresh", "refresh-cw", crate::i18n::t("Refresh"))
+                                .debug_selector(|| "ext-refresh".into())
                                 .relative()
-                                .child(self.ctl(crate::i18n::t("Extensions"), "ext-refresh", crate::i18n::t("Refresh"), cx, |this, _, cx| {
-                                    this.refresh_extension_list();
-                                    cx.notify();
+                                .child(self.ctl(crate::i18n::t("Extensions"), "ext-refresh", crate::i18n::t("Refresh"), cx, |this, window, cx| {
+                                    this.refresh_extensions(window, cx);
                                 }))
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.refresh_extension_list();
-                                    cx.notify();
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.refresh_extensions(window, cx);
                                 })),
                         ),
                 )

@@ -114,6 +114,81 @@ fn the_market_lists_and_searches_without_asking_the_registry_again(cx: &mut Test
     assert_eq!(fetch.count(), after_open, "searching and reopening asked nothing: {:?}", fetch.requests.lock().unwrap());
 }
 
+/// The toolbar refreshes the visible Market, keeps its query, and still uses ETags.
+#[gpui::test]
+fn explicit_refresh_reads_new_market_releases_without_clearing_the_search(cx: &mut TestAppContext) {
+    let root = dir("explicit-refresh");
+    let now = crate::ext_registry::now();
+    let (mut r, fetch) = registry(&root, "explicit-refresh", now);
+    let (wb, cx) = setup(cx, &root.join("cfg"));
+    open_market(&wb, cx);
+    assert!(search(&wb, cx, "ocean").is_empty());
+    r.publish(&package("you.ocean", "1.0.0", "Ocean", "A blue theme.", None), &github(7, 42), now);
+    let before = fetch.count();
+    let refresh = cx.debug_bounds("ext-refresh").expect("the Extensions refresh button");
+    cx.simulate_click(refresh.center(), gpui::Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(market(&wb, cx).0, ["you.ocean"], "the active query applies to the new catalogue");
+    assert_eq!(fetch.count(), before + 4, "explicit refresh reads a changed signed index immediately");
+    wb.update_in(cx, |wb, window, cx| wb.refresh_extensions_for_test(window, cx));
+    cx.run_until_parked();
+    assert_eq!(fetch.count(), before + 5, "an unchanged index needs only its conditional request");
+    wb.update_in(cx, |wb, window, cx| {
+        wb.extensions_tab_for_test(false, window, cx);
+        wb.refresh_extensions_for_test(window, cx);
+    });
+    cx.run_until_parked();
+    assert_eq!(fetch.count(), before + 5, "refreshing Installed never asks a registry");
+}
+
+/// A temporary failure is not cached as a successful one-day refresh.
+#[gpui::test]
+fn a_failed_market_load_can_retry_immediately_in_the_same_window(cx: &mut TestAppContext) {
+    let root = dir("retry-load");
+    let (r, fetch) = registry(&root, "retry-load", crate::ext_registry::now());
+    let unavailable = root.join("temporarily-unavailable");
+    std::fs::rename(&r.dir, &unavailable).unwrap();
+    let (wb, cx) = setup(cx, &root.join("cfg"));
+    open_market(&wb, cx);
+    let (ids, status) = market(&wb, cx);
+    assert!(ids.is_empty());
+    assert!(status.contains("retry-load") && status.contains("404"), "the failure is explained: {status}");
+    let failed_requests = fetch.count();
+    std::fs::rename(&unavailable, &r.dir).unwrap();
+    open_market(&wb, cx);
+    assert_eq!(market(&wb, cx).1, "3 extensions");
+    assert_eq!(fetch.count(), failed_requests + 4, "reopening retries instead of waiting for tomorrow");
+}
+
+/// Only one load can write a registry cache at a time; an old request cannot publish the wrong settings' catalogue.
+#[gpui::test]
+fn pending_refreshes_are_coalesced_and_registry_changes_discard_the_old_result(cx: &mut TestAppContext) {
+    let root = dir("pending-refresh");
+    let now = crate::ext_registry::now();
+    let (mut old, old_fetch) = registry(&root, "pending-old", now);
+    old.publish(&package("you.obsolete", "1.0.0", "Obsolete", "From the old registry.", None), &github(7, 42), now);
+    let cfg = root.join("cfg");
+    let old_settings = std::fs::read(cfg.join("settings.jsonc")).unwrap();
+    let (mut current, current_fetch) = registry(&root, "pending-current", now);
+    current.publish(&package("you.current", "1.0.0", "Current", "From the new registry.", None), &github(7, 42), now);
+    let new_settings = std::fs::read(cfg.join("settings.jsonc")).unwrap();
+    std::fs::write(cfg.join("settings.jsonc"), old_settings).unwrap();
+    let (wb, cx) = setup(cx, &cfg);
+    wb.update_in(cx, |wb, window, cx| {
+        wb.extensions_tab_for_test(true, window, cx);
+        for _ in 0..3 {
+            wb.refresh_extensions_for_test(window, cx);
+        }
+        std::fs::write(cfg.join("settings.jsonc"), new_settings).unwrap();
+        wb.reload_config_for_test(window, cx);
+    });
+    cx.run_until_parked();
+    let (ids, _) = market(&wb, cx);
+    assert!(ids.contains(&"you.current".into()) && !ids.contains(&"you.obsolete".into()), "only the current registry is published: {ids:?}");
+    assert_eq!(old_fetch.count(), 4, "repeated refresh clicks share the pending load");
+    assert_eq!(current_fetch.count(), 4, "the updated registry is read once after the old request finishes");
+}
+
 /// A new window the next day reads the index again, once, with its ETag.
 #[gpui::test]
 fn a_day_later_the_market_asks_once_more(cx: &mut TestAppContext) {
