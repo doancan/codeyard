@@ -1,14 +1,21 @@
 # Releasing
 
-**Prebuilt files.** Every push to `develop` runs `prebuild.yml`, which calls `release.yml` as a dry run and keeps its files as
-artifacts for 14 days: the SSH agents, the three macOS binaries (`prebuilt-macos`) and the Windows ZIP and setup EXE. When a tag
+**Prebuilt files.** `prebuild.yml` calls `release.yml` as a dry run and keeps its files as artifacts for 14 days. It runs as soon as
+a pull request into `develop` (from this repository, never from a fork) is opened or updated, and on every push to `develop`, so most
+of the build is behind a change by the time it is merged and released. The files: the SSH agents, the three macOS binaries (`prebuilt-macos`) and the Windows ZIP and setup EXE. When a tag
 is pushed, `release.yml` first runs `scripts/find-prebuilt.sh`: it looks for the prebuild run whose commit has the same git tree as
-the tagged commit (the merge of `develop` into `main` has the tree of `develop`'s last commit) and waits for it if it is still
-running. If it finds one, the agent and Windows jobs are skipped; the macOS job takes the binaries, runs
+the tagged commit (the merge of `develop` into `main` has the tree of `develop`'s last commit, which is also the tree of the
+pull request that was merged last) and waits for it if it is still running. If it finds one, the agent and Windows jobs are skipped; the macOS job takes the binaries, runs
 `PREBUILT=1 scripts/bundle-macos.sh` (bundle, Developer ID signature, DMG), notarizes, and the publish job takes the agents
 and the Windows files from that run, signs `SHA256SUMS.txt` and creates the release. That is about ten minutes, most of it
-Apple's notarization. If the full CI run (`ci.yml`) of that commit on `develop` failed, the release stops instead: a build whose tests failed is not
-released; a full run that is still going is not waited for. Without a matching run (a commit made straight on `main`, a run older than 14 days, a failed prebuild)
+Apple's notarization. If a full CI run (`ci.yml`) of that commit failed, the release stops instead: a build whose tests failed is not
+released; a full run that is still going is not waited for.
+
+**What holds a release back.** A pull request from `develop` into `main` passes `release-ready` as soon as `clippy-linux`, `fast-checks`
+and `linux-tests` of `develop`'s run for the same commit succeeded. The macOS tests of that run are advisory (they take the longest and
+a macOS failure shows in the run), the memory and size budgets are not run in CI at all (`scripts/check.sh --budgets` on a Retina Mac
+is where they count), and `linux-tests` runs on the self-hosted runner `ci05`, whose build directory survives between runs; it never
+runs for a pull request from a fork. Without a matching run (a commit made straight on `main`, a run older than 14 days, a failed prebuild)
 the workflow builds everything as described below. A manual run (Actions, release, Run workflow) takes the same path, short
 of publishing; tick "rebuild" to build everything instead.
 

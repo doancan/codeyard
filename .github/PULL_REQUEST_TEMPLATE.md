@@ -8,7 +8,7 @@ Closes #<!-- issue number: links this pull request to the issue, moves it to In 
 
 - [ ] `scripts/check.sh` passes locally (fmt, clippy, arch-check, docs-check, cargo deny, audit, tests; see [docs/testing.md](https://github.com/doancan/codeyard/blob/main/docs/testing.md))
 
-CI runs these gates. `scripts/memcheck.sh` also runs in CI on macOS, but its budgets are only authoritative on a Retina Mac;
+CI runs these gates. The memory and size budgets (`scripts/memcheck.sh`) are not run in CI, they count on a Retina Mac;
 if the change could add memory or binary size, say so above and run `scripts/check.sh --budgets` on a Mac if you can.
 
 House rules ([CONTRIBUTING.md](https://github.com/doancan/codeyard/blob/main/CONTRIBUTING.md)):

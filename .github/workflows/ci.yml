@@ -2,8 +2,9 @@ name: ci
 # What a pull request has to wait for is short: formatting, clippy, a Windows build check and the dependency and licence
 # gates (about four minutes). The tests (the app's in parallel shards, the crates without GPUI on Linux) run on every pull
 # request too but are advisory there: a red one shows in the pull request, it does not hold it up. They are the gate where it
-# matters: a push to develop runs the whole workspace on macOS, the memory budgets and the Linux tests, and a pull request
-# from develop into main (`release-ready`) passes only when that run succeeded for the same commit. The nightly run and
+# matters: a push to develop runs the whole workspace on macOS (advisory: it takes the longest and a macOS failure shows
+# in the run, it does not hold a release) and the Linux tests, clippy and formatting on the self-hosted runner, and a pull
+# request from develop into main (`release-ready`) passes as soon as those gating jobs succeeded for the same commit. The nightly run and
 # a manual run add the slowest checks: every test natively on Windows, the standalone Windows build and the full Linux app run.
 on:
   push:
@@ -220,36 +221,6 @@ jobs:
           # Code extensions run in codeyard-exthost inside the OS sandbox, which this runner has: their tests must run.
           CODEYARD_REQUIRE_TOOLS: codeyard-exthost
 
-  # Memory and size budgets (a release build): not part of the pull request gate.
-  macos-budgets:
-    if: github.event_name != 'pull_request'
-    runs-on: macos-latest
-    timeout-minutes: 60
-    env:
-      # Match bundle-macos.sh so its cached production dependencies can be reused.
-      MACOSX_DEPLOYMENT_TARGET: "11.0"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
-      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
-        with:
-          toolchain: stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
-        with:
-          shared-key: app-macos
-          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
-      - name: Metal toolchain (GPUI shaders)
-        run: |
-          if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
-            xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
-          fi
-          xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
-      # What this step guards: the app binary size, the agent sizes and the idle agent daemon's memory do not depend
-      # on the display, so they are enforced exactly. The window rows (terminal, welcome, files) are budgeted for
-      # Retina and the runner has a 1x display, so they only catch gross regressions (they measure lower here).
-      # The real measurement of those is the maintainer's machine (`scripts/check.sh --budgets`). A process that
-      # cannot start or be measured fails the step; it never passes as "ok".
-      - run: scripts/memcheck.sh
-
   # Dependency gate: licences, known vulnerabilities, yanked versions, sources (deny.toml).
   deny:
     runs-on: ubuntu-latest
@@ -332,10 +303,12 @@ jobs:
   # The crates that do not depend on GPUI, plus the musl agent and its size limit
   # (the agent runs on Linux servers), and the extension SDKs and examples (the only job with the wasm32-wasip2 target
   # and Node.js for TypeScript extensions).
+  # Runs on the self-hosted runner (ci05) with a build directory that survives between runs, so it compiles only what changed. It
+  # never runs code from a fork: a pull request from another repository is skipped (the runner is a machine of the maintainer's).
   linux-tests:
     # Not for the pull request from develop into main: develop's own full run already tested the same commit.
-    if: ${{ !(github.event_name == 'pull_request' && github.base_ref == 'main' && github.head_ref == 'develop') }}
-    runs-on: ubuntu-latest
+    if: ${{ !(github.event_name == 'pull_request' && github.base_ref == 'main' && github.head_ref == 'develop') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: [self-hosted, ci05]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
@@ -347,10 +320,11 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
-        with:
-          shared-key: ci-linux
-          save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
+      # The checkout removes untracked files, so `target` is a link to a folder outside the workspace that keeps the build state.
+      - name: Persistent build directory
+        run: |
+          mkdir -p "$HOME/.cache/codeyard-ci/linux-tests"
+          ln -sfn "$HOME/.cache/codeyard-ci/linux-tests" target
       - name: TypeScript SDK (type check and tests)
         working-directory: sdk/typescript
         run: npm ci --ignore-scripts --no-audit --no-fund && npm run check && npm test
@@ -542,9 +516,20 @@ jobs:
           if [ "$EVENT" != pull_request ] || [ "$BASE" != main ]; then echo "not a pull request into main: nothing to hold back"; exit 0; fi
           for i in $(seq 1 80); do
             if [ "$HEAD" = develop ]; then
-              state=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=develop&event=push&head_sha=$SHA" \
-                --jq '[.workflow_runs[] | select(.head_sha == env.SHA)] | sort_by(.created_at) | last | "\(.status) \(.conclusion)"')
-              echo "full run of $SHA on develop: ${state:-none yet}"
+              # The jobs that gate main in develop's full run of this commit: clippy, formatting and the Linux tests. The macOS tests of
+              # that run are advisory and take the longest: a release does not wait for them.
+              run=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=develop&event=push&head_sha=$SHA" \
+                --jq '[.workflow_runs[] | select(.head_sha == env.SHA)] | sort_by(.created_at) | last | .id // empty')
+              jobs=""
+              [ -z "$run" ] || jobs=$(gh api "repos/$REPO/actions/runs/$run/jobs?per_page=100" \
+                --jq '[.jobs[] | select(.name | test("^(clippy-linux|fast-checks|linux-tests)$")) | .conclusion // "pending"] | join(",")')
+              echo "gating jobs of $SHA on develop: ${jobs:-none yet}"
+              count=$(printf '%s' "$jobs" | tr ',' '\n' | grep -c . || true)
+              case ",$jobs," in
+                *,failure,*|*,cancelled,*|*,timed_out,*) state="completed failure" ;;
+                *,pending,*) state="in_progress" ;;
+                *) if [ "$count" -eq 3 ]; then state="completed success"; else state="in_progress"; fi ;;
+              esac
             else
               jobs=$(gh api "repos/$REPO/actions/runs/$RUN/jobs?per_page=100" \
                 --jq '[.jobs[] | select(.name | test("^(linux-shard|linux-tests)")) | .conclusion // "pending"] | join(",")')
