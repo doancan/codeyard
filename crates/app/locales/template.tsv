@@ -319,6 +319,7 @@ Checking whitespace…
 Checking…	
 Checkout (Detached)	
 Checkout to…	
+Checkout {}	
 Checks	
 Cherry-pick	
 Cherry-pick aborted	
@@ -1262,6 +1263,7 @@ Go
 Go back to version {}	
 Go package	
 Go to Breakpoint	
+Go to Current Commit	
 Go to Definition	
 Go to File	
 Go to File…	
@@ -1707,6 +1709,7 @@ No cherry-pick or revert is in progress.
 No code extension is installed and enabled.	
 No code lens on this line	
 No comment syntax for this file type	
+No commit among the latest {} matches.	
 No commit matches.	
 No commits to show.	
 No commits yet.	
@@ -1922,6 +1925,7 @@ Open Settings (JSON)
 Open Setup Instructions	
 Open System Settings	
 Open View: {0} ({1})	
+Open Worktree	
 Open a .code-workspace file in the editor first.	
 Open a .http or .rest file to send requests.	
 Open a Cargo.toml first	
@@ -2260,6 +2264,7 @@ Remove All Breakpoints
 Remove Breakpoint	
 Remove Expression	
 Remove Host…	
+Remove Worktree…	
 Remove a host	
 Remove blank lines at the end of a file when saving	
 Remove control characters from pasted text	
@@ -2625,6 +2630,7 @@ Show type and parameter name hints from the language server
 Show who last changed the cursor line (and when) at the end of the line	
 Showing the first 100,000 files of a very large folder	
 Showing the last successful snapshot.	
+Showing the latest {} commits.	
 Showing {0} of {1} problems	
 Showing {0} of {1} problems: {2} errors, {3} warnings, {4} information	
 Shrink Selection	
@@ -4042,6 +4048,7 @@ your words
 {} minutes ago	
 {} month ago|{} months ago	
 {} more entry that the comparison hides (ignored by .gitignore or the compare settings) goes too.|{} more entries that the comparison hides (ignored by .gitignore or the compare settings) go too.	
+{} more files. Double-click the commit to see them all.	
 {} more ports are not listed here	
 {} needs a file operation that is not selected.	
 {} nested file|{} nested files	

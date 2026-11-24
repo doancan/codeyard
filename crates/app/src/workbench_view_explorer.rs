@@ -145,7 +145,8 @@ impl Workbench {
                 .child(super::a11y::part_frame(super::a11y::Part::Control(id), cx))
                 .flex_none()
                 .w(px(layout::ACTIVITYBAR_W))
-                .h(px(layout::ACTIVITYBAR_W))
+                // A little shorter than the view buttons: in a very small window the room for them is what is left above it.
+                .h(px(layout::ACTIVITYBAR_W - 4.))
                 .flex()
                 .items_center()
                 .justify_center()

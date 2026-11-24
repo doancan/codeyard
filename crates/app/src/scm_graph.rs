@@ -22,7 +22,8 @@ fn ref_chip(r: &RefLabel, p: &Palette) -> gpui::Div {
     let (fg, bg) = graph::ref_chip_colors(r.kind, p);
     let glyph = if r.kind == RefKind::Tag { "bookmark" } else { "git-branch" };
     div()
-        .flex_none()
+        .flex_shrink()
+        .min_w_0()
         .max_w(px(110.))
         .flex()
         .items_center()
@@ -34,7 +35,7 @@ fn ref_chip(r: &RefLabel, p: &Palette) -> gpui::Div {
         .text_color(c(fg))
         .bg(c(bg))
         .child(icon(glyph, 9., fg))
-        .child(div().overflow_hidden().whitespace_nowrap().child(r.name.clone()))
+        .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(r.name.clone()))
 }
 
 /// Labels in order of importance (HEAD, local, tag, remote); a remote branch with the same name as a local one is not repeated next to it.
@@ -53,7 +54,10 @@ fn ordered_refs(commit: &GraphCommit) -> Vec<&RefLabel> {
 
 /// Most lines of the message body a hover card shows, and the longest of those lines in characters.
 const CARD_MESSAGE_LINES: usize = 3;
-const CARD_LINE_CHARS: usize = 160;
+/// A line of the card is a paragraph of the message (hard-wrapped lines are joined), which the card wraps itself.
+const CARD_LINE_CHARS: usize = 280;
+/// A line at least this long that is followed by a plain line is taken as wrapped (git messages wrap at 72).
+const WRAPPED_LINE_CHARS: usize = 50;
 /// Details kept for hovered commits; the oldest are dropped when it is full (a commit's changes never change, so nothing else
 /// invalidates them).
 const CARD_CACHE: usize = 64;
@@ -169,10 +173,43 @@ fn pull_number(subject: &str) -> Option<u64> {
     number.chars().all(|c| c.is_ascii_digit()).then(|| number.parse().ok()).flatten()
 }
 
+/// Whether a message line starts a list item, a quote, a heading or a code fence: such a line is never joined to the one before.
+fn starts_block(line: &str) -> bool {
+    let t = line.trim_start();
+    t.starts_with(['-', '*', '•', '>', '#', '`', '|'])
+        || t.split_once(['.', ')']).is_some_and(|(n, rest)| !n.is_empty() && n.len() <= 3 && n.chars().all(|c| c.is_ascii_digit()) && rest.starts_with(' '))
+}
+
+/// Joins the lines of a message that were hard-wrapped (at 72 columns, by habit) back into paragraphs, so the narrow card does
+/// not show them as ragged short lines. Blank lines, list items, quotes and short lines stay as they are.
+fn reflow(lines: impl Iterator<Item = String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut previous_len = 0;
+    for line in lines {
+        let len = line.chars().count();
+        let continues = !line.is_empty()
+            && !starts_block(&line)
+            && previous_len >= WRAPPED_LINE_CHARS
+            && out.last().is_some_and(|last| !last.is_empty() && !last.starts_with("```"));
+        match out.last_mut() {
+            Some(last) if continues => {
+                last.push(' ');
+                last.push_str(line.trim_start());
+            }
+            _ => out.push(line),
+        }
+        previous_len = len;
+    }
+    out
+}
+
 /// The rest of the message under its subject line, cut to what a card can hold.
 fn message_body(message: &str) -> Vec<String> {
-    let mut lines: Vec<String> =
-        message.lines().skip(1).map(str::trim_end).skip_while(|l| l.is_empty()).map(|l| l.chars().take(CARD_LINE_CHARS).collect()).collect();
+    let body = message.lines().skip(1).map(str::trim_end).skip_while(|l| l.is_empty()).map(str::to_string);
+    let mut lines: Vec<String> = reflow(body)
+        .into_iter()
+        .map(|l| if l.chars().count() > CARD_LINE_CHARS { l.chars().take(CARD_LINE_CHARS - 1).collect::<String>() + "…" } else { l })
+        .collect();
     while lines.last().is_some_and(String::is_empty) {
         lines.pop();
     }
@@ -383,6 +420,8 @@ pub enum GraphOption {
     HideMerges,
     Search,
     Reload,
+    /// Select the commit the checked-out branch is at and scroll it into view.
+    GoToHead,
 }
 
 /// What the "…" menu needs to draw its checks.
@@ -431,6 +470,7 @@ impl ScmPanel {
             GraphOption::HideMerges => self.hide_merges = !self.hide_merges,
             GraphOption::Search => self.toggle_graph_search(window, cx),
             GraphOption::Reload => self.load_graph(cx),
+            GraphOption::GoToHead => self.go_to_head(cx),
         }
         cx.notify();
     }
@@ -471,16 +511,36 @@ impl ScmPanel {
         let flat = mode != GraphView::Graph || searching || only_mine || hide_merges;
         let items = graph::build_items(&g.commits, keep, mode);
         if items.is_empty() {
-            let why = if searching {
-                crate::i18n::t("No commit matches.")
+            let why: String = if searching && self.graph_truncated(cx) {
+                // Older commits are not loaded: "no match" would read as "no such commit in the repository".
+                crate::i18n::tf("No commit among the latest {} matches.", &[&g.commits.len()])
+            } else if searching {
+                crate::i18n::t("No commit matches.").into()
             } else if only_mine {
-                crate::i18n::t("None of these commits is yours.")
+                crate::i18n::t("None of these commits is yours.").into()
             } else {
-                crate::i18n::t("No commits to show.")
+                crate::i18n::t("No commits to show.").into()
             };
             return Err((why.into(), false));
         }
         Ok((g, items, flat))
+    }
+
+    /// How many commits the graph asks git for: the setting, plus what "Load more" added.
+    pub(super) fn graph_limit(&self, cx: &gpui::App) -> usize {
+        (cx.global::<crate::settings::Settings>().graph_limit + self.graph_more).min(super::GRAPH_LIMIT_MAX)
+    }
+
+    /// The history was cut at the limit and the limit can still grow: there may be older commits that are not here.
+    pub(crate) fn graph_truncated(&self, cx: &gpui::App) -> bool {
+        let limit = self.graph_limit(cx);
+        self.graph.as_ref().is_some_and(|g| g.commits.len() >= limit) && limit < super::GRAPH_LIMIT_MAX
+    }
+
+    pub(super) fn load_more_commits(&mut self, cx: &mut Context<Self>) {
+        self.graph_more += super::GRAPH_MORE_STEP;
+        self.load_graph(cx);
+        cx.notify();
     }
 
     /// `fill`: nothing else needs the room, so the graph grows to the bottom of the panel instead of its fixed height.
@@ -508,6 +568,7 @@ impl ScmPanel {
             .child(
                 ui::icon_button("scm-graph-search", "search", crate::i18n::t("Search commits"), &p)
                     .relative()
+                    .map(|d| sections::tabbable(d, &p))
                     .child(probe(HistoryFrame::Button("search")))
                     .when(self.search_open, |d| d.bg(c(p.surface_active)))
                     .on_click(cx.listener(|this, _, window, cx| {
@@ -519,18 +580,21 @@ impl ScmPanel {
                 d.child(
                     ui::icon_button("scm-graph-fetch", "cloud-download", crate::i18n::t("Fetch from all remotes"), &p)
                         .relative()
+                        .map(|d| sections::tabbable(d, &p))
                         .child(probe(HistoryFrame::Button("fetch")))
                         .on_click(dispatch(Box::new(crate::workbench::GitFetchAll))),
                 )
                 .child(
-                    count_button("scm-graph-pull", "arrow-down", behind, "Pull", &p)
+                    count_button("scm-graph-pull", "arrow-down", behind, crate::i18n::t("Pull"), &p)
                         .relative()
+                        .map(|d| sections::tabbable(d, &p))
                         .child(probe(HistoryFrame::Button("pull")))
                         .on_click(dispatch(Box::new(crate::workbench::GitPull))),
                 )
                 .child(
-                    count_button("scm-graph-push", "arrow-up", ahead, "Push", &p)
+                    count_button("scm-graph-push", "arrow-up", ahead, crate::i18n::t("Push"), &p)
                         .relative()
+                        .map(|d| sections::tabbable(d, &p))
                         .child(probe(HistoryFrame::Button("push")))
                         .on_click(dispatch(Box::new(crate::workbench::GitPush))),
                 )
@@ -550,6 +614,7 @@ impl ScmPanel {
             } else {
                 ui::icon_button("scm-graph-refresh", "refresh-cw", crate::i18n::t("Reload history"), &p)
                     .relative()
+                    .map(|d| sections::tabbable(d, &p))
                     .child(probe(HistoryFrame::Button("refresh")))
                     .on_click(cx.listener(|this, _, _, cx| {
                         cx.stop_propagation();
@@ -559,6 +624,7 @@ impl ScmPanel {
             .child(
                 ui::icon_button("scm-graph-more", "ellipsis", crate::i18n::t("More Actions…"), &p)
                     .relative()
+                    .map(|d| sections::tabbable(d, &p))
                     .child(probe(HistoryFrame::Button("more")))
                     .on_click(cx.listener(|_, ev: &gpui::ClickEvent, _, cx| {
                         cx.stop_propagation();
@@ -601,6 +667,7 @@ impl ScmPanel {
             });
 
         let height = self.section_height("graph", 260.);
+        let truncated_at = self.graph_truncated(cx).then(|| self.graph.as_ref().map_or(0, |g| g.commits.len()));
         let selected = self.selected.as_ref().map(|c| c.hash.clone());
         let body = open.then(|| {
             let (g, items, flat) = match self.graph_items(cx) {
@@ -657,7 +724,8 @@ impl ScmPanel {
             .min_h(px(super::layout::ROW_H + 4.))
             .relative()
             .child(probe(HistoryFrame::Section("graph")))
-            .child(self.top_sash("graph", &p, cx))
+            // Nothing to move while the graph fills the panel under a short list: no edge to grab.
+            .when(!fill, |d| d.child(self.top_sash("graph", &p, cx)))
             .child(header)
             .when(open && filtered, |d| d.child(filters))
             .when(open && self.search_open, |d| {
@@ -674,16 +742,91 @@ impl ScmPanel {
             .when_some(body, |d, body| {
                 d.child(
                     div()
+                        .debug_selector(|| "scm-graph-body".into())
+                        .track_focus(&self.graph_focus)
+                        .tab_index(0)
+                        .key_context("ScmGraph")
+                        .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, _, cx| {
+                            if let Some(key) = graph_key(&ev.keystroke.key, ev.keystroke.modifiers) {
+                                this.graph_key(key, cx);
+                                cx.stop_propagation();
+                            }
+                        }))
                         .when(fill, |d| d.flex_1())
                         .when(!fill, |d| d.h(px(height)))
-                        .flex_shrink()
+                        // Under a lack of room the sections above give way first (worktrees, stashes, the change list), so that
+                        // a dragged edge makes the graph as tall as asked instead of the graph giving the room back.
+                        .map(|mut d| {
+                            d.style().flex_shrink = Some(0.01);
+                            d
+                        })
                         .min_h(px(60.))
                         .relative()
                         .child(probe(HistoryFrame::List("graph")))
+                        .child(self.sections.measure("graph"))
                         .child(body),
                 )
             })
+            // The history was cut at the limit: say so, and let one press bring in the next page.
+            .when_some(truncated_at.filter(|_| open), |d, n| {
+                d.child(
+                    div()
+                        .id("scm-graph-more")
+                        .debug_selector(|| "scm-graph-more".into())
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .gap(px(theme::SPACE[3]))
+                        .h(px(super::layout::ROW_H))
+                        .px(px(theme::SPACE[5]))
+                        .border_t_1()
+                        .border_color(c(p.border))
+                        .text_size(px(text::XS.0))
+                        .text_color(c(p.text_muted))
+                        .child(
+                            div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(tf("Showing the latest {} commits.", &[&n])),
+                        )
+                        .child(
+                            div()
+                                .id("scm-graph-more-button")
+                                .flex_none()
+                                .cursor_pointer()
+                                .text_color(c(ui::ensure_contrast(p.accent, p.text, &[p.bg, p.surface], 4.6)))
+                                .hover(|d| d.underline())
+                                .map(|d| sections::tabbable(d, &p))
+                                .child(t("Load more"))
+                                .on_click(cx.listener(|this, _, _, cx| this.load_more_commits(cx))),
+                        ),
+                )
+            })
     }
+}
+
+/// What a key does in the graph's list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GraphKey {
+    /// Commits to move by (negative: up); the ends are `isize::MIN` and `isize::MAX`.
+    Step(isize),
+    Open,
+}
+
+/// Rows a Page key moves by.
+const GRAPH_PAGE: isize = 10;
+
+pub(crate) fn graph_key(key: &str, m: gpui::Modifiers) -> Option<GraphKey> {
+    if m.control || m.alt || m.shift || m.function || m.platform {
+        return None;
+    }
+    Some(match key {
+        "up" => GraphKey::Step(-1),
+        "down" => GraphKey::Step(1),
+        "pageup" => GraphKey::Step(-GRAPH_PAGE),
+        "pagedown" => GraphKey::Step(GRAPH_PAGE),
+        "home" => GraphKey::Step(isize::MIN),
+        "end" => GraphKey::Step(isize::MAX),
+        "enter" => GraphKey::Open,
+        _ => return None,
+    })
 }
 
 /// Day header: "Saturday, 24 Oct 2026" and that day's count.
@@ -824,7 +967,7 @@ fn graph_row(
                     )
                 }),
         )
-        .children(refs.first().map(|r| div().flex_none().ml(px(theme::SPACE[2])).child(ref_chip(r, p))))
+        .children(refs.first().map(|r| div().flex_shrink().min_w_0().ml(px(theme::SPACE[2])).child(ref_chip(r, p))))
         .when(more > 0, |d| {
             d.child(div().flex_none().ml(px(theme::SPACE[1])).text_size(px(text::BADGE.0)).text_color(c(p.text_muted)).child(format!("+{more}")))
         })
@@ -954,6 +1097,47 @@ impl ScmPanel {
         let Some(anchor) = anchor else { return self.select_commit(commit, cx) };
         self.range = Some((anchor, commit.hash.clone()));
         self.select_commit(commit, cx);
+    }
+
+    /// The commits as listed (filters and search applied, day headers left out) with the row each one is in.
+    fn listed_commits(&self, cx: &gpui::App) -> Option<(Arc<GraphData>, Vec<(usize, usize)>)> {
+        let (g, items, _) = self.graph_items(cx).ok()?;
+        let commits = items.iter().enumerate().filter_map(|(row, item)| if let GraphItem::Commit(ix) = item { Some((row, *ix)) } else { None }).collect();
+        Some((g, commits))
+    }
+
+    /// A key in the graph's list: the selection moves to the commit above or below (the list scrolls to keep it in view), or the
+    /// selected commit opens.
+    pub(super) fn graph_key(&mut self, key: GraphKey, cx: &mut Context<Self>) {
+        let Some((g, commits)) = self.listed_commits(cx) else { return };
+        let Some(last) = commits.len().checked_sub(1) else { return };
+        let current = self.selected.as_ref().and_then(|s| commits.iter().position(|(_, ix)| g.commits[*ix].hash == s.hash));
+        let target = match (key, current) {
+            (GraphKey::Open, Some(at)) => {
+                cx.emit(ScmEvent::OpenCommit(g.commits[commits[at].1].clone()));
+                return;
+            }
+            (GraphKey::Open, None) => return,
+            (GraphKey::Step(isize::MIN), _) => 0,
+            (GraphKey::Step(isize::MAX), _) => last,
+            // Nothing selected yet: the first key lands on the first commit rather than skipping it.
+            (GraphKey::Step(_), None) => 0,
+            (GraphKey::Step(delta), Some(at)) => at.saturating_add_signed(delta).min(last),
+        };
+        let (row, ix) = commits[target];
+        self.pick_commit(g.commits[ix].clone(), false, cx);
+        self.graph_scroll.scroll_to_item(row, gpui::ScrollStrategy::Center);
+        cx.notify();
+    }
+
+    /// Select the commit the checked-out branch is at and bring it into view (a search or a long history moved it away).
+    pub(super) fn go_to_head(&mut self, cx: &mut Context<Self>) {
+        let Some(hash) = self.head_hash() else { return };
+        let Some((g, commits)) = self.listed_commits(cx) else { return };
+        let Some(&(row, ix)) = commits.iter().find(|(_, ix)| g.commits[*ix].hash == hash) else { return };
+        self.pick_commit(g.commits[ix].clone(), false, cx);
+        self.graph_scroll.scroll_to_item(row, gpui::ScrollStrategy::Center);
+        cx.notify();
     }
 
     /// The commit the checked-out branch was at when the graph was read: what a rewrite is pinned to.

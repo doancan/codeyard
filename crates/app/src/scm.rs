@@ -44,6 +44,8 @@ pub enum ScmEvent {
     OpenCommitFile(GraphCommit, FileChange),
     /// Right click on a commit row: operation menu.
     CommitMenu(GraphCommit, gpui::Point<gpui::Pixels>),
+    /// Right click on a worktree row: its menu.
+    WorktreeMenu(WorktreeMenu),
     /// Section layout changed (persisted).
     SectionsChanged(String),
     /// Right click on a changed file: its menu (path relative to the repository, window coordinates).
@@ -82,6 +84,17 @@ pub enum ScmEvent {
 pub struct Target {
     pub root: String,
     pub id: Option<Arc<RepoId>>,
+}
+
+/// What the menu of a worktree row needs: where it is, and what can be done with it.
+#[derive(Clone, Debug)]
+pub struct WorktreeMenu {
+    pub path: String,
+    pub position: gpui::Point<gpui::Pixels>,
+    /// Another, usable checkout: it can be opened in this window.
+    pub can_open: bool,
+    /// Not the main one and not the one in this window: it can be removed.
+    pub can_remove: bool,
 }
 
 /// What a stash action does.
@@ -154,6 +167,10 @@ pub struct ScmPanel {
     change_scroll: UniformListScrollHandle,
     /// The change list's keyboard focus and cursor row (by identity, with the index it was last seen at).
     change_focus: FocusHandle,
+    /// The graph's list: Up, Down, Home, End, Page keys move the selected commit, Enter opens it.
+    graph_focus: FocusHandle,
+    /// Commits loaded beyond `git.graph.limit` in this session ("Load more"); read again for another repository.
+    graph_more: usize,
     change_cursor: Option<(changes_ui::ChangeKey, usize)>,
     /// Result of the last operation: (text, is error).
     result: Option<(SharedString, bool)>,
@@ -214,6 +231,8 @@ pub(crate) use history_access::{AccessGraphRow, AccessHistory, AccessWorktree, A
 
 #[path = "scm_changes.rs"]
 mod changes_ui;
+#[path = "scm_detail.rs"]
+mod detail_ui;
 #[path = "scm_operation.rs"]
 mod operation_ui;
 #[path = "scm_ops.rs"]
@@ -265,6 +284,8 @@ impl ScmPanel {
             repo_scroll: UniformListScrollHandle::new(),
             change_scroll: UniformListScrollHandle::new(),
             change_focus: cx.focus_handle().tab_stop(true),
+            graph_focus: cx.focus_handle().tab_stop(true),
+            graph_more: 0,
             change_cursor: None,
             repo_focus: cx.focus_handle(),
             result: None,
@@ -366,6 +387,7 @@ impl ScmPanel {
 
     /// The history of another repository than the selected one is never kept on screen.
     fn clear_history(&mut self) {
+        self.graph_more = 0;
         self.graph = None;
         self.graph_error = None;
         self.history = None;
@@ -401,7 +423,7 @@ impl ScmPanel {
         self.graph_loading = true;
         let host = self.host.clone();
         let scope = self.scope;
-        let limit = cx.global::<crate::settings::Settings>().graph_limit;
+        let limit = self.graph_limit(cx);
         let dir = root.clone();
         let task = cx.background_executor().spawn(async move {
             let log = graph::log(host.as_ref(), &dir, limit, scope);
@@ -411,7 +433,7 @@ impl ScmPanel {
                 commits.iter_mut().for_each(|c| c.incoming = incoming.contains(&c.hash));
                 commits
             });
-            (log, git::identity(host.as_ref(), &dir), git::stash_list(host.as_ref(), &dir).unwrap_or_default(), has_remote)
+            (log, git::identity(host.as_ref(), &dir), git::stash_list(host.as_ref(), &dir).ok(), has_remote)
         });
         let loaded_from = self.host.clone();
         cx.spawn(async move |this, cx| {
@@ -429,7 +451,10 @@ impl ScmPanel {
                 this.identity = Some(identity);
 
                 this.has_remote = has_remote;
-                this.stashes = stashes;
+                // A failed `git stash list` keeps the list as it was: the section does not vanish without a word.
+                if let Some(stashes) = stashes {
+                    this.stashes = stashes;
+                }
                 this.graph_loading = false;
                 match result {
                     Ok(commits) => {
@@ -438,7 +463,11 @@ impl ScmPanel {
                         this.graph = Some(Arc::new(GraphData { commits, rows }));
                         this.graph_error = None;
                     }
-                    Err(e) => this.graph_error = Some(e.lines().next().unwrap_or("git log failed").to_string().into()),
+                    // The old graph goes too: it would stay on screen as if it were current, with the error nowhere to be seen.
+                    Err(e) => {
+                        this.graph = None;
+                        this.graph_error = Some(e.lines().next().unwrap_or("git log failed").to_string().into());
+                    }
                 }
                 // If the state changed during loading (key was reset), load again.
                 let now = this.status.as_deref().map(GraphKey::of);
@@ -566,6 +595,7 @@ impl ScmPanel {
                     })),
                 )
         };
+        let opened = self.opened.as_ref().is_some_and(|(open, open_staged)| *open == change.path && *open_staged == staged);
         div()
             .id(SharedString::from(format!("scm-{staged}-{ix}")))
             .relative()
@@ -581,12 +611,26 @@ impl ScmPanel {
             .whitespace_nowrap()
             .overflow_hidden()
             .cursor_pointer()
-            .hover(|d| d.bg(c(p.surface_hover)))
-            .when(self.opened.as_ref().is_some_and(|(open, open_staged)| *open == change.path && *open_staged == staged), |d| d.bg(c(p.surface_active)))
+            // The opened row keeps its own fill under the pointer; hover would paint over it.
+            .when(!opened, |d| d.hover(|d| d.bg(c(p.surface_hover))))
+            .when(opened, |d| d.bg(c(p.surface_active)))
             .child(crate::icon_theme::file_icon_el(&name, layout::ICON, &p))
             .child(div().flex_shrink().min_w_0().overflow_hidden().text_color(c(mark.color(&p))).when(mark == Mark::Deleted, |d| d.line_through()).child(name))
             .child(div().flex_1().min_w_0().overflow_hidden().text_size(px(text::XS.0)).text_color(c(p.text_muted)).children(dir))
-            .child(div().invisible().group_hover(group, |s| s.visible()).child(actions))
+            .child(
+                // On hover the buttons cover the end of the folder name; they take no room from the name when the row is at rest.
+                div()
+                    .absolute()
+                    .top_0()
+                    .right(px(theme::SPACE[4] + 12. + theme::SPACE[2]))
+                    .h_full()
+                    .flex()
+                    .items_center()
+                    .bg(c(if opened { p.surface_active } else { p.surface_hover }))
+                    .invisible()
+                    .group_hover(group, |s| s.visible())
+                    .child(actions),
+            )
             .child(div().w(px(12.)).flex_none().text_size(px(text::XS.0)).text_color(c(mark.color(&p))).child(mark.letter()))
             .when(!self.menu_open, |d| {
                 d.tooltip({
@@ -667,7 +711,7 @@ impl ScmPanel {
             .text_color(c(p.text_muted))
             .cursor_pointer()
             .child(icon(if self.sections.is_open(id, true) { "chevron-down" } else { "chevron-right" }, 14., p.text_muted))
-            .child(div().flex_1().child(title.to_string()))
+            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(title.to_string()))
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_section(id, cx)))
             .when(!staged && n > 0 && id != "scm-merge", |d| {
                 d.child(hover_button(format!("{el}-discard"), "undo-2", crate::i18n::t("Discard all changes")).on_click(cx.listener(
@@ -795,17 +839,20 @@ impl Render for ScmPanel {
         let commit_label: SharedString = commit_label.into();
         // Latest commit in the repo: so the panel visibly shows it really read the repo.
         let last = self.graph.as_ref().and_then(|g| g.commits.iter().find(|c| c.refs.iter().any(|r| r.kind == RefKind::Head)).cloned());
-        let branch = match (&st.branch, st.ahead, st.behind) {
-            (Some(b), 0, 0) => b.clone(),
-            (Some(b), a, d) => format!("{b}  {}", git::counts_label(a, d)),
-            (None, ..) => crate::i18n::t("detached HEAD").into(),
+        let (branch, counts) = match (&st.branch, st.ahead, st.behind) {
+            (Some(b), 0, 0) => (b.clone(), None),
+            (Some(b), a, d) => (b.clone(), Some(git::counts_label(a, d))),
+            (None, ..) => (crate::i18n::t("detached HEAD").into(), None),
         };
         // Several repositories: the line names the one the message box, Commit, Sync and the graph act on.
         let branch = match self.repo_by_root(&st.root).filter(|_| self.multi()) {
             Some(r) => format!("{} · {branch}", r.label),
             None => branch,
         };
-        let graph_fills = !self.multi() && st.changes.is_empty() && self.sections.is_open("graph", true) && !self.sections.has_height("graph");
+        // The graph fills the room while the changes list is short (whatever height was dragged earlier: it applies again once the list
+        // is long); a long list keeps the room for itself.
+        let list_is_short = st.changes.len() <= changes_ui::MAX_FIT_LINES && self.current_lines(&st).len() <= changes_ui::MAX_FIT_LINES;
+        let graph_fills = !self.multi() && list_is_short && self.sections.is_open("graph", true);
         let field_box = ui::input_box("scm-message-box", &p, p.bg, self.message.focus_handle(cx).is_focused(window))
             .relative()
             .child(self.message.clone())
@@ -865,7 +912,10 @@ impl Render for ScmPanel {
                             .gap(px(theme::SPACE[3]))
                             .text_size(px(text::XS.0))
                             .child(icon("git-branch", 14., p.text_muted))
-                            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_color(c(p.text)).child(branch))
+                            .child(div().flex_shrink().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(c(p.text)).child(branch))
+                            // The counts are what a narrow panel must not cut: the name gives way to them.
+                            .children(counts.map(|n| div().flex_none().whitespace_nowrap().text_color(c(p.text_muted)).child(n)))
+                            .child(div().flex_1())
                             .when_some(self.identity.clone(), |d, (name, email)| match (name, email) {
                                 (Some(n), Some(e)) => {
                                     let tip: SharedString = crate::i18n::tf("Commits as {0} <{1}>", &[&n, &e]).into();
@@ -923,9 +973,8 @@ impl Render for ScmPanel {
                             .rounded(px(theme::radius::SM))
                             .bg(c(p.accent))
                             .text_color(c(p.on_accent))
-                            .cursor_pointer()
+                            .when(can_commit, |d| d.cursor_pointer().hover(|d| d.opacity(0.9)))
                             .when(!can_commit, |d| d.opacity(0.5))
-                            .hover(|d| d.opacity(0.9))
                             .child(icon("check", 14., p.on_accent))
                             .child(commit_label)
                             .on_click(cx.listener(|this, _, _, cx| this.commit(cx))),
@@ -946,6 +995,18 @@ impl Render for ScmPanel {
             .child(self.graph_section(self.query.focus_handle(cx).is_focused(window), graph_fills, cx))
             .children(self.detail_section(cx))
     }
+}
+
+/// Files of a commit listed in its details; the rest are behind "+N more" (the commit opens with all of them).
+const DETAIL_FILE_ROWS: usize = 300;
+
+/// Commits one "Load more" adds, and the most a session loads (a graph of more rows is not drawn or searched any faster).
+const GRAPH_MORE_STEP: usize = 300;
+const GRAPH_LIMIT_MAX: usize = 10_000;
+
+/// The local branches that point at a commit and are not checked out: the ones a menu can switch to in one step.
+pub(crate) fn switchable_branches(commit: &GraphCommit) -> Vec<String> {
+    commit.refs.iter().filter(|r| r.kind == RefKind::Local).map(|r| r.name.clone()).collect()
 }
 
 /// Commit button's label and whether it can be pressed: "Commit (n)" if something is staged, otherwise
@@ -994,12 +1055,17 @@ fn status_color(status: char, p: &ui::Palette) -> u32 {
 
 /// Commit matches on subject, author, short/full hash.
 pub fn commit_matches(c: &GraphCommit, query: &str) -> bool {
-    let q = query.trim().to_lowercase();
+    let q = fold_case(query.trim());
     q.is_empty()
-        || c.subject.to_lowercase().contains(&q)
-        || c.author.to_lowercase().contains(&q)
+        || fold_case(&c.subject).contains(&q)
+        || fold_case(&c.author).contains(&q)
         || c.hash.starts_with(&q)
-        || c.refs.iter().any(|r| r.name.to_lowercase().contains(&q))
+        || c.refs.iter().any(|r| fold_case(&r.name).contains(&q))
+}
+
+/// Lower case for searching. `İ` lowers to `i` plus a combining dot (U+0307), which would keep "ilhan" from finding "İlhan".
+fn fold_case(text: &str) -> String {
+    text.to_lowercase().replace('\u{307}', "")
 }
 
 impl ScmPanel {
@@ -1046,7 +1112,12 @@ impl ScmPanel {
                 .hover(|d| d.bg(c(p.surface_hover)))
                 .child(if self.syncing { ui::spinner("scm-sync-busy", 14., p.text).into_any_element() } else { icon(glyph, 14., p.text).into_any_element() })
                 .child(label)
-                .on_click(cx.listener(move |_, _, _, cx| cx.emit(event()))),
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    // A sync is running: a second press must not start another one on top of it.
+                    if !this.syncing {
+                        cx.emit(event());
+                    }
+                })),
         )
     }
 
@@ -1192,14 +1263,19 @@ impl ScmPanel {
 
     /// Handle on the section's top edge: dragging up enlarges it.
     fn top_sash(&self, id: &'static str, p: &ui::Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        let h = self.section_height(id, if id == "graph" { 260. } else { 170. });
-        sections::sash(SharedString::from(format!("sash-{id}")), p, self.sections.dragging_section(id)).on_mouse_down(
-            gpui::MouseButton::Left,
-            cx.listener(move |this, ev: &gpui::MouseDownEvent, _, cx| {
-                cx.stop_propagation();
-                this.sections.begin_drag(id, ev.position.y / px(1.), h, -1.);
-            }),
-        )
+        // From what is painted: a section squeezed by a short window is smaller than its stored height, and a drag that started
+        // from the stored one would move nothing until it passed the difference.
+        let stored = self.section_height(id, if id == "graph" { 260. } else { 170. });
+        let h = self.sections.rendered_height(id, stored);
+        sections::sash(SharedString::from(format!("sash-{id}")), p, self.sections.dragging_section(id))
+            .debug_selector(move || format!("sash-{id}"))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |this, ev: &gpui::MouseDownEvent, _, cx| {
+                    cx.stop_propagation();
+                    this.sections.begin_drag(id, ev.position.y / px(1.), h, -1.);
+                }),
+            )
     }
 
     /// "GRAPH": history of all branches; two-line commit rows like GitLab.
@@ -1288,183 +1364,6 @@ impl ScmPanel {
                 .flex_none()
                 .child(header)
                 .when(open, |d| d.child(div().id("scm-stashes").max_h(px(layout::ROW_H * 6.)).overflow_y_scroll().children(rows))),
-        )
-    }
-
-    /// "COMMIT": the selected commit's message, author, files and line counts.
-    fn detail_section(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
-        let commit = self.selected.clone()?;
-        let p = *palette(cx);
-        let open = self.sections.is_open("details", true);
-        let title = crate::i18n::tf("Commit {}", &[&commit.short]);
-        let probe = |part: HistoryFrame| crate::painted::probe(&self.a11y_frames, AccessFrame::History(part));
-        let header = sections::header("scm-detail-header", &title, None, open, &p)
-            .relative()
-            .child(probe(HistoryFrame::Header("details")))
-            .child(
-                ui::icon_button("scm-detail-close", "x", crate::i18n::t("Close details"), &p)
-                    .relative()
-                    .child(probe(HistoryFrame::Button("details-close")))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        cx.stop_propagation();
-                        this.selected = None;
-                        this.detail = None;
-                        cx.notify();
-                    })),
-            )
-            .on_click(cx.listener(|this, _, _, cx| this.toggle_section("details", cx)));
-        let height = self.section_height("details", 170.);
-        let hash = commit.hash.clone();
-        let body = open.then(|| {
-            let mut col = div()
-                .id("scm-detail")
-                .size_full()
-                .overflow_y_scroll()
-                .flex()
-                .flex_col()
-                .gap(px(theme::SPACE[3]))
-                .px(px(theme::SPACE[5]))
-                .py(px(theme::SPACE[3]));
-            let head = |col: gpui::Stateful<gpui::Div>, d: Option<&CommitDetail>| {
-                let message = d.map_or(commit.subject.clone(), |d| d.message.clone());
-                let (subject, rest) = message.split_once('\n').map_or((message.as_str(), ""), |(a, b)| (a, b.trim()));
-                col.child(div().font_weight(gpui::FontWeight::SEMIBOLD).text_size(px(text::SM.0)).child(subject.to_string()))
-                    .when(!rest.is_empty(), |c0| c0.child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(rest.to_string())))
-                    // Single-line meta: author (email and date in the tooltip), time and hash; icons instead of text.
-                    .child({
-                        let who: SharedString = format!("{} <{}>\n{}", commit.author, commit.email, commit.date).into();
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(theme::SPACE[4]))
-                            .text_size(px(text::XS.0))
-                            .child(
-                                div()
-                                    .id("scm-detail-author")
-                                    .flex_1()
-                                    .min_w_0()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(theme::SPACE[2]))
-                                    .child(avatar(&commit.author, 16., &p))
-                                    .child(div().overflow_hidden().whitespace_nowrap().child(commit.author.clone()))
-                                    .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(who.clone())).into()),
-                            )
-                            .child(
-                                div()
-                                    .flex_none()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(theme::SPACE[1]))
-                                    .text_color(c(p.text_muted))
-                                    .child(icon("clock", 12., p.text_muted))
-                                    .child(crate::git::short_ago(&commit.when)),
-                            )
-                            .child(
-                                div()
-                                    .id("scm-detail-hash")
-                                    .flex_none()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(theme::SPACE[1]))
-                                    .cursor_pointer()
-                                    .font_family(ui::MONO_FONT)
-                                    .text_size(px(text::XXS.0))
-                                    .text_color(c(p.accent))
-                                    .child(icon("git-commit", 12., p.text_muted))
-                                    .child(commit.short.clone())
-                                    .tooltip(|_, cx| cx.new(|_| crate::workbench::Tooltip(crate::i18n::t("Copy the full hash").into())).into())
-                                    .on_click({
-                                        let h = hash.clone();
-                                        move |_, _, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(h.clone()))
-                                    }),
-                            )
-                    })
-            };
-            match (&self.detail, &self.detail_error) {
-                (_, Some(e)) => {
-                    head(col, None).child(div().text_color(c(p.danger)).child(crate::i18n::tf("Could not read the commit: {}", &[&e]))).into_any_element()
-                }
-                (None, None) => head(col, None).child(div().text_color(c(p.text_muted)).child(crate::i18n::t("Loading…"))).into_any_element(),
-                (Some(d), None) => {
-                    let (added, deleted) = d.totals();
-                    col = head(col, Some(d)).child(
-                        div()
-                            .flex()
-                            .gap(px(theme::SPACE[3]))
-                            .text_size(px(text::XS.0))
-                            .text_color(c(p.text_muted))
-                            .items_center()
-                            .child(icon("files", 12., p.text_muted))
-                            .child(d.files.len().to_string())
-                            .child(div().text_color(c(p.success)).child(format!("+{added}")))
-                            .child(div().text_color(c(p.danger)).child(format!("−{deleted}"))),
-                    );
-                    let rows: Vec<_> = d
-                        .files
-                        .iter()
-                        .enumerate()
-                        .map(|(i, f)| {
-                            let (entry, file) = (commit.clone(), f.clone());
-                            let dir = f.path.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default();
-                            div()
-                                .id(("scm-detail-file", i))
-                                .relative()
-                                .child(crate::painted::probe(&self.a11y_frames, AccessFrame::History(HistoryFrame::DetailFile(i))))
-                                .h(px(layout::ROW_H))
-                                .flex()
-                                .flex_none()
-                                .items_center()
-                                .gap(px(theme::SPACE[3]))
-                                .px(px(theme::SPACE[2]))
-                                .rounded(px(theme::radius::SM))
-                                .cursor_pointer()
-                                .hover(|d| d.bg(c(p.surface_hover)))
-                                .child(crate::icon_theme::file_icon_el(ui::file_name(&f.path), 14., &p))
-                                .child(div().flex_none().text_size(px(text::SM.0)).child(ui::file_name(&f.path).to_string()))
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .overflow_hidden()
-                                        .whitespace_nowrap()
-                                        .text_size(px(text::XXS.0))
-                                        .text_color(c(p.text_muted))
-                                        .child(dir),
-                                )
-                                .when_some(f.added, |d, a| {
-                                    d.child(div().flex_none().text_size(px(text::XXS.0)).text_color(c(p.success)).child(format!("+{a}")))
-                                })
-                                .when_some(f.deleted, |d, a| {
-                                    d.child(div().flex_none().text_size(px(text::XXS.0)).text_color(c(p.danger)).child(format!("−{a}")))
-                                })
-                                .child(
-                                    div()
-                                        .flex_none()
-                                        .w(px(12.))
-                                        .text_size(px(text::XS.0))
-                                        .font_weight(gpui::FontWeight::BOLD)
-                                        .text_color(c(status_color(f.status, &p)))
-                                        .child(f.status.to_string()),
-                                )
-                                .on_click(cx.listener(move |_, _, _, cx| cx.emit(ScmEvent::OpenCommitFile(entry.clone(), file.clone()))))
-                        })
-                        .collect();
-                    col.children(rows).into_any_element()
-                }
-            }
-        });
-        Some(
-            div()
-                .flex()
-                .flex_col()
-                .flex_shrink()
-                .min_h(px(layout::ROW_H + 4.))
-                .relative()
-                .child(probe(HistoryFrame::Section("details")))
-                .child(self.top_sash("details", &p, cx))
-                .child(header)
-                .when_some(body, |d, body| d.child(div().h(px(height)).flex_shrink().min_h(px(60.)).child(body))),
         )
     }
 }

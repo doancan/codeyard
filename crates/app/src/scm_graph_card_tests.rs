@@ -162,6 +162,23 @@ fn a_long_message_body_is_cut_to_what_a_card_holds() {
     assert_eq!(message_body(&format!("S\n\n{wide}"))[0].chars().count(), CARD_LINE_CHARS);
 }
 
+/// A message wrapped at 72 columns reads as paragraphs, not as ragged short lines; lists, quotes, blank lines and short lines stay.
+#[test]
+fn a_hard_wrapped_message_is_joined_into_paragraphs() {
+    let wrapped = "The built-in list is meant to be short and polished: the two\nCodeyard themes, the high-contrast pair and the well-known\npalettes.\n\nSecond paragraph.";
+    assert_eq!(
+        message_body(&format!("Subject\n\n{wrapped}")),
+        vec![
+            "The built-in list is meant to be short and polished: the two Codeyard themes, the high-contrast pair and the well-known palettes.",
+            "",
+            "Second paragraph."
+        ]
+    );
+    let listed = "Changes in this commit, all of them listed below for the reader:\n- one thing\n- another thing\n1. numbered\n> quoted";
+    assert_eq!(reflow(listed.lines().map(String::from)).len(), 5, "list items, numbers and quotes start their own line");
+    assert_eq!(message_body("S\n\nshort\nshort too"), vec!["short", "short too"], "short lines are not wrapped lines");
+}
+
 /// The card of a commit in a repository opened over SSH (the throwaway `sshd`): the changes are read through the agent.
 #[gpui::test]
 fn the_card_reads_a_commit_over_ssh(cx: &mut TestAppContext) {
@@ -282,4 +299,29 @@ fn the_incoming_commits_are_read_over_ssh_too(cx: &mut TestAppContext) {
     });
     let host = wb.read_with(wcx, |wb, _| wb.remote_host_for_test());
     assert_eq!(graph::incoming(host.as_ref(), &ui::local_path(&dir), 1000), std::collections::HashSet::from([theirs]));
+}
+
+/// Search folds case the way a Turkish user types it: "ilhan" finds "İlhan" (İ lowers to i and a combining dot in Rust).
+#[test]
+fn search_finds_a_capital_dotted_i_by_its_lower_case() {
+    let mut commit = GraphCommit { subject: "İstanbul bağlantısı".into(), author: "İlhan Çelik".into(), ..Default::default() };
+    assert!(crate::scm::commit_matches(&commit, "ilhan"));
+    assert!(crate::scm::commit_matches(&commit, "istanbul"));
+    assert!(crate::scm::commit_matches(&commit, "ÇELİK"));
+    commit.subject = "Fix".into();
+    assert!(!crate::scm::commit_matches(&commit, "istanbul"));
+}
+
+/// The graph is branches, tags, remote branches and HEAD: neither a stash nor the commit `git notes add` makes shows in it.
+#[test]
+fn the_graph_leaves_out_stashes_and_notes() {
+    let dir = repo("graph-no-notes");
+    std::fs::write(dir.join("README.md"), "changed\n").unwrap();
+    git_in(&dir, &["stash", "push", "-q", "-m", "parked"]);
+    git_in(&dir, &["notes", "add", "-m", "a note"]);
+    let host = host::local();
+    let log = graph::log(&host, &ui::local_path(&dir), 50, Scope::All).unwrap();
+    let subjects: Vec<&str> = log.iter().map(|c| c.subject.as_str()).collect();
+    assert!(!subjects.iter().any(|s| s.contains("Notes added") || s.contains("parked") || s.contains("index on")), "{subjects:?}");
+    assert!(!log.is_empty(), "the branch's own history is there");
 }

@@ -99,6 +99,22 @@ fn head_copy_name(file: &str) -> String {
 }
 
 impl Workbench {
+    /// Ask, then remove the worktree at `path` of the repository at `root` (git refuses one with uncommitted changes).
+    pub(super) fn confirm_remove_worktree(&mut self, root: String, path: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.confirm_git(
+            window,
+            &crate::i18n::tf("Remove worktree {}?", &[&path]),
+            crate::i18n::t("Its folder is deleted. Git refuses when the worktree has uncommitted changes; the branch stays."),
+            crate::i18n::t("Remove"),
+            cx,
+            move |this, cx| {
+                this.git_task(&crate::i18n::tf("Removing {}…", &[&path]), cx, move |h| {
+                    git::remove_worktree(h, &root, &path, false).map(|_| crate::i18n::tf("Removed worktree {}", &[&path]))
+                });
+            },
+        );
+    }
+
     /// The repository root and `path` relative to it, or a notice saying why not.
     fn repo_rel(&mut self, path: &str, cx: &mut Context<Self>) -> Option<(String, String)> {
         let root = self.repo_root(cx)?;
@@ -238,18 +254,7 @@ impl Workbench {
                 })
                 .detach();
             }
-            BranchOp::RemoveWorktree => self.confirm_git(
-                window,
-                &crate::i18n::tf("Remove worktree {}?", &[&name]),
-                crate::i18n::t("Its folder is deleted. Git refuses when the worktree has uncommitted changes; the branch stays."),
-                crate::i18n::t("Remove"),
-                cx,
-                move |this, cx| {
-                    this.git_task(&crate::i18n::tf("Removing {}…", &[&name]), cx, move |h| {
-                        git::remove_worktree(h, &root, &name, false).map(|_| crate::i18n::tf("Removed worktree {}", &[&name]))
-                    });
-                },
-            ),
+            BranchOp::RemoveWorktree => self.confirm_remove_worktree(root, name, window, cx),
             BranchOp::CompareBranch => {
                 if let Some((root, rel)) = self.active_in_repo(cx) {
                     self.open_compare_with(root, name.clone(), rel, name, window, cx);

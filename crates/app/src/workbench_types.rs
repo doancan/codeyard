@@ -467,12 +467,17 @@ pub(super) enum MenuCmd {
     CopySubject,
     CommitFiles,
     CommitCheckout,
+    /// The nth branch that points at the commit (`scm::switchable_branches`).
+    CommitCheckoutBranch(u8),
     CommitBranch,
     CommitTag,
     CommitCherryPick,
     CommitRevert,
     CommitReset(crate::graph::ResetMode),
     CommitSquash,
+    /// Worktree row menu (`MenuTarget::path` = the worktree's folder).
+    WorktreeOpen,
+    WorktreeRemove,
     CommitMove {
         down: bool,
     },

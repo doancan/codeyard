@@ -19,6 +19,10 @@ use crate::ui::{c, ca, layout, palette, text};
 /// The changes list keeps room for this many lines at least, and for as many as there are up to `MAX_MIN_LINES`.
 const MIN_VISIBLE_LINES: usize = 4;
 const MAX_MIN_LINES: usize = 7;
+/// Longest the changes list can be while the graph fills the rest of the panel; a longer list takes the room itself.
+pub(super) const MAX_FIT_LINES: usize = 12;
+/// What the list keeps once the graph's height is set by dragging.
+const MIN_VISIBLE_LINES_AFTER_DRAG: usize = 2;
 
 /// One row of the single-repository list. `File` indexes `Status::changes`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -131,11 +135,17 @@ impl ScmPanel {
                 .debug_selector(|| "scm-list".into())
                 .size_full(),
             )
-            // Nothing to commit: the list takes only its lines and the graph gets the room (until its height is set by hand).
+            // The list takes only its lines (up to `MAX_FIT_LINES`, then it scrolls) and the graph gets the room, until the graph's
+            // height is set by hand: then the list takes what the graph leaves.
             .when(fit, |d| d.h(px(layout::ROW_H * n as f32)))
             // Never less than a few rows: in a short window or at a large interface scale the sections under the list (worktrees, graph)
             // shrink first, so the changes the user came for are not cut off at the second row.
-            .when(!fit, |d| d.flex_1().min_h(px(layout::ROW_H * n.clamp(MIN_VISIBLE_LINES, MAX_MIN_LINES) as f32)))
+            // Until the user sizes the graph by hand; after that the list gives way down to two rows, or the dragged edge would stop
+            // at the list's minimum and look stuck.
+            .when(!fit, |d| {
+                let rows = if self.sections.has_height("graph") { MIN_VISIBLE_LINES_AFTER_DRAG } else { n.clamp(MIN_VISIBLE_LINES, MAX_MIN_LINES) };
+                d.flex_1().min_h(px(layout::ROW_H * rows as f32))
+            })
     }
 
     fn change_line(&self, ix: usize, line: ChangeLine, st: &Status, current: bool, cx: &mut Context<Self>) -> gpui::AnyElement {
