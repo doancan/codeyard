@@ -212,7 +212,7 @@ for one. It downloads two small files from github.com (see [Updates](#updates) f
 - **The UI.** `workbench_update.rs` is the state machine (`Idle`, `Checking`, `UpToDate`, `Available`, `Downloading`, `Installing`,
   `Ready`, `Error`) and everything the dialog says; `workbench_view_update.rs` draws it; the activity bar's gear button carries the badge and the first menu entry (`workbench_view_explorer.rs`, `workbench_menus.rs`), and `whats_new.rs` reads the running version's notes from the compiled-in CHANGELOG for the dialog shown after an update. The network, the
   installer, the clock and quitting are behind `UpdateBackend` (`update_backend.rs`), so tests script every outcome. Machine-written
-  values (time of the last good check, skipped version, installed version, the notified version, when the question may come back) are
+  values (time of the last good check, skipped version, installed version, the version that ran last, when the question may come back) are
   keys `update.*` in the state database; the one setting, `update.check`, is user-only like `ui.language`. Restarting goes through the
   normal quit path (hot exit), starts the new version first and quits second.
   **The restart hand-over** (`update_restart.rs`): after hot exit has saved every window and before the relaunch, the old process writes

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Updates: a new version found in the background is shown only by the badge on the gear button; the "is available" notice in the status bar is gone.
+
 ## [0.13.1] - 2026-11-24
 
 ### Added
