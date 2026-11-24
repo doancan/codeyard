@@ -1058,6 +1058,26 @@ mod tests {
         assert!(cx.debug_bounds("setting-help-text-ui.language").is_none());
     }
 
+    /// The real click on the "?" button (not a call of the toggle) opens the explanation and a second click closes it.
+    #[gpui::test]
+    fn clicking_the_question_mark_toggles_the_explanation(cx: &mut gpui::TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        let (page, cx) = cx.add_window_view(|_, cx| SettingsPage::new(cx));
+        page.update(cx, |page, cx| page.set_query("ui.language", cx));
+        cx.run_until_parked();
+        let click = |cx: &mut gpui::VisualTestContext| {
+            let at = cx.debug_bounds("setting-help-ui.language").expect("the button is drawn").center();
+            cx.simulate_click(at, gpui::Modifiers::none());
+            cx.run_until_parked();
+        };
+        click(cx);
+        assert!(cx.debug_bounds("setting-help-text-ui.language").is_some(), "the first click opens it");
+        assert_eq!(page.read_with(cx, |p, _| p.help_open.len()), 1);
+        click(cx);
+        // The registry of painted bounds keeps the last frame's entry until the next paint: the state is what counts.
+        assert_eq!(page.read_with(cx, |p, _| p.help_open.len()), 0, "the second click closes it");
+    }
+
     /// The help is searched too: a word that only the written explanation has finds the setting.
     #[gpui::test]
     fn search_finds_a_setting_by_its_help_text(cx: &mut gpui::TestAppContext) {
