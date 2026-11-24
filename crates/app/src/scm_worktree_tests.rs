@@ -253,3 +253,21 @@ fn the_details_of_a_huge_commit_list_a_bounded_number_of_files(cx: &mut TestAppC
     assert_eq!(scm.read_with(cx, |s, _| s.detail_for_test()).unwrap().files.len(), total, "the data is whole");
     assert!(cx.debug_bounds("scm-detail-more").is_some(), "the rest is one line: more files, double-click to see them");
 }
+
+/// A click on a section header opens or closes it and leaves the focus where it was: the header's active-colour fill belongs to the
+/// keyboard, and a fill left behind by the mouse read as a stuck hover.
+#[gpui::test]
+fn a_click_on_a_section_header_does_not_take_the_focus(cx: &mut TestAppContext) {
+    let dir = repo("header-focus");
+    let (_wb, scm, cx) = open(cx, &dir);
+    wait_ticking(cx, "graph header", |cx| cx.debug_bounds("scm-worktree-header").is_some());
+    let focused = |cx: &mut VisualTestContext| cx.update(|window, cx| window.focused(cx));
+    let before = focused(cx);
+    let header = cx.debug_bounds("scm-worktree-header").unwrap();
+    for _ in 0..2 {
+        cx.simulate_click(header.origin + gpui::point(px(8.), px(8.)), Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(focused(cx), before, "the click did not move the focus to the header");
+    }
+    assert!(scm.read_with(cx, |s, _| s.sections.is_open("worktrees", true)), "two clicks: closed and open again");
+}

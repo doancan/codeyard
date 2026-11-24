@@ -545,6 +545,7 @@ impl ScmPanel {
             .child(
                 ui::icon_button("scm-graph-search", "search", crate::i18n::t("Search commits"), &p)
                     .relative()
+                    .map(|d| sections::tabbable(d, &p))
                     .child(probe(HistoryFrame::Button("search")))
                     .when(self.search_open, |d| d.bg(c(p.surface_active)))
                     .on_click(cx.listener(|this, _, window, cx| {
@@ -556,18 +557,21 @@ impl ScmPanel {
                 d.child(
                     ui::icon_button("scm-graph-fetch", "cloud-download", crate::i18n::t("Fetch from all remotes"), &p)
                         .relative()
+                    .map(|d| sections::tabbable(d, &p))
                         .child(probe(HistoryFrame::Button("fetch")))
                         .on_click(dispatch(Box::new(crate::workbench::GitFetchAll))),
                 )
                 .child(
                     count_button("scm-graph-pull", "arrow-down", behind, "Pull", &p)
                         .relative()
+                    .map(|d| sections::tabbable(d, &p))
                         .child(probe(HistoryFrame::Button("pull")))
                         .on_click(dispatch(Box::new(crate::workbench::GitPull))),
                 )
                 .child(
                     count_button("scm-graph-push", "arrow-up", ahead, "Push", &p)
                         .relative()
+                    .map(|d| sections::tabbable(d, &p))
                         .child(probe(HistoryFrame::Button("push")))
                         .on_click(dispatch(Box::new(crate::workbench::GitPush))),
                 )
@@ -587,6 +591,7 @@ impl ScmPanel {
             } else {
                 ui::icon_button("scm-graph-refresh", "refresh-cw", crate::i18n::t("Reload history"), &p)
                     .relative()
+                    .map(|d| sections::tabbable(d, &p))
                     .child(probe(HistoryFrame::Button("refresh")))
                     .on_click(cx.listener(|this, _, _, cx| {
                         cx.stop_propagation();
@@ -596,6 +601,7 @@ impl ScmPanel {
             .child(
                 ui::icon_button("scm-graph-more", "ellipsis", crate::i18n::t("More Actions…"), &p)
                     .relative()
+                    .map(|d| sections::tabbable(d, &p))
                     .child(probe(HistoryFrame::Button("more")))
                     .on_click(cx.listener(|_, ev: &gpui::ClickEvent, _, cx| {
                         cx.stop_propagation();

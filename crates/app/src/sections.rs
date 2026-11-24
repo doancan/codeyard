@@ -125,10 +125,19 @@ impl Sections {
     }
 }
 
+/// A control that Tab reaches and Enter or Space presses. It fills with the active colour while the keyboard has it, but a mouse
+/// press does not take the focus: the fill would stay behind after the click and read as a stuck hover.
+pub fn tabbable(element: Stateful<Div>, p: &Palette) -> Stateful<Div> {
+    element.tab_index(0).focus(|d| d.bg(c(p.surface_active))).on_mouse_down(gpui::MouseButton::Left, no_click_focus)
+}
+
+fn no_click_focus(_: &gpui::MouseDownEvent, window: &mut gpui::Window, _: &mut gpui::App) {
+    window.prevent_default();
+}
+
 /// Section header: arrow, name, optional counter. The caller adds click and action buttons.
 pub fn header(id: impl Into<gpui::ElementId>, title: &str, count: Option<usize>, open: bool, p: &Palette) -> Stateful<Div> {
-    div()
-        .id(id)
+    tabbable(div().id(id), p)
         .w_full()
         .h(px(theme::layout::ROW_H))
         .flex_none()
