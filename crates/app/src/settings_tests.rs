@@ -160,7 +160,7 @@ fn untrusted_project_layer_drops_restricted_keys_and_says_so() {
 
 #[test]
 fn project_layers_override_user_settings() {
-    let user = r#"{ "editor.tabSize": 4, "theme": "ember" }"#;
+    let user = r#"{ "editor.tabSize": 4, "theme": "dracula" }"#;
     let (s, w) = parse_layers(
         user,
         &[
@@ -169,7 +169,7 @@ fn project_layers_override_user_settings() {
         ],
     )
     .unwrap();
-    assert_eq!((s.tab_size, s.theme.as_str(), s.editor_font_size), (Some(2), "ember", 15.));
+    assert_eq!((s.tab_size, s.theme.as_str(), s.editor_font_size), (Some(2), "dracula", 15.));
     assert!(w.is_empty(), "extension settings do not warn: {w:?}");
     let (_, w) = parse_layers(user, &[(".codeyard/settings.jsonc", "{ bozuk", true)]).unwrap();
     assert_eq!(w.len(), 1, "a broken project file only warns");
@@ -215,10 +215,10 @@ fn auto_save_with_delay() {
 #[test]
 fn set_string_keeps_comments_and_other_lines() {
     let text = "{\n  // \"theme\": \"eski yorum\"\n  \"theme\": \"auto\", // seçim\n  \"x\": 1,\n}\n";
-    let out = set_string_in(text, "theme", "fjord");
-    assert_eq!(out, "{\n  // \"theme\": \"eski yorum\"\n  \"theme\": \"fjord\", // seçim\n  \"x\": 1,\n}\n");
-    let added = set_string_in("{\n  \"x\": 1\n}\n", "theme", "paper");
-    assert_eq!(parse(&added).0.theme, "paper");
+    let out = set_string_in(text, "theme", "nord");
+    assert_eq!(out, "{\n  // \"theme\": \"eski yorum\"\n  \"theme\": \"nord\", // seçim\n  \"x\": 1,\n}\n");
+    let added = set_string_in("{\n  \"x\": 1\n}\n", "theme", "solarized-light");
+    assert_eq!(parse(&added).0.theme, "solarized-light");
 }
 
 #[test]
@@ -237,9 +237,9 @@ fn set_value_preserves_nested_comments_and_updates_duplicate_or_escaped_keys() {
     let text = "{\"files.exclude\": [\n // } ] must not end the value\n \"target\" /* [ */\n], \"theme\": \"old\", \"th\\u0065me\": \"last\"}";
     let out = set_value_in(text, "files.exclude", &serde_json::json!([".git"]));
     assert_eq!(out, "{\"files.exclude\": [\".git\"], \"theme\": \"old\", \"th\\u0065me\": \"last\"}");
-    let out = set_string_in(&out, "theme", "fjord");
-    assert_eq!(parse(&out).0.theme, "fjord");
-    assert_eq!(out.matches("\"fjord\"").count(), 2);
+    let out = set_string_in(&out, "theme", "nord");
+    assert_eq!(parse(&out).0.theme, "nord");
+    assert_eq!(out.matches("\"nord\"").count(), 2);
 }
 
 #[test]

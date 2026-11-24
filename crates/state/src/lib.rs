@@ -881,9 +881,9 @@ mod tests {
         let s = State::init(db).unwrap();
         assert_eq!(s.db.query_row("pragma user_version", [], |r| r.get::<_, i64>(0)).unwrap(), SCHEMA_VERSION);
         assert_eq!(s.get("theme"), None);
-        s.set("theme", "fjord").unwrap();
-        s.set("theme", "ember").unwrap();
-        assert_eq!(s.get("theme").as_deref(), Some("ember"));
+        s.set("theme", "nord").unwrap();
+        s.set("theme", "dracula").unwrap();
+        assert_eq!(s.get("theme").as_deref(), Some("dracula"));
     }
 
     #[test]

@@ -164,24 +164,24 @@ fn binary_and_missing_files_show_message(cx: &mut TestAppContext) {
 fn theme_picker_preview_confirm_and_escape(cx: &mut TestAppContext) {
     let (wb, cx) = setup(cx);
     let active = |cx: &mut VisualTestContext| cx.update(|_, cx| cx.global::<ActiveTheme>().0);
-    let fjord = theme::themes::builtin().into_iter().find(|t| t.id == "fjord").unwrap().palette;
-    let ember = theme::themes::builtin().into_iter().find(|t| t.id == "ember").unwrap().palette;
+    let nord = theme::themes::builtin().into_iter().find(|t| t.id == "nord").unwrap().palette;
+    let dracula = theme::themes::builtin().into_iter().find(|t| t.id == "dracula").unwrap().palette;
 
     cx.simulate_keystrokes("cmd-k cmd-t");
     assert!(wb.read_with(cx, |wb, _| wb.theme_picker_open()), "⌘K ⌘T should open the picker");
-    cx.simulate_input("fjord");
-    assert_eq!(active(cx), fjord, "first match is previewed live while typing");
+    cx.simulate_input("nord");
+    assert_eq!(active(cx), nord, "first match is previewed live while typing");
     cx.simulate_keystrokes("enter");
-    assert_eq!(wb.read_with(cx, |wb, _| wb.current_theme_id().to_string()), "fjord");
-    assert_eq!(active(cx), fjord);
+    assert_eq!(wb.read_with(cx, |wb, _| wb.current_theme_id().to_string()), "nord");
+    assert_eq!(active(cx), nord);
 
     // Preview, then Esc: the previous theme comes back.
     cx.simulate_keystrokes("cmd-k cmd-t");
-    cx.simulate_input("ember");
-    assert_eq!(active(cx), ember);
+    cx.simulate_input("dracula");
+    assert_eq!(active(cx), dracula);
     cx.simulate_keystrokes("escape");
-    assert_eq!(active(cx), fjord);
-    assert_eq!(wb.read_with(cx, |wb, _| wb.current_theme_id().to_string()), "fjord");
+    assert_eq!(active(cx), nord);
+    assert_eq!(wb.read_with(cx, |wb, _| wb.current_theme_id().to_string()), "nord");
 }
 
 #[gpui::test]
@@ -1315,7 +1315,7 @@ fn settings_file_is_applied(cx: &mut TestAppContext) {
         cfg.join("settings.jsonc"),
         r#"{
           // yorumlar serbest
-          "theme": "ember",
+          "theme": "dracula",
           "files.exclude": [".git", "*.md"],
           "editor.tabSize": 2,
           "editor.insertSpaces": true,
@@ -1326,8 +1326,8 @@ fn settings_file_is_applied(cx: &mut TestAppContext) {
     .unwrap();
     let dir = project("settings");
     let (wb, cx) = setup_with_config(cx, &cfg);
-    let ember = theme::themes::builtin().into_iter().find(|t| t.id == "ember").unwrap().palette;
-    assert_eq!(cx.update(|_, cx| cx.global::<ActiveTheme>().0), ember);
+    let dracula = theme::themes::builtin().into_iter().find(|t| t.id == "dracula").unwrap().palette;
+    assert_eq!(cx.update(|_, cx| cx.global::<ActiveTheme>().0), dracula);
 
     open(&wb, &dir, cx);
     let names = wb.read_with(cx, |wb, cx| wb.tree_names(cx));
@@ -1361,11 +1361,11 @@ fn user_keybindings_and_live_reload(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("escape");
 
     // Modify the file: the once-a-second check picks it up, the theme changes immediately.
-    std::fs::write(cfg.join("settings.jsonc"), r#"{ "theme": "paper" }"#).unwrap();
+    std::fs::write(cfg.join("settings.jsonc"), r#"{ "theme": "solarized-light" }"#).unwrap();
     cx.executor().advance_clock(std::time::Duration::from_secs(2));
     cx.run_until_parked();
-    let paper = theme::themes::builtin().into_iter().find(|t| t.id == "paper").unwrap().palette;
-    assert_eq!(cx.update(|_, cx| cx.global::<ActiveTheme>().0), paper);
+    let solarized_light = theme::themes::builtin().into_iter().find(|t| t.id == "solarized-light").unwrap().palette;
+    assert_eq!(cx.update(|_, cx| cx.global::<ActiveTheme>().0), solarized_light);
 }
 
 #[gpui::test]
@@ -1374,10 +1374,10 @@ fn theme_picker_writes_settings_file_keeping_comments(cx: &mut TestAppContext) {
     std::fs::write(cfg.join("settings.jsonc"), "{\n  // benim yorumum\n  \"theme\": \"auto\",\n  \"editor.fontSize\": 14,\n}\n").unwrap();
     let (_wb, cx) = setup_with_config(cx, &cfg);
     cx.simulate_keystrokes("cmd-k cmd-t");
-    cx.simulate_input("graphite");
+    cx.simulate_input("gruvbox");
     cx.simulate_keystrokes("enter");
     let text = std::fs::read_to_string(cfg.join("settings.jsonc")).unwrap();
-    assert_eq!(text, "{\n  // benim yorumum\n  \"theme\": \"graphite\",\n  \"editor.fontSize\": 14,\n}\n");
+    assert_eq!(text, "{\n  // benim yorumum\n  \"theme\": \"gruvbox-dark\",\n  \"editor.fontSize\": 14,\n}\n");
 }
 
 #[gpui::test]
@@ -3510,7 +3510,7 @@ fn import_vscode_settings_and_shortcuts(cx: &mut TestAppContext) {
     std::fs::create_dir_all(&vs).unwrap();
     std::fs::write(
         vs.join("settings.json"),
-        r#"{ "editor.fontSize": 16, "files.autoSave": "afterDelay", "workbench.colorTheme": "Paper", "eklenti.ayarı": 1 }"#,
+        r#"{ "editor.fontSize": 16, "files.autoSave": "afterDelay", "workbench.colorTheme": "Solarized Light", "eklenti.ayarı": 1 }"#,
     )
     .unwrap();
     std::fs::write(vs.join("keybindings.json"), r#"[ { "key": "cmd+k cmd+c", "command": "editor.action.commentLine", "when": "editorTextFocus" }, { "key": "f5", "command": "workbench.action.debug.start" } ]"#).unwrap();
@@ -3519,7 +3519,7 @@ fn import_vscode_settings_and_shortcuts(cx: &mut TestAppContext) {
     let msg = wb.update_in(cx, |wb, _, _| wb.import_vscode_from(&vs)).unwrap();
     assert!(msg.contains("Imported 3 settings and 1 shortcuts") && msg.contains("1 settings and 1 shortcuts have no equivalent"), "{msg}");
     let text = std::fs::read_to_string(cfg.join("settings.jsonc")).unwrap();
-    assert!(text.contains("// benim yorumum") && text.contains("\"editor.fontSize\": 16") && text.contains("\"theme\": \"paper\""), "{text}");
+    assert!(text.contains("// benim yorumum") && text.contains("\"editor.fontSize\": 16") && text.contains("\"theme\": \"solarized-light\""), "{text}");
     // Settings apply live; the imported shortcut works (⌘K ⌘C: comment).
     cx.executor().advance_clock(std::time::Duration::from_secs(2));
     cx.run_until_parked();

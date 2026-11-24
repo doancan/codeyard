@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Themes: 16 built-in themes instead of 31. Removed: Basalt, Canopy, Codeyard One, Deepwater, Ember, Fjord, Graphite, Meadow, Mulberry, Paper, Porcelain, Quarry, Shore, Studio Dark and Vellum. Kept: Codeyard Dark and Light (also as Midnight and Daylight), Dracula, One Dark, Nord, Solarized Dark and Light, GitHub Dark and Light, Catppuccin Mocha, Tokyo Night, Gruvbox Dark and the two high-contrast themes. A settings file that still names a removed theme gets the "theme not found" notice and the default theme; the palettes are in the git history if you want one as your own theme file.
 - File icons (File Glyphs, Codeyard and Colorful themes): each icon sits on a soft tile of its language colour.
 - The empty editor's logo is a quiet grey instead of mint green. The status bar is 2 px taller, and its first and last entries keep a little room from the window's edges. Activity bar icons are 2 px larger.
 - Codeyard Dark is a graphite black (editor `#111214`, darker side panels) with a flat, saturated blue accent (`#5c96ff`) in place of the pale periwinkle. Codeyard Light is cleaner (pure white editor, crisper borders and text).

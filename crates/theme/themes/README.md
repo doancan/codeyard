@@ -27,24 +27,15 @@ Selection, gutter and comment colours are adjusted where necessary to keep them 
 
 ## Codeyard's own themes
 
-`codeyard-dark.json`, `codeyard-light.json`, `codeyard-one.json` (the graphite tile and mint letter of the app icon), `high-contrast-dark.json`, `high-contrast-light.json`, `studio-dark.json`,
-`ember.json`, `fjord.json`, `graphite.json`, `paper.json`, `quarry.json`. The first two follow `crates/theme/design/tokens*.json`.
-The others were written for this project. No upstream palette is claimed for them. `quarry.json` is an original palette, designed from scratch and not derived from any existing theme.
+`codeyard-dark.json` and `codeyard-light.json` follow `crates/theme/design/tokens*.json`. `high-contrast-dark.json` and
+`high-contrast-light.json` are for people who need the strongest separation (see `ACCESSIBILITY.md`). They were written for this
+project; no upstream palette is claimed for them.
 
 Licence texts and the full attribution are in `THIRD_PARTY_NOTICES.md` at the repository root.
 
-## Additional Codeyard palettes
-
-Eight original palettes extend the same surface, text and control system:
-
-| Dark | Light | Character |
-| --- | --- | --- |
-| Basalt | Porcelain | Neutral mineral surfaces and a restrained sage accent |
-| Canopy | Meadow | Forest and olive greens |
-| Deepwater | Shore | Ink, slate and muted cyan |
-| Mulberry | Vellum | Plum at night, warm paper in daylight |
-
-All 31 built-in choices (29 JSON palettes plus Midnight and Daylight) use the shared spacing and icon system.
+All 16 built-in choices (14 JSON palettes plus Midnight and Daylight, which are the Codeyard Dark and Codeyard Light tokens under
+their older ids) use the shared spacing and icon system. A short list on purpose: each palette is kept to a standard of
+polish and contrast, and more can be added as a theme file or an extension.
 GitHub variants follow current Primer neutral surfaces and separators, adapted for editor and terminal contrast.
 Terminal text additionally receives a 4.5:1 contrast floor against its final cell background, including faint text,
 selection and search highlights. Explicit equal foreground/background pairs and hidden text remain hidden.

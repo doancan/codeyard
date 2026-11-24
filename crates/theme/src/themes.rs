@@ -517,7 +517,7 @@ mod tests {
         on_disk.sort();
         let mut embedded: Vec<String> = BUILTIN_JSON.iter().map(|(id, _)| id.to_string()).collect();
         embedded.sort();
-        assert!(on_disk.len() >= 16, "only {} theme files found", on_disk.len());
+        assert!(on_disk.len() >= 14, "only {} theme files found", on_disk.len());
         assert_eq!(embedded, on_disk, "themes/*.json and the embedded list differ (stale build? build.rs failed to read the folder?)");
         assert_eq!(builtin().len(), on_disk.len() + 2, "every file plus Midnight and Daylight");
     }

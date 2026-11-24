@@ -178,17 +178,17 @@ fn qa_files_exclude_double_star_glob_hides_folder_in_tree(cx: &mut TestAppContex
 #[gpui::test]
 fn qa_broken_settings_file_keeps_last_good_settings(cx: &mut TestAppContext) {
     let cfg = fresh("cfg-broken");
-    std::fs::write(cfg.join("settings.jsonc"), r#"{ "theme": "ember", "editor.fontSize": 18 }"#).unwrap();
+    std::fs::write(cfg.join("settings.jsonc"), r#"{ "theme": "dracula", "editor.fontSize": 18 }"#).unwrap();
     let (_wb, cx) = setup_with_config(cx, &cfg);
-    let ember = theme::themes::builtin().into_iter().find(|t| t.id == "ember").unwrap().palette;
-    assert_eq!(cx.update(|_, cx| cx.global::<ActiveTheme>().0), ember);
+    let dracula = theme::themes::builtin().into_iter().find(|t| t.id == "dracula").unwrap().palette;
+    assert_eq!(cx.update(|_, cx| cx.global::<ActiveTheme>().0), dracula);
     std::thread::sleep(std::time::Duration::from_millis(1100)); // new mtime
-    std::fs::write(cfg.join("settings.jsonc"), r#"{ "theme": "ember", "editor.fontSize": 18, "#).unwrap(); // mid-edit
+    std::fs::write(cfg.join("settings.jsonc"), r#"{ "theme": "dracula", "editor.fontSize": 18, "#).unwrap(); // mid-edit
     cx.executor().advance_clock(std::time::Duration::from_secs(2));
     cx.run_until_parked();
     let size = cx.update(|_, cx| cx.global::<crate::settings::Settings>().editor_font_size);
     assert_eq!(size, 18., "font size must not reset to the default on a syntax error");
-    assert_eq!(cx.update(|_, cx| cx.global::<ActiveTheme>().0), ember, "theme must not flip on a syntax error");
+    assert_eq!(cx.update(|_, cx| cx.global::<ActiveTheme>().0), dracula, "theme must not flip on a syntax error");
 }
 
 /// An unknown theme id in settings.jsonc should be reported (VS Code: "theme not found").
