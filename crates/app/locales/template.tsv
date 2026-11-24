@@ -3188,6 +3188,7 @@ TypeScript {} · TypeScript Language Server {} · HTML/CSS {}
 UI font of the whole window (empty: system font)	
 Unavailable	
 Unchanged	
+Uncommitted changes	
 Underline misspelled words in prose files and in code comments	
 Undid commit “{0}” (the branch was at {1})	
 Undo	
