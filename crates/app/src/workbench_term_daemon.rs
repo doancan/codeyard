@@ -464,15 +464,14 @@ impl Workbench {
             shown.push_str(history);
             shown.push('\n');
         }
-        let status = if here {
-            crate::i18n::t("Previous session ended; started a new shell").to_string()
-        } else {
-            crate::i18n::tf(
+        // A shell that simply starts again in its own folder needs no notice; only a fallback folder is worth saying.
+        if !here {
+            let status = crate::i18n::tf(
                 "Terminal session could not be restored: {}",
                 &[&crate::i18n::tf("the folder {} no longer exists; started a new shell in the workspace folder", &[&t.cwd.clone().unwrap_or_default()])],
-            )
-        };
-        shown.push_str(&format!("\x1b[2m{status}\x1b[0m\n"));
+            );
+            shown.push_str(&format!("\x1b[2m{status}\x1b[0m\n"));
+        }
         term.update(cx, |term, cx| {
             term.icon = t.icon.clone().filter(|i| crate::terminal_profiles::ICONS.contains(&i.as_str()));
             if let Some(title) = &t.title {

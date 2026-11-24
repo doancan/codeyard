@@ -214,7 +214,7 @@ fn a_token_that_does_not_match_brings_a_new_shell_and_ends_the_old_one(cx: &mut 
     let (wb, cx) = window(cx, &home, &dir, &sock);
     wait_ticking(cx, "a new shell", |cx| wb.read_with(cx, |wb, cx| wb.terminals.len() == 1 && wb.terminals[0].read(cx).pty_handle().is_some()));
     let shown = text(&wb, cx);
-    assert!(shown.contains("Previous session ended; started a new shell") && !shown.contains("Reconnected"), "{shown}");
+    assert!(!shown.contains("Previous session ended") && !shown.contains("Reconnected"), "{shown}");
     assert_ne!(shell_pid(&wb, cx, &dir.join("pid-2")), first, "not the old process");
     // The old shell was in the session but no window can reach it: it is ended.
     let old: i32 = first.parse().unwrap();
