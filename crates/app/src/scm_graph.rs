@@ -674,12 +674,19 @@ impl ScmPanel {
             .when_some(body, |d, body| {
                 d.child(
                     div()
+                        .debug_selector(|| "scm-graph-body".into())
                         .when(fill, |d| d.flex_1())
                         .when(!fill, |d| d.h(px(height)))
-                        .flex_shrink()
+                        // Under a lack of room the sections above give way first (worktrees, stashes, the change list), so that
+                        // a dragged edge makes the graph as tall as asked instead of the graph giving the room back.
+                        .map(|mut d| {
+                            d.style().flex_shrink = Some(0.01);
+                            d
+                        })
                         .min_h(px(60.))
                         .relative()
                         .child(probe(HistoryFrame::List("graph")))
+                        .child(self.sections.measure("graph"))
                         .child(body),
                 )
             })

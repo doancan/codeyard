@@ -165,3 +165,42 @@ fn worktree_panel_opens_checkouts_on_the_existing_ssh_host(cx: &mut TestAppConte
     assert!(scm.read_with(cx, |s, _| Arc::ptr_eq(&s.host, &source)), "opening a worktree must retain the SSH host");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The graph's top edge drags up and down whether the Worktrees section is open or closed: the line is not only drawn, the
+/// section follows it.
+#[gpui::test]
+fn the_graph_edge_moves_the_section_with_worktrees_open_and_closed(cx: &mut TestAppContext) {
+    let dir = repo("graph-sash");
+    for n in 0..30 {
+        std::fs::write(dir.join(format!("f{n}.txt")), "x").unwrap();
+        git_in(&dir, &["add", "-A"]);
+        git_in(&dir, &["commit", "-q", "-m", &format!("commit {n}")]);
+    }
+    std::fs::write(dir.join("README.md"), "changed\n").unwrap();
+    let (_wb, scm, cx) = open(cx, &dir);
+    wait_ticking(cx, "graph rows", |cx| cx.debug_bounds("scm-graph-body").is_some());
+    let drag = |cx: &mut VisualTestContext, dy: f32| {
+        let sash = cx.debug_bounds("sash-graph").unwrap().center();
+        cx.simulate_mouse_down(sash, gpui::MouseButton::Left, Modifiers::none());
+        cx.simulate_mouse_move(sash + gpui::point(px(0.), px(dy)), Some(gpui::MouseButton::Left), Modifiers::none());
+        cx.simulate_mouse_up(sash + gpui::point(px(0.), px(dy)), gpui::MouseButton::Left, Modifiers::none());
+        cx.run_until_parked();
+    };
+    let height = |cx: &mut VisualTestContext| f32::from(cx.debug_bounds("scm-graph-body").unwrap().size.height);
+    for (worktrees_open, window_h) in [(true, 900.), (false, 900.), (true, 700.), (false, 700.), (true, 620.), (false, 620.)] {
+        cx.simulate_resize(gpui::size(px(1000.), px(window_h)));
+        cx.run_until_parked();
+        scm.update(cx, |s, cx| {
+            s.sections.set_open("worktrees", worktrees_open);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        let before = height(cx);
+        drag(cx, -60.);
+        let grown = height(cx);
+        assert!(grown > before + 30., "worktrees open {worktrees_open}, window {window_h}: dragged up 60, the graph went from {before} to {grown}");
+        drag(cx, 60.);
+        let back = height(cx);
+        assert!(back < grown - 30., "worktrees open {worktrees_open}, window {window_h}: dragged down 60, the graph went from {grown} to {back}");
+    }
+}

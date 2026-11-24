@@ -805,7 +805,9 @@ impl Render for ScmPanel {
             Some(r) => format!("{} · {branch}", r.label),
             None => branch,
         };
-        let graph_fills = !self.multi() && st.changes.is_empty() && self.sections.is_open("graph", true) && !self.sections.has_height("graph");
+        // The graph fills the room while the changes list is short; a long list keeps the room for itself.
+        let list_is_short = st.changes.len() <= changes_ui::MAX_FIT_LINES && self.current_lines(&st).len() <= changes_ui::MAX_FIT_LINES;
+        let graph_fills = !self.multi() && list_is_short && self.sections.is_open("graph", true) && !self.sections.has_height("graph");
         let field_box = ui::input_box("scm-message-box", &p, p.bg, self.message.focus_handle(cx).is_focused(window))
             .relative()
             .child(self.message.clone())
@@ -1192,8 +1194,11 @@ impl ScmPanel {
 
     /// Handle on the section's top edge: dragging up enlarges it.
     fn top_sash(&self, id: &'static str, p: &ui::Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        let h = self.section_height(id, if id == "graph" { 260. } else { 170. });
-        sections::sash(SharedString::from(format!("sash-{id}")), p, self.sections.dragging_section(id)).on_mouse_down(
+        // From what is painted: a section squeezed by a short window is smaller than its stored height, and a drag that started
+        // from the stored one would move nothing until it passed the difference.
+        let stored = self.section_height(id, if id == "graph" { 260. } else { 170. });
+        let h = self.sections.rendered_height(id, stored);
+        sections::sash(SharedString::from(format!("sash-{id}")), p, self.sections.dragging_section(id)).debug_selector(move || format!("sash-{id}")).on_mouse_down(
             gpui::MouseButton::Left,
             cx.listener(move |this, ev: &gpui::MouseDownEvent, _, cx| {
                 cx.stop_propagation();
