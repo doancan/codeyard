@@ -49,17 +49,17 @@ pub fn saved_window_bounds() -> Option<gpui::WindowBounds> {
     State::open(&state_path()?).ok()?.get(WINDOW_BOUNDS_KEY).as_deref().and_then(parse_bounds)
 }
 
-/// Where a new window opens. On macOS it fills the screen (zoomed, the menu bar and Dock stay visible; `default` is the size it
-/// returns to), unless the last window was in full screen. Elsewhere the last window's bounds, or `default`, as before.
-pub fn initial_bounds(saved: Option<gpui::WindowBounds>, default: gpui::Bounds<gpui::Pixels>, fill_screen: bool) -> gpui::WindowBounds {
-    match (saved, fill_screen) {
-        (Some(gpui::WindowBounds::Fullscreen(b)), _) => gpui::WindowBounds::Fullscreen(b),
-        (Some(gpui::WindowBounds::Maximized(b)), _) => gpui::WindowBounds::Maximized(b),
-        (Some(gpui::WindowBounds::Windowed(b)), false) => gpui::WindowBounds::Windowed(b),
-        // The size to return to is the one the user last chose, when there is one.
-        (Some(gpui::WindowBounds::Windowed(b)), true) => gpui::WindowBounds::Maximized(b),
-        (None, true) => gpui::WindowBounds::Maximized(default),
-        (None, false) => gpui::WindowBounds::Windowed(default),
+/// Where a new window opens: the first one where the last closed window was (`saved`); every other one at the size of the window
+/// in front (`front`: its bounds), a little down and right of it so they do not stack exactly; `default` when there is neither.
+pub fn initial_bounds(saved: Option<gpui::WindowBounds>, default: gpui::Bounds<gpui::Pixels>, front: Option<gpui::Bounds<gpui::Pixels>>) -> gpui::WindowBounds {
+    match (saved, front) {
+        (Some(saved), _) => saved,
+        (None, Some(front)) => {
+            let mut bounds = front;
+            bounds.origin = front.origin + gpui::point(px(28.), px(28.));
+            gpui::WindowBounds::Windowed(bounds)
+        }
+        (None, None) => gpui::WindowBounds::Windowed(default),
     }
 }
 
@@ -73,20 +73,20 @@ mod initial_bounds_tests {
     }
 
     #[test]
-    fn on_a_mac_new_windows_fill_the_screen_unless_the_last_one_was_full_screen() {
-        assert_eq!(initial_bounds(None, b(1280.), true), WindowBounds::Maximized(b(1280.)));
-        assert_eq!(
-            initial_bounds(Some(WindowBounds::Windowed(b(900.))), b(1280.), true),
-            WindowBounds::Maximized(b(900.)),
-            "it returns to the size the user chose"
-        );
-        assert_eq!(initial_bounds(Some(WindowBounds::Fullscreen(b(900.))), b(1280.), true), WindowBounds::Fullscreen(b(900.)));
-        assert_eq!(initial_bounds(Some(WindowBounds::Maximized(b(900.))), b(1280.), true), WindowBounds::Maximized(b(900.)));
+    fn the_first_window_opens_where_the_last_one_closed() {
+        assert_eq!(initial_bounds(Some(WindowBounds::Maximized(b(900.))), b(1280.), None), WindowBounds::Maximized(b(900.)));
+        assert_eq!(initial_bounds(Some(WindowBounds::Windowed(b(900.))), b(1280.), Some(b(700.))), WindowBounds::Windowed(b(900.)));
     }
 
     #[test]
-    fn elsewhere_the_saved_bounds_or_the_default_are_used_as_they_are() {
-        assert_eq!(initial_bounds(None, b(1280.), false), WindowBounds::Windowed(b(1280.)));
-        assert_eq!(initial_bounds(Some(WindowBounds::Windowed(b(900.))), b(1280.), false), WindowBounds::Windowed(b(900.)));
+    fn a_new_window_takes_the_size_of_the_one_in_front_a_little_down_and_right() {
+        let WindowBounds::Windowed(opened) = initial_bounds(None, b(1280.), Some(b(900.))) else { panic!("a windowed new window") };
+        assert_eq!(opened.size, b(900.).size);
+        assert_eq!(opened.origin, point(px(38.), px(38.)));
+    }
+
+    #[test]
+    fn with_nothing_to_follow_the_default_size_is_used() {
+        assert_eq!(initial_bounds(None, b(1280.), None), WindowBounds::Windowed(b(1280.)));
     }
 }
