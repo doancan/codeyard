@@ -602,14 +602,13 @@ mod resize_tests {
             wb.vcs.branch = Some("feature/long-branch-name-".repeat(12).into());
             wb.vcs.status = Some(std::sync::Arc::new(crate::git::Status { ahead: 1294, behind: 982, ..Default::default() }));
             wb.lsp.progress = Some("Indexing a large workspace… ".repeat(20).into());
-            wb.update.state = update_glue::UpdateState::Ready { version: "999.999.999".into(), plan: None };
             cx.notify();
         });
         for width in [480., 640., 800., 1100., 1280., 1920.] {
             cx.simulate_resize(gpui::size(px(width), px(800.)));
             cx.run_until_parked();
             let bar = cx.debug_bounds("status-bar").unwrap();
-            for id in ["sb-conflicts", "sb-unsaved", "sb-update"] {
+            for id in ["sb-conflicts", "sb-unsaved"] {
                 let item = cx.debug_bounds(id).unwrap();
                 assert!(item.left() >= bar.left() && item.right() <= bar.right(), "{id} at {width}: {item:?} inside {bar:?}");
             }

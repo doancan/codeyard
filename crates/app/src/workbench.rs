@@ -33,8 +33,8 @@ pub mod a11y;
 mod bounds;
 #[cfg(test)]
 pub(crate) use bounds::parse_bounds;
-pub use bounds::saved_window_bounds;
 pub(crate) use bounds::{WINDOW_BOUNDS_KEY, format_bounds, visible_enough};
+pub use bounds::{initial_bounds, saved_window_bounds};
 #[cfg(test)]
 pub(crate) use providers_glue::round_trip_allowance_for_test;
 // --- compare ---

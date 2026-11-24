@@ -617,6 +617,21 @@ impl Workbench {
         }
     }
 
+    /// The first-start check after an update, as the timer runs it.
+    pub fn show_whats_new_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        self.show_whats_new(true, window, cx)
+    }
+
+    /// Remember which version ran last, as the previous start did.
+    pub fn set_last_run_for_test(&self, version: &str) {
+        self.remember(super::update_glue::LAST_RUN, version);
+    }
+
+    /// The entries of the gear button's menu, in order.
+    pub fn manage_menu_labels_for_test(&self) -> Vec<String> {
+        self.manage_menu_entries().into_iter().map(|e| e.0).collect()
+    }
+
     /// What the update dialog shows right now (`None`: closed).
     pub fn update_dialog_for_test(&self, cx: &App) -> Option<DialogView> {
         use update_glue::Body;

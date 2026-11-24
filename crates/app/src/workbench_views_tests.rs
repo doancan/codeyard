@@ -268,7 +268,7 @@ fn a_restart_starts_a_new_shell_in_the_group_without_replaying_anything(cx: &mut
     assert_eq!((title.as_str(), color.as_deref()), ("build", Some("success")));
     assert!(wait(vcx, |vcx| vcx.update(|_, cx| term.read(cx).pty_handle().is_some())), "a new shell runs");
     let text = vcx.update(|_, cx| term.read(cx).scrollback_text() + &term.read(cx).screen_text());
-    assert!(text.contains("Previous session ended; started a new shell"), "the notice is shown: {text}");
+    assert!(!text.contains("Previous session ended"), "no notice is shown: {text}");
     // The new shell runs what it is given in order: once a command typed now has run, anything replayed would have too.
     let ready = dir.join("ready");
     term.update(vcx, |t, _| t.send(&format!("echo x > \"{}\"\r", ready.display())));

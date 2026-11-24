@@ -722,8 +722,11 @@ fn x_of(left: Pixels, col: usize) -> Pixels {
     left + px(PAD + col as f32 * LANE_W)
 }
 
+/// How strongly the lanes and nodes of commits that are not pulled yet are drawn.
+pub const INCOMING_ALPHA: f32 = 0.45;
+
 /// Lane drawing for a row, as wide as the row's own lanes; `head`: the checked-out commit (ringed node), `merge`: merge,
-/// `incoming`: not pulled yet (the node is drawn in the warning color instead of its lane's).
+/// `incoming`: not pulled yet (drawn faded, with a hollow node, so the commits that are really here stand out).
 pub fn lane_element(row: GraphRow, head: bool, merge: bool, incoming: bool, p: Palette) -> impl IntoElement {
     let w = width_px(row.width.max(row.col + 1));
     canvas(
@@ -732,11 +735,12 @@ pub fn lane_element(row: GraphRow, head: bool, merge: bool, incoming: bool, p: P
             let (top, bottom) = (bounds.top(), bounds.bottom());
             let mid = top + (bottom - top) / 2.;
             let left = bounds.left();
+            let fade = if incoming { INCOMING_ALPHA } else { 1. };
             let stroke = |window: &mut gpui::Window, color: u32, build: &dyn Fn(&mut PathBuilder)| {
                 let mut b = PathBuilder::stroke(px(LINE_W));
                 build(&mut b);
                 if let Ok(path) = b.build() {
-                    window.paint_path(path, ui::c(color));
+                    window.paint_path(path, ui::ca(color, fade));
                 }
             };
             for &(col, color) in &row.pass {
@@ -773,12 +777,20 @@ pub fn lane_element(row: GraphRow, head: bool, merge: bool, incoming: bool, p: P
                     b.curve_to(point(x, bottom), point(x, mid));
                 });
             }
-            let color = if incoming { p.warning } else { lane_color(&p, row.color) };
+            let color = lane_color(&p, row.color);
             let dot = |window: &mut gpui::Window, r: f32, color: u32| {
                 let b = Bounds::new(point(nx - px(r), mid - px(r)), size(px(r * 2.), px(r * 2.)));
                 window.paint_quad(fill(b, ui::c(color)).corner_radii(px(r)));
             };
-            if head {
+            if incoming {
+                // A hollow ring: on its way here, not part of this checkout yet.
+                let ring = |window: &mut gpui::Window, r: f32, color: u32, alpha: f32| {
+                    let b = Bounds::new(point(nx - px(r), mid - px(r)), size(px(r * 2.), px(r * 2.)));
+                    window.paint_quad(fill(b, ui::ca(color, alpha)).corner_radii(px(r)));
+                };
+                ring(window, 4., color, INCOMING_ALPHA);
+                dot(window, 2.4, p.surface);
+            } else if head {
                 dot(window, 5.5, p.text);
                 dot(window, 3.8, color);
             } else if merge {

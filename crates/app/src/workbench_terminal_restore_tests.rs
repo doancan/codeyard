@@ -65,7 +65,7 @@ fn terminals_come_back_as_new_shells_in_their_folders_without_running_anything_a
     });
     assert_eq!((title.as_str(), cwd.as_deref()), ("build", Some(sub.as_str())));
     let shown = terminal_text(&wb, cx, 0);
-    assert!(shown.contains("restore-marker") && shown.contains("Previous session ended; started a new shell"), "{shown}");
+    assert!(shown.contains("restore-marker") && !shown.contains("Previous session ended"), "{shown}");
     // The missing folder falls back to the workspace folder, and says so.
     assert!(terminal_text(&wb, cx, 1).contains("no longer exists"), "{}", terminal_text(&wb, cx, 1));
     assert_eq!(wb.read_with(cx, |wb, cx| wb.terminals[1].read(cx).start_dir()), Some(dir.to_string_lossy().into_owned()));

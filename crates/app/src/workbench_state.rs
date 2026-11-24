@@ -404,6 +404,8 @@ pub(super) struct UpdateUi {
     /// That window while it is open, and whether it is being opened (the open is deferred out of `render`).
     pub(super) window: Option<gpui::WindowHandle<update_window_glue::UpdateWindow>>,
     pub(super) opening: bool,
+    /// The version this one replaced, while the "what's new" dialog tells about it.
+    pub(super) previous: Option<String>,
 }
 
 impl UpdateUi {
@@ -431,6 +433,7 @@ impl UpdateUi {
             native: cfg!(all(target_os = "macos", not(test))),
             window: None,
             opening: false,
+            previous: None,
         }
     }
 }

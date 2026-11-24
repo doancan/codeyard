@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use gpui::{Animation, AnimationExt as _, ElementId, relative};
 
-use super::update_glue::{Body, DialogButton, DialogModel, MAX_BUTTONS, StatusItem, Tone, UpdateCmd};
+use super::update_glue::{Body, DialogButton, DialogModel, MAX_BUTTONS, Tone, UpdateCmd};
 use super::*;
 use crate::ui::ca;
 
@@ -41,7 +41,7 @@ fn accent_pair(p: &Palette) -> (u32, u32) {
     if ui::luminance_is_light(p.bg) { (p.accent, p.on_accent) } else { (super::welcome_glue::brand_colors(p).2, 0x0b1f1a) }
 }
 
-fn tone_color(tone: Tone, p: &Palette) -> u32 {
+pub(super) fn tone_color(tone: Tone, p: &Palette) -> u32 {
     match tone {
         Tone::Accent => accent_pair(p).0,
         Tone::Success => p.success,
@@ -122,31 +122,6 @@ impl Workbench {
                 .occlude()
                 .child(card),
         ))
-    }
-
-    /// The status bar item: click opens the dialog.
-    pub(super) fn update_status_button(&self, item: StatusItem, show_label: bool, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        let color = tone_color(item.tone, p);
-        let tip = item.tip.clone();
-        div()
-            .id("sb-update")
-            .debug_selector(|| "sb-update".into())
-            .relative()
-            .child(super::a11y::part_frame(super::a11y::Part::Status(super::a11y::StatusPart::Update), cx))
-            .flex_none()
-            .min_w(px(32.))
-            .h_full()
-            .px(px(theme::SPACE[4]))
-            .flex()
-            .items_center()
-            .gap(px(theme::SPACE[2]))
-            .cursor_pointer()
-            .hover(|d| d.bg(c(p.surface_hover)))
-            .text_color(c(color))
-            .child(glyph(item.icon, 14., color, "sb-update-spinner"))
-            .when(show_label, |d| d.child(div().max_w(px(100.)).truncate().child(item.label)))
-            .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone())).into())
-            .on_click(cx.listener(|this, _, window, cx| this.open_update_dialog(window, cx)))
     }
 }
 

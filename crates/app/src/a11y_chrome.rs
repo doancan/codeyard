@@ -56,6 +56,8 @@ pub(crate) struct ChromeSnap {
     caption: Option<bool>,
     /// The Remote Explorer is shown (its header buttons are drawn).
     remote: bool,
+    /// The gear button's name: it says what an update is doing while there is one.
+    pub(crate) manage: String,
 }
 
 fn button(nodes: &mut Vec<(NodeId, Node)>, geometry: &Geometry, id: NodeId, label: &str, part: &'static str, enabled: bool) -> NodeId {
@@ -137,7 +139,7 @@ impl ChromeSnap {
             list.set_children(ids);
             nodes.push((VIEWS, list));
             kids.push(VIEWS);
-            kids.push(button(nodes, geometry, MANAGE, t("Manage: About, Settings, Color Theme…"), "act-manage", true));
+            kids.push(button(nodes, geometry, MANAGE, &self.manage, "act-manage", true));
             if let Some((_, n)) = nodes.last_mut() {
                 n.set_has_popup(accesskit::HasPopup::Menu);
             }
@@ -170,7 +172,11 @@ impl Workbench {
         };
         let title_bar = cfg!(target_os = "macos").then(|| (!self.nav.back.is_empty(), !self.nav.forward.is_empty(), self.command_center_label(cx)));
         let caption = (cfg!(target_os = "windows") && !window.is_fullscreen()).then(|| window.is_maximized());
-        ChromeSnap { views, title_bar, caption, remote: self.view_shown(Panel::Remote) }
+        let manage = match self.update_status_item() {
+            Some(item) => tf("Manage: {}", &[&item.tip.to_string()]),
+            None => t("Manage: About, Settings, Color Theme…").to_string(),
+        };
+        ChromeSnap { views, title_bar, caption, remote: self.view_shown(Panel::Remote), manage }
     }
 
     /// An action on the chrome; `false` if the request is not for it.

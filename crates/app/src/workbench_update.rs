@@ -35,6 +35,8 @@ const SKIPPED: &str = "update.skipped";
 const INSTALLED: &str = "update.installed";
 const NOTIFIED: &str = "update.notified";
 const ASK_SNOOZED_UNTIL: &str = "update.ask_snoozed_until";
+/// The version that ran last in this profile: when it is lower than the running one, the app has just been updated.
+pub(super) const LAST_RUN: &str = "update.last_run";
 /// The highest version a verified list has offered here; a lower one later is a replayed old list.
 const HIGHEST_SEEN: &str = "update.highest_seen";
 
@@ -139,6 +141,8 @@ impl Cause {
 pub(super) enum Dialog {
     Closed,
     Ask,
+    /// The first start after an update: what the new version brings.
+    WhatsNew,
     Update,
 }
 
@@ -475,6 +479,15 @@ impl Workbench {
                 buttons: vec![button(A::OnlyWhenAsked, t("Only When I Ask"), false), button(A::CheckDaily, t("Check Daily"), true)],
                 escape: A::Close,
             }),
+            (Dialog::WhatsNew, _) => Some(DialogModel {
+                icon: "check",
+                tone: Tone::Success,
+                title: tf("Codeyard {} is ready", &[&version]).into(),
+                subtitle: self.update.previous.as_ref().map(|v| tf("Updated from {}", &[v]).into()),
+                body: Body::Notes { note: None, text: self.update.notes_text.clone().into() },
+                buttons: vec![start_button(A::ReleasePage, t("Release Page")), button(A::Close, t("Continue"), true)],
+                escape: A::Close,
+            }),
             (Dialog::Update, UpdateState::Idle) => None,
             (Dialog::Update, UpdateState::Checking) => Some(DialogModel {
                 icon: "loader",
@@ -594,7 +607,8 @@ impl Workbench {
         }
     }
 
-    /// The status bar item: shown while an update is on offer, on its way or waiting for a restart.
+    /// What the gear button shows while an update is on offer, on its way or waiting for a restart: a badge in this tone,
+    /// this text as its tooltip, and a first entry in the Manage menu.
     pub(super) fn update_status_item(&self) -> Option<StatusItem> {
         let version = self.update.state.version()?.to_string();
         let (icon, tone, label, tip) = match &self.update.state {
@@ -636,7 +650,11 @@ impl Workbench {
             UpdateAction::Install => self.start_update_download(window, cx),
             UpdateAction::Skip => self.skip_version(window, cx),
             UpdateAction::ReleasePage => {
-                let version = self.update.state.version().map(str::to_string);
+                // After an update the page is the running version's; otherwise the one on offer.
+                let version = match self.update.dialog {
+                    Dialog::WhatsNew => Some(self.update.backend.version().to_string()),
+                    _ => self.update.state.version().map(str::to_string),
+                };
                 cx.open_url(&release_url(version.as_deref()));
             }
             UpdateAction::Retry => self.retry(window, cx),
@@ -697,7 +715,7 @@ impl Workbench {
                 let until = self.update.backend.now() + ASK_SNOOZE;
                 self.remember(ASK_SNOOZED_UNTIL, &unix_ms(until).to_string());
             }
-            Dialog::Update => {}
+            Dialog::WhatsNew | Dialog::Update => {}
         }
         self.update.dialog = Dialog::Closed;
         // What was only worth showing in the dialog is dropped with it. So is an error the user has read: its status item goes
@@ -741,6 +759,40 @@ impl Workbench {
 
     // --- The question ---
 
+    /// Nothing else is open and the window is in front: a dialog may appear without landing under someone's hands.
+    fn calm_for_dialog(&self, window_active: bool) -> bool {
+        self.overlay.is_none() && self.menu.is_none() && self.update.dialog == Dialog::Closed && window_active
+    }
+
+    /// The first start after an update shows what is new, once. `false`: not now, try again soon. A profile that never ran
+    /// before, or one that ran a newer version, only remembers this one.
+    pub(super) fn show_whats_new(&mut self, window_active: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let current = self.update.backend.version().to_string();
+        let previous = self.stored(LAST_RUN);
+        if previous.as_deref() == Some(current.as_str()) {
+            return true;
+        }
+        let updated = previous.as_deref().filter(|p| is_rollback(p, &current));
+        let notes = crate::whats_new::notes_for(&current);
+        let (Some(from), Some(notes)) = (updated, notes) else {
+            self.remember(LAST_RUN, &current);
+            return true;
+        };
+        if !self.calm_for_dialog(window_active) {
+            return false;
+        }
+        let from = from.to_string();
+        self.remember(LAST_RUN, &current);
+        (self.update.notes, self.update.notes_text) = render_notes(&notes, &release_url(Some(current.as_str())));
+        self.update.notes_scroll.set_offset(gpui::point(px(0.), px(0.)));
+        self.update.previous = Some(from);
+        self.update.return_focus = window.focused(cx);
+        self.update.dialog = Dialog::WhatsNew;
+        self.focus_update_primary(window, cx);
+        cx.notify();
+        true
+    }
+
     /// Shows the one-time question when `update.check` is undecided, it was not snoozed and nothing else is in the way (a picker or
     /// menu is open, the window is in the background or a key was pressed a moment ago: a dialog must not appear under someone
     /// else's hands). `false`: not now, try again soon.
@@ -751,8 +803,7 @@ impl Workbench {
         }
         let now = self.update.backend.now();
         let typing = self.update.last_key.is_some_and(|t| now.duration_since(t).map_or(true, |age| age < QUIET_BEFORE_ASK));
-        let calm = self.overlay.is_none() && self.menu.is_none() && self.update.dialog == Dialog::Closed && window_active && !typing;
-        if !calm {
+        if !self.calm_for_dialog(window_active) || typing {
             return false;
         }
         self.update.return_focus = window.focused(cx);
@@ -793,6 +844,13 @@ impl Workbench {
     pub(crate) fn schedule_update_checks(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.update.schedule = Some(cx.spawn_in(window, async move |this, cx| {
             cx.background_executor().timer(ASK_AFTER).await;
+            for _ in 0..ASK_ATTEMPTS {
+                match this.update_in(cx, |this, window, cx| this.show_whats_new(window.is_window_active(), window, cx)) {
+                    Ok(true) => break,
+                    Ok(false) => cx.background_executor().timer(ASK_RETRY).await,
+                    Err(_) => return,
+                }
+            }
             for _ in 0..ASK_ATTEMPTS {
                 match this.update_in(cx, |this, window, cx| this.ask_update_policy(window.is_window_active(), window, cx)) {
                     Ok(true) => break,
@@ -847,6 +905,11 @@ impl Workbench {
                     self.update.manual = true;
                     self.open_update_dialog(window, cx);
                 }
+                return;
+            }
+            // Already on offer: show the offer rather than asking the server again.
+            UpdateState::Available(_) if manual => {
+                self.open_update_dialog(window, cx);
                 return;
             }
             // A background check only looks when nothing is on offer or on screen.
@@ -1276,7 +1339,7 @@ impl Workbench {
     }
 
     /// A failed write costs a repeated notice or check: it is reported once per session (see `persist_failures.rs`).
-    fn remember(&self, key: &str, value: &str) {
+    pub(super) fn remember(&self, key: &str, value: &str) {
         if let Some(Err(e)) = self.persist.state.as_ref().map(|s| s.set(key, value)) {
             crate::diagnostics::log::warn("update", format_args!("could not remember {key}: {e}"));
             self.persist_failed(super::notifications_glue::failures::Area::UpdateChoice, &e);
