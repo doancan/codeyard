@@ -562,14 +562,14 @@ impl ScmPanel {
                         .on_click(dispatch(Box::new(crate::workbench::GitFetchAll))),
                 )
                 .child(
-                    count_button("scm-graph-pull", "arrow-down", behind, "Pull", &p)
+                    count_button("scm-graph-pull", "arrow-down", behind, crate::i18n::t("Pull"), &p)
                         .relative()
                     .map(|d| sections::tabbable(d, &p))
                         .child(probe(HistoryFrame::Button("pull")))
                         .on_click(dispatch(Box::new(crate::workbench::GitPull))),
                 )
                 .child(
-                    count_button("scm-graph-push", "arrow-up", ahead, "Push", &p)
+                    count_button("scm-graph-push", "arrow-up", ahead, crate::i18n::t("Push"), &p)
                         .relative()
                     .map(|d| sections::tabbable(d, &p))
                         .child(probe(HistoryFrame::Button("push")))

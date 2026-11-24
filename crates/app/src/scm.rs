@@ -1081,7 +1081,12 @@ impl ScmPanel {
                 .hover(|d| d.bg(c(p.surface_hover)))
                 .child(if self.syncing { ui::spinner("scm-sync-busy", 14., p.text).into_any_element() } else { icon(glyph, 14., p.text).into_any_element() })
                 .child(label)
-                .on_click(cx.listener(move |_, _, _, cx| cx.emit(event()))),
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    // A sync is running: a second press must not start another one on top of it.
+                    if !this.syncing {
+                        cx.emit(event());
+                    }
+                })),
         )
     }
 
