@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - File icons (File Glyphs, Codeyard and Colorful themes): each icon sits on a soft tile of its language colour.
 - The empty editor's logo is a quiet grey instead of mint green. The status bar is 2 px taller, and its first and last entries keep a little room from the window's edges. Activity bar icons are 2 px larger.
-- Codeyard Dark is a warm ink black (editor `#120f0e`, darker side panels, soft warm text) with an amber accent instead of blue. Codeyard Light is cleaner (pure white editor, crisper borders and text).
+- Codeyard Dark is a graphite black (editor `#111214`, darker side panels) with a flat, saturated blue accent (`#5c96ff`) in place of the pale periwinkle. Codeyard Light is cleaner (pure white editor, crisper borders and text).
 - Welcome: the logo and the product name at the top are gone, so the start cards come first. The cards are taller with a larger icon and an accent border on hover, the section titles have a line under them and the tip of the day sits in a box.
 
 ## [0.13.2] - 2026-11-24
