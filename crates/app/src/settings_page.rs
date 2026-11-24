@@ -87,7 +87,7 @@ pub enum AccessControl {
 
 /// The categories of the page, in the order of its list. Everything about *writing* languages (the interface language, spelling)
 /// is under "Language & Region" and everything about *programming* languages (language servers, schemas, `.http`) under
-/// "Programming Languages".
+/// "Development".
 pub const CATEGORIES: &[&str] = &[
     "Commonly Used",
     "Modified",
@@ -101,7 +101,7 @@ pub const CATEGORIES: &[&str] = &[
     "Terminal",
     "Window",
     "Language & Region",
-    "Programming Languages",
+    "Development",
     "Remote & Security",
 ];
 
@@ -139,7 +139,7 @@ pub fn category_of(key: &str) -> &'static str {
         "editor" | "data" | "diffEditor" => "Editor",
         "workbench" | "theme" | "ui" | "extensions" | "keymap" => "Workbench",
         "spelling" => "Language & Region",
-        "lsp" | "json" | "emmet" | "http" | "rust" => "Programming Languages",
+        "lsp" | "json" | "emmet" | "http" | "rust" => "Development",
         "ports" | "security" => "Remote & Security",
         "files" => "Files",
         "explorer" => "Explorer",
@@ -237,7 +237,7 @@ pub fn category_label(name: &str) -> &'static str {
         "Terminal" => t("Terminal"),
         "Window" => t("Window"),
         "Language & Region" => t("Language & Region"),
-        "Programming Languages" => t("Programming Languages"),
+        "Development" => t("Development"),
         "Remote & Security" => t("Remote & Security"),
         _ => "Git",
     }
@@ -1024,14 +1024,14 @@ mod tests {
         let region = keys_of(cx, "Language & Region");
         assert!(region.contains(&"ui.language") && region.contains(&"spelling.enabled"), "{region:?}");
         assert!(!region.contains(&"lsp.enabled"), "{region:?}");
-        let programming = keys_of(cx, "Programming Languages");
+        let programming = keys_of(cx, "Development");
         for key in ["lsp.enabled", "json.validate.enable", "http.runOn", "rust.profile", "rust.testRunner", "rust.inlayHints.types"] {
             assert!(programming.contains(&key), "{key} in {programming:?}");
         }
         assert!(!programming.contains(&"ui.language"), "{programming:?}");
         assert!(CATEGORIES.iter().all(|c| !c.contains("Remote & Languages")));
         let _tr = crate::i18n::LangGuard::set("tr");
-        assert_eq!((category_label("Language & Region"), category_label("Programming Languages")), ("Dil ve Bölge", "Programlama Dilleri"));
+        assert_eq!((category_label("Language & Region"), category_label("Development")), ("Dil ve Bölge", "Geliştirme"));
     }
 
     /// The "?" opens the explanation in the interface language, with the facts under it; a second press closes it.

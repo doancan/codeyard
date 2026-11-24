@@ -1,7 +1,7 @@
 # Settings help, English. Format: setting key<TAB>explanation. `\n` is a line break. The text is what the "?" button of that setting shows,
 # above the facts the page works out itself (key, default, allowed values). A setting without an entry shows its description and the
 # facts. See docs/settings-help.md.
-ui.language	The language of menus, dialogs and messages. `auto` follows the system language and falls back to English when Codeyard has no translation for it.\nThis is the language of the app itself. It does not change the programming language of a file, spell checking (Spelling) or the language servers (Programming Languages).
+ui.language	The language of menus, dialogs and messages. `auto` follows the system language and falls back to English when Codeyard has no translation for it.\nThis is the language of the app itself. It does not change the programming language of a file, spell checking (Spelling) or the language servers (Development).
 ui.scale	Zooms the whole interface (text, icons and spacing) without changing the editor font size. Use ⌘+ and ⌘- to change it while you work.
 spelling.enabled	Underlines misspelled words in prose files and in code comments. The dictionaries are the languages listed in `spelling.languages` in settings.jsonc.\nThis is about the languages you write in, not the language of the interface.
 spelling.checkComments	Also checks comments in code files; prose files are always checked. Code identifiers are split into words (camelCase, snake_case) before they are checked.

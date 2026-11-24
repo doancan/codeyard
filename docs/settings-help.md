@@ -33,6 +33,6 @@ No Rust code changes. A **new language** adds `help/<code>.tsv` and one `help: i
 ## Categories
 
 The page groups settings by what they are about; the category of a key is decided in `settings_page::category_of`.
-"Language & Region" holds the languages people write in (the interface language, spelling); "Programming Languages" holds language
+"Language & Region" holds the languages people write in (the interface language, spelling); "Development" holds language
 servers, JSON/YAML schemas, `.http`, Emmet and the Rust and Cargo build settings; "Remote & Security" holds port forwarding, remote
 Local History and Workspace Trust. A test checks that every setting of the page lands in a category.

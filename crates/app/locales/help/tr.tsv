@@ -1,5 +1,5 @@
 # Ayar yardımı, Türkçe. Biçim: ayar anahtarı<TAB>açıklama. `\n` satır sonudur. Anahtarlar help/en.tsv ile aynıdır; eksik olan ayarda İngilizce gösterilir.
-ui.language	Menülerin, iletişim kutularının ve iletilerin dili. `auto` sistem dilini izler; Codeyard'da o dilin çevirisi yoksa İngilizceye döner.\nBu, uygulamanın kendi dilidir. Bir dosyanın programlama dilini, yazım denetimini (Spelling) ve dil sunucularını (Programming Languages) değiştirmez.
+ui.language	Menülerin, iletişim kutularının ve iletilerin dili. `auto` sistem dilini izler; Codeyard'da o dilin çevirisi yoksa İngilizceye döner.\nBu, uygulamanın kendi dilidir. Bir dosyanın programlama dilini, yazım denetimini (Spelling) ve dil sunucularını (Development) değiştirmez.
 ui.scale	Tüm arayüzü (yazı, simgeler ve boşluklar) editör yazı boyutunu değiştirmeden yakınlaştırır. Çalışırken ⌘+ ve ⌘- ile değiştirebilirsin.
 spelling.enabled	Metin dosyalarındaki ve koddaki yorumlardaki yanlış yazılmış kelimelerin altını çizer. Sözlükler settings.jsonc içindeki `spelling.languages` listesindeki dillerdir.\nBu, yazdığın dillerle ilgilidir; arayüzün diliyle ilgisi yoktur.
 spelling.checkComments	Koddaki yorumları da denetler; metin dosyaları her zaman denetlenir. Kod adları (camelCase, snake_case) denetlenmeden önce kelimelere ayrılır.
