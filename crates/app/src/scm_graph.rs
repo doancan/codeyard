@@ -182,7 +182,7 @@ fn starts_block(line: &str) -> bool {
 
 /// Joins the lines of a message that were hard-wrapped (at 72 columns, by habit) back into paragraphs, so the narrow card does
 /// not show them as ragged short lines. Blank lines, list items, quotes and short lines stay as they are.
-fn reflow(lines: impl Iterator<Item = String>) -> Vec<String> {
+pub(super) fn reflow(lines: impl Iterator<Item = String>) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut previous_len = 0;
     for line in lines {

@@ -45,8 +45,10 @@ impl ScmPanel {
             let head = |col: gpui::Stateful<gpui::Div>, d: Option<&CommitDetail>| {
                 let message = d.map_or(commit.subject.clone(), |d| d.message.clone());
                 let (subject, rest) = message.split_once('\n').map_or((message.as_str(), ""), |(a, b)| (a, b.trim()));
+                // Lines wrapped at 72 columns read as paragraphs here too, not as ragged breaks in a narrow panel.
+                let rest = super::graph_ui::reflow(rest.lines().map(|l| l.trim_end().to_string())).join("\n");
                 col.child(div().font_weight(gpui::FontWeight::SEMIBOLD).text_size(px(text::SM.0)).child(subject.to_string()))
-                    .when(!rest.is_empty(), |c0| c0.child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(rest.to_string())))
+                    .when(!rest.is_empty(), |c0| c0.child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(rest.clone())))
                     // Single-line meta: author (email and date in the tooltip), time and hash; icons instead of text.
                     .child({
                         let who: SharedString = format!("{} <{}>\n{}", commit.author, commit.email, commit.date).into();
