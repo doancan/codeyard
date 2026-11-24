@@ -283,8 +283,7 @@ closing its tab (closing a terminal's tab never ends what runs in it). Opening a
 it to the panel; a connection change ends it like a panel terminal. Drag a terminal's tab onto another group's tab bar
 to move it there; screen readers list terminal tabs with the other tabs of the focused group, and selecting one brings it
 to the front. At the next start, each terminal that was in an editor group or in a window of its own comes back in the
-same place as a new shell, with its name, colour and folder, and the line "Previous session ended; started a new
-shell"; nothing from the previous session runs again. A window whose display is gone opens on an attached display, made
+same place as a new shell, with its name, colour and folder; nothing from the previous session runs again. A window whose display is gone opens on an attached display, made
 to fit; a saved arrangement that cannot be read is ignored.
 
 "View: Move Editor into New Window" shows the active file in a window of its own, for example on a second display;
@@ -314,7 +313,7 @@ with it: this window starts new shells and says so in the status bar. If more th
 came while no window was open, the line says how much was lost. A terminal no window takes back in time is ended; the
 local daemon stops 10 minutes after its last terminal. Any terminal that cannot be taken back (it ended, the daemon or
 the server was restarted, `window.restoreSession` is off) is a **new shell**: nothing that
-ran before is started or typed again, and a line says *Previous session ended; started a new shell*. If a terminal's folder is gone,
+ran before is started or typed again, and the shell simply starts again without a notice. If a terminal's folder is gone,
 it starts in the workspace folder and says so. `"terminal.persistentScrollback": 1000` also keeps the last lines of each
 terminal's history (plain text, with colors and control sequences removed) and shows them above that line; it is 0 (off) by
 default, because history can contain secrets. "Terminal: Clear Saved Terminal History" removes the saved history now.
@@ -519,9 +518,10 @@ A folder or file given on the command line always opens, whatever the setting. `
 `--goto`) opens the file with the cursor at line 42, column 7; the column is optional. An empty editor
 shows the Welcome content unless the setting is `"blank"`; "Help: Welcome" opens it as a tab.
 `"window.restoreSession"` is separate: it brings a folder's tabs and unsaved changes back whenever
-you open that folder. Right-click the Dock icon (macOS) for your open windows, recent projects, New Window,
-Open Folder…, Connect to SSH Host…, Go to File…, Settings… and Welcome; recent projects are also under
-File ▸ Open Recent. A recent project or Open Folder… never replaces the folder of the front window: an empty
+you open that folder. Right-click the Dock icon (macOS) for your open windows (at most six, the front one first), New Window,
+Open Folder…, Connect to SSH Host…, a *Recent Projects* submenu and Settings…; recent projects are also under
+File ▸ Open Recent. On macOS every new window opens filling the screen (zoomed, not full screen) unless the last window was in
+full screen; resizing it is remembered until the next window. A recent project or Open Folder… never replaces the folder of the front window: an empty
 window takes it, a project that is already open comes forward, and any other opens in a window of its own.
 
 The gear at the bottom of the activity bar is one menu: **About Codeyard** (version), Settings,
@@ -568,7 +568,7 @@ Make it yours:
 **Graph.** Source Control shows the history of all branches as colored lanes (at most seven
 columns), one line per commit: message, author and the most important branch/tag chip
 (`"git.graph.showHash"` adds the short hash). Every row is only as wide as the branches running
-next to it, so history reads from the left edge and side branches step to the right. Commits the upstream has and your branch does not (fetched but not pulled yet) have an orange dot instead of their lane's colour; Sync pulls them and the dot turns back. The hover card and a screen reader's description of the row say "not pulled yet" too. Hover a commit
+next to it, so history reads from the left edge and side branches step to the right. Commits the upstream has and your branch does not (fetched but not pulled yet) are faded, with a hollow node and a small arrow, while the commit you are on is highlighted; Sync pulls them and they become solid. The hover card and a screen reader's description of the row say "not pulled yet" too. Hover a commit
 for a short card with its author, date, the start of its message, labels, hash (and a merge's parents) and how much it
 changed: the number of files and the added and removed lines (a merge shows what it brought in against its first parent).
 The card does not list files, so it stays the same size however big the commit is. When the repository's `origin` is on
@@ -925,7 +925,7 @@ set it) takes:
 | Value | What happens |
 | --- | --- |
 | `ask` (default) | Nothing is checked. A few seconds after the first window opens, once, Codeyard asks whether to check daily. *Check Daily* and *Only When I Ask* write `daily` or `manual` for you; closing the question with Esc writes nothing and asks again after 30 days. |
-| `daily` | Looks when Codeyard starts and then once in 24 hours while it runs (one successful check a day). If a check fails, for instance offline, it is tried again every three hours while Codeyard runs, but after three failed attempts in a day it waits for the next day. A newer version shows one notice and an item at the right end of the status bar; a failed check is only logged to stderr. |
+| `daily` | Looks when Codeyard starts and then once in 24 hours while it runs (one successful check a day). If a check fails, for instance offline, it is tried again every three hours while Codeyard runs, but after three failed attempts in a day it waits for the next day. A newer version shows one notice and a badge on the gear button at the bottom of the activity bar; a failed check is only logged to stderr. |
 | `manual` | Only **Help ▸ Check for Updates…** (palette: *Help: Check for Updates…*; on macOS also under the *codeyard* menu) looks. |
 
 That command works whatever the setting says, and shows its errors. Debug builds and windows started with `--do` or `--panel` never
@@ -933,14 +933,18 @@ ask and never check by themselves.
 
 **The dialog.** On macOS it is a window of its own, titled *Software Update*, with the app's icon, like the update windows of other Mac
 apps (other systems draw it as a card over the editor). Closing it with the red button, ⌘W or Esc does what *Later* does. *Checking*, then either "Codeyard is up to date" or the new version with its release notes. *Install and Restart*
-downloads the installer (progress in megabytes), checks it, replaces the app and offers *Restart Now* (*What comes back* below). *Later* closes the dialog and keeps the item
-in the status bar. *Skip This Version* hides that version from the notice and the item for good; a manual check still offers it and a
+downloads the installer (progress in megabytes), checks it, replaces the app and offers *Restart Now* (*What comes back* below). *Later* closes the dialog and keeps the badge
+on the gear button; the gear's menu starts with the update ("Update 0.13.0…", "Updating… 40%…", "Restart to update…") and ends with *Check for Updates…* while there is none. *Skip This Version* hides that version from the notice and the item for good; a manual check still offers it and a
 newer version is not skipped. *Release Page* opens the release on GitHub. Esc or *Hide* during a download closes the dialog and the
-download goes on ("Updating… 40%" in the status bar; click it to come back); *Cancel* stops it and removes the partial file. Quitting
+download goes on (the gear button shows a spinner and says "Updating… 40%" in its tooltip; open its menu to come back); *Cancel* stops it and removes the partial file. Quitting
 during a download cancels it; during the few seconds the app is being replaced (in any window) you are asked before quitting, and that
 window does not close. The notes are reached with Tab and scroll with the arrow keys, Page Up/Down, Home and End (a screen reader is
 given their text, the first 8 KB of it; Codeyard draws at most the first 64 KB of very long notes and points to GitHub for the rest).
-Closing the dialog of a failed update dismisses the failure and its red status bar item.
+Closing the dialog of a failed update dismisses the failure and the red badge on the gear button.
+
+**What's new.** The first start after an update opens a dialog with the notes of the version you now run, under Features,
+Improvements, Fixes and Security, once; *Release Page* opens the full notes on GitHub. A new install, or a profile that ran a newer
+version, shows nothing. The notes are those of `CHANGELOG.md`, compiled into the app, so they appear offline.
 
 **What comes back after the restart.** Every window that has a folder open is reopened, on the same computer or SSH host, and the one that
 was in front is in front again; it does not matter what `window.startup` says, because a restart is not a launch. Windows that showed the

@@ -716,8 +716,12 @@ fn row_shell(
     cx: &mut Context<ScmPanel>,
 ) -> gpui::Stateful<gpui::Div> {
     let (entry, menu_entry, card) = (k.clone(), k.clone(), k.clone());
+    let here = k.refs.iter().any(|r| r.kind == RefKind::Head);
     div()
         .id(("scm-graph", ix))
+        // Not pulled yet: the whole row recedes; the row of the checked-out commit is the one that is lit.
+        .when(k.incoming, |d| d.opacity(0.6))
+        .when(here && !is_sel, |d| d.bg(ui::ca(p.accent, 0.1)))
         .w_full()
         .h(px(h))
         .flex()
@@ -766,13 +770,19 @@ fn graph_row(
         .pr(px(theme::SPACE[3]))
         .child(if flat {
             // Rows are skipped, so lines would break: a dot in the commit's lane color stands in for the graph.
-            let color = if commit.incoming { p.warning } else { graph::lane_color(p, row.color) };
+            let color = graph::lane_color(p, row.color);
             div()
                 .w(px(graph::width_px(1)))
                 .flex_none()
                 .flex()
                 .justify_center()
-                .child(div().size(px(8.)).rounded_full().when(merge, |d| d.border_2().border_color(c(color))).when(!merge, |d| d.bg(c(color))))
+                .child(
+                    div()
+                        .size(px(8.))
+                        .rounded_full()
+                        .when(merge || commit.incoming, |d| d.border_2().border_color(c(color)))
+                        .when(!merge && !commit.incoming, |d| d.bg(c(color))),
+                )
                 .into_any_element()
         } else {
             graph::lane_element(row.clone(), head, merge, commit.incoming, *p).into_any_element()
@@ -818,6 +828,8 @@ fn graph_row(
         .when(more > 0, |d| {
             d.child(div().flex_none().ml(px(theme::SPACE[1])).text_size(px(text::BADGE.0)).text_color(c(p.text_muted)).child(format!("+{more}")))
         })
+        // Not pulled yet: an arrow says where it is going, whatever the row's other columns show.
+        .when(commit.incoming, |d| d.child(div().flex_none().ml(px(theme::SPACE[2])).child(icon("arrow-down", 12., p.warning))))
         .when(show_hash, |d| {
             d.child(
                 div()
@@ -847,7 +859,7 @@ fn compact_row(
     let head = commit.refs.iter().any(|r| r.kind == RefKind::Head);
     let merge = commit.parents.len() > 1;
     let refs = ordered_refs(commit);
-    let color = if commit.incoming { p.warning } else { graph::lane_color(p, row.color) };
+    let color = graph::lane_color(p, row.color);
     row_shell(ix, commit, GraphView::Compact.row_height(), is_sel, tooltips, show_tooltips, p, cx)
         .gap(px(theme::SPACE[3]))
         .pl(px(theme::SPACE[4]))
@@ -858,8 +870,8 @@ fn compact_row(
                 .flex_none()
                 .size(px(8.))
                 .rounded_full()
-                .when(merge, |d| d.border_2().border_color(c(color)))
-                .when(!merge, |d| d.bg(c(color)))
+                .when(merge || commit.incoming, |d| d.border_2().border_color(c(color)))
+                .when(!merge && !commit.incoming, |d| d.bg(c(color)))
                 .when(head, |d| d.border_2().border_color(c(p.text))),
         )
         .child(

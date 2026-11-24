@@ -53,8 +53,7 @@ impl Workbench {
         let busy = usize::from(conflicts > 0)
             + usize::from(editor_info.as_ref().is_some_and(|info| info.3 || info.4))
             + usize::from(self.active_forwards() > 0)
-            + usize::from(self.transfer_active().is_some())
-            + usize::from(self.update_status_item().is_some());
+            + usize::from(self.transfer_active().is_some());
         // Operational signals take priority over secondary editor metadata.
         let detail_width = width - busy as f32 * 140.;
         let labels = width >= 1100.;
@@ -234,8 +233,6 @@ impl Workbench {
                         .on_click(cx.listener(|this, _, w, cx| this.dispatch_now(&ToggleTabFocusMode, w, cx))),
                 )
             })
-            // A new version waits at the left, beside the problems: always labelled, so it is not missed.
-            .when_some(self.update_status_item(), |d, item| d.child(self.update_status_button(item, width >= 640., p, cx)))
             // `cyx dev`: this window runs an extension straight from the author's folder.
             .when(crate::ext::dev_dir().is_some(), |d| {
                 d.child(

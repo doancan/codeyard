@@ -295,33 +295,18 @@ jobs:
           tar -czf "dist/$NAME.tar.gz" "$NAME"
           # Name the files: a bare `*` would also list SHA256SUMS.txt itself, created empty by the redirect.
           (cd dist && shasum -a 256 *.dmg *.tar.gz > SHA256SUMS.txt)
+          # The notes are the CHANGELOG section of this version, under the headings users know: Features, Improvements, Fixes,
+          # Security. They carry no install instructions (the downloads say what they are) and no links to commits.
           awk -v v="$VERSION" '
             $0 ~ "^## \\[" v "\\]" { on=1; next }
             on && /^## \[/ { exit }
             on && /^\[[^]]+\]: / { exit }
+            on && /^### Added$/ { print "### Features"; next }
+            on && /^### Changed$/ { print "### Improvements"; next }
+            on && /^### Fixed$/ { print "### Fixes"; next }
             on { print }
           ' CHANGELOG.md > notes.md
           grep -q '[^[:space:]]' notes.md || { echo "CHANGELOG.md [$VERSION] section has no text: the release notes would be empty"; exit 1; }
-          if [ "$NOTARIZE_RELEASE" = true ]; then
-            cat >> notes.md <<'NOTES'
-
-          ### Install
-          Open the DMG and drag **Codeyard** to Applications. The macOS build is signed with Developer ID and notarized by Apple.
-          The DMG includes its notarization ticket. Standalone binaries in the tar.gz use Apple's online ticket lookup.
-          NOTES
-          else
-            cat >> notes.md <<'NOTES'
-
-          ### Install (unsigned dry run)
-          Open the DMG and drag **Codeyard** to Applications. This test build is not notarized:
-          on first launch approve it in System Settings > Privacy & Security.
-          NOTES
-          fi
-          cat >> notes.md <<'NOTES'
-
-          Windows: extract the Windows ZIP or run the Windows setup EXE.
-          Windows builds are unsigned and may show a SmartScreen warning.
-          NOTES
 
       - name: Upload macOS release files
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24

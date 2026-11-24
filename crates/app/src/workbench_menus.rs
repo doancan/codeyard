@@ -243,18 +243,29 @@ impl Workbench {
         }
     }
 
-    /// The gear button's menu, grouped like VS Code's Manage menu: commands, then preferences, then About. The `bool` puts a
-    /// separator in front of the entry.
-    pub(super) fn manage_menu_entries() -> Vec<(&'static str, Box<dyn gpui::Action>, bool)> {
+    /// The gear button's menu: commands, then preferences, then About. The `bool` puts a separator in front of the entry.
+    /// While an update is on offer or on its way it is the first entry (its label says what a click does); otherwise
+    /// "Check for Updates…" ends the menu, under About.
+    pub(super) fn manage_menu_entries(&self) -> Vec<(String, Box<dyn gpui::Action>, bool)> {
         use crate::i18n::t;
-        vec![
-            (t("Command Palette…"), Box::new(CommandPalette), false),
-            (t("Settings"), Box::new(OpenSettingsPage), true),
-            (t("Keyboard Shortcuts"), Box::new(ShowKeyboardShortcuts), false),
-            (t("Color Theme…"), Box::new(SelectTheme), false),
-            (t("File Icon Theme…"), Box::new(SelectIconTheme), false),
-            (t("About Codeyard"), Box::new(ShowAbout), true),
-        ]
+        let entry = |label: &str, action: Box<dyn gpui::Action>, sep: bool| (label.to_string(), action, sep);
+        let mut entries = Vec::new();
+        let pending = self.update_status_item();
+        if let Some(item) = &pending {
+            entries.push(entry(&format!("{}…", item.label), Box::new(CheckForUpdates), false));
+        }
+        entries.extend([
+            entry(t("Command Palette…"), Box::new(CommandPalette), pending.is_some()),
+            entry(t("Settings"), Box::new(OpenSettingsPage), true),
+            entry(t("Keyboard Shortcuts"), Box::new(ShowKeyboardShortcuts), false),
+            entry(t("Color Theme…"), Box::new(SelectTheme), false),
+            entry(t("File Icon Theme…"), Box::new(SelectIconTheme), false),
+            entry(t("About Codeyard"), Box::new(ShowAbout), true),
+        ]);
+        if pending.is_none() {
+            entries.push(entry(t("Check for Updates…"), Box::new(CheckForUpdates), false));
+        }
+        entries
     }
 
     /// Where the Manage menu's bottom-left corner goes: right of the activity bar, level with the bottom of the gear button
@@ -268,7 +279,9 @@ impl Workbench {
     pub(super) fn open_manage_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let status_bar = self.chrome.zen.is_none() && cx.global::<Settings>().status_bar;
         let origin = Self::manage_menu_origin(window.viewport_size().height, status_bar);
-        self.show_action_menu_at(Self::manage_menu_entries(), origin, gpui::Corner::BottomLeft, window, cx);
+        let entries = self.manage_menu_entries();
+        let entries = entries.iter().map(|(label, action, sep)| (label.as_str(), action.boxed_clone(), *sep)).collect();
+        self.show_action_menu_at(entries, origin, gpui::Corner::BottomLeft, window, cx);
         if let Some(state) = &mut self.menu {
             state.follows_manage = true;
         }

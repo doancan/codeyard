@@ -220,12 +220,11 @@ impl Workbench {
                 launch.color = saved.color.clone();
             }
             let Some(term) = self.spawn_terminal(cwd, launch, window, cx) else { break };
-            term.update(cx, |t, cx| {
+            term.update(cx, |t, _| {
                 t.icon = saved.icon;
                 if let Some(title) = saved.title {
                     t.set_fixed_title(title);
                 }
-                t.show_restored_notice(cx);
             });
             self.put_moved_terminal(term, saved.place, &displays_unique, window, cx);
         }

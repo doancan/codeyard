@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-24
+
+### Added
+
+- Updates: the gear button in the activity bar carries the update. A badge shows while a version is available, downloading or waiting for a restart, its tooltip says what is happening, and its menu starts with the update (or ends with Check for Updates…).
+- What's new: the first start after an update opens a dialog with the notes of the new version, grouped under Features, Improvements, Fixes and Security.
+
+### Changed
+
+- Updates: the update no longer takes space in the status bar. The release notes shown in the app and on GitHub use the same headings and no longer carry installation instructions.
+- Git graph: commits that are not pulled yet are faded with hollow nodes and a pull arrow, while the commit you are on is highlighted.
+- Windows (macOS): new windows and folders open filling the screen.
+- Dock menu (macOS): open windows come first (at most six), then New Window, Open Folder… and Connect to SSH Host…, with recent projects in a submenu and Settings… last.
+
+### Fixed
+
+- Terminal: a shell that starts again after a restart no longer prints "Previous session ended; started a new shell".
+
 ## [0.12.9] - 2026-11-23
 
 ### Changed
@@ -2131,7 +2149,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.12.9...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/doancan/codeyard/compare/v0.12.9...v0.13.0
 [0.12.9]: https://github.com/doancan/codeyard/compare/v0.12.8...v0.12.9
 [0.12.8]: https://github.com/doancan/codeyard/compare/v0.12.7...v0.12.8
 [0.12.7]: https://github.com/doancan/codeyard/compare/v0.12.6...v0.12.7

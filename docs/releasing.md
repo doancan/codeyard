@@ -106,7 +106,7 @@ warnings in `shaders` and `agents`; all release jobs also had zero such warnings
    SHA-256 (they are not put into the bundle). `target/release/codeyard --check-agent-bundle` must exit 0.
 7. Collect `dist/`: `Codeyard-X.Y.Z-macos-arm64.dmg`, `codeyard-X.Y.Z-macos-arm64.tar.gz` (binary and `licenses/`), and the
    agents themselves, `cp agents/codeyard-agent-* dist/` (the apps download them from the release: see below).
-8. Release notes: the CHANGELOG section plus installation instructions that match the artifact. Use the GitHub workflow
+8. Release notes: the CHANGELOG section of the version (Added, Changed and Fixed become Features, Improvements and Fixes; no install text, no commit links). Use the GitHub workflow
    for Developer ID signing and notarization; an ad-hoc local build still requires user approval in Privacy & Security.
    Save the notes as `dist/RELEASE_NOTES.md`: the same file is the release body
    and the signed notes the app shows.
