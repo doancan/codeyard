@@ -2050,3 +2050,21 @@ fn hiding_the_dialog_keeps_the_update_waiting_for_the_user(cx: &mut TestAppConte
     assert_eq!(fake.count("quit"), 0, "nobody is watching: the app does not restart unasked");
     assert_eq!(wb.read_with(cx, |wb, _| wb.update_status_for_test()).map(|s| s.0), Some("Restart to update".into()));
 }
+
+/// The whole path with the real pointer: a click on "Install and Restart" downloads, installs and restarts, with no second click.
+#[gpui::test]
+fn one_click_on_install_and_restart_ends_in_the_restart(cx: &mut TestAppContext) {
+    let (wb, cx, fake) = rig(cx);
+    offered(&wb, cx, &fake, "0.2.0");
+    let labels = dialog(&wb, cx).unwrap().buttons;
+    let ix = labels.iter().position(|l| l == "Install and Restart").expect("the button");
+    fake.download_does(Download::Done);
+    fake.install_returns(Ok(mac_plan()));
+    cx.run_until_parked();
+    // `debug_bounds` wants a `'static` name: leaking one short string in a test is harmless.
+    let selector: &'static str = Box::leak(format!("update-button-{ix}").into_boxed_str());
+    let at = cx.debug_bounds(selector).expect("the button is drawn").center();
+    cx.simulate_click(at, gpui::Modifiers::none());
+    wait_ticking(cx, "the restart", |_| fake.count("quit") == 1);
+    assert_eq!(fake.count("relaunch"), 1);
+}

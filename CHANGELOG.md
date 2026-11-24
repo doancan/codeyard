@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-11-24
+
 ### Changed
 
 - Updates: a new version found in the background is shown only by the badge on the gear button; the "is available" notice in the status bar is gone.
@@ -2166,7 +2168,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.13.1...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.13.2...HEAD
+[0.13.2]: https://github.com/doancan/codeyard/compare/v0.13.1...v0.13.2
 [0.13.1]: https://github.com/doancan/codeyard/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/doancan/codeyard/compare/v0.12.9...v0.13.0
 [0.12.9]: https://github.com/doancan/codeyard/compare/v0.12.8...v0.12.9
