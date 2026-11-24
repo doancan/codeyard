@@ -406,6 +406,9 @@ pub(super) struct UpdateUi {
     pub(super) opening: bool,
     /// The version this one replaced, while the "what's new" dialog tells about it.
     pub(super) previous: Option<String>,
+    /// "Install and Restart" was pressed and the dialog has stayed open: the app restarts by itself once the update is installed.
+    /// Hiding the dialog takes it back (the update then waits for the user, with its badge).
+    pub(super) restart_when_ready: bool,
 }
 
 impl UpdateUi {
@@ -434,6 +437,7 @@ impl UpdateUi {
             window: None,
             opening: false,
             previous: None,
+            restart_when_ready: false,
         }
     }
 }

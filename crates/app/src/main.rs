@@ -215,6 +215,7 @@ mod sections;
 mod settings;
 #[cfg(test)]
 mod settings_docs;
+mod settings_help;
 mod settings_page;
 mod shortcuts_page;
 mod snippets;
@@ -1096,25 +1097,25 @@ fn dump_dock_menu() {
 
 /// Open a workbench window; on close, back up unsaved changes or ask.
 pub fn open_workbench_window(cx: &mut App) -> Option<gpui::WindowHandle<Workbench>> {
-    // Open the new window slightly down and right of the frontmost one (so they don't stack exactly).
-    let offset = px(28. * cx.windows().len() as f32);
-    let mut bounds = Bounds::centered(None, size(px(1280.), px(800.)), cx);
-    bounds.origin.x += offset;
-    bounds.origin.y += offset;
+    let default = Bounds::centered(None, size(px(1280.), px(800.)), cx);
     // The first window opens where and at the size the last closed window had; default if the saved position
     // is on a screen that's no longer attached.
-    let saved = cx
-        .windows()
-        .is_empty()
-        .then(workbench::saved_window_bounds)
+    let first = cx.windows().is_empty();
+    let saved =
+        first.then(workbench::saved_window_bounds).flatten().filter(|b| cx.displays().iter().any(|d| workbench::visible_enough(d.bounds(), b.get_bounds())));
+    // Every other one has the size of the window in front (the active one, else the last opened), a little down and right of it.
+    let front = (!first)
+        .then(|| {
+            let mut windows: Vec<_> = cx.windows().into_iter().filter_map(|w| w.downcast::<Workbench>()).collect();
+            windows.sort_by_key(|w| Some(w.window_id()) != cx.active_window().map(|a| a.window_id()));
+            windows.first().and_then(|w| w.update(cx, |_, window, _| window.bounds()).ok())
+        })
         .flatten()
-        .filter(|b| cx.displays().iter().any(|d| workbench::visible_enough(d.bounds(), b.get_bounds())));
-    // The test platform has no zoom; the real macOS window does.
-    let fill_screen = cfg!(all(target_os = "macos", not(test)));
+        .filter(|b| cx.displays().iter().any(|d| workbench::visible_enough(d.bounds(), *b)));
     let window = cx
         .open_window(
             WindowOptions {
-                window_bounds: Some(workbench::initial_bounds(saved, bounds, fill_screen)),
+                window_bounds: Some(workbench::initial_bounds(saved, default, front)),
                 // macOS and Windows use themed title bars; Windows controls keep native hit testing.
                 titlebar: Some(TitlebarOptions {
                     title: Some("Codeyard".into()),

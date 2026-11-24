@@ -211,6 +211,15 @@ fn press(wb: &Entity<Workbench>, cx: &mut VisualTestContext, label: &str) {
     cx.run_until_parked();
 }
 
+/// Presses "Install and Restart" but leaves the restart to the test, as if the user had hidden the dialog: the update waits.
+fn install_only(wb: &Entity<Workbench>, cx: &mut VisualTestContext) {
+    wb.update_in(cx, |wb, window, cx| {
+        wb.press_update_button_for_test("Install and Restart", window, cx);
+        wb.leave_restart_to_the_user_for_test();
+    });
+    cx.run_until_parked();
+}
+
 fn manual_check(wb: &Entity<Workbench>, cx: &mut VisualTestContext) {
     run_command(wb, cx, "Help: Check for Updates…");
 }
@@ -349,7 +358,7 @@ fn install_downloads_installs_and_waits_for_the_restart(cx: &mut TestAppContext)
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::Done);
     fake.install_returns(Ok(mac_plan()));
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_state(&wb, cx, "ready 0.2.0");
     assert_eq!(fake.calls(), ["check", "download", "install mac", "discard"]);
     let d = dialog(&wb, cx).unwrap();
@@ -365,7 +374,7 @@ fn downloading_shows_progress_and_the_size_in_megabytes(cx: &mut TestAppContext)
     let (wb, cx, fake) = rig(cx);
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::UntilCancelled);
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_ticking(cx, "some progress", |cx| dialog(&wb, cx).is_some_and(|d| d.text.contains(" of 9.5 MB")));
     let d = dialog(&wb, cx).unwrap();
     assert_eq!(d.title, "Downloading Codeyard 0.2.0");
@@ -379,7 +388,7 @@ fn cancelling_a_download_returns_to_the_offer_without_an_error(cx: &mut TestAppC
     let (wb, cx, fake) = rig(cx);
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::UntilCancelled);
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_ticking(cx, "downloading", |cx| dialog(&wb, cx).is_some_and(|d| d.text.contains(" of ")));
     press(&wb, cx, "Cancel");
     wait_state(&wb, cx, "available 0.2.0");
@@ -393,7 +402,7 @@ fn closing_the_dialog_keeps_the_download_going_and_the_status_item_shows_it(cx: 
     let (wb, cx, fake) = rig(cx);
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::UntilCancelled);
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_ticking(cx, "downloading", |cx| dialog(&wb, cx).is_some_and(|d| d.text.contains(" of ")));
     cx.simulate_keystrokes("escape");
     cx.run_until_parked();
@@ -421,7 +430,7 @@ fn the_install_step_cannot_be_cancelled_and_says_what_it_does(cx: &mut TestAppCo
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::Done);
     fake.hold_install.store(true, Ordering::SeqCst);
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_state(&wb, cx, "installing 0.2.0");
     let d = dialog(&wb, cx).unwrap();
     assert_eq!(d.title, "Installing Codeyard 0.2.0");
@@ -463,7 +472,7 @@ fn a_failed_download_retries_the_download_not_the_check(cx: &mut TestAppContext)
     let (wb, cx, fake) = rig(cx);
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::Fail(network()));
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_state(&wb, cx, "error network");
     assert_eq!(dialog(&wb, cx).unwrap().title, "Couldn't download the update");
     fake.download_does(Download::Done);
@@ -478,7 +487,7 @@ fn an_untrusted_download_installs_nothing_and_only_points_to_the_release_page(cx
     let (wb, cx, fake) = rig(cx);
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::Fail(UpdateError::HashMismatch("Codeyard-0.2.0-macos-arm64.dmg".into())));
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_state(&wb, cx, "error untrusted");
     let d = dialog(&wb, cx).unwrap();
     assert_eq!(d.title, "The update couldn't be verified");
@@ -494,7 +503,7 @@ fn an_install_error_says_so_and_its_status_item_goes_when_the_dialog_is_closed(c
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::Done);
     fake.install_returns(Err(UpdateError::NoWritePermission(PathBuf::from("/Applications"))));
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_state(&wb, cx, "error install");
     let d = dialog(&wb, cx).unwrap();
     assert_eq!(d.title, "The update couldn't be installed");
@@ -525,7 +534,7 @@ fn a_download_that_fails_after_the_dialog_was_hidden_tells_the_user(cx: &mut Tes
     let (wb, cx, fake) = rig(cx);
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::FailWhenReleased(network()));
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_ticking(cx, "downloading", |cx| state(&wb, cx) == "downloading 0.2.0");
     cx.simulate_keystrokes("escape");
     cx.run_until_parked();
@@ -661,7 +670,7 @@ fn later_after_an_install_does_not_offer_the_same_version_again(cx: &mut TestApp
     let (wb, cx, fake) = rig(cx);
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::Done);
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_state(&wb, cx, "ready 0.2.0");
     press(&wb, cx, "Later");
     assert!(dialog(&wb, cx).is_none());
@@ -856,7 +865,7 @@ fn restart_now_starts_the_new_version_before_it_quits(cx: &mut TestAppContext) {
     let (wb, cx, fake) = rig(cx);
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::Done);
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_state(&wb, cx, "ready 0.2.0");
     press(&wb, cx, "Restart Now");
     assert_eq!(fake.calls().iter().rev().take(2).rev().cloned().collect::<Vec<_>>(), ["relaunch", "quit"], "{:?}", fake.calls());
@@ -867,7 +876,7 @@ fn a_restart_that_cannot_start_the_new_version_does_not_quit(cx: &mut TestAppCon
     let (wb, cx, fake) = rig(cx);
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::Done);
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_state(&wb, cx, "ready 0.2.0");
     fake.relaunch_fails.store(true, Ordering::SeqCst);
     press(&wb, cx, "Restart Now");
@@ -885,7 +894,7 @@ fn restarting_with_unsaved_work_and_hot_exit_off_asks_first(cx: &mut TestAppCont
     cx.simulate_input("// unsaved\n");
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::Done);
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_state(&wb, cx, "ready 0.2.0");
     press(&wb, cx, "Restart Now");
     let (title, detail) = cx.pending_prompt().expect("the unsaved-changes question");
@@ -915,7 +924,7 @@ fn unsaved_edits_survive_the_restart_after_an_update(cx: &mut TestAppContext) {
     cx.run_until_parked();
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::Done);
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_state(&wb, cx, "ready 0.2.0");
     press(&wb, cx, "Restart Now");
     assert_eq!(fake.count("quit"), 1, "no question: hot exit is on");
@@ -935,7 +944,7 @@ fn on_windows_the_installer_ends_with_a_restart_not_a_ready_state(cx: &mut TestA
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::Done);
     fake.hold_install.store(true, Ordering::SeqCst);
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_state(&wb, cx, "installing 0.2.0");
     assert!(dialog(&wb, cx).unwrap().text.contains("Installing — Codeyard will restart."));
     fake.install_returns(Ok(InstallPlan::WindowsInstaller));
@@ -949,7 +958,7 @@ fn quitting_during_a_download_cancels_it_and_waits_for_the_clean_up(cx: &mut Tes
     let (wb, cx, fake) = rig(cx);
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::UntilCancelled);
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_ticking(cx, "downloading", |cx| dialog(&wb, cx).is_some_and(|d| d.text.contains(" of ")));
     let exited = wb.update(cx, |wb, _| wb.cancel_update_for_quit_for_test()).expect("a download was running");
     wait_ticking(cx, "the download thread is done", |_| exited.load(Ordering::SeqCst));
@@ -963,7 +972,7 @@ fn quitting_while_the_app_is_being_replaced_asks_first(cx: &mut TestAppContext) 
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::Done);
     fake.hold_install.store(true, Ordering::SeqCst);
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_state(&wb, cx, "installing 0.2.0");
     cx.simulate_keystrokes("cmd-q");
     cx.run_until_parked();
@@ -1013,7 +1022,12 @@ fn a_second_window_shows_the_update_that_is_already_running_instead_of_starting_
         .unwrap();
     wait(cx, "available 0.2.0");
     fake.download_does(Download::UntilCancelled);
-    first.update(cx, |wb, window, cx| wb.press_update_button_for_test("Install and Restart", window, cx)).unwrap();
+    first
+        .update(cx, |wb, window, cx| {
+            wb.press_update_button_for_test("Install and Restart", window, cx);
+            wb.leave_restart_to_the_user_for_test();
+        })
+        .unwrap();
     wait(cx, "downloading 0.2.0");
     first.update(cx, |wb, window, cx| wb.press_update_button_for_test("Hide", window, cx)).unwrap();
     // The second window asks for a check: nothing starts there, the first window shows what is going on.
@@ -1051,7 +1065,7 @@ fn the_accessibility_tree_has_a_modal_dialog_with_progress_and_buttons(cx: &mut 
     let (wb, cx, fake) = rig(cx);
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::UntilCancelled);
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_ticking(cx, "downloading", |cx| dialog(&wb, cx).is_some_and(|d| d.text.contains(" of ")));
     let snapshot = cx.update(|window, cx| wb.read(cx).a11y_snapshot(window, cx));
     let tree = accesskit_consumer::Tree::new(snapshot.to_tree(), true);
@@ -1190,7 +1204,7 @@ fn a_full_disk_can_be_retried_and_a_failed_rollback_says_where_the_old_app_is(cx
     let (wb, cx, fake) = rig(cx);
     offered(&wb, cx, &fake, "0.2.0");
     fake.download_does(Download::Fail(UpdateError::NoSpace));
-    press(&wb, cx, "Install and Restart");
+    install_only(&wb, cx);
     wait_state(&wb, cx, "error install");
     let d = dialog(&wb, cx).unwrap();
     assert!(d.text.contains("isn't enough free disk space") && d.buttons.contains(&"Try Again".to_string()), "{}", d.text);
@@ -1339,7 +1353,12 @@ fn installing_in_first(cx: &mut TestAppContext, first: gpui::WindowHandle<Workbe
     wait(cx, "available 0.2.0");
     fake.download_does(Download::Done);
     fake.hold_install.store(true, Ordering::SeqCst);
-    first.update(cx, |wb, window, cx| wb.press_update_button_for_test("Install and Restart", window, cx)).unwrap();
+    first
+        .update(cx, |wb, window, cx| {
+            wb.press_update_button_for_test("Install and Restart", window, cx);
+            wb.leave_restart_to_the_user_for_test();
+        })
+        .unwrap();
     wait(cx, "installing 0.2.0");
 }
 
@@ -1423,7 +1442,7 @@ use crate::update_restart::{self, Folder, Handover};
 fn ready(wb: &Entity<Workbench>, cx: &mut VisualTestContext, fake: &Fake) {
     offered(wb, cx, fake, "0.2.0");
     fake.download_does(Download::Done);
-    press(wb, cx, "Install and Restart");
+    install_only(wb, cx);
     wait_state(wb, cx, "ready 0.2.0");
 }
 
@@ -1647,7 +1666,12 @@ fn every_window_with_a_folder_is_left_for_the_new_version_and_the_one_in_front_i
     };
     wait(cx, "available 0.2.0");
     fake.download_does(Download::Done);
-    first.update(cx, |wb, window, cx| wb.press_update_button_for_test("Install and Restart", window, cx)).unwrap();
+    first
+        .update(cx, |wb, window, cx| {
+            wb.press_update_button_for_test("Install and Restart", window, cx);
+            wb.leave_restart_to_the_user_for_test();
+        })
+        .unwrap();
     wait(cx, "ready 0.2.0");
     // The user is in the second window when they press the button in the first one's dialog.
     second.update(cx, |_, window, _| window.activate_window()).unwrap();
@@ -1998,4 +2022,34 @@ fn the_update_lives_on_the_gear_button_and_not_in_the_status_bar(cx: &mut TestAp
     let labels = wb.read_with(cx, |wb, _| wb.manage_menu_labels_for_test());
     assert_eq!(labels.first().map(String::as_str), Some("Update 0.2.0…"), "{labels:?}");
     assert!(!labels.iter().any(|l| l == "Check for Updates…"), "{labels:?}");
+}
+
+// --- One click ---
+
+#[gpui::test]
+fn install_and_restart_restarts_by_itself_when_the_dialog_stayed_open(cx: &mut TestAppContext) {
+    let (wb, cx, fake) = rig(cx);
+    offered(&wb, cx, &fake, "0.2.0");
+    fake.download_does(Download::Done);
+    fake.install_returns(Ok(mac_plan()));
+    press(&wb, cx, "Install and Restart");
+    wait_ticking(cx, "the restart", |_| fake.count("quit") == 1);
+    assert_eq!(fake.count("relaunch"), 1, "the new version is started");
+}
+
+#[gpui::test]
+fn hiding_the_dialog_keeps_the_update_waiting_for_the_user(cx: &mut TestAppContext) {
+    let (wb, cx, fake) = rig(cx);
+    offered(&wb, cx, &fake, "0.2.0");
+    fake.download_does(Download::Done);
+    fake.install_returns(Ok(mac_plan()));
+    fake.hold_install.store(true, Ordering::SeqCst);
+    press(&wb, cx, "Install and Restart");
+    wait_state(&wb, cx, "installing 0.2.0");
+    press(&wb, cx, "Hide");
+    fake.hold_install.store(false, Ordering::SeqCst);
+    wait_state(&wb, cx, "ready 0.2.0");
+    cx.run_until_parked();
+    assert_eq!(fake.count("quit"), 0, "nobody is watching: the app does not restart unasked");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.update_status_for_test()).map(|s| s.0), Some("Restart to update".into()));
 }

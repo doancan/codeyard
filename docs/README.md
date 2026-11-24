@@ -30,6 +30,7 @@ code they describe.
 | [registry-setup-checklist.md](registry-setup-checklist.md) | what the owner buys, creates and sends back to put the public registry online, and the go-live order |
 | [extensions/README.md](extensions/README.md) | the extension author documentation: guides, SDKs, `cyx` and the generated references |
 | [extensions/developer-guide.md](extensions/developer-guide.md) | how to write, test and publish an extension |
+| [settings-help.md](settings-help.md) | the **?** help of every setting: where the text lives, how to add or translate it, how settings are grouped |
 | [translating.md](translating.md) | adding a language, the translation file format, plurals, quality bar, adding UI text |
 | [releasing.md](releasing.md) | the release workflow, the manual fallback, signing and the update key |
 

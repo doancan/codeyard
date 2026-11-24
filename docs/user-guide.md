@@ -520,8 +520,8 @@ shows the Welcome content unless the setting is `"blank"`; "Help: Welcome" opens
 `"window.restoreSession"` is separate: it brings a folder's tabs and unsaved changes back whenever
 you open that folder. Right-click the Dock icon (macOS) for your open windows (at most six, the front one first), New Window,
 Open Folder…, Connect to SSH Host…, a *Recent Projects* submenu and Settings…; recent projects are also under
-File ▸ Open Recent. On macOS every new window opens filling the screen (zoomed, not full screen) unless the last window was in
-full screen; resizing it is remembered until the next window. A recent project or Open Folder… never replaces the folder of the front window: an empty
+File ▸ Open Recent. The first window opens where the last one was closed; every other window opens at the size of the window
+in front, a little down and right of it. A recent project or Open Folder… never replaces the folder of the front window: an empty
 window takes it, a project that is already open comes forward, and any other opens in a window of its own.
 
 The gear at the bottom of the activity bar is one menu: **About Codeyard** (version), Settings,
@@ -933,7 +933,7 @@ ask and never check by themselves.
 
 **The dialog.** On macOS it is a window of its own, titled *Software Update*, with the app's icon, like the update windows of other Mac
 apps (other systems draw it as a card over the editor). Closing it with the red button, ⌘W or Esc does what *Later* does. *Checking*, then either "Codeyard is up to date" or the new version with its release notes. *Install and Restart*
-downloads the installer (progress in megabytes), checks it, replaces the app and offers *Restart Now* (*What comes back* below). *Later* closes the dialog and keeps the badge
+downloads the installer (progress in megabytes), checks it, replaces the app and restarts it by itself while the dialog is still open (*What comes back* below); if you hide the dialog meanwhile, nothing restarts unasked and the gear badge and *Restart to update…* wait for you. *Later* closes the dialog and keeps the badge
 on the gear button; the gear's menu starts with the update ("Update 0.13.0…", "Updating… 40%…", "Restart to update…") and ends with *Check for Updates…* while there is none. *Skip This Version* hides that version from the notice and the item for good; a manual check still offers it and a
 newer version is not skipped. *Release Page* opens the release on GitHub. Esc or *Hide* during a download closes the dialog and the
 download goes on (the gear button shows a spinner and says "Updating… 40%" in its tooltip; open its menu to come back); *Cancel* stops it and removes the partial file. Quitting

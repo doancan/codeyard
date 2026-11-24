@@ -1,0 +1,25 @@
+# Settings help, English. Format: setting key<TAB>explanation. `\n` is a line break. The text is what the "?" button of that setting shows,
+# above the facts the page works out itself (key, default, allowed values). A setting without an entry shows its description and the
+# facts. See docs/settings-help.md.
+ui.language	The language of menus, dialogs and messages. `auto` follows the system language and falls back to English when Codeyard has no translation for it.\nThis is the language of the app itself. It does not change the programming language of a file, spell checking (Spelling) or the language servers (Development).
+ui.scale	Zooms the whole interface (text, icons and spacing) without changing the editor font size. Use ⌘+ and ⌘- to change it while you work.
+spelling.enabled	Underlines misspelled words in prose files and in code comments. The dictionaries are the languages listed in `spelling.languages` in settings.jsonc.\nThis is about the languages you write in, not the language of the interface.
+spelling.checkComments	Also checks comments in code files; prose files are always checked. Code identifiers are split into words (camelCase, snake_case) before they are checked.
+lsp.enabled	Turns language servers on or off. A language server gives completions, diagnostics, go to definition and rename for a programming language, and runs as a separate program that you install once per language.\nWith this off the editor still highlights syntax, but offers no language-aware features.
+json.validate.enable	Checks JSON and YAML files against their schema and underlines what does not fit; hover and suggestions use the same schema. It comes from the file itself, from your settings or from the built-in list of well-known files.
+json.schemaDownload.enable	Downloads schemas from SchemaStore and keeps them on this computer. With this off only local and already saved schemas are used and no request is made.
+http.runOn	Where a request in a `.http` file is sent from: `workspace` is the host of the open folder (the server when connected over SSH), `local` is this computer.
+http.confirmRequests	Asks before a request is sent, showing the method and the address.
+ports.autoForward	Forwards a port to this computer when a program on the remote host starts listening on it, so that `localhost:port` opens it.
+ports.localBind	Which address a forwarded port listens on here. `loopback` accepts connections from this computer only; `all` also accepts them from the network, which exposes the remote service to it.
+security.workspaceTrust.enabled	Opens unknown folders in Restricted Mode: no tasks, debug configurations, project-defined language servers or extension code run until you trust the folder.\nTurning it off trusts every folder, so a downloaded project can run programs when you open it.
+update.check	How Codeyard looks for new versions. `daily` checks once a day in the background and shows a badge on the gear button; `manual` only checks when you choose Check for Updates….
+extensions.autoUpdate	How new versions of installed extensions are handled. `install` installs them by themselves (a version that runs code waits 48 hours after publication, and one that asks for more permissions waits for your OK); `notify` lists them in the Extensions view; `off` downloads nothing until you ask.
+editor.formatOnSave	Formats the file with its language server (or formatter extension) every time you save it.
+editor.wordWrap	How long lines are shown. `off` scrolls sideways; `on` wraps at the window edge; `wordWrapColumn` wraps at the column in `editor.wordWrapColumn`; `bounded` wraps at whichever comes first.
+rust.profile	The Cargo profile used by Run, Debug and Test. `dev` is Cargo's default; `release` builds optimized code; any `[profile.*]` of your Cargo.toml works. Empty uses Cargo's default.
+rust.target	Builds for another platform (cross-compilation), for example `aarch64-unknown-linux-gnu`. The target must be installed (`rustup target add …`). Only letters, digits, `-`, `_` and `.` are accepted. Empty builds for this computer.
+rust.targetDir	Where Cargo writes build output. Empty uses the `target` folder of the project; set a shared folder to reuse builds between projects.
+rust.testRunner	`cargo` runs `cargo test`; `nextest` runs cargo-nextest (faster, one process per test) when it is installed; `auto` uses nextest when it is installed and `cargo test` otherwise.
+diagnostics.logLevel	What the log file (`logs/codeyard.log` in the state folder) records: `error` only failures, `warn` adds problems that were worked around, `info` adds what the app did, `debug` is for bug reports. Only your own settings file counts; a folder's setting is ignored.
+compare.folders.maxFiles	Compare: Folders… stops reading a side after this many files and says that the result is partial, so that a huge folder cannot freeze the window.

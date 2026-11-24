@@ -88,6 +88,9 @@ pub struct Language {
     pub name: &'static str,
     /// Embedded translation files (none for English); multiple parts are merged, a duplicate key is an error.
     pub tables: &'static [&'static str],
+    /// The settings help of this language (`locales/help/<code>.tsv`, see `settings_help.rs`); a setting it does not list shows
+    /// the English help.
+    pub help: &'static str,
     pub plural: Plural,
     #[allow(dead_code, reason = "tests read from here which checks are mandatory")]
     pub status: Status,
@@ -95,8 +98,15 @@ pub struct Language {
 
 /// Supported languages; the order is the `current()` index and 0 is always English (the language of the keys).
 pub const LANGUAGES: &[Language] = &[
-    Language { code: "en", name: "English", tables: &[], plural: Plural::OneOther, status: Status::Source },
-    Language { code: "tr", name: "Türkçe", tables: &[include_str!("../locales/tr.tsv")], plural: Plural::None, status: Status::Complete },
+    Language { code: "en", name: "English", tables: &[], help: include_str!("../locales/help/en.tsv"), plural: Plural::OneOther, status: Status::Source },
+    Language {
+        code: "tr",
+        name: "Türkçe",
+        tables: &[include_str!("../locales/tr.tsv")],
+        help: include_str!("../locales/help/tr.tsv"),
+        plural: Plural::None,
+        status: Status::Complete,
+    },
 ];
 
 /// Valid values for `ui.language`: `auto` and the `LANGUAGES` codes (a test verifies it matches `LANGUAGES`).

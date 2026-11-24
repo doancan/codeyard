@@ -85,8 +85,25 @@ pub enum AccessControl {
     Field(String),
 }
 
-pub const CATEGORIES: &[&str] =
-    &["Commonly Used", "Modified", "Modules", "Editor", "Workbench", "Files", "Explorer", "Search", "Git", "Terminal", "Window", "Remote & Languages"];
+/// The categories of the page, in the order of its list. Everything about *writing* languages (the interface language, spelling)
+/// is under "Language & Region" and everything about *programming* languages (language servers, schemas, `.http`) under
+/// "Development".
+pub const CATEGORIES: &[&str] = &[
+    "Commonly Used",
+    "Modified",
+    "Modules",
+    "Editor",
+    "Workbench",
+    "Files",
+    "Explorer",
+    "Search",
+    "Git",
+    "Terminal",
+    "Window",
+    "Language & Region",
+    "Development",
+    "Remote & Security",
+];
 
 /// Keys of the "Commonly Used" category.
 const COMMON: &[&str] = &[
@@ -111,9 +128,19 @@ const COMMON: &[&str] = &[
 
 /// The category of a setting (from the key prefix).
 pub fn category_of(key: &str) -> &'static str {
+    match key {
+        "ui.language" => return "Language & Region",
+        "localHistory.remote" => return "Remote & Security",
+        "localHistory.enabled" | "compare.folders.maxFiles" => return "Files",
+        "diagnostics.logLevel" => return "Workbench",
+        _ => {}
+    }
     match key.split('.').next().unwrap_or("") {
-        "editor" | "data" => "Editor",
-        "workbench" | "theme" => "Workbench",
+        "editor" | "data" | "diffEditor" => "Editor",
+        "workbench" | "theme" | "ui" | "extensions" | "keymap" => "Workbench",
+        "spelling" => "Language & Region",
+        "lsp" | "json" | "emmet" | "http" | "rust" => "Development",
+        "ports" | "security" => "Remote & Security",
         "files" => "Files",
         "explorer" => "Explorer",
         "search" => "Search",
@@ -121,7 +148,7 @@ pub fn category_of(key: &str) -> &'static str {
         "terminal" => "Terminal",
         "window" | "update" => "Window",
         "modules" | "webPreview" => "Modules",
-        _ => "Remote & Languages",
+        _ => "Workbench",
     }
 }
 
@@ -163,7 +190,8 @@ pub fn matches_query(key: &str, about: &str, query: &str) -> bool {
     if q.is_empty() {
         return true;
     }
-    let searchable = [key.to_lowercase(), title_of(key).to_lowercase(), about.to_lowercase(), crate::i18n::t(about).to_lowercase()];
+    let help = crate::settings_help::help_for(key).unwrap_or_default().to_lowercase();
+    let searchable = [key.to_lowercase(), title_of(key).to_lowercase(), about.to_lowercase(), crate::i18n::t(about).to_lowercase(), help];
     q.split_whitespace().all(|word| searchable.iter().any(|part| part.contains(word)))
 }
 
@@ -177,6 +205,8 @@ pub struct SettingsPage {
     /// Last committed text shown in each field; differing text is an unsaved draft.
     synced_fields: HashMap<&'static str, String>,
     errors: HashMap<&'static str, String>,
+    /// Settings whose "?" explanation is open.
+    help_open: std::collections::HashSet<&'static str>,
     /// Where each setting's row was painted in the last frame (accessibility).
     bounds: crate::painted::RowBounds<SetFrame>,
     focus_handle: FocusHandle,
@@ -206,7 +236,9 @@ pub fn category_label(name: &str) -> &'static str {
         "Search" => t("Search"),
         "Terminal" => t("Terminal"),
         "Window" => t("Window"),
-        "Remote & Languages" => t("Remote & Languages"),
+        "Language & Region" => t("Language & Region"),
+        "Development" => t("Development"),
+        "Remote & Security" => t("Remote & Security"),
         _ => "Git",
     }
 }
@@ -284,12 +316,28 @@ impl SettingsPage {
             fields,
             synced_fields: HashMap::new(),
             errors: HashMap::new(),
+            help_open: Default::default(),
             bounds: Default::default(),
             focus_handle: cx.focus_handle(),
             _subs: subs,
         };
         page.sync_fields(cx);
         page
+    }
+
+    /// Opens or closes the "?" explanation of a setting.
+    pub fn toggle_help(&mut self, key: &'static str, cx: &mut Context<Self>) {
+        if !self.help_open.remove(key) {
+            self.help_open.insert(key);
+        }
+        cx.notify();
+    }
+
+    /// The paragraphs of the explanation: the written help (in the UI language), then the facts the page works out itself.
+    fn help_text(&self, key: &str, kind: Option<Kind>, default: &Value) -> Vec<String> {
+        let mut out: Vec<String> = crate::settings_help::help_for(key).map(|h| h.split('\n').map(str::to_string).collect()).unwrap_or_default();
+        out.extend(crate::settings_help::facts(key, kind, default));
+        out
     }
 
     /// Fill the fields from the current settings (when the settings file changes).
@@ -439,10 +487,15 @@ impl SettingsPage {
                 AccessSetting {
                     key,
                     title: row_title(key),
-                    about: if self.has_draft(key, cx) {
-                        format!("{} {}", crate::i18n::t(about), crate::i18n::t("Press Enter to apply"))
-                    } else {
-                        crate::i18n::t(about).to_string()
+                    about: {
+                        let mut about = crate::i18n::t(about).to_string();
+                        if self.help_open.contains(key) {
+                            about = format!("{about} {}", self.help_text(key, entry.map(|e| e.kind), &current(&Settings::default(), key)).join(" "));
+                        }
+                        if self.has_draft(key, cx) {
+                            about = format!("{about} {}", crate::i18n::t("Press Enter to apply"));
+                        }
+                        about
                     },
                     control,
                     modified: Self::is_modified(s, key),
@@ -581,6 +634,8 @@ impl SettingsPage {
             },
             _ => div().into_any_element(),
         };
+        let help_open = self.help_open.contains(key);
+        let help_lines = if help_open { self.help_text(key, entry.map(|e| e.kind), &default) } else { Vec::new() };
         let reset = (modified || self.has_draft(key, cx)).then(|| {
             div()
                 .id(("reset", ix))
@@ -622,6 +677,23 @@ impl SettingsPage {
                     .gap(px(8.))
                     .children(modified.then(|| div().flex_none().size(px(6.)).rounded_full().bg(c(p.accent))))
                     .child(div().font_weight(gpui::FontWeight::SEMIBOLD).text_size(px(text::SM.0)).child(row_title(key)))
+                    .child(
+                        div()
+                            .id(("help", ix))
+                            .debug_selector(move || format!("setting-help-{key}"))
+                            .flex_none()
+                            .size(px(20.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded_full()
+                            .cursor_pointer()
+                            .hover(|d| d.bg(c(p.surface_hover)))
+                            .when(help_open, |d| d.bg(c(p.surface_active)))
+                            .child(icon("circle-help", 15., if help_open { p.accent } else { p.text_muted }))
+                            .tooltip(|_, cx| cx.new(|_| crate::workbench::Tooltip(crate::i18n::t("Explain this setting").into())).into())
+                            .on_click(cx.listener(move |this, _, _, cx| this.toggle_help(key, cx))),
+                    )
                     .children(reset),
             )
             .child(
@@ -632,6 +704,24 @@ impl SettingsPage {
                     .text_color(c(p.text_muted))
                     .child(crate::i18n::t(about).to_string()),
             )
+            .when(help_open, |d| {
+                d.child(
+                    div()
+                        .debug_selector(move || format!("setting-help-text-{key}"))
+                        .flex()
+                        .flex_col()
+                        .gap(px(6.))
+                        .p(px(theme::SPACE[5]))
+                        .rounded(px(theme::radius::MD))
+                        .bg(c(p.surface_hover))
+                        .border_l_2()
+                        .border_color(c(p.accent))
+                        .text_size(px(text::SM.0))
+                        .line_height(px(20.))
+                        .text_color(c(p.text))
+                        .children(help_lines.iter().map(|l| div().child(l.clone()))),
+                )
+            })
             .child(div().font_family(ui::MONO_FONT).text_size(px(text::XXS.0)).text_color(c(p.line_number)).child(key.to_string()))
             .children(
                 source_note(key, cx)
@@ -916,6 +1006,65 @@ mod tests {
         assert!(CATEGORIES.contains(&"Modules"));
         assert!(COMMON.contains(&"modules.containers.enabled"));
         assert!(COMMON.contains(&"modules.webPreview.enabled"));
+    }
+
+    /// The interface language and spelling (languages people write) and language servers, schemas and Rust builds (programming
+    /// languages) are in different categories, each translated.
+    #[gpui::test]
+    fn writing_languages_and_programming_languages_have_their_own_categories(cx: &mut gpui::TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        let (page, cx) = cx.add_window_view(|_, cx| SettingsPage::new(cx));
+        let keys_of = |cx: &mut gpui::VisualTestContext, name: &str| {
+            page.update(cx, |page, cx| {
+                page.category = CATEGORIES.iter().position(|c| *c == name).unwrap();
+                cx.notify();
+            });
+            page.read_with(cx, |page, cx| page.visible_keys(cx))
+        };
+        let region = keys_of(cx, "Language & Region");
+        assert!(region.contains(&"ui.language") && region.contains(&"spelling.enabled"), "{region:?}");
+        assert!(!region.contains(&"lsp.enabled"), "{region:?}");
+        let programming = keys_of(cx, "Development");
+        for key in ["lsp.enabled", "json.validate.enable", "http.runOn", "rust.profile", "rust.testRunner", "rust.inlayHints.types"] {
+            assert!(programming.contains(&key), "{key} in {programming:?}");
+        }
+        assert!(!programming.contains(&"ui.language"), "{programming:?}");
+        assert!(CATEGORIES.iter().all(|c| !c.contains("Remote & Languages")));
+        let _tr = crate::i18n::LangGuard::set("tr");
+        assert_eq!((category_label("Language & Region"), category_label("Development")), ("Dil ve Bölge", "Geliştirme"));
+    }
+
+    /// The "?" opens the explanation in the interface language, with the facts under it; a second press closes it.
+    #[gpui::test]
+    fn the_question_mark_opens_and_closes_the_explanation_in_the_ui_language(cx: &mut gpui::TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        let (page, cx) = cx.add_window_view(|_, cx| SettingsPage::new(cx));
+        page.update(cx, |page, cx| page.set_query("ui.language", cx));
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("setting-help-ui.language").is_some(), "every row has the button");
+        assert!(cx.debug_bounds("setting-help-text-ui.language").is_none(), "closed at first");
+        page.update(cx, |page, cx| page.toggle_help("ui.language", cx));
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("setting-help-text-ui.language").is_some());
+        let spoken = cx.update(|window, cx| page.read(cx).access_view(50, window, cx));
+        assert!(spoken.rows[0].about.contains("The language of menus") && spoken.rows[0].about.contains("Default: "), "{}", spoken.rows[0].about);
+        {
+            let _tr = crate::i18n::LangGuard::set("tr");
+            let spoken = cx.update(|window, cx| page.read(cx).access_view(50, window, cx));
+            assert!(spoken.rows[0].about.contains("Menülerin") && spoken.rows[0].about.contains("Varsayılan: "), "{}", spoken.rows[0].about);
+        }
+        page.update(cx, |page, cx| page.toggle_help("ui.language", cx));
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("setting-help-text-ui.language").is_none());
+    }
+
+    /// The help is searched too: a word that only the written explanation has finds the setting.
+    #[gpui::test]
+    fn search_finds_a_setting_by_its_help_text(cx: &mut gpui::TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        let (page, cx) = cx.add_window_view(|_, cx| SettingsPage::new(cx));
+        page.update(cx, |page, cx| page.set_query("nextest installed", cx));
+        assert!(page.read_with(cx, |page, cx| page.visible_keys(cx)).contains(&"rust.testRunner"));
     }
 
     #[gpui::test]

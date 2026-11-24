@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-24
+
+### Added
+
+- Settings: every setting has a **?** button that explains it in the interface language, with its key, accepted values and default. The explanations are language files (`locales/help/<code>.tsv`), so adding or translating them needs no code change, and search finds settings by them.
+- Settings: the Rust and build settings (profile, target, target folder, default features, test runner, inlay hints, dependency lookups), the log level and the Compare Folders file limit can be changed in the page.
+
+### Changed
+
+- Updates: *Install and Restart* now does both. When the update is installed and the dialog is still open, Codeyard restarts by itself; hiding the dialog leaves the restart to you.
+- Windows: a new window or folder opens at the size of the window in front instead of filling the screen (0.13.0 made macOS windows fill it).
+- Settings: categories are clearer. "Remote & Languages" is split into Language & Region (interface language, spelling), Development (language servers, schemas, `.http`, Rust) and Remote & Security.
+
 ## [0.13.0] - 2026-11-24
 
 ### Added
@@ -2149,7 +2162,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.13.1...HEAD
+[0.13.1]: https://github.com/doancan/codeyard/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/doancan/codeyard/compare/v0.12.9...v0.13.0
 [0.12.9]: https://github.com/doancan/codeyard/compare/v0.12.8...v0.12.9
 [0.12.8]: https://github.com/doancan/codeyard/compare/v0.12.7...v0.12.8

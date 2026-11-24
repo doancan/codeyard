@@ -622,6 +622,11 @@ impl Workbench {
         self.show_whats_new(true, window, cx)
     }
 
+    /// The user's choice to restart by themselves: "Install and Restart" no longer restarts when the install is done.
+    pub fn leave_restart_to_the_user_for_test(&mut self) {
+        self.update.restart_when_ready = false;
+    }
+
     /// Remember which version ran last, as the previous start did.
     pub fn set_last_run_for_test(&self, version: &str) {
         self.remember(super::update_glue::LAST_RUN, version);

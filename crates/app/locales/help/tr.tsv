@@ -1,0 +1,23 @@
+# Ayar yardımı, Türkçe. Biçim: ayar anahtarı<TAB>açıklama. `\n` satır sonudur. Anahtarlar help/en.tsv ile aynıdır; eksik olan ayarda İngilizce gösterilir.
+ui.language	Menülerin, iletişim kutularının ve iletilerin dili. `auto` sistem dilini izler; Codeyard'da o dilin çevirisi yoksa İngilizceye döner.\nBu, uygulamanın kendi dilidir. Bir dosyanın programlama dilini, yazım denetimini (Spelling) ve dil sunucularını (Development) değiştirmez.
+ui.scale	Tüm arayüzü (yazı, simgeler ve boşluklar) editör yazı boyutunu değiştirmeden yakınlaştırır. Çalışırken ⌘+ ve ⌘- ile değiştirebilirsin.
+spelling.enabled	Metin dosyalarındaki ve koddaki yorumlardaki yanlış yazılmış kelimelerin altını çizer. Sözlükler settings.jsonc içindeki `spelling.languages` listesindeki dillerdir.\nBu, yazdığın dillerle ilgilidir; arayüzün diliyle ilgisi yoktur.
+spelling.checkComments	Koddaki yorumları da denetler; metin dosyaları her zaman denetlenir. Kod adları (camelCase, snake_case) denetlenmeden önce kelimelere ayrılır.
+lsp.enabled	Dil sunucularını açar veya kapatır. Dil sunucusu bir programlama dili için tamamlama, tanılama, tanıma git ve yeniden adlandırma sağlar; her dil için bir kez kurduğun ayrı bir programdır.\nKapalıyken editör sözdizimini yine renklendirir ama dile özgü özellik sunmaz.
+json.validate.enable	JSON ve YAML dosyalarını şemasına göre denetler ve uymayanın altını çizer; üzerine gelince gösterilen bilgi ve öneriler aynı şemayı kullanır. Şema dosyanın kendisinden, ayarlarından veya bilinen dosyaların yerleşik listesinden gelir.
+json.schemaDownload.enable	Şemaları SchemaStore'dan indirir ve bu bilgisayarda saklar. Kapalıyken yalnızca yerel ve daha önce kaydedilmiş şemalar kullanılır, hiç istek yapılmaz.
+http.runOn	`.http` dosyasındaki bir isteğin nereden gönderileceği: `workspace` açık klasörün bulunduğu makinedir (SSH ile bağlıysa sunucu), `local` bu bilgisayardır.
+http.confirmRequests	İstek gönderilmeden önce yöntemi ve adresi gösterip sorar.
+ports.autoForward	Uzak sunucuda bir program bir portu dinlemeye başlayınca o portu bu bilgisayara yönlendirir; böylece `localhost:port` açılır.
+ports.localBind	Yönlendirilen portun burada hangi adreste dinleyeceği. `loopback` yalnızca bu bilgisayardan bağlantı kabul eder; `all` ağdan da kabul eder ve uzak servisi ağa açar.
+security.workspaceTrust.enabled	Bilinmeyen klasörleri Kısıtlı Kipte açar: klasöre güvenene kadar görev, hata ayıklama yapılandırması, projenin tanımladığı dil sunucusu veya eklenti kodu çalışmaz.\nKapatmak her klasöre güvenmek demektir; indirilen bir proje açıldığında program çalıştırabilir.
+update.check	Codeyard'ın yeni sürümleri nasıl aradığı. `daily` günde bir kez arka planda bakar ve dişli düğmesinde rozet gösterir; `manual` yalnızca Güncellemeleri Denetle… dediğinde bakar.
+extensions.autoUpdate	Kurulu eklentilerin yeni sürümlerinin nasıl ele alınacağı. `install` kendiliğinden kurar (kod çalıştıran sürüm yayımlandıktan 48 saat sonra, daha fazla izin isteyen sürüm onayını bekler); `notify` Eklentiler görünümünde listeler; `off` sen isteyene kadar bir şey indirmez.
+editor.formatOnSave	Dosyayı her kaydettiğinde dil sunucusuyla (veya biçimlendirici eklentisiyle) biçimlendirir.
+editor.wordWrap	Uzun satırların nasıl gösterileceği. `off` yana kaydırır; `on` pencere kenarında böler; `wordWrapColumn` `editor.wordWrapColumn` sütununda böler; `bounded` hangisi önce gelirse orada böler.
+rust.profile	Run, Debug ve Test'in kullandığı Cargo profili. `dev` Cargo'nun varsayılanıdır; `release` optimize kod üretir; Cargo.toml'daki her `[profile.*]` kullanılabilir. Boşsa Cargo'nun varsayılanı kullanılır.
+rust.target	Başka bir platform için derler (çapraz derleme), örneğin `aarch64-unknown-linux-gnu`. Hedef kurulu olmalıdır (`rustup target add …`). Yalnızca harf, rakam, `-`, `_` ve `.` kabul edilir. Boşsa bu bilgisayar için derler.
+rust.targetDir	Cargo'nun derleme çıktısını yazdığı yer. Boşsa projenin `target` klasörü kullanılır; projeler arasında derlemeyi paylaşmak için ortak bir klasör verebilirsin.
+rust.testRunner	`cargo` `cargo test` çalıştırır; `nextest` kuruluysa cargo-nextest çalıştırır (daha hızlı, her test ayrı süreç); `auto` kuruluysa nextest'i, değilse `cargo test`'i kullanır.
+diagnostics.logLevel	Günlük dosyasının (durum klasöründeki `logs/codeyard.log`) neyi kaydettiği: `error` yalnızca hataları, `warn` atlatılan sorunları da, `info` uygulamanın yaptıklarını da ekler, `debug` hata bildirimleri içindir. Yalnızca kendi ayar dosyan geçerlidir; klasörün ayarı yok sayılır.
+compare.folders.maxFiles	Klasörleri Karşılaştır bir tarafı bu kadar dosyadan sonra okumayı bırakır ve sonucun kısmi olduğunu söyler; böylece çok büyük bir klasör pencereyi dondurmaz.
