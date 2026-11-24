@@ -792,6 +792,7 @@ Dev Container setup failed: {}. Check Output and install the Dev Container CLI i
 Developer: Extension Inspector	
 Developer: Reload Window	
 Developer: Restart Language Servers	
+Development	
 Diagnostic copied	
 Diagnostics copied. Nothing was sent anywhere: paste them where you want to share them.	
 Diff view side by side (off: inline)	
@@ -2115,7 +2116,6 @@ Profiles: Delete…
 Profiles: Duplicate Current…	
 Profiles: Rename…	
 Profiles: Switch…	
-Programming Languages	
 Progress	
 Project lifecycle commands will run. Rebuild replaces the container; persistent volumes are kept.	
 Project name	

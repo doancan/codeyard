@@ -540,7 +540,7 @@ fn settings_categories_are_translated_for_display_only() {
             "Terminal",
             "Pencere",
             "Dil ve Bölge",
-            "Programlama Dilleri",
+            "Geliştirme",
             "Uzak ve Güvenlik"
         ]
     );

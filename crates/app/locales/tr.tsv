@@ -4350,7 +4350,7 @@ Key in settings.jsonc: {}	settings.jsonc'deki anahtar: {}
 Language & Region	Dil ve Bölge
 Look up newer versions of the crates in Cargo.toml (asks the registry)	Cargo.toml'daki crate'lerin yeni sürümlerini ara (kayıt sunucusuna sorar)
 Most files Compare: Folders… reads on each side before it stops and says so	Klasörleri Karşılaştır'ın her tarafta, durup bunu söylemeden önce okuduğu en fazla dosya sayısı
-Programming Languages	Programlama Dilleri
+Development	Geliştirme
 Remote & Security	Uzak ve Güvenlik
 Show inferred types of Rust variables at the end of the line	Rust değişkenlerinin çıkarılan türlerini satır sonunda göster
 Show parameter names in Rust calls	Rust çağrılarında parametre adlarını göster
