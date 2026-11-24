@@ -566,6 +566,7 @@ impl ScmPanel {
                     })),
                 )
         };
+        let opened = self.opened.as_ref().is_some_and(|(open, open_staged)| *open == change.path && *open_staged == staged);
         div()
             .id(SharedString::from(format!("scm-{staged}-{ix}")))
             .relative()
@@ -581,12 +582,26 @@ impl ScmPanel {
             .whitespace_nowrap()
             .overflow_hidden()
             .cursor_pointer()
-            .hover(|d| d.bg(c(p.surface_hover)))
-            .when(self.opened.as_ref().is_some_and(|(open, open_staged)| *open == change.path && *open_staged == staged), |d| d.bg(c(p.surface_active)))
+            // The opened row keeps its own fill under the pointer; hover would paint over it.
+            .when(!opened, |d| d.hover(|d| d.bg(c(p.surface_hover))))
+            .when(opened, |d| d.bg(c(p.surface_active)))
             .child(crate::icon_theme::file_icon_el(&name, layout::ICON, &p))
             .child(div().flex_shrink().min_w_0().overflow_hidden().text_color(c(mark.color(&p))).when(mark == Mark::Deleted, |d| d.line_through()).child(name))
             .child(div().flex_1().min_w_0().overflow_hidden().text_size(px(text::XS.0)).text_color(c(p.text_muted)).children(dir))
-            .child(div().invisible().group_hover(group, |s| s.visible()).child(actions))
+            .child(
+                // On hover the buttons cover the end of the folder name; they take no room from the name when the row is at rest.
+                div()
+                    .absolute()
+                    .top_0()
+                    .right(px(theme::SPACE[4] + 12. + theme::SPACE[2]))
+                    .h_full()
+                    .flex()
+                    .items_center()
+                    .bg(c(if opened { p.surface_active } else { p.surface_hover }))
+                    .invisible()
+                    .group_hover(group, |s| s.visible())
+                    .child(actions),
+            )
             .child(div().w(px(12.)).flex_none().text_size(px(text::XS.0)).text_color(c(mark.color(&p))).child(mark.letter()))
             .when(!self.menu_open, |d| {
                 d.tooltip({
@@ -667,7 +682,7 @@ impl ScmPanel {
             .text_color(c(p.text_muted))
             .cursor_pointer()
             .child(icon(if self.sections.is_open(id, true) { "chevron-down" } else { "chevron-right" }, 14., p.text_muted))
-            .child(div().flex_1().child(title.to_string()))
+            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(title.to_string()))
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_section(id, cx)))
             .when(!staged && n > 0 && id != "scm-merge", |d| {
                 d.child(hover_button(format!("{el}-discard"), "undo-2", crate::i18n::t("Discard all changes")).on_click(cx.listener(
@@ -795,10 +810,10 @@ impl Render for ScmPanel {
         let commit_label: SharedString = commit_label.into();
         // Latest commit in the repo: so the panel visibly shows it really read the repo.
         let last = self.graph.as_ref().and_then(|g| g.commits.iter().find(|c| c.refs.iter().any(|r| r.kind == RefKind::Head)).cloned());
-        let branch = match (&st.branch, st.ahead, st.behind) {
-            (Some(b), 0, 0) => b.clone(),
-            (Some(b), a, d) => format!("{b}  {}", git::counts_label(a, d)),
-            (None, ..) => crate::i18n::t("detached HEAD").into(),
+        let (branch, counts) = match (&st.branch, st.ahead, st.behind) {
+            (Some(b), 0, 0) => (b.clone(), None),
+            (Some(b), a, d) => (b.clone(), Some(git::counts_label(a, d))),
+            (None, ..) => (crate::i18n::t("detached HEAD").into(), None),
         };
         // Several repositories: the line names the one the message box, Commit, Sync and the graph act on.
         let branch = match self.repo_by_root(&st.root).filter(|_| self.multi()) {
@@ -868,7 +883,10 @@ impl Render for ScmPanel {
                             .gap(px(theme::SPACE[3]))
                             .text_size(px(text::XS.0))
                             .child(icon("git-branch", 14., p.text_muted))
-                            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_color(c(p.text)).child(branch))
+                            .child(div().flex_shrink().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(c(p.text)).child(branch))
+                            // The counts are what a narrow panel must not cut: the name gives way to them.
+                            .children(counts.map(|n| div().flex_none().whitespace_nowrap().text_color(c(p.text_muted)).child(n)))
+                            .child(div().flex_1())
                             .when_some(self.identity.clone(), |d, (name, email)| match (name, email) {
                                 (Some(n), Some(e)) => {
                                     let tip: SharedString = crate::i18n::tf("Commits as {0} <{1}>", &[&n, &e]).into();
@@ -926,9 +944,8 @@ impl Render for ScmPanel {
                             .rounded(px(theme::radius::SM))
                             .bg(c(p.accent))
                             .text_color(c(p.on_accent))
-                            .cursor_pointer()
+                            .when(can_commit, |d| d.cursor_pointer().hover(|d| d.opacity(0.9)))
                             .when(!can_commit, |d| d.opacity(0.5))
-                            .hover(|d| d.opacity(0.9))
                             .child(icon("check", 14., p.on_accent))
                             .child(commit_label)
                             .on_click(cx.listener(|this, _, _, cx| this.commit(cx))),
@@ -1421,13 +1438,23 @@ impl ScmPanel {
                                 .flex()
                                 .flex_none()
                                 .items_center()
+                                .overflow_hidden()
                                 .gap(px(theme::SPACE[3]))
                                 .px(px(theme::SPACE[2]))
                                 .rounded(px(theme::radius::SM))
                                 .cursor_pointer()
                                 .hover(|d| d.bg(c(p.surface_hover)))
                                 .child(crate::icon_theme::file_icon_el(ui::file_name(&f.path), 14., &p))
-                                .child(div().flex_none().text_size(px(text::SM.0)).child(ui::file_name(&f.path).to_string()))
+                                .child(
+                                    div()
+                                        .flex_shrink()
+                                        .min_w_0()
+                                        .overflow_hidden()
+                                        .whitespace_nowrap()
+                                        .text_ellipsis()
+                                        .text_size(px(text::SM.0))
+                                        .child(ui::file_name(&f.path).to_string()),
+                                )
                                 .child(
                                     div()
                                         .flex_1()

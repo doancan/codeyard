@@ -145,7 +145,7 @@ pub fn header(id: impl Into<gpui::ElementId>, title: &str, count: Option<usize>,
         .cursor_pointer()
         .hover(|d| d.bg(c(p.surface_hover)))
         .child(icon(if open { "chevron-down" } else { "chevron-right" }, 14., p.text_muted))
-        .child(div().flex_1().whitespace_nowrap().overflow_hidden().child(crate::i18n::heading(title)))
+        .child(div().flex_1().min_w(px(36.)).whitespace_nowrap().overflow_hidden().child(crate::i18n::heading(title)))
         .children(count.filter(|n| *n > 0).map(|n| {
             div()
                 .flex_none()

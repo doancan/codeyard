@@ -22,7 +22,8 @@ fn ref_chip(r: &RefLabel, p: &Palette) -> gpui::Div {
     let (fg, bg) = graph::ref_chip_colors(r.kind, p);
     let glyph = if r.kind == RefKind::Tag { "bookmark" } else { "git-branch" };
     div()
-        .flex_none()
+        .flex_shrink()
+        .min_w_0()
         .max_w(px(110.))
         .flex()
         .items_center()
@@ -868,7 +869,7 @@ fn graph_row(
                     )
                 }),
         )
-        .children(refs.first().map(|r| div().flex_none().ml(px(theme::SPACE[2])).child(ref_chip(r, p))))
+        .children(refs.first().map(|r| div().flex_shrink().min_w_0().ml(px(theme::SPACE[2])).child(ref_chip(r, p))))
         .when(more > 0, |d| {
             d.child(div().flex_none().ml(px(theme::SPACE[1])).text_size(px(text::BADGE.0)).text_color(c(p.text_muted)).child(format!("+{more}")))
         })
