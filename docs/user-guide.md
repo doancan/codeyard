@@ -1270,6 +1270,7 @@ complete Add Remote and Add Worktree.
 path. **Current** marks the open checkout; click another row (or focus it with Tab and press Enter) to open its folder in this
 window, on the same local or SSH host. The normal unsaved-file protection applies. Detached checkouts are labelled, locked
 ones show a lock, and stale or bare entries cannot be opened from the list. Hover for the full path, commit and lock reason.
+A dot after a branch name marks a checkout with uncommitted changes in tracked files (the others are checked in the background, at most eight of them, and again when you press **Refresh**).
 Right-click a row for **Open Worktree**, **Copy Path**, **Reveal in Finder** (local folders) and **Remove Worktree…**, which asks
 first and is offered only for a linked checkout that is not the one open in this window.
 The header offers **Add worktree** and **Refresh**. The list also refreshes with Git while Source Control and this section are

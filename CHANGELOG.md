@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Source Control, Graph: the list takes Tab and moves the selected commit with ↑ ↓, Page Up, Page Down, Home and End (↵ opens it). *Go to Current Commit* in the **…** menu selects the commit the checked-out branch is at. A commit's menu offers *Checkout <branch>* for the local branches that point at it.
 - Source Control, Graph: history is cut at `git.graph.limit` and now says so. A bar under the list offers *Load more* (300 commits a time, up to 10,000), and a search that finds nothing says it looked only in the commits that are loaded.
+- Source Control, Worktrees: a dot marks a checkout with uncommitted changes (the open one from Source Control's own status, the others by a background `git status` in at most eight of them, refreshed by the Refresh button).
 - Source Control, Worktrees: a right-click menu on a row with *Open Worktree*, *Copy Path*, *Reveal in Finder* and *Remove Worktree…*.
 - Source Control: the section headers and the buttons of the Graph header can be reached with Tab and pressed with Enter or Space.
 
@@ -20,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Source Control: the Graph's top edge could not be dragged in a short window or with a few changes (the line showed but nothing moved). The drag starts from the painted height, the changes list gives way, and under a short list the graph fills the panel, so no empty band is left. With a short list there is no edge to drag.
 - Source Control: the ahead/behind counts of the branch line, group titles, the files of a commit and branch labels no longer get cut or wrapped in a narrow panel; the stage and discard buttons of a changed file overlay the folder name on hover instead of taking room from it; the opened file row keeps its fill under the pointer; a disabled Commit button no longer lights up on hover; Sync cannot start twice.
 - Source Control: the commit card joins messages wrapped at 72 columns into paragraphs, and a long e-mail address in its footer shortens instead of running out of the card.
-- Source Control, narrow sidebar: Reload and the **…** menu of the Graph header stay in reach (the quick buttons before them are cut first), and a commit's subject keeps a few letters when its branch label takes room.
+- Source Control, narrow sidebar: Reload and the **…** menu of the Graph header stay in reach (the quick buttons before them are cut first), and a commit's subject keeps a few letters when its branch label takes room. A quick button that does not fit goes whole instead of showing as a cut-off icon.
 - Accessibility: while the commit list has the keyboard, the screen-reader focus is the selected commit's row.
 - Source Control: search finds *İlhan* by typing "ilhan"; the graph leaves out notes and rewritten-away refs; a failed history read shows its error instead of a stale graph, and a failed stash read keeps the stash list; a commit of tens of thousands of files lists the first 300 in its details and says how many more there are.
 - Explorer: a folder that was closed shows what is in it when it opens again. A closed folder is not watched, so files added or removed meanwhile used to stay unseen until a refresh.

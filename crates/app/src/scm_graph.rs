@@ -575,6 +575,9 @@ impl ScmPanel {
             .child(
                 div()
                     .flex()
+                    // A button that does not fit wraps to a second, hidden line: it goes whole, not as a cut-off icon.
+                    .flex_wrap()
+                    .h(px(22.))
                     .flex_shrink()
                     .min_w_0()
                     .overflow_hidden()

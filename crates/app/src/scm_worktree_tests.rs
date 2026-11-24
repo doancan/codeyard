@@ -414,3 +414,28 @@ fn the_graph_menu_button_stays_inside_a_narrow_sidebar(cx: &mut TestAppContext) 
         assert!(more.left() >= header.left(), "sidebar {width}: {more:?} {header:?}");
     }
 }
+
+/// A linked checkout with uncommitted changes is marked in the list, and the mark goes when the changes do. The open checkout is
+/// marked from the changes Source Control already knows.
+#[gpui::test]
+fn a_worktree_with_uncommitted_changes_is_marked(cx: &mut TestAppContext) {
+    let dir = repo("worktree-dirty");
+    let linked = dir.join("linked");
+    git_in(&dir, &["worktree", "add", "-q", "-b", "linked", linked.to_str().unwrap()]);
+    let (_wb, scm, cx) = open(cx, &dir);
+    wait_ticking(cx, "both worktrees", |cx| scm.read_with(cx, |s, _| s.worktrees.entries.len()) == 2);
+    let marked = |cx: &mut VisualTestContext| scm.read_with(cx, |s, _| s.worktrees.dirty_paths_for_test());
+    let linked_path = scm.read_with(cx, |s, _| s.worktrees.entries.iter().find(|e| e.branch.as_deref() == Some("linked")).unwrap().path.clone());
+    // Nothing changed anywhere yet.
+    scm.update(cx, |s, cx| s.refresh_worktree_dirty(true, cx));
+    wait_ticking(cx, "the first check", |cx| scm.read_with(cx, |s, _| s.worktrees.dirty_checked_for_test()));
+    assert!(marked(cx).is_empty(), "{:?}", marked(cx));
+    // A tracked file of the linked checkout changes.
+    std::fs::write(linked.join("README.md"), "edited in the linked checkout\n").unwrap();
+    scm.update(cx, |s, cx| s.refresh_worktree_dirty(true, cx));
+    wait_ticking(cx, "the linked checkout is marked", |cx| marked(cx).contains(&linked_path));
+    // And is clean again.
+    git_in(&linked, &["checkout", "--", "README.md"]);
+    scm.update(cx, |s, cx| s.refresh_worktree_dirty(true, cx));
+    wait_ticking(cx, "the mark goes", |cx| marked(cx).is_empty());
+}

@@ -16,10 +16,34 @@ pub(super) struct Worktrees {
     entries: Vec<Worktree>,
     error: Option<String>,
     task: Option<gpui::Task<()>>,
+    /// Linked checkouts with uncommitted changes, read apart from the list (a slow `git status` must not hold the list back).
+    dirty: std::collections::HashSet<String>,
+    dirty_task: Option<gpui::Task<()>>,
+    /// When the other checkouts were last asked, so a poll every few seconds does not run a `git status` in each of them every time.
+    dirty_asked: Option<std::time::Instant>,
 }
 
+/// Most checkouts asked for their state, and how long the answer stands before a poll asks again.
+const DIRTY_CHECKS: usize = 8;
+const DIRTY_STALE: std::time::Duration = std::time::Duration::from_secs(20);
+
 impl Worktrees {
+    #[cfg(test)]
+    pub(super) fn dirty_paths_for_test(&self) -> Vec<String> {
+        let mut paths: Vec<String> = self.dirty.iter().cloned().collect();
+        paths.sort();
+        paths
+    }
+
+    #[cfg(test)]
+    pub(super) fn dirty_checked_for_test(&self) -> bool {
+        self.dirty_asked.is_some() && self.dirty_task.is_none()
+    }
+
     pub(super) fn reset(&mut self) {
+        self.dirty.clear();
+        self.dirty_task = None;
+        self.dirty_asked = None;
         self.task = None;
         self.loaded = false;
         self.current_path = None;
@@ -81,9 +105,71 @@ impl ScmPanel {
                 if changed || first_load {
                     cx.notify();
                 }
+                // A new list or a first one is asked about at once; an unchanged one only when the last answer is old.
+                this.refresh_worktree_dirty(changed || first_load, cx);
             })
             .ok();
         }));
+    }
+
+    /// Which other checkouts have uncommitted changes (tracked files): a `git status` in each, in the background, for at most
+    /// `DIRTY_CHECKS` of them and not on every poll. The open checkout is not asked: Source Control's own status says (`is_dirty`).
+    pub(super) fn refresh_worktree_dirty(&mut self, force: bool, cx: &mut Context<Self>) {
+        let w = &mut self.worktrees;
+        let stale = w.dirty_asked.is_none_or(|at| at.elapsed() >= DIRTY_STALE);
+        if w.dirty_task.is_some() || w.error.is_some() || !(force || stale) || !self.sections.is_open("worktrees", true) {
+            return;
+        }
+        let current = w.current_path.clone();
+        let paths: Vec<String> = w
+            .entries
+            .iter()
+            .filter(|e| !e.bare && e.prunable.is_none() && Some(&e.path) != current.as_ref())
+            .take(DIRTY_CHECKS)
+            .map(|e| e.path.clone())
+            .collect();
+        w.dirty_asked = Some(std::time::Instant::now());
+        let host = self.host.clone();
+        let root = self.status.as_ref().map(|s| s.root.clone());
+        let asked = host.clone();
+        let task = cx.background_executor().spawn(async move {
+            let mut dirty = Vec::new();
+            for path in paths {
+                if git::git_ok(asked.as_ref(), &path, &["status", "--porcelain", "--untracked-files=no"]).is_ok_and(|out| !out.trim().is_empty()) {
+                    dirty.push(path);
+                }
+            }
+            dirty
+        });
+        self.worktrees.dirty_task = Some(cx.spawn(async move |this, cx| {
+            let timeout = cx.background_executor().timer(std::time::Duration::from_secs(30));
+            // Past the timeout the marks stay as they were; the next poll asks again.
+            let answer = match futures::future::select(task, timeout).await {
+                futures::future::Either::Left((dirty, _)) => Some(dirty),
+                futures::future::Either::Right(_) => None,
+            };
+            this.update(cx, |this, cx| {
+                this.worktrees.dirty_task = None;
+                if !Arc::ptr_eq(&this.host, &host) || this.status.as_ref().map(|s| s.root.clone()) != root {
+                    return;
+                }
+                let Some(dirty) = answer else { return };
+                let marked: std::collections::HashSet<String> = dirty.into_iter().collect();
+                if marked != this.worktrees.dirty {
+                    this.worktrees.dirty = marked;
+                    cx.notify();
+                }
+            })
+            .ok();
+        }));
+    }
+
+    /// Whether the checkout at `path` has uncommitted changes: the open one by what Source Control shows, the others by the last check.
+    fn is_dirty(&self, path: &str) -> bool {
+        if self.worktrees.current_path.as_deref() == Some(path) {
+            return self.status.as_ref().is_some_and(|s| !s.changes.is_empty());
+        }
+        self.worktrees.dirty.contains(path)
     }
 
     /// The section as assistive technology reads it: open or not, its rows, or why there are none.
@@ -109,6 +195,9 @@ impl ScmPanel {
                 }
                 detail.extend(entry.locked.as_ref().map(|reason| tf("Worktree locked: {}", &[reason])));
                 detail.extend(entry.prunable.clone());
+                if available && self.is_dirty(&entry.path) {
+                    detail.push(t("Uncommitted changes").to_string());
+                }
                 AccessWorktree { path: entry.path.clone(), title, detail: detail.join(", "), current, available }
             })
             .collect();
@@ -185,6 +274,8 @@ impl ScmPanel {
                         this.sections.set_open("worktrees", true);
                         this.emit_sections(cx);
                         this.refresh_worktrees(cx);
+                        // The button asks for fresh marks too, not the ones that are not yet stale.
+                        this.refresh_worktree_dirty(true, cx);
                         cx.notify();
                     })),
             );
@@ -230,6 +321,7 @@ impl ScmPanel {
         } else {
             None
         };
+        let dirty = available && self.is_dirty(&entry.path);
         let path = entry.path.clone();
         let menu_path = path.clone();
         let label = path.escape_debug().to_string();
@@ -277,6 +369,18 @@ impl ScmPanel {
                             .items_center()
                             .gap(px(theme::SPACE[3]))
                             .child(div().flex_1().min_w_0().truncate().text_size(px(text::SM.0)).text_color(c(p.text)).child(title.to_string()))
+                            // Uncommitted changes in that checkout: a dot, so a row is not removed or left unseen by mistake.
+                            .when(dirty, |d| {
+                                d.child(
+                                    div()
+                                        .id(("w-dirty", index))
+                                        .flex_none()
+                                        .size(px(7.))
+                                        .rounded_full()
+                                        .bg(c(p.warning))
+                                        .tooltip(|_, cx| cx.new(|_| crate::workbench::Tooltip(t("Uncommitted changes").into())).into()),
+                                )
+                            })
                             .children(badge.map(|b| div().flex_none().text_size(px(text::XXS.0)).text_color(c(p.text_muted)).child(b))),
                     )
                     .child(div().truncate().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(label)),
