@@ -805,10 +805,6 @@ impl Workbench {
             status.push(e.encoding().label().to_string());
             status_parts.extend([StatusPart::Position, StatusPart::Indent, StatusPart::LineEnding, StatusPart::Language, StatusPart::Encoding]);
         }
-        if let Some(item) = self.update_status_item() {
-            status.push(item.tip.to_string());
-            status_parts.push(StatusPart::Update);
-        }
         let mut geometry = Geometry::new(&self.chrome.a11y_bounds, window);
         geometry.set_status_items(&status_parts);
         // Character positions are those of the editor's last paint: only while it is drawn in this window's frame.
@@ -989,7 +985,6 @@ impl Workbench {
                     StatusPart::Indent => self.show_indent_picker(window, cx),
                     StatusPart::LineEnding => self.show_eol_picker(window, cx),
                     StatusPart::Language => self.show_language_picker(window, cx),
-                    StatusPart::Update => self.open_update_dialog(window, cx),
                     StatusPart::Encoding => {}
                 }
             }

@@ -133,7 +133,7 @@ impl Workbench {
                 .on_click(cx.listener(move |this, _, window, cx| this.activity_click(panel, window, cx)))
         };
         // `tip`: tooltip only while the menu is closed so it can't cover the open menu's last row (native apps hide it too).
-        let bottom = |id: &'static str, name: &'static str, label: &'static str, tip: bool, cx: &Context<Self>| {
+        let bottom = |id: &'static str, name: &'static str, label: SharedString, badge: Option<(u32, bool)>, tip: bool, cx: &Context<Self>| {
             div()
                 .id(id)
                 .debug_selector(|| id.to_string())
@@ -157,7 +157,35 @@ impl Workbench {
                         .group_hover(id, |s| s.bg(c(p.surface_hover)))
                         .child(icon(name, layout::ICON_LG - 2., p.text_muted).group_hover(id, |s| s.text_color(c(p.text)))),
                 )
-                .when(tip, |d| d.tooltip(move |_, cx| cx.new(|_| Tooltip(label.into())).into()))
+                // An update is on offer, on its way or waiting for a restart: a dot in its tone (a spinner while it works).
+                .when_some(badge, |d, (tone, busy)| {
+                    d.child(
+                        div()
+                            .id("act-manage-badge")
+                            .debug_selector(|| "act-manage-badge".into())
+                            .absolute()
+                            .right(px(9.))
+                            .top(px(9.))
+                            .size(px(11.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded_full()
+                            .border_2()
+                            .border_color(c(p.surface))
+                            .bg(c(tone))
+                            .when(busy, |d| d.child(ui::spinner("act-manage-badge-spinner", 6., p.surface))),
+                    )
+                })
+                .when(tip, |d| d.tooltip(move |_, cx| cx.new(|_| Tooltip(label.clone())).into()))
+        };
+        // The gear carries the update: its badge and tooltip say what is happening, its menu does it.
+        let (manage_label, manage_badge): (SharedString, _) = match self.update_status_item() {
+            Some(item) => (
+                crate::i18n::tf("Manage: {}", &[&item.tip.to_string()]).into(),
+                Some((super::view_update_glue::tone_color(item.tone, p), item.icon == "loader")),
+            ),
+            None => (crate::i18n::t("Manage: About, Settings, Color Theme…").into(), None),
         };
         let scroll = &self.chrome.activity_scroll;
         let (more_above, more_below) = activity_hints(scroll);
@@ -241,7 +269,7 @@ impl Workbench {
             )
             .child(
                 // A single "manage" button: the menu opens to the right of the icon, bottom edge aligned with it (see `open_manage_menu`).
-                bottom("act-manage", "settings", crate::i18n::t("Manage: About, Settings, Color Theme…"), self.menu.is_none(), cx).on_mouse_down(
+                bottom("act-manage", "settings", manage_label, manage_badge, self.menu.is_none(), cx).on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, _: &gpui::MouseDownEvent, window, cx| {
                         cx.stop_propagation();

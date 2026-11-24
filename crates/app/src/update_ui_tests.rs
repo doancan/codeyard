@@ -1065,8 +1065,9 @@ fn the_accessibility_tree_has_a_modal_dialog_with_progress_and_buttons(cx: &mut 
     let labels: Vec<_> = kids.iter().filter(|n| n.role() == Role::Button).filter_map(|n| n.label()).collect();
     assert_eq!(labels, ["Cancel", "Hide"]);
     assert_eq!(state.focus().map(|n| n.role()), Some(Role::Button), "the focused button is the focus of the tree");
-    // The status bar names the update too.
-    assert!(snapshot.status.iter().any(|s| s == "Downloading Codeyard 0.2.0. Click for details."), "{:?}", snapshot.status);
+    // The gear button names the update (its badge says it to the eye); the status bar does not carry it.
+    assert_eq!(snapshot.chrome.manage, "Manage: Downloading Codeyard 0.2.0. Click for details.");
+    assert!(!snapshot.status.iter().any(|s| s.contains("Downloading")), "{:?}", snapshot.status);
     press(&wb, cx, "Cancel");
 }
 
@@ -1949,4 +1950,52 @@ fn a_good_check_clears_the_failure_an_earlier_one_left(cx: &mut TestAppContext) 
     wait_state(&wb, cx, "idle");
     assert!(wb.read_with(cx, |wb, _| wb.history_for_test()).is_empty(), "the failure is out of date");
     assert_eq!(notice(&wb, cx), None);
+}
+
+// --- After an update ---
+
+#[gpui::test]
+fn the_first_start_after_an_update_shows_what_is_new_once(cx: &mut TestAppContext) {
+    let home = fresh("update-whats-new-home");
+    let (wb, cx) = setup_persistent(cx, &home);
+    wb.update(cx, |wb, _| wb.set_update_backend_for_test(Fake::new()));
+    wb.update(cx, |wb, _| wb.set_last_run_for_test("0.0.9"));
+    assert!(wb.update_in(cx, |wb, window, cx| wb.show_whats_new_for_test(window, cx)));
+    let d = dialog(&wb, cx).expect("the dialog opens");
+    assert_eq!((d.title.as_str(), d.subtitle.as_deref()), ("Codeyard 0.1.0 is ready", Some("Updated from 0.0.9")));
+    assert!(d.text.contains("Features"), "the notes use the release page headings: {}", d.text);
+    assert_eq!((d.buttons, d.primary.as_deref()), (vec!["Release Page".to_string(), "Continue".to_string()], Some("Continue")));
+    press(&wb, cx, "Continue");
+    assert!(dialog(&wb, cx).is_none());
+    // Remembered: the next start of this version says nothing.
+    assert!(wb.update_in(cx, |wb, window, cx| wb.show_whats_new_for_test(window, cx)));
+    assert!(dialog(&wb, cx).is_none(), "once per update");
+}
+
+#[gpui::test]
+fn a_profile_that_never_ran_before_or_ran_a_newer_version_shows_nothing(cx: &mut TestAppContext) {
+    let home = fresh("update-whats-new-quiet-home");
+    let (wb, cx) = setup_persistent(cx, &home);
+    wb.update(cx, |wb, _| wb.set_update_backend_for_test(Fake::new()));
+    assert!(wb.update_in(cx, |wb, window, cx| wb.show_whats_new_for_test(window, cx)), "a fresh install has nothing to compare with");
+    assert!(dialog(&wb, cx).is_none());
+    wb.update(cx, |wb, _| wb.set_last_run_for_test("9.0.0"));
+    assert!(wb.update_in(cx, |wb, window, cx| wb.show_whats_new_for_test(window, cx)), "a downgrade is not news");
+    assert!(dialog(&wb, cx).is_none());
+}
+
+#[gpui::test]
+fn the_update_lives_on_the_gear_button_and_not_in_the_status_bar(cx: &mut TestAppContext) {
+    let (wb, cx, fake) = rig(cx);
+    assert!(cx.debug_bounds("act-manage-badge").is_none(), "no update, no badge");
+    let quiet = wb.read_with(cx, |wb, _| wb.manage_menu_labels_for_test());
+    assert_eq!(quiet.last().map(String::as_str), Some("Check for Updates…"), "{quiet:?}");
+    offered(&wb, cx, &fake, "0.2.0");
+    press(&wb, cx, "Later");
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("act-manage-badge").is_some(), "the gear carries a badge while an update is on offer");
+    assert!(cx.debug_bounds("sb-update").is_none(), "the status bar does not");
+    let labels = wb.read_with(cx, |wb, _| wb.manage_menu_labels_for_test());
+    assert_eq!(labels.first().map(String::as_str), Some("Update 0.2.0…"), "{labels:?}");
+    assert!(!labels.iter().any(|l| l == "Check for Updates…"), "{labels:?}");
 }

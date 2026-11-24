@@ -389,6 +389,7 @@ Codeyard {} is available
 Codeyard {} is available.	
 Codeyard {} is available. Click for details.	
 Codeyard {} is installed. Click for details.	
+Codeyard {} is ready	
 Collapse	
 Collapse All	
 Collapse All Files	
@@ -1556,6 +1557,7 @@ Make the location writable, or save somewhere else.
 Manage SSH hosts	
 Manage SSH hosts…	
 Manage: About, Settings, Color Theme…	
+Manage: {}	
 Managed language services are not installed on this host.	
 Mar	
 Mark all as resolved (stage)	
@@ -3222,6 +3224,7 @@ Update {} dependency in this file to its newest compatible version|Update {} dep
 Update {} dependency in this file to the latest version|Update {} dependencies in this file to the latest versions	
 Update “{0}” to the latest version, {1}	
 Update “{0}” to {1}, the newest compatible version	
+Updated from {}	
 Updated the URL of {}	
 Updated {} dependency|Updated {} dependencies	
 Updates paused	

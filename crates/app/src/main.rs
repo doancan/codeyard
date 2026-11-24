@@ -270,6 +270,7 @@ mod update_restart;
 #[cfg(test)]
 mod update_ui_tests;
 mod vscode;
+mod whats_new;
 mod workbench;
 mod workspace_file;
 

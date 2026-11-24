@@ -75,7 +75,6 @@ pub(in crate::workbench) enum StatusPart {
     LineEnding,
     Language,
     Encoding,
-    Update,
 }
 
 /// Logical bounds of one window's most recent frame; absent landmarks, rows and controls were not laid out (a row

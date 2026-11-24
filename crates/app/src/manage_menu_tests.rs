@@ -7,7 +7,7 @@ use crate::menu::Flavor;
 use crate::qa_workbench_tests::setup;
 use crate::workbench::Workbench;
 
-const LABELS: [&str; 6] = ["Command Palette…", "Settings", "Keyboard Shortcuts", "Color Theme…", "File Icon Theme…", "About Codeyard"];
+const LABELS: [&str; 7] = ["Command Palette…", "Settings", "Keyboard Shortcuts", "Color Theme…", "File Icon Theme…", "About Codeyard", "Check for Updates…"];
 
 /// Like VS Code: commands first, then preferences, About last; groups are separated by a divider.
 #[gpui::test]
@@ -17,8 +17,8 @@ fn the_manage_menu_groups_commands_preferences_and_about(cx: &mut TestAppContext
     assert_eq!(wb.read_with(cx, |wb, cx| wb.menu_labels(cx)).expect("menu opened"), LABELS);
     assert_eq!(
         wb.read_with(cx, |wb, cx| wb.menu_separators_for_test(cx)).unwrap(),
-        [false, true, false, false, false, true],
-        "separators sit before Settings and before About"
+        [false, true, false, false, false, true, false],
+        "separators sit before Settings and before About; Check for Updates… closes the menu"
     );
 }
 
