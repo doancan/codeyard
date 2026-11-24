@@ -647,7 +647,10 @@ impl Workbench {
             UpdateAction::OnlyWhenAsked => self.choose_policy(Policy::Manual, window, cx),
             UpdateAction::CancelCheck => self.cancel_check(window, cx),
             UpdateAction::CancelDownload => self.cancel_download(cx),
-            UpdateAction::Install => self.start_update_download(window, cx),
+            UpdateAction::Install => {
+                self.update.restart_when_ready = true;
+                self.start_update_download(window, cx)
+            }
             UpdateAction::Skip => self.skip_version(window, cx),
             UpdateAction::ReleasePage => {
                 // After an update the page is the running version's; otherwise the one on offer.
@@ -718,6 +721,8 @@ impl Workbench {
             Dialog::WhatsNew | Dialog::Update => {}
         }
         self.update.dialog = Dialog::Closed;
+        // Hidden: nobody is watching, so nothing restarts the app unasked.
+        self.update.restart_when_ready = false;
         // What was only worth showing in the dialog is dropped with it. So is an error the user has read: its status item goes
         // away, and a background check is no longer held back by it (the next one finds the release again).
         if matches!(self.update.state, UpdateState::UpToDate | UpdateState::Error(_)) {
@@ -1093,6 +1098,9 @@ impl Workbench {
                 self.update.state = UpdateState::Ready { version: release.version, plan: Some(plan.clone()) };
                 if plan == InstallPlan::WindowsInstaller {
                     // The setup program is running and closes this app itself; leave through the normal quit path first.
+                    self.restart_now(window, cx);
+                } else if std::mem::take(&mut self.update.restart_when_ready) && self.update.dialog == Dialog::Update {
+                    // The user asked for "Install and Restart" and is still looking at the dialog: finish the job.
                     self.restart_now(window, cx);
                 } else if self.update.dialog != Dialog::Update {
                     self.notify(NoticeSource::Update, Notice::Info(t("Update installed. Restart Codeyard to finish.").into()));
