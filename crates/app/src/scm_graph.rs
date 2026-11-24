@@ -34,7 +34,7 @@ fn ref_chip(r: &RefLabel, p: &Palette) -> gpui::Div {
         .text_color(c(fg))
         .bg(c(bg))
         .child(icon(glyph, 9., fg))
-        .child(div().overflow_hidden().whitespace_nowrap().child(r.name.clone()))
+        .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(r.name.clone()))
 }
 
 /// Labels in order of importance (HEAD, local, tag, remote); a remote branch with the same name as a local one is not repeated next to it.
