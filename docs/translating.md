@@ -73,8 +73,10 @@ can be added; open an issue first.
 
 1. `scripts/i18n-new-language.sh pt-BR "Português (Brasil)"` copies `crates/app/locales/template.tsv` to `locales/pt-BR.tsv` and prints
    the lines to add in step 3.
-2. Translate the right-hand column. A line left empty means "not translated yet" and is skipped.
-3. Register it in `crates/app/src/i18n.rs`: one `Language { … }` in `LANGUAGES` (code, native name, `include_str!`, plural rule,
+2. Translate the right-hand column. A line left empty means "not translated yet" and is skipped. The script also starts
+   `locales/help/<code>.tsv`, the explanations behind the **?** of each setting: copy the lines of `help/en.tsv` you translate
+   (a setting without a line shows the English text; see [settings-help.md](settings-help.md)).
+3. Register it in `crates/app/src/i18n.rs`: one `Language { … }` in `LANGUAGES` (code, native name, `include_str!` of both files, plural rule,
    `status: Status::Partial`) and the code in `SETTING_CHOICES`, and add a row to the table above.
 4. `UPDATE_DOCS=1 cargo test -p app docs_reference` (the `ui.language` values are in `docs/settings.md`), then
    `cargo test -p app --bin codeyard i18n`.

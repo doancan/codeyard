@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Settings: every setting has a **?** button that explains it in the interface language, with its key, accepted values and default. The explanations are language files (`locales/help/<code>.tsv`), so adding or translating them needs no code change, and search finds settings by them.
+- Settings: the Rust and build settings (profile, target, target folder, default features, test runner, inlay hints, dependency lookups), the log level and the Compare Folders file limit can be changed in the page.
+
+### Changed
+
+- Settings: categories are clearer. "Remote & Languages" is split into Language & Region (interface language, spelling), Programming Languages (language servers, schemas, `.http`, Rust) and Remote & Security.
+
 ## [0.13.0] - 2026-11-24
 
 ### Added
