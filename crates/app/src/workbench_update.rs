@@ -6,7 +6,7 @@
 //! - `update.check` = `ask` and `manual` never contact the network by themselves; only `daily` does: one successful check in
 //!   24 hours, and after failed ones (offline) a retry every few hours, at most three failures a day.
 //! - A check the user asked for shows its errors; a background check logs them to stderr and stays quiet.
-//! - A background check that finds a release shows one notice per version and a status bar item, never a dialog.
+//! - A background check that finds a release shows a badge on the gear button, never a notice, a status bar item or a dialog.
 //! - Skipping a version silences those two for it; a manual check still offers it.
 //! - A list that offers a version lower than the highest ever offered here is a replay: logged, not offered.
 //! - Quitting during a download cancels it and removes its files; quitting (or closing a window) while ANY window is swapping
@@ -33,7 +33,6 @@ mod report;
 const LAST_CHECK: &str = "update.last_check";
 const SKIPPED: &str = "update.skipped";
 const INSTALLED: &str = "update.installed";
-const NOTIFIED: &str = "update.notified";
 const ASK_SNOOZED_UNTIL: &str = "update.ask_snoozed_until";
 /// The version that ran last in this profile: when it is lower than the running one, the app has just been updated.
 pub(super) const LAST_RUN: &str = "update.last_run";
@@ -1005,10 +1004,6 @@ impl Workbench {
         (self.update.notes, self.update.notes_text) = render_notes(&release.notes, &release_url(Some(version.as_str())));
         self.update.notes_scroll.set_offset(gpui::point(px(0.), px(0.)));
         self.update.state = UpdateState::Available(release);
-        if !manual && self.stored(NOTIFIED).as_deref() != Some(version.as_str()) {
-            self.remember(NOTIFIED, &version);
-            self.notify(NoticeSource::Update, Notice::Info(tf("Codeyard {} is available.", &[&version]).into()));
-        }
         cx.notify();
     }
 
