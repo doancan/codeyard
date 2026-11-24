@@ -62,7 +62,7 @@ stash first.
 | "There isn't enough free disk space for the download" | The installer is downloaded to Codeyard's state folder; free some space and **Try Again**. |
 | "The update failed part-way … may be at …" | The new app could not be put in place and the old one could not be moved back. The message names the folder with the old copy (`.Codeyard.old-…`); if Codeyard does not start, move it back to its place. |
 | "The update couldn't be installed" and "cannot write to /Applications" | The app is in a folder your account cannot change. Install by hand from the release page, or move Codeyard to a folder you own. |
-| The red "Update failed" item in the status bar | Click it to read the reason; closing that dialog removes the item. |
+| A red badge on the gear button ("Update failed") | Open the gear menu and choose the first entry to read the reason; closing that dialog removes the badge. |
 | **Download Page** instead of *Install and Restart* | This copy cannot replace itself (debug build, bare binary, Linux, Windows ZIP, read-only location); the dialog gives the reason. Download the new version and replace the old one yourself. |
 | "Update installed" but the old version still runs | Restart: the dialog's **Restart Now** quits and opens the new version; *Later* only postpones it. |
 | You were never asked about update checks | Debug builds and windows started with `--do`/`--panel` never ask; closing the question with Esc snoozes it for 30 days. Set `"update.check"` yourself or use *Help: Check for Updates…*. |

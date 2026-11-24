@@ -346,7 +346,7 @@ The tree, in the order a screen reader walks it:
   tab order; the focused button is the tree's focus. On macOS the dialog is a window of its own ("Software Update") with
   its own adapter: that window's tree is the dialog alone (titled "Software Update"), with the frames its card and
   buttons were drawn at there, the focused button as its focus, and buttons that act as in the main window (whose tree
-  still lists the dialog). The status bar item and *Help: Check for Updates…* are the way in.
+  still lists the dialog). The gear button (named "Manage: …" with what the update is doing) and *Help: Check for Updates…* are the way in.
 - Geometry: the window, primary Explorer viewport, focused text-editor pane and status bar expose their painted bounds,
   and so do the individual rows and controls drawn on screen: Explorer rows, the editor tabs of the focused group, the
   status bar's items, the find bar's fields, status and buttons, Source Control's message field, commit button, group
