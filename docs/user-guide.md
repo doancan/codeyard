@@ -604,6 +604,13 @@ branches or the current one), *Only My Commits* and *Hide Merge Commits*, and of
 click one to turn it off. Stashes are listed with apply, pop and drop. `"git.graph.limit"`,
 `"git.graph.allBranches"` and `"git.timeline.limit"` tune it; the Changes groups fold too.
 
+The graph list takes Tab: ↑ ↓ move the selected commit, Page Up and Page Down move by ten, Home and End go to the ends, and ↵ opens
+the commit's files. **Go to Current Commit** in the **…** menu selects the commit the checked-out branch is at. The right-click
+menu of a commit offers *Checkout <branch>* for the local branches that point at it. History is cut at `"git.graph.limit"`
+(300 by default); when it is, a bar under the list says so and **Load more** brings in 300 more commits (up to 10,000 in a
+session), and a search that finds nothing says it looked only in the commits that are loaded. Notes and other refs outside
+branches, tags and remote branches are not drawn.
+
 **Explorer sections.** OPEN EDITORS, the folder tree, **OUTLINE** (the symbols of the open file) and **TIMELINE** (the file's git
 commits plus a saved copy for every save, "local history"; click an entry for a diff).
 
@@ -1263,6 +1270,8 @@ complete Add Remote and Add Worktree.
 path. **Current** marks the open checkout; click another row (or focus it with Tab and press Enter) to open its folder in this
 window, on the same local or SSH host. The normal unsaved-file protection applies. Detached checkouts are labelled, locked
 ones show a lock, and stale or bare entries cannot be opened from the list. Hover for the full path, commit and lock reason.
+Right-click a row for **Open Worktree**, **Copy Path**, **Reveal in Finder** (local folders) and **Remove Worktree…**, which asks
+first and is offered only for a linked checkout that is not the one open in this window.
 The header offers **Add worktree** and **Refresh**. The list also refreshes with Git while Source Control and this section are
 visible, including checkouts added or removed in a terminal. Collapsing the section is remembered and pauses its refreshes.
 
