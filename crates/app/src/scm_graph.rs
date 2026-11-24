@@ -580,21 +580,21 @@ impl ScmPanel {
                 d.child(
                     ui::icon_button("scm-graph-fetch", "cloud-download", crate::i18n::t("Fetch from all remotes"), &p)
                         .relative()
-                    .map(|d| sections::tabbable(d, &p))
+                        .map(|d| sections::tabbable(d, &p))
                         .child(probe(HistoryFrame::Button("fetch")))
                         .on_click(dispatch(Box::new(crate::workbench::GitFetchAll))),
                 )
                 .child(
                     count_button("scm-graph-pull", "arrow-down", behind, crate::i18n::t("Pull"), &p)
                         .relative()
-                    .map(|d| sections::tabbable(d, &p))
+                        .map(|d| sections::tabbable(d, &p))
                         .child(probe(HistoryFrame::Button("pull")))
                         .on_click(dispatch(Box::new(crate::workbench::GitPull))),
                 )
                 .child(
                     count_button("scm-graph-push", "arrow-up", ahead, crate::i18n::t("Push"), &p)
                         .relative()
-                    .map(|d| sections::tabbable(d, &p))
+                        .map(|d| sections::tabbable(d, &p))
                         .child(probe(HistoryFrame::Button("push")))
                         .on_click(dispatch(Box::new(crate::workbench::GitPush))),
                 )
@@ -783,7 +783,9 @@ impl ScmPanel {
                         .border_color(c(p.border))
                         .text_size(px(text::XS.0))
                         .text_color(c(p.text_muted))
-                        .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(tf("Showing the latest {} commits.", &[&n])))
+                        .child(
+                            div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(tf("Showing the latest {} commits.", &[&n])),
+                        )
                         .child(
                             div()
                                 .id("scm-graph-more-button")

@@ -578,7 +578,7 @@ impl Workbench {
                         .gap(px(theme::SPACE[9]))
                         .px(px(theme::SPACE[9]))
                         .py(px(56.))
-                                                .child(
+                        .child(
                             div()
                                 .flex()
                                 .flex_col()
