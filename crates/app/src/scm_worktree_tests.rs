@@ -336,3 +336,33 @@ fn a_commit_menu_offers_its_local_branches() {
     };
     assert_eq!(crate::scm::switchable_branches(&commit), vec!["feature/x".to_string()]);
 }
+
+/// Right click on a worktree row: Open and Remove only for a checkout that can be opened or removed; Copy Path always.
+#[gpui::test]
+fn the_worktree_menu_offers_what_the_row_can_do(cx: &mut TestAppContext) {
+    let dir = repo("worktree-menu");
+    let linked = dir.join("linked");
+    git_in(&dir, &["worktree", "add", "-q", "-b", "linked", linked.to_str().unwrap()]);
+    let (wb, scm, cx) = open(cx, &dir);
+    wait_ticking(cx, "both worktrees", |cx| scm.read_with(cx, |s, _| s.worktrees.entries.len()) == 2);
+    cx.simulate_resize(gpui::size(px(1000.), px(900.)));
+    cx.run_until_parked();
+    let labels = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, cx| wb.menu_labels(cx));
+    let right_click = |cx: &mut VisualTestContext, row: &'static str| {
+        let at = cx.debug_bounds(row).unwrap().center();
+        cx.simulate_mouse_down(at, gpui::MouseButton::Right, Modifiers::none());
+        cx.run_until_parked();
+    };
+    // The row of the open (main) checkout: no Open, no Remove.
+    let current = scm.read_with(cx, |s, _| s.worktrees.entries.iter().position(|e| e.branch.as_deref() != Some("linked"))).unwrap();
+    right_click(cx, Box::leak(format!("scm-worktree-row-{current}").into_boxed_str()));
+    let menu = labels(cx).expect("a menu opened");
+    assert!(menu.iter().any(|l| l == "Copy Path"), "{menu:?}");
+    assert!(!menu.iter().any(|l| l == "Open Worktree" || l == "Remove Worktree…"), "the open checkout cannot be opened or removed: {menu:?}");
+    cx.simulate_keystrokes("escape");
+    // The linked checkout: both.
+    let other = scm.read_with(cx, |s, _| s.worktrees.entries.iter().position(|e| e.branch.as_deref() == Some("linked"))).unwrap();
+    right_click(cx, Box::leak(format!("scm-worktree-row-{other}").into_boxed_str()));
+    let menu = labels(cx).expect("a menu opened");
+    assert!(menu.iter().any(|l| l == "Open Worktree") && menu.iter().any(|l| l == "Remove Worktree…"), "{menu:?}");
+}

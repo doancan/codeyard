@@ -1924,6 +1924,7 @@ Open Settings (JSON)
 Open Setup Instructions	
 Open System Settings	
 Open View: {0} ({1})	
+Open Worktree	
 Open a .code-workspace file in the editor first.	
 Open a .http or .rest file to send requests.	
 Open a Cargo.toml first	
@@ -2262,6 +2263,7 @@ Remove All Breakpoints
 Remove Breakpoint	
 Remove Expression	
 Remove Host…	
+Remove Worktree…	
 Remove a host	
 Remove blank lines at the end of a file when saving	
 Remove control characters from pasted text	

@@ -44,6 +44,8 @@ pub enum ScmEvent {
     OpenCommitFile(GraphCommit, FileChange),
     /// Right click on a commit row: operation menu.
     CommitMenu(GraphCommit, gpui::Point<gpui::Pixels>),
+    /// Right click on a worktree row: its menu.
+    WorktreeMenu(WorktreeMenu),
     /// Section layout changed (persisted).
     SectionsChanged(String),
     /// Right click on a changed file: its menu (path relative to the repository, window coordinates).
@@ -82,6 +84,17 @@ pub enum ScmEvent {
 pub struct Target {
     pub root: String,
     pub id: Option<Arc<RepoId>>,
+}
+
+/// What the menu of a worktree row needs: where it is, and what can be done with it.
+#[derive(Clone, Debug)]
+pub struct WorktreeMenu {
+    pub path: String,
+    pub position: gpui::Point<gpui::Pixels>,
+    /// Another, usable checkout: it can be opened in this window.
+    pub can_open: bool,
+    /// Not the main one and not the one in this window: it can be removed.
+    pub can_remove: bool,
 }
 
 /// What a stash action does.

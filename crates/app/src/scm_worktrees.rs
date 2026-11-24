@@ -145,7 +145,7 @@ impl ScmPanel {
         cx.notify();
     }
 
-    fn open_worktree(&self, path: &str, cx: &mut Context<Self>) {
+    pub(crate) fn open_worktree(&self, path: &str, cx: &mut Context<Self>) {
         let Some(st) = &self.status else { return };
         if self.worktrees.error.is_none()
             && self.worktrees.current_path.as_deref() != Some(path)
@@ -231,6 +231,7 @@ impl ScmPanel {
             None
         };
         let path = entry.path.clone();
+        let menu_path = path.clone();
         let label = path.escape_debug().to_string();
         let tip: SharedString = [
             title.to_string(),
@@ -260,7 +261,8 @@ impl ScmPanel {
             .border_1()
             .border_color(ui::ca(p.focus_ring, 0.))
             .when(current, |d| d.bg(c(p.surface_active)))
-            .when(available, |d| d.tab_index(0).cursor_pointer().hover(|d| d.bg(c(p.surface_hover))).active(|d| d.bg(c(p.surface_active))))
+            .when(available, |d| d.tab_index(0).cursor_pointer().active(|d| d.bg(c(p.surface_active))))
+            .when(available && !current, |d| d.hover(|d| d.bg(c(p.surface_hover))))
             .when(available && ui::keyboard_focus(cx), |d| d.focus(|d| d.border_color(c(p.focus_ring))))
             .child(icon(if entry.locked.is_some() { "lock" } else { "git-branch" }, 14., p.text_muted))
             .child(
@@ -280,6 +282,21 @@ impl ScmPanel {
                     .child(div().truncate().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(label)),
             )
             .when(!self.menu_open, |d| d.tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.clone())).into()))
+            .on_mouse_down(
+                gpui::MouseButton::Right,
+                cx.listener(move |this, ev: &gpui::MouseDownEvent, _, cx| {
+                    if this.status.is_none() {
+                        return;
+                    }
+                    cx.stop_propagation();
+                    cx.emit(ScmEvent::WorktreeMenu(super::WorktreeMenu {
+                        path: menu_path.clone(),
+                        position: ev.position,
+                        can_open: available && !current,
+                        can_remove: available && !current && index > 0,
+                    }));
+                }),
+            )
             .on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 this.open_worktree(&path, cx);

@@ -4365,3 +4365,5 @@ on or off	açık veya kapalı
 {} more files. Double-click the commit to see them all.	{} dosya daha. Hepsini görmek için commit'e çift tıklayın.
 Go to Current Commit	Geçerli Commit'e Git
 Checkout {}	{} dalına geç
+Open Worktree	Worktree'yi Aç
+Remove Worktree…	Worktree'yi Kaldır…

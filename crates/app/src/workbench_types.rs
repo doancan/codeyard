@@ -475,6 +475,9 @@ pub(super) enum MenuCmd {
     CommitRevert,
     CommitReset(crate::graph::ResetMode),
     CommitSquash,
+    /// Worktree row menu (`MenuTarget::path` = the worktree's folder).
+    WorktreeOpen,
+    WorktreeRemove,
     CommitMove {
         down: bool,
     },

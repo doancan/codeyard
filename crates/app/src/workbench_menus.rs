@@ -486,6 +486,15 @@ impl Workbench {
                     self.git_checkout(repo.root, branch, false, false, window, cx);
                 }
             }
+            MenuCmd::WorktreeOpen => {
+                let path = target.path;
+                self.scm.update(cx, |s, cx| s.open_worktree(&path, cx));
+            }
+            MenuCmd::WorktreeRemove => {
+                if let Some(root) = self.git_status().map(|s| s.root.clone()) {
+                    self.confirm_remove_worktree(root, target.path, window, cx);
+                }
+            }
             MenuCmd::CommitSquash => self.squash_commits(window, cx),
             MenuCmd::CommitMove { down } => self.move_commit(target.path, down, cx),
             // --- git-refs ---

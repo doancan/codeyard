@@ -624,6 +624,26 @@ impl Workbench {
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
     }
 
+    /// Right click on a worktree row: open it here, copy or reveal its folder, remove it.
+    pub(super) fn open_worktree_menu(&mut self, menu: crate::scm::WorktreeMenu, window: &mut Window, cx: &mut Context<Self>) {
+        use super::{MenuCmd, MenuTarget};
+        use crate::menu::MenuItem;
+        let mut rows: Vec<(MenuItem, MenuCmd)> = Vec::new();
+        if menu.can_open {
+            rows.push((MenuItem::new(crate::i18n::t("Open Worktree")), MenuCmd::WorktreeOpen));
+        }
+        rows.push((MenuItem::new(crate::i18n::t("Copy Path")).separator(), MenuCmd::CopyPath));
+        if !self.remote.host.is_remote() {
+            rows.push((MenuItem::new(crate::i18n::t("Reveal in Finder")), MenuCmd::Reveal));
+        }
+        if menu.can_remove {
+            rows.push((MenuItem::new(crate::i18n::t("Remove Worktree…")).separator(), MenuCmd::WorktreeRemove));
+        }
+        let (items, commands): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
+        let target = MenuTarget { path: menu.path, is_dir: true, tab: None };
+        self.show_menu(items, commands, Vec::new(), target, menu.position, window, cx);
+    }
+
     /// Open a file of the commit in a diff tab (compared with its parent).
     pub(super) fn open_commit_file(&mut self, commit: crate::graph::GraphCommit, file: crate::graph::FileChange, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
