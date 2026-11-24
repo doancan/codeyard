@@ -47,8 +47,10 @@ jobs:
           test "$FAST" = success
 
   # clippy for the workspace on Linux: libraries and binaries on a pull request, test code too on a push.
+  # On the self-hosted runner (ci05, a build directory that survives between runs) for this repository's own branches and pushes; a
+  # pull request from a fork runs on a hosted runner instead, so no fork code reaches the maintainer's machine.
   clippy-linux:
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","ci05"]') || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
@@ -57,16 +59,25 @@ jobs:
           toolchain: stable
           components: clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        if: runner.environment != 'self-hosted'
         with:
           shared-key: ci-linux-clippy
           save-if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.event_name == 'workflow_dispatch' }}
+      # The checkout removes untracked files, so `target` is a link to a folder outside the workspace that keeps the build state.
+      - name: Persistent build directory
+        if: runner.environment == 'self-hosted'
+        run: |
+          mkdir -p "$HOME/.cache/codeyard-ci/clippy"
+          ln -sfn "$HOME/.cache/codeyard-ci/clippy" target
       - name: GPUI build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential pkg-config git \
-            libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev \
-            libfontconfig-dev libfreetype-dev libwayland-dev libvulkan-dev
+          deps="build-essential pkg-config git libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev libfontconfig-dev libfreetype-dev libwayland-dev libvulkan-dev"
+          missing=""
+          for d in $deps; do dpkg -s "$d" >/dev/null 2>&1 || missing="$missing $d"; done
+          [ -n "${missing// /}" ] || exit 0
+          sudo -n true 2>/dev/null || { echo "::error::missing packages ($missing) and no passwordless sudo: run 'sudo apt-get install -y $deps' on the runner once"; exit 1; }
+          sudo -n apt-get update
+          sudo -n apt-get install -y --no-install-recommends $deps
       # Our crates only: the patched copies under vendor/ are not linted.
       # --keep-going: every finding of a run is reported, not only the first.
       - run: cargo clippy --locked --workspace --keep-going -- -D warnings
