@@ -320,6 +320,14 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
+      # What a hosted runner has and a fresh self-hosted one may not: a C toolchain, git and pip. Installed once (an apt run that finds
+      # everything there does nothing); it needs passwordless sudo, and says so when it is missing.
+      - name: Build tools
+        run: |
+          if command -v cc >/dev/null && command -v pkg-config >/dev/null && command -v git >/dev/null && command -v pip3 >/dev/null; then exit 0; fi
+          sudo -n true 2>/dev/null || { echo "::error::ci05 has no C toolchain and no passwordless sudo: run 'sudo apt-get install -y build-essential pkg-config git python3-pip' on it once"; exit 1; }
+          sudo -n apt-get update
+          sudo -n apt-get install -y --no-install-recommends build-essential pkg-config git python3-pip
       # The checkout removes untracked files, so `target` is a link to a folder outside the workspace that keeps the build state.
       - name: Persistent build directory
         run: |
