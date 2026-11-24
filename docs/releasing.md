@@ -11,6 +11,11 @@ and the Windows files from that run, signs `SHA256SUMS.txt` and creates the rele
 Apple's notarization. If a full CI run (`ci.yml`) of that commit failed, the release stops instead: a build whose tests failed is not
 released; a full run that is still going is not waited for.
 
+**Build profile.** Release builds (`[profile.release]` in `Cargo.toml`) use no cross-crate LTO and 16 codegen units: about 40% less
+build time (the files are built twice, for macOS and Windows, on every pull request into `develop`) for a binary 4% larger. Eight
+interleaved runs of each build gave the same first-frame and keystroke times within the noise of the performance gate
+(`scripts/perf/README.md`). The SSH agents keep their own `release-agent` profile (fat LTO, size-optimized).
+
 **What holds a release back.** A pull request from `develop` into `main` passes `release-ready` as soon as `clippy-linux`, `fast-checks`
 and `linux-tests` of `develop`'s run for the same commit succeeded. The macOS tests of that run are advisory (they take the longest and
 a macOS failure shows in the run), the memory and size budgets are not run in CI at all (`scripts/check.sh --budgets` on a Retina Mac
