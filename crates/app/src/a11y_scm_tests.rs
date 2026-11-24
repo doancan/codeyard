@@ -421,3 +421,24 @@ fn a_half_done_merge_is_announced_with_its_conflicts(cx: &mut TestAppContext) {
     assert_eq!((commit.label(), commit.is_disabled()), (Some("Resolve Conflicts"), true));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// While the commit list has the keyboard, the accessibility focus is the selected commit's row, and the arrow keys move it.
+#[gpui::test]
+fn scm_graph_focus_follows_the_selected_commit(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let Some((dir, wb, cx)) = repo("a11y-scm-graph-keys", cx) else { return };
+    std::fs::write(dir.join("later.txt"), "x").unwrap();
+    git_in(&dir, &["add", "later.txt"]);
+    git_in(&dir, &["commit", "-qm", "Later commit"]);
+    idle(&wb, cx, "all three commits", |s| s.scm.as_ref().is_some_and(|s| s.view.history.graph.total >= 3));
+    let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
+    scm.update_in(cx, |s, window, _| s.focus_graph_for_test(window));
+    cx.simulate_keystrokes("down");
+    let snap = snapshot(&wb, cx);
+    let (first, _) = node(&snap, "Later commit").expect("the newest commit is a row");
+    assert_eq!(snap.to_tree().focus, first, "the first Down selects the newest commit and the accessibility focus is on it");
+    cx.simulate_keystrokes("down");
+    let snap = snapshot(&wb, cx);
+    let (second, _) = node(&snap, "Add tracked fixture").expect("the older commit is a row");
+    assert_eq!(snap.to_tree().focus, second, "the next Down moves the focus to the older commit");
+}

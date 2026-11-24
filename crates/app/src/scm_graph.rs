@@ -182,7 +182,7 @@ fn starts_block(line: &str) -> bool {
 
 /// Joins the lines of a message that were hard-wrapped (at 72 columns, by habit) back into paragraphs, so the narrow card does
 /// not show them as ragged short lines. Blank lines, list items, quotes and short lines stay as they are.
-fn reflow(lines: impl Iterator<Item = String>) -> Vec<String> {
+pub(super) fn reflow(lines: impl Iterator<Item = String>) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut previous_len = 0;
     for line in lines {
@@ -290,6 +290,7 @@ impl Render for CommitCard {
         };
         let muted = |t: String| div().text_size(px(text::XXS.0)).text_color(c(p.text_muted)).child(t);
         div()
+            .debug_selector(|| "commit-card".into())
             .w(px(320.))
             .flex()
             .flex_col()
@@ -363,7 +364,10 @@ impl Render for CommitCard {
                         )
                     })
                     .child(div().flex_1())
-                    .child(muted(k.email.clone())),
+                    // A long address (a machine name in it) shortens instead of running out of the card.
+                    .child(
+                        muted(k.email.clone()).debug_selector(|| "commit-card-email".into()).min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis(),
+                    ),
             )
             .when(k.parents.len() > 1, |d| {
                 let parents = k.parents.iter().map(|h| h.chars().take(7).collect::<String>()).collect::<Vec<_>>().join(" · ");
@@ -563,42 +567,52 @@ impl ScmPanel {
         // The remote round-trip (fetch, pull, push) first, then refresh and the "…" menu.
         let probe = |part: HistoryFrame| crate::painted::probe(&self.a11y_frames, AccessFrame::History(part));
         let header = sections::header("scm-graph-header", crate::i18n::t("Graph"), count, open, &p)
+            .debug_selector(|| "scm-graph-header".into())
             .relative()
             .child(probe(HistoryFrame::Header("graph")))
+            // The quick buttons give way (the last ones are cut first) before Reload and "…" do: in a narrow panel the menu holds
+            // all of them again, so it must stay in reach.
             .child(
-                ui::icon_button("scm-graph-search", "search", crate::i18n::t("Search commits"), &p)
-                    .relative()
-                    .map(|d| sections::tabbable(d, &p))
-                    .child(probe(HistoryFrame::Button("search")))
-                    .when(self.search_open, |d| d.bg(c(p.surface_active)))
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        cx.stop_propagation();
-                        this.toggle_graph_search(window, cx);
-                    })),
+                div()
+                    .flex()
+                    .flex_shrink()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .child(
+                        ui::icon_button("scm-graph-search", "search", crate::i18n::t("Search commits"), &p)
+                            .relative()
+                            .map(|d| sections::tabbable(d, &p))
+                            .child(probe(HistoryFrame::Button("search")))
+                            .when(self.search_open, |d| d.bg(c(p.surface_active)))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.toggle_graph_search(window, cx);
+                            })),
+                    )
+                    .when(has_remote, |d| {
+                        d.child(
+                            ui::icon_button("scm-graph-fetch", "cloud-download", crate::i18n::t("Fetch from all remotes"), &p)
+                                .relative()
+                                .map(|d| sections::tabbable(d, &p))
+                                .child(probe(HistoryFrame::Button("fetch")))
+                                .on_click(dispatch(Box::new(crate::workbench::GitFetchAll))),
+                        )
+                        .child(
+                            count_button("scm-graph-pull", "arrow-down", behind, crate::i18n::t("Pull"), &p)
+                                .relative()
+                                .map(|d| sections::tabbable(d, &p))
+                                .child(probe(HistoryFrame::Button("pull")))
+                                .on_click(dispatch(Box::new(crate::workbench::GitPull))),
+                        )
+                        .child(
+                            count_button("scm-graph-push", "arrow-up", ahead, crate::i18n::t("Push"), &p)
+                                .relative()
+                                .map(|d| sections::tabbable(d, &p))
+                                .child(probe(HistoryFrame::Button("push")))
+                                .on_click(dispatch(Box::new(crate::workbench::GitPush))),
+                        )
+                    }),
             )
-            .when(has_remote, |d| {
-                d.child(
-                    ui::icon_button("scm-graph-fetch", "cloud-download", crate::i18n::t("Fetch from all remotes"), &p)
-                        .relative()
-                        .map(|d| sections::tabbable(d, &p))
-                        .child(probe(HistoryFrame::Button("fetch")))
-                        .on_click(dispatch(Box::new(crate::workbench::GitFetchAll))),
-                )
-                .child(
-                    count_button("scm-graph-pull", "arrow-down", behind, crate::i18n::t("Pull"), &p)
-                        .relative()
-                        .map(|d| sections::tabbable(d, &p))
-                        .child(probe(HistoryFrame::Button("pull")))
-                        .on_click(dispatch(Box::new(crate::workbench::GitPull))),
-                )
-                .child(
-                    count_button("scm-graph-push", "arrow-up", ahead, crate::i18n::t("Push"), &p)
-                        .relative()
-                        .map(|d| sections::tabbable(d, &p))
-                        .child(probe(HistoryFrame::Button("push")))
-                        .on_click(dispatch(Box::new(crate::workbench::GitPush))),
-                )
-            })
             // While history loads or a sync runs, the refresh button turns into the spinner (no extra icon squeezing the title).
             .child(if self.graph_loading || syncing {
                 div()
@@ -623,6 +637,7 @@ impl ScmPanel {
             })
             .child(
                 ui::icon_button("scm-graph-more", "ellipsis", crate::i18n::t("More Actions…"), &p)
+                    .debug_selector(|| "scm-graph-more".into())
                     .relative()
                     .map(|d| sections::tabbable(d, &p))
                     .child(probe(HistoryFrame::Button("more")))
@@ -942,7 +957,7 @@ fn graph_row(
                 .child(
                     div()
                         .flex_shrink()
-                        .min_w_0()
+                        .min_w(px(56.))
                         .overflow_hidden()
                         .text_ellipsis()
                         .text_size(px(text::SM.0))
@@ -967,7 +982,12 @@ fn graph_row(
                     )
                 }),
         )
-        .children(refs.first().map(|r| div().flex_shrink().min_w_0().ml(px(theme::SPACE[2])).child(ref_chip(r, p))))
+        .children(refs.first().map(|r| {
+            // The label gives way before the subject does.
+            let mut shell = div().min_w_0().ml(px(theme::SPACE[2])).child(ref_chip(r, p));
+            shell.style().flex_shrink = Some(4.);
+            shell
+        }))
         .when(more > 0, |d| {
             d.child(div().flex_none().ml(px(theme::SPACE[1])).text_size(px(text::BADGE.0)).text_color(c(p.text_muted)).child(format!("+{more}")))
         })
@@ -1097,6 +1117,11 @@ impl ScmPanel {
         let Some(anchor) = anchor else { return self.select_commit(commit, cx) };
         self.range = Some((anchor, commit.hash.clone()));
         self.select_commit(commit, cx);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn focus_graph_for_test(&self, window: &mut Window) {
+        window.focus(&self.graph_focus);
     }
 
     /// The commits as listed (filters and search applied, day headers left out) with the row each one is in.

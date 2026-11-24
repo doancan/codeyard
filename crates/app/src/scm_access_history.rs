@@ -51,6 +51,8 @@ pub(crate) struct AccessGraph {
     pub search_open: bool,
     pub query: String,
     pub query_focused: bool,
+    /// The commit list has the keyboard: the selected commit's row is the focused node.
+    pub list_focused: bool,
     /// Active filters (0 current branch, 1 mine, 2 no merges) and their labels.
     pub filters: Vec<(u8, String)>,
     pub rows: Vec<AccessGraphRow>,
@@ -137,6 +139,7 @@ impl ScmPanel {
             search_open: self.search_open,
             query: self.query.read(cx).text().to_string(),
             query_focused: self.query.focus_handle(cx).is_focused(window),
+            list_focused: self.graph_focus.is_focused(window),
             filters,
             ..Default::default()
         };
