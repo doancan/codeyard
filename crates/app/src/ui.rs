@@ -255,6 +255,7 @@ const ICONS: &[(&str, &[u8])] = icons![
     "bell",
     "bell-off",
     "check",
+    "circle-help",
     "chevron-down",
     "chevron-right",
     "chevron-up",

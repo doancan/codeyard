@@ -19,6 +19,15 @@ pub enum TestRunner {
 impl TestRunner {
     pub const CHOICES: [&'static str; 3] = ["auto", "cargo", "nextest"];
 
+    /// The name the setting uses (the inverse of `parse`).
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Cargo => "cargo",
+            Self::Nextest => "nextest",
+        }
+    }
+
     pub fn parse(text: &str) -> Option<Self> {
         match text {
             "auto" => Some(Self::Auto),

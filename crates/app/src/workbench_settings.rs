@@ -214,6 +214,34 @@ pub const CATALOG: &[Entry] = &[
     e("ports.autoForward", crate::i18n::tr("Forward ports opened on SSH hosts"), Kind::Bool),
     e("ports.localBind", crate::i18n::tr("Where forwarded ports listen: this computer only, or every network interface"), Kind::Choice(&["loopback", "all"])),
     e("lsp.enabled", crate::i18n::tr("Start language servers"), Kind::Bool),
+    // --- Rust and Cargo (how Run, Debug and Test build; the lists `rust.features` and `rust.semanticModifiers` are in the file) ---
+    e(
+        "rust.profile",
+        crate::i18n::tr("Cargo profile Run, Debug and Test build with: dev, release or a profile of your own (empty: Cargo's default)"),
+        Kind::Text,
+    ),
+    e("rust.target", crate::i18n::tr("Target triple to build for, for example aarch64-unknown-linux-gnu (empty: this computer)"), Kind::Text),
+    e("rust.targetDir", crate::i18n::tr("Folder for build output (empty: the project's own target folder)"), Kind::Text),
+    e("rust.noDefaultFeatures", crate::i18n::tr("Build without the default Cargo features of the package"), Kind::Bool),
+    e(
+        "rust.testRunner",
+        crate::i18n::tr("What runs the tests: cargo (cargo test), nextest (cargo-nextest) or auto (nextest when it is installed)"),
+        Kind::Choice(&crate::rust_toolchain::nextest::TestRunner::CHOICES),
+    ),
+    e("rust.inlayHints.types", crate::i18n::tr("Show inferred types of Rust variables at the end of the line"), Kind::Bool),
+    e("rust.inlayHints.parameters", crate::i18n::tr("Show parameter names in Rust calls"), Kind::Bool),
+    e("rust.inlayHints.chaining", crate::i18n::tr("Show the type of each step of a Rust method chain"), Kind::Bool),
+    e("rust.cargo.dependencyLookups", crate::i18n::tr("Look up newer versions of the crates in Cargo.toml (asks the registry)"), Kind::Bool),
+    e(
+        "diagnostics.logLevel",
+        crate::i18n::tr("What the log file records: error, warn, info or debug (debug is for bug reports). Your own settings only"),
+        Kind::Choice(&crate::diagnostics::log::Level::NAMES),
+    ),
+    e(
+        "compare.folders.maxFiles",
+        crate::i18n::tr("Most files Compare: Folders… reads on each side before it stops and says so"),
+        Kind::Number { min: 100., max: 5_000_000. },
+    ),
     e(
         "http.runOn",
         crate::i18n::tr("Where .http requests are sent from: the workspace host (the server when connected over SSH) or this computer"),
@@ -463,6 +491,17 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "ports.autoForward" => json!(s.ports_auto_forward),
         "ports.localBind" => json!(if s.ports_local_bind == host::forward::LocalBind::All { "all" } else { "loopback" }),
         "lsp.enabled" => json!(s.lsp_enabled),
+        "rust.profile" => json!(s.rust_build.profile.clone().unwrap_or_default()),
+        "rust.target" => json!(s.rust_build.target.clone().unwrap_or_default()),
+        "rust.targetDir" => json!(s.rust_build.target_dir.clone().unwrap_or_default()),
+        "rust.noDefaultFeatures" => json!(s.rust_build.no_default_features),
+        "rust.testRunner" => json!(s.rust_build.test_runner.name()),
+        "rust.inlayHints.types" => json!(s.rust_build.hints.types),
+        "rust.inlayHints.parameters" => json!(s.rust_build.hints.parameters),
+        "rust.inlayHints.chaining" => json!(s.rust_build.hints.chaining),
+        "rust.cargo.dependencyLookups" => json!(s.rust_dependency_lookups),
+        "diagnostics.logLevel" => json!(s.log_level.name()),
+        "compare.folders.maxFiles" => json!(s.compare_max_files),
         _ => Value::Null,
     }
 }

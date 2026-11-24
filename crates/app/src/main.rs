@@ -215,6 +215,7 @@ mod sections;
 mod settings;
 #[cfg(test)]
 mod settings_docs;
+mod settings_help;
 mod settings_page;
 mod shortcuts_page;
 mod snippets;
