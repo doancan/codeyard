@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Terminal (macOS): with Caps Lock on, letters are typed in capitals. They came out lowercase until Shift was pressed.
+
 ### Changed
 
 - Welcome: the logo and the product name at the top are gone, so the start cards come first. The cards are taller with a larger icon and an accent border on hover, the section titles have a line under them and the tip of the day sits in a box.
