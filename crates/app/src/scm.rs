@@ -154,6 +154,8 @@ pub struct ScmPanel {
     change_scroll: UniformListScrollHandle,
     /// The change list's keyboard focus and cursor row (by identity, with the index it was last seen at).
     change_focus: FocusHandle,
+    /// The graph's list: Up, Down, Home, End, Page keys move the selected commit, Enter opens it.
+    graph_focus: FocusHandle,
     change_cursor: Option<(changes_ui::ChangeKey, usize)>,
     /// Result of the last operation: (text, is error).
     result: Option<(SharedString, bool)>,
@@ -265,6 +267,7 @@ impl ScmPanel {
             repo_scroll: UniformListScrollHandle::new(),
             change_scroll: UniformListScrollHandle::new(),
             change_focus: cx.focus_handle().tab_stop(true),
+            graph_focus: cx.focus_handle().tab_stop(true),
             change_cursor: None,
             repo_focus: cx.focus_handle(),
             result: None,
@@ -977,6 +980,11 @@ impl Render for ScmPanel {
 
 /// Files of a commit listed in its details; the rest are behind "+N more" (the commit opens with all of them).
 const DETAIL_FILE_ROWS: usize = 300;
+
+/// The local branches that point at a commit and are not checked out: the ones a menu can switch to in one step.
+pub(crate) fn switchable_branches(commit: &GraphCommit) -> Vec<String> {
+    commit.refs.iter().filter(|r| r.kind == RefKind::Local).map(|r| r.name.clone()).collect()
+}
 
 /// Commit button's label and whether it can be pressed: "Commit (n)" if something is staged, otherwise
 /// "Commit All (n)" for tracked changes, a dimmed "Commit" if there are none.

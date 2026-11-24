@@ -420,6 +420,8 @@ pub enum GraphOption {
     HideMerges,
     Search,
     Reload,
+    /// Select the commit the checked-out branch is at and scroll it into view.
+    GoToHead,
 }
 
 /// What the "…" menu needs to draw its checks.
@@ -468,6 +470,7 @@ impl ScmPanel {
             GraphOption::HideMerges => self.hide_merges = !self.hide_merges,
             GraphOption::Search => self.toggle_graph_search(window, cx),
             GraphOption::Reload => self.load_graph(cx),
+            GraphOption::GoToHead => self.go_to_head(cx),
         }
         cx.notify();
     }
@@ -719,6 +722,15 @@ impl ScmPanel {
                 d.child(
                     div()
                         .debug_selector(|| "scm-graph-body".into())
+                        .track_focus(&self.graph_focus)
+                        .tab_index(0)
+                        .key_context("ScmGraph")
+                        .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, _, cx| {
+                            if let Some(key) = graph_key(&ev.keystroke.key, ev.keystroke.modifiers) {
+                                this.graph_key(key, cx);
+                                cx.stop_propagation();
+                            }
+                        }))
                         .when(fill, |d| d.flex_1())
                         .when(!fill, |d| d.h(px(height)))
                         // Under a lack of room the sections above give way first (worktrees, stashes, the change list), so that
@@ -735,6 +747,33 @@ impl ScmPanel {
                 )
             })
     }
+}
+
+/// What a key does in the graph's list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GraphKey {
+    /// Commits to move by (negative: up); the ends are `isize::MIN` and `isize::MAX`.
+    Step(isize),
+    Open,
+}
+
+/// Rows a Page key moves by.
+const GRAPH_PAGE: isize = 10;
+
+pub(crate) fn graph_key(key: &str, m: gpui::Modifiers) -> Option<GraphKey> {
+    if m.control || m.alt || m.shift || m.function || m.platform {
+        return None;
+    }
+    Some(match key {
+        "up" => GraphKey::Step(-1),
+        "down" => GraphKey::Step(1),
+        "pageup" => GraphKey::Step(-GRAPH_PAGE),
+        "pagedown" => GraphKey::Step(GRAPH_PAGE),
+        "home" => GraphKey::Step(isize::MIN),
+        "end" => GraphKey::Step(isize::MAX),
+        "enter" => GraphKey::Open,
+        _ => return None,
+    })
 }
 
 /// Day header: "Saturday, 24 Oct 2026" and that day's count.
@@ -1005,6 +1044,47 @@ impl ScmPanel {
         let Some(anchor) = anchor else { return self.select_commit(commit, cx) };
         self.range = Some((anchor, commit.hash.clone()));
         self.select_commit(commit, cx);
+    }
+
+    /// The commits as listed (filters and search applied, day headers left out) with the row each one is in.
+    fn listed_commits(&self, cx: &gpui::App) -> Option<(Arc<GraphData>, Vec<(usize, usize)>)> {
+        let (g, items, _) = self.graph_items(cx).ok()?;
+        let commits = items.iter().enumerate().filter_map(|(row, item)| if let GraphItem::Commit(ix) = item { Some((row, *ix)) } else { None }).collect();
+        Some((g, commits))
+    }
+
+    /// A key in the graph's list: the selection moves to the commit above or below (the list scrolls to keep it in view), or the
+    /// selected commit opens.
+    pub(super) fn graph_key(&mut self, key: GraphKey, cx: &mut Context<Self>) {
+        let Some((g, commits)) = self.listed_commits(cx) else { return };
+        let Some(last) = commits.len().checked_sub(1) else { return };
+        let current = self.selected.as_ref().and_then(|s| commits.iter().position(|(_, ix)| g.commits[*ix].hash == s.hash));
+        let target = match (key, current) {
+            (GraphKey::Open, Some(at)) => {
+                cx.emit(ScmEvent::OpenCommit(g.commits[commits[at].1].clone()));
+                return;
+            }
+            (GraphKey::Open, None) => return,
+            (GraphKey::Step(isize::MIN), _) => 0,
+            (GraphKey::Step(isize::MAX), _) => last,
+            // Nothing selected yet: the first key lands on the first commit rather than skipping it.
+            (GraphKey::Step(_), None) => 0,
+            (GraphKey::Step(delta), Some(at)) => at.saturating_add_signed(delta).min(last),
+        };
+        let (row, ix) = commits[target];
+        self.pick_commit(g.commits[ix].clone(), false, cx);
+        self.graph_scroll.scroll_to_item(row, gpui::ScrollStrategy::Center);
+        cx.notify();
+    }
+
+    /// Select the commit the checked-out branch is at and bring it into view (a search or a long history moved it away).
+    pub(super) fn go_to_head(&mut self, cx: &mut Context<Self>) {
+        let Some(hash) = self.head_hash() else { return };
+        let Some((g, commits)) = self.listed_commits(cx) else { return };
+        let Some(&(row, ix)) = commits.iter().find(|(_, ix)| g.commits[*ix].hash == hash) else { return };
+        self.pick_commit(g.commits[ix].clone(), false, cx);
+        self.graph_scroll.scroll_to_item(row, gpui::ScrollStrategy::Center);
+        cx.notify();
     }
 
     /// The commit the checked-out branch was at when the graph was read: what a rewrite is pinned to.

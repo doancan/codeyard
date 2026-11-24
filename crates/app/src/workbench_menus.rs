@@ -480,6 +480,12 @@ impl Workbench {
                     self.scm.update(cx, |s, cx| s.commit_op_in(Some(repo), target.path, op, window, cx));
                 }
             }
+            MenuCmd::CommitCheckoutBranch(nth) => {
+                let branch = self.scm.read(cx).commit_by_hash(&target.path).and_then(|c| crate::scm::switchable_branches(&c).into_iter().nth(usize::from(nth)));
+                if let (Some(branch), Some(repo)) = (branch, self.vcs.menu_repo.clone()) {
+                    self.git_checkout(repo.root, branch, false, false, window, cx);
+                }
+            }
             MenuCmd::CommitSquash => self.squash_commits(window, cx),
             MenuCmd::CommitMove { down } => self.move_commit(target.path, down, cx),
             // --- git-refs ---

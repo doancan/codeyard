@@ -319,6 +319,7 @@ Checking whitespace…
 Checking…	
 Checkout (Detached)	
 Checkout to…	
+Checkout {}	
 Checks	
 Cherry-pick	
 Cherry-pick aborted	
@@ -1262,6 +1263,7 @@ Go
 Go back to version {}	
 Go package	
 Go to Breakpoint	
+Go to Current Commit	
 Go to Definition	
 Go to File	
 Go to File…	

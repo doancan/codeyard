@@ -467,6 +467,8 @@ pub(super) enum MenuCmd {
     CopySubject,
     CommitFiles,
     CommitCheckout,
+    /// The nth branch that points at the commit (`scm::switchable_branches`).
+    CommitCheckoutBranch(u8),
     CommitBranch,
     CommitTag,
     CommitCherryPick,

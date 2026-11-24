@@ -66,6 +66,9 @@ pub struct Timeline {
     pub task: Option<gpui::Task<()>>,
 }
 
+/// Branches that get an entry of their own in a commit's menu (the rest are reached through Checkout to…).
+const MAX_BRANCH_ENTRIES: usize = 3;
+
 impl Workbench {
     /// Refresh TIMELINE in the background when the active file or HEAD changes (while visible).
     pub(super) fn sync_timeline(&mut self, cx: &mut Context<Self>) {
@@ -490,6 +493,8 @@ impl Workbench {
         }
         items.push(MenuItem::new(crate::i18n::t("Search Commits")).checked(state.search_open).separator());
         commands.push(MenuCmd::Graph(GraphOption::Search));
+        items.push(MenuItem::new(crate::i18n::t("Go to Current Commit")));
+        commands.push(MenuCmd::Graph(GraphOption::GoToHead));
         // Pull, Push, Fetch and Sync are git terms and stay as they are in every language.
         let mut remote: Vec<(&str, Box<dyn gpui::Action>)> = Vec::new();
         if state.has_remote {
@@ -608,6 +613,12 @@ impl Workbench {
             (MenuItem::new(crate::i18n::t("Move Commit Down")), MenuCmd::CommitMove { down: true }),
         ];
         rows.extend(squash);
+        // A branch that points here is one entry away: the detached checkout is the only one without a branch to go to.
+        let branches = crate::scm::switchable_branches(&commit);
+        let at = rows.iter().position(|(_, cmd)| matches!(cmd, MenuCmd::CommitCheckout)).map_or(rows.len(), |i| i + 1);
+        for (i, name) in branches.iter().enumerate().take(MAX_BRANCH_ENTRIES) {
+            rows.insert(at + i, (MenuItem::new(&crate::i18n::tf("Checkout {}", &[name])), MenuCmd::CommitCheckoutBranch(i as u8)));
+        }
         let (items, commands): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
         let target = MenuTarget { path: commit.hash, is_dir: false, tab: None };
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);

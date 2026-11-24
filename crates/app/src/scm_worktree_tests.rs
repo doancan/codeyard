@@ -271,3 +271,68 @@ fn a_click_on_a_section_header_does_not_take_the_focus(cx: &mut TestAppContext) 
     }
     assert!(scm.read_with(cx, |s, _| s.sections.is_open("worktrees", true)), "two clicks: closed and open again");
 }
+
+fn commit_chain(name: &str, n: usize) -> std::path::PathBuf {
+    let dir = repo(name);
+    for i in 0..n {
+        std::fs::write(dir.join(format!("c{i}.txt")), "x").unwrap();
+        git_in(&dir, &["add", "-A"]);
+        git_in(&dir, &["commit", "-q", "-m", &format!("commit {i}")]);
+    }
+    dir
+}
+
+/// Up, Down, Home and End move the selected commit in the graph, Page keys move by ten, and the keys stop at the ends.
+#[gpui::test]
+fn the_graph_list_moves_the_selected_commit_with_the_keys(cx: &mut TestAppContext) {
+    let dir = commit_chain("graph-keys", 15);
+    let (_wb, scm, cx) = open(cx, &dir);
+    cx.simulate_resize(gpui::size(px(1000.), px(900.)));
+    wait_ticking(cx, "graph", |cx| scm.read_with(cx, |s, _| s.graph_subjects().len() >= 16));
+    scm.update_in(cx, |s, window, _| window.focus(&s.graph_focus));
+    let selected = |cx: &mut VisualTestContext| scm.read_with(cx, |s, _| s.selected_hash());
+    let hash_at = |cx: &mut VisualTestContext, ix: usize| scm.read_with(cx, |s, _| s.graph_commit(ix)).map(|c| c.hash);
+    cx.simulate_keystrokes("down");
+    assert_eq!(selected(cx), hash_at(cx, 0), "the first key lands on the first commit");
+    cx.simulate_keystrokes("down down");
+    assert_eq!(selected(cx), hash_at(cx, 2));
+    cx.simulate_keystrokes("up");
+    assert_eq!(selected(cx), hash_at(cx, 1));
+    cx.simulate_keystrokes("pagedown");
+    assert_eq!(selected(cx), hash_at(cx, 11), "a page is ten commits");
+    cx.simulate_keystrokes("end");
+    let last = scm.read_with(cx, |s, _| s.graph_subjects().len()) - 1;
+    assert_eq!(selected(cx), hash_at(cx, last));
+    cx.simulate_keystrokes("down");
+    assert_eq!(selected(cx), hash_at(cx, last), "no further than the last commit");
+    cx.simulate_keystrokes("home");
+    assert_eq!(selected(cx), hash_at(cx, 0));
+    cx.simulate_keystrokes("up");
+    assert_eq!(selected(cx), hash_at(cx, 0), "no further than the first commit");
+}
+
+/// "Go to Current Commit" selects the commit the checked-out branch is at, from wherever the selection was.
+#[gpui::test]
+fn go_to_current_commit_selects_where_head_is(cx: &mut TestAppContext) {
+    let dir = commit_chain("graph-head", 12);
+    let (_wb, scm, cx) = open(cx, &dir);
+    wait_ticking(cx, "graph", |cx| scm.read_with(cx, |s, _| s.graph_subjects().len() >= 13));
+    let head = git_in(&dir, &["rev-parse", "HEAD"]).trim().to_string();
+    let old = scm.read_with(cx, |s, _| s.graph_commit(10)).unwrap();
+    scm.update(cx, |s, cx| s.pick_commit(old.clone(), false, cx));
+    assert_eq!(scm.read_with(cx, |s, _| s.selected_hash()), Some(old.hash));
+    scm.update(cx, |s, cx| s.go_to_head(cx));
+    assert_eq!(scm.read_with(cx, |s, _| s.selected_hash()), Some(head));
+}
+
+/// The menu of a commit offers the local branches that point at it, not the checked-out one, remote branches or tags.
+#[test]
+fn a_commit_menu_offers_its_local_branches() {
+    use crate::graph::{GraphCommit, RefKind, RefLabel};
+    let label = |name: &str, kind| RefLabel { name: name.into(), kind };
+    let commit = GraphCommit {
+        refs: vec![label("main", RefKind::Head), label("feature/x", RefKind::Local), label("origin/feature/x", RefKind::Remote), label("v1", RefKind::Tag)],
+        ..Default::default()
+    };
+    assert_eq!(crate::scm::switchable_branches(&commit), vec!["feature/x".to_string()]);
+}
