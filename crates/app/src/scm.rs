@@ -169,6 +169,8 @@ pub struct ScmPanel {
     change_focus: FocusHandle,
     /// The graph's list: Up, Down, Home, End, Page keys move the selected commit, Enter opens it.
     graph_focus: FocusHandle,
+    /// Commits loaded beyond `git.graph.limit` in this session ("Load more"); read again for another repository.
+    graph_more: usize,
     change_cursor: Option<(changes_ui::ChangeKey, usize)>,
     /// Result of the last operation: (text, is error).
     result: Option<(SharedString, bool)>,
@@ -281,6 +283,7 @@ impl ScmPanel {
             change_scroll: UniformListScrollHandle::new(),
             change_focus: cx.focus_handle().tab_stop(true),
             graph_focus: cx.focus_handle().tab_stop(true),
+            graph_more: 0,
             change_cursor: None,
             repo_focus: cx.focus_handle(),
             result: None,
@@ -382,6 +385,7 @@ impl ScmPanel {
 
     /// The history of another repository than the selected one is never kept on screen.
     fn clear_history(&mut self) {
+        self.graph_more = 0;
         self.graph = None;
         self.graph_error = None;
         self.history = None;
@@ -417,7 +421,7 @@ impl ScmPanel {
         self.graph_loading = true;
         let host = self.host.clone();
         let scope = self.scope;
-        let limit = cx.global::<crate::settings::Settings>().graph_limit;
+        let limit = self.graph_limit(cx);
         let dir = root.clone();
         let task = cx.background_executor().spawn(async move {
             let log = graph::log(host.as_ref(), &dir, limit, scope);
@@ -993,6 +997,10 @@ impl Render for ScmPanel {
 
 /// Files of a commit listed in its details; the rest are behind "+N more" (the commit opens with all of them).
 const DETAIL_FILE_ROWS: usize = 300;
+
+/// Commits one "Load more" adds, and the most a session loads (a graph of more rows is not drawn or searched any faster).
+const GRAPH_MORE_STEP: usize = 300;
+const GRAPH_LIMIT_MAX: usize = 10_000;
 
 /// The local branches that point at a commit and are not checked out: the ones a menu can switch to in one step.
 pub(crate) fn switchable_branches(commit: &GraphCommit) -> Vec<String> {

@@ -1709,6 +1709,7 @@ No cherry-pick or revert is in progress.
 No code extension is installed and enabled.	
 No code lens on this line	
 No comment syntax for this file type	
+No commit among the latest {} matches.	
 No commit matches.	
 No commits to show.	
 No commits yet.	
@@ -2629,6 +2630,7 @@ Show type and parameter name hints from the language server
 Show who last changed the cursor line (and when) at the end of the line	
 Showing the first 100,000 files of a very large folder	
 Showing the last successful snapshot.	
+Showing the latest {} commits.	
 Showing {0} of {1} problems	
 Showing {0} of {1} problems: {2} errors, {3} warnings, {4} information	
 Shrink Selection	

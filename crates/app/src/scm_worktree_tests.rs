@@ -366,3 +366,31 @@ fn the_worktree_menu_offers_what_the_row_can_do(cx: &mut TestAppContext) {
     let menu = labels(cx).expect("a menu opened");
     assert!(menu.iter().any(|l| l == "Open Worktree") && menu.iter().any(|l| l == "Remove Worktree…"), "{menu:?}");
 }
+
+/// A history cut at the limit says so and offers Load more: one press brings in the next page, and the bar goes when the whole
+/// history is there. A search that finds nothing says it looked only in the commits that are loaded.
+#[gpui::test]
+fn a_history_cut_at_the_limit_offers_to_load_more(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let dir = commit_chain("graph-more", 25);
+    let (wb, scm, cx) = open(cx, &dir);
+    cx.simulate_resize(gpui::size(px(1000.), px(900.)));
+    cx.update(|_, cx| {
+        let mut settings = cx.global::<Settings>().clone();
+        settings.graph_limit = 20;
+        cx.set_global(settings);
+    });
+    scm.update(cx, |s, cx| s.load_graph(cx));
+    wait_ticking(cx, "the first page", |cx| scm.read_with(cx, |s, _| s.graph_subjects().len() == 20));
+    assert!(cx.debug_bounds("scm-graph-more").is_some(), "20 of 26 commits: there is more to load");
+    assert!(scm.read_with(cx, |s, cx| s.graph_truncated(cx)));
+    scm.update(cx, |s, cx| s.set_query_for_test("no such commit anywhere", cx));
+    cx.run_until_parked();
+    let why = scm.read_with(cx, |s, cx| s.graph_items(cx).err().map(|(why, _)| why.to_string())).expect("nothing matches");
+    assert_eq!(why, "No commit among the latest 20 matches.", "it says it looked only in what is loaded");
+    scm.update(cx, |s, cx| s.set_query_for_test("", cx));
+    scm.update(cx, |s, cx| s.load_more_commits(cx));
+    wait_ticking(cx, "everything", |cx| scm.read_with(cx, |s, _| s.graph_subjects().len() == 26));
+    assert!(!scm.read_with(cx, |s, cx| s.graph_truncated(cx)), "the whole history is loaded: nothing more to offer");
+    let _ = wb;
+}

@@ -511,16 +511,36 @@ impl ScmPanel {
         let flat = mode != GraphView::Graph || searching || only_mine || hide_merges;
         let items = graph::build_items(&g.commits, keep, mode);
         if items.is_empty() {
-            let why = if searching {
-                crate::i18n::t("No commit matches.")
+            let why: String = if searching && self.graph_truncated(cx) {
+                // Older commits are not loaded: "no match" would read as "no such commit in the repository".
+                crate::i18n::tf("No commit among the latest {} matches.", &[&g.commits.len()])
+            } else if searching {
+                crate::i18n::t("No commit matches.").into()
             } else if only_mine {
-                crate::i18n::t("None of these commits is yours.")
+                crate::i18n::t("None of these commits is yours.").into()
             } else {
-                crate::i18n::t("No commits to show.")
+                crate::i18n::t("No commits to show.").into()
             };
             return Err((why.into(), false));
         }
         Ok((g, items, flat))
+    }
+
+    /// How many commits the graph asks git for: the setting, plus what "Load more" added.
+    pub(super) fn graph_limit(&self, cx: &gpui::App) -> usize {
+        (cx.global::<crate::settings::Settings>().graph_limit + self.graph_more).min(super::GRAPH_LIMIT_MAX)
+    }
+
+    /// The history was cut at the limit and the limit can still grow: there may be older commits that are not here.
+    pub(crate) fn graph_truncated(&self, cx: &gpui::App) -> bool {
+        let limit = self.graph_limit(cx);
+        self.graph.as_ref().is_some_and(|g| g.commits.len() >= limit) && limit < super::GRAPH_LIMIT_MAX
+    }
+
+    pub(super) fn load_more_commits(&mut self, cx: &mut Context<Self>) {
+        self.graph_more += super::GRAPH_MORE_STEP;
+        self.load_graph(cx);
+        cx.notify();
     }
 
     /// `fill`: nothing else needs the room, so the graph grows to the bottom of the panel instead of its fixed height.
@@ -647,6 +667,7 @@ impl ScmPanel {
             });
 
         let height = self.section_height("graph", 260.);
+        let truncated_at = self.graph_truncated(cx).then(|| self.graph.as_ref().map_or(0, |g| g.commits.len()));
         let selected = self.selected.as_ref().map(|c| c.hash.clone());
         let body = open.then(|| {
             let (g, items, flat) = match self.graph_items(cx) {
@@ -744,6 +765,36 @@ impl ScmPanel {
                         .child(probe(HistoryFrame::List("graph")))
                         .child(self.sections.measure("graph"))
                         .child(body),
+                )
+            })
+            // The history was cut at the limit: say so, and let one press bring in the next page.
+            .when_some(truncated_at.filter(|_| open), |d, n| {
+                d.child(
+                    div()
+                        .id("scm-graph-more")
+                        .debug_selector(|| "scm-graph-more".into())
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .gap(px(theme::SPACE[3]))
+                        .h(px(super::layout::ROW_H))
+                        .px(px(theme::SPACE[5]))
+                        .border_t_1()
+                        .border_color(c(p.border))
+                        .text_size(px(text::XS.0))
+                        .text_color(c(p.text_muted))
+                        .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(tf("Showing the latest {} commits.", &[&n])))
+                        .child(
+                            div()
+                                .id("scm-graph-more-button")
+                                .flex_none()
+                                .cursor_pointer()
+                                .text_color(c(ui::ensure_contrast(p.accent, p.text, &[p.bg, p.surface], 4.6)))
+                                .hover(|d| d.underline())
+                                .map(|d| sections::tabbable(d, &p))
+                                .child(t("Load more"))
+                                .on_click(cx.listener(|this, _, _, cx| this.load_more_commits(cx))),
+                        ),
                 )
             })
     }
