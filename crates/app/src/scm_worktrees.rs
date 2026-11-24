@@ -18,6 +18,12 @@ pub(super) struct Worktrees {
     task: Option<gpui::Task<()>>,
 }
 
+/// A header that can be reached with Tab shows the focus fill only for the keyboard: a click must not leave the fill behind
+/// (the focused header kept the "hover" colour after it was opened or closed).
+fn no_click_focus(_: &gpui::MouseDownEvent, window: &mut gpui::Window, _: &mut gpui::App) {
+    window.prevent_default();
+}
+
 impl Worktrees {
     pub(super) fn reset(&mut self) {
         self.task = None;
@@ -165,6 +171,7 @@ impl ScmPanel {
             .debug_selector(|| "scm-worktree-header".into())
             .tab_index(0)
             .focus(|d| d.bg(c(p.surface_active)))
+            .on_mouse_down(gpui::MouseButton::Left, no_click_focus)
             .on_click(cx.listener(|this, _, _, cx| this.toggle_worktrees(cx)))
             .child(
                 ui::icon_button("scm-worktree-add", "plus", t("Add worktree"), &p)
@@ -172,6 +179,7 @@ impl ScmPanel {
                     .child(probe(HistoryFrame::Button("worktree-add")))
                     .tab_index(0)
                     .focus(|d| d.bg(c(p.surface_active)))
+                    .on_mouse_down(gpui::MouseButton::Left, no_click_focus)
                     .on_click(cx.listener(|_, _, _, cx| {
                         cx.stop_propagation();
                         cx.emit(ScmEvent::AddWorktree);
@@ -184,6 +192,7 @@ impl ScmPanel {
                     .debug_selector(|| "scm-worktree-refresh".into())
                     .tab_index(0)
                     .focus(|d| d.bg(c(p.surface_active)))
+                    .on_mouse_down(gpui::MouseButton::Left, no_click_focus)
                     .on_click(cx.listener(|this, _, _, cx| {
                         cx.stop_propagation();
                         this.sections.set_open("worktrees", true);
@@ -196,7 +205,7 @@ impl ScmPanel {
             let mut body = div()
                 .id("scm-worktrees")
                 .debug_selector(|| "scm-worktrees".into())
-                .min_h_0()
+                .min_h(px(layout::ROW_H))
                 .max_h(px(layout::ROW_H * 8.))
                 .overflow_y_scroll()
                 .relative()
