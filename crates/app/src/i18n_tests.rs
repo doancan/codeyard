@@ -539,7 +539,9 @@ fn settings_categories_are_translated_for_display_only() {
             "Git",
             "Terminal",
             "Pencere",
-            "Uzak ve Diller"
+            "Dil ve Bölge",
+            "Programlama Dilleri",
+            "Uzak ve Güvenlik"
         ]
     );
 }

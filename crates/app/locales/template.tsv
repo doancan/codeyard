@@ -210,6 +210,7 @@ Bring a folder's tabs and unsaved changes back when you open it
 Build and Open	
 Build failed: {}	
 Build for target	
+Build without the default Cargo features of the package	
 Building the tests…	
 Building…	
 Built-in	
@@ -257,6 +258,7 @@ Cargo metadata has no workspace members
 Cargo package has no manifest path	
 Cargo package has no name	
 Cargo package has no targets	
+Cargo profile Run, Debug and Test build with: dev, release or a profile of your own (empty: Cargo's default)	
 Cargo reported {0} executables for target {1}	
 Cargo target has no name	
 Cargo was not found. Install Rust from https://rustup.rs and make sure `cargo` is on the PATH of this machine.	
@@ -743,6 +745,7 @@ Decoded here only: nothing is sent or logged
 Default	
 Default terminal profile	
 Default: build for this machine	
+Default: {}	
 Delay for afterDelay (ms)	
 Delete	
 Delete All Local History	
@@ -1018,6 +1021,7 @@ Expected KEY=value
 Expected a cargo test command	
 Expected “{}”	
 Explain error {}	
+Explain this setting	
 Explorer	
 Explorer (⇧⌘E)	
 Export as Text…	
@@ -1142,6 +1146,7 @@ Focus Right Editor Group
 Fold	
 Fold All	
 Fold line {}	
+Folder for build output (empty: the project's own target folder)	
 Folder to clone into	
 Folders colored by purpose (src, tests, docs…) and colored file glyphs	
 Follow	
@@ -1447,6 +1452,7 @@ Keep Waiting
 Keep a copy of a file on every save (Local History)	
 Keep unsaved changes across restarts	
 Key binding: {0} runs {1}	
+Key in settings.jsonc: {}	
 Key login is set up for “{}” (created {}). The next connection needs no password.	
 Key login is set up for “{}”. The next connection needs no password.	
 Key login was already set up for “{}” (created {}). The next connection needs no password.	
@@ -1461,6 +1467,7 @@ Kill Terminal
 Label	
 Labels	
 Language	
+Language & Region	
 Language Badges	
 Language Services	
 Language mode for this file	
@@ -1544,6 +1551,7 @@ Local time is not available on this system
 Log	
 Logs	
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
+Look up newer versions of the crates in Cargo.toml (asks the registry)	
 Looking for cargo-nextest…	
 Looking for installed targets…	
 Looking for tests…	
@@ -1612,6 +1620,7 @@ Monday
 More Actions…	
 More context lines	
 More…	
+Most files Compare: Folders… reads on each side before it stops and says so	
 Most files a structural search reads and parses	
 Mount paths are shown as reported by the engine. Volume and bind-mount sizes are not included in container disk usage.	
 Mounted storage	
@@ -2106,6 +2115,7 @@ Profiles: Delete…
 Profiles: Duplicate Current…	
 Profiles: Rename…	
 Profiles: Switch…	
+Programming Languages	
 Progress	
 Project lifecycle commands will run. Rebuild replaces the container; persistent volumes are kept.	
 Project name	
@@ -2224,7 +2234,7 @@ Release Page
 Reload history	
 Reloading the Rust workspace…	
 Remote	
-Remote & Languages	
+Remote & Security	
 Remote Docker environments currently support attaching to existing containers. Create Dev Containers with a local Docker engine.	
 Remote Explorer	
 Remote agent protocol	
@@ -2594,8 +2604,10 @@ Show identical
 Show in Folder	
 Show in the Explorer	
 Show indent guides	
+Show inferred types of Rust variables at the end of the line	
 Show line numbers in search results	
 Show lines matching (regular expression, case-insensitive), e.g. {}	
+Show parameter names in Rust calls	
 Show related files under the file they belong to (Cargo.lock under Cargo.toml)	
 Show spaces and tabs as marks	
 Show the Markdown source	
@@ -2608,6 +2620,7 @@ Show the latest versions of your dependencies? This contacts index.crates.io wit
 Show the minimap	
 Show the short commit hash on Source Control graph rows	
 Show the status bar	
+Show the type of each step of a Rust method chain	
 Show these lines	
 Show type and parameter name hints from the language server	
 Show who last changed the cursor line (and when) at the end of the line	
@@ -2755,6 +2768,7 @@ Tabs
 Tag name, then an optional message for an annotated tag	
 Tag name, then an optional message for an annotated tag (at HEAD)	
 Tagged {0} as {1}	
+Target triple to build for, for example aarch64-unknown-linux-gnu (empty: this computer)	
 Task cancellation could not be confirmed. Reconnect and inspect the process.	
 Task could not start: {}	
 Task dependency cycle: {}	
@@ -3248,6 +3262,8 @@ User
 User Forwarded	
 User: {}	
 Username	
+Values: a number from {} to {}	
+Values: {}	
 Variables	
 Variables are not supported	
 Verify Files	
@@ -3351,6 +3367,8 @@ Welcome (no recent folders yet)
 What kind of extension?	
 What opens at start: welcome (the start page), continue (where you left off, SSH hosts included) or blank (an empty window)	
 What runs after a commit: nothing, push or sync. Your own settings only; a folder cannot change it	
+What runs the tests: cargo (cargo test), nextest (cargo-nextest) or auto (nextest when it is installed)	
+What the log file records: error, warn, info or debug (debug is for bug reports). Your own settings only	
 What you can do	
 When	
 When a file, diff or page opens while the panel is maximized: shrink the panel to half, give it back its size, or move the terminal into a tab	
@@ -3487,6 +3505,7 @@ draft
 e.g. 3000 or 3000:8080	
 edit the file by hand	
 editor.formatters.{}: expected “lsp” or an extension id	
+empty	
 empty body	
 empty variable	
 enabled by default	
@@ -3592,6 +3611,7 @@ no item {} in the response
 no upstream	
 no version matches	
 no “{}” in the response	
+none	
 not UTF-8	
 not a PNG, JPEG, GIF, WebP or SVG image	
 not available	
@@ -3608,6 +3628,7 @@ not signed in to {0}; call auth.session with “{1}” first
 now	
 of {}	
 offline	
+on or off	
 only the first {} files were looked at (search.structural.maxFiles)	
 open	
 operator	

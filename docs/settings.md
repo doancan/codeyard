@@ -8,12 +8,24 @@ Settings live in `~/.config/codeyard/settings.jsonc` (comments and trailing comm
 unless it is listed under *File-only settings*. A wrong value never breaks the app: that key keeps its default and the
 status bar reports it.
 
+## `compare`
+
+| Setting | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `compare.folders.maxFiles` | number 100–5000000 | `50000` | Most files Compare: Folders… reads on each side before it stops and says so |
+
 ## `data`
 
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
 | `data.indent` | number 1–8 | `2` | Spaces per level in the JSON and YAML written by Data: Convert To… and Data: Query… |
 | `data.sortKeys` | `true` / `false` | `false` | Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order) |
+
+## `diagnostics`
+
+| Setting | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `diagnostics.logLevel` | `error`, `warn`, `info`, `debug` | `info` | What the log file records: error, warn, info or debug (debug is for bug reports). Your own settings only |
 
 ## `diffEditor`
 
@@ -169,6 +181,20 @@ status bar reports it.
 | `ports.autoForward` | `true` / `false` | `true` | Forward ports opened on SSH hosts |
 | `ports.localBind` | `loopback`, `all` | `loopback` | Where forwarded ports listen: this computer only, or every network interface |
 
+## `rust`
+
+| Setting | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `rust.cargo.dependencyLookups` | `true` / `false` | `false` | Look up newer versions of the crates in Cargo.toml (asks the registry) |
+| `rust.inlayHints.chaining` | `true` / `false` | `true` | Show the type of each step of a Rust method chain |
+| `rust.inlayHints.parameters` | `true` / `false` | `true` | Show parameter names in Rust calls |
+| `rust.inlayHints.types` | `true` / `false` | `true` | Show inferred types of Rust variables at the end of the line |
+| `rust.noDefaultFeatures` | `true` / `false` | `false` | Build without the default Cargo features of the package |
+| `rust.profile` | text | empty | Cargo profile Run, Debug and Test build with: dev, release or a profile of your own (empty: Cargo's default) |
+| `rust.target` | text | empty | Target triple to build for, for example aarch64-unknown-linux-gnu (empty: this computer) |
+| `rust.targetDir` | text | empty | Folder for build output (empty: the project's own target folder) |
+| `rust.testRunner` | `auto`, `cargo`, `nextest` | `cargo` | What runs the tests: cargo (cargo test), nextest (cargo-nextest) or auto (nextest when it is installed) |
+
 ## `search`
 
 | Setting | Values | Default | What it does |
@@ -271,11 +297,9 @@ status bar reports it.
 | `editor.rulers` | list of columns | `[]` | Draw vertical rulers at these columns, e.g. `[80, 120]`. |
 | `files.exclude` | list of globs | `[]` | Hide matching paths from the explorer and from file lists, e.g. `["**/node_modules"]`. |
 | `explorer.fileNesting.patterns` | object of pattern → file names | built-in rules (see the user guide) | Which files the explorer lists under another file when `explorer.fileNesting.enabled` is on, added to the built-in rules. The key is a file name or a pattern with one `*`; the value is a comma-separated list of names (or a list of texts) in the same folder, where `${capture}` stands for the text the `*` matched, e.g. `{ "*.c": "${capture}.h" }`. An entry replaces the built-in rule with the same key; `false` removes it. A file is nested under one parent only (the first matching rule wins). Names are case-sensitive. |
-| `diagnostics.logLevel` | `error`, `warn`, `info` or `debug` | `info` | What the log file (`logs/codeyard.log` in the state folder) records: `error` only failures, `warn` adds problems that were worked around, `info` adds what the app did, `debug` is for bug reports. Only your own settings file counts; a folder's setting is ignored. |
 | `search.exclude` | list of globs | `[]` | Skip matching paths in Find in Files. |
 | `localHistory.exclude` | list of globs | `[]` | Files Local History does not copy, added to the built-in list: `.env` and `.env.*` (not `.env.example` or `.env.sample`), `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`, `id_ecdsa*`, `*.kdbx`, `.netrc`, `.npmrc`, `.pypirc`, `credentials*.json` and `*.tfstate`. A pattern without `/` matches a file or folder name, one with `/` a run of folders and the file at its end (`config/*.secret.yaml`). Case is ignored. Copies that already exist of a file that matches are deleted the next time it is saved. Only your own settings file counts; a folder's setting is ignored. |
 | `compare.folders.ignore` | list of globs | `[".git", "node_modules", "target"]` | Names and paths *Compare: Folders…* leaves out on both sides (gitignore syntax). |
-| `compare.folders.maxFiles` | number 100–5000000 | `50000` | Entries per side *Compare: Folders…* reads before it stops and reports that the result is partial. |
 | `workbench.startupEditor` | string | `welcome` | Alias of `window.startup`, kept for settings imported from another editor. |
 | `editor.codeActionsOnSave` | object | `{}` | Code actions to run on save before formatting, e.g. `{ "source.organizeImports": "explicit" }`; each gives up after 2 s. |
 | `files.associations` | object of glob → language | `{}` | Force a language mode for matching files, e.g. `{ "*.tpl": "html" }`. |
@@ -290,14 +314,5 @@ status bar reports it.
 | `extensions.registries` | list of `{ name, url, root-keys, threshold }` | `[]` | Extension registries besides the public one, e.g. a company's own `yard`: a short `name`, its `https://` address, the hex public keys that sign its `root.json` and how many of them must (default: all). User settings only. |
 | `spelling.languages` | list of dictionary ids | `["en"]` | Dictionaries used together; install more with *Spelling: Install Dictionary…*. |
 | `rust.features` | list of feature names | `[]` | Cargo features Run and Debug build with, besides a target's required features. |
-| `rust.noDefaultFeatures` | boolean | `false` | Build Run and Debug targets without the package's default features. |
-| `rust.profile` | string | Cargo's default (`dev`) | Cargo profile Run and Debug build with, e.g. `release` or a custom `[profile.*]`. |
-| `rust.testRunner` | `cargo`, `auto`, `nextest` | `cargo` | What runs Rust tests from the Testing view, *Test: Run Test at Cursor* and *Rust: Run Runnable at Cursor*. `cargo` (the default) runs `cargo test`. `auto` uses cargo-nextest when `cargo nextest` is installed and `cargo test` otherwise; `nextest` says so when it is missing and falls back to `cargo test`. Whether nextest is installed is looked for only in a folder you have trusted (Cargo reads the folder's configuration), within five seconds, and a missing one is remembered for five minutes. The output says when nextest runs the tests. Documentation tests are rustdoc's, so nextest does not run them. |
-| `rust.inlayHints.types` | boolean | `true` | Show rust-analyzer's type hints (`let x` → `: i32`). Needs `editor.inlayHints`. Sent to the server as `rust-analyzer.inlayHints.typeHints.enable`, unless `lsp.servers.rust.settings` sets that itself. |
-| `rust.inlayHints.parameters` | boolean | `true` | Show rust-analyzer's parameter name hints (`f(` `a:` `1)`), as `rust-analyzer.inlayHints.parameterHints.enable`. |
-| `rust.inlayHints.chaining` | boolean | `true` | Show rust-analyzer's hints on method chains (the type at the end of each line), as `rust-analyzer.inlayHints.chainingHints.enable`. |
 | `rust.semanticModifiers` | list of `unsafe`, `mutable`, `consumed` | `["unsafe"]` | Which semantic token modifiers from rust-analyzer are drawn over the colours: `unsafe` is underlined in the warning colour, `mutable` is underlined and `consumed` (a value moved out by that use) is in italics. Needs `editor.semanticHighlighting`. |
-| `rust.target` | target triple | Cargo's own (this machine) | Target triple (`--target`) that Run, Debug, tests and *Rust: Run Runnable at Cursor* build for, e.g. `aarch64-unknown-linux-musl`; *Rust: Select Target…* lists the installed ones. *Preferences: Apply Rust Setup…* also points rust-analyzer at it. |
-| `rust.targetDir` | path | Cargo's own | Output folder for Run and Debug builds (`--target-dir`); a relative path is resolved against the workspace folder on the machine that builds, also over SSH. |
-| `rust.cargo.dependencyLookups` | boolean | `false` | Let `Cargo.toml` look up the crates it names on its own: the latest version of each dependency as a hint, and completion of crate names, versions and features. Off by default, so nothing contacts crates.io unless you start it: *Cargo: Add Dependency…*, *Cargo: Check Dependency Updates* and *Update All* each look up on request, and a one-time question above a `Cargo.toml` offers to turn this on. When on, it asks index.crates.io for the crates named in the file and crates.io for search and descriptions (see *Cargo dependencies* in the user guide for exactly what is sent). |
 | `workbench.colorCustomizations` | object | `{}` | Override single colour roles; an entry in `[Theme Name]` applies to that theme only. |

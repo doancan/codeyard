@@ -49,6 +49,11 @@ pub enum Level {
 impl Level {
     pub const NAMES: [&'static str; 4] = ["error", "warn", "info", "debug"];
 
+    /// The name the setting uses (the inverse of `parse`).
+    pub fn name(self) -> &'static str {
+        Self::NAMES[self as usize]
+    }
+
     pub fn parse(name: &str) -> Option<Level> {
         match name {
             "error" => Some(Level::Error),
