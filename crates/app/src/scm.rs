@@ -805,9 +805,10 @@ impl Render for ScmPanel {
             Some(r) => format!("{} · {branch}", r.label),
             None => branch,
         };
-        // The graph fills the room while the changes list is short; a long list keeps the room for itself.
+        // The graph fills the room while the changes list is short (whatever height was dragged earlier: it applies again once the list
+        // is long); a long list keeps the room for itself.
         let list_is_short = st.changes.len() <= changes_ui::MAX_FIT_LINES && self.current_lines(&st).len() <= changes_ui::MAX_FIT_LINES;
-        let graph_fills = !self.multi() && list_is_short && self.sections.is_open("graph", true) && !self.sections.has_height("graph");
+        let graph_fills = !self.multi() && list_is_short && self.sections.is_open("graph", true);
         let field_box = ui::input_box("scm-message-box", &p, p.bg, self.message.focus_handle(cx).is_focused(window))
             .relative()
             .child(self.message.clone())

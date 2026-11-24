@@ -176,7 +176,10 @@ fn the_graph_edge_moves_the_section_with_worktrees_open_and_closed(cx: &mut Test
         git_in(&dir, &["add", "-A"]);
         git_in(&dir, &["commit", "-q", "-m", &format!("commit {n}")]);
     }
-    std::fs::write(dir.join("README.md"), "changed\n").unwrap();
+    // A long list of changes: the graph does not fill the panel then, and its top edge can be dragged.
+    for n in 0..14 {
+        std::fs::write(dir.join(format!("new-{n}.txt")), "x").unwrap();
+    }
     let (_wb, scm, cx) = open(cx, &dir);
     wait_ticking(cx, "graph rows", |cx| cx.debug_bounds("scm-graph-body").is_some());
     let drag = |cx: &mut VisualTestContext, dy: f32| {
@@ -203,4 +206,27 @@ fn the_graph_edge_moves_the_section_with_worktrees_open_and_closed(cx: &mut Test
         let back = height(cx);
         assert!(back < grown - 30., "worktrees open {worktrees_open}, window {window_h}: dragged down 60, the graph went from {grown} to {back}");
     }
+}
+
+/// Under a short list of changes the graph fills the panel, whatever height was dragged earlier, and there is no edge to drag
+/// (it would move nothing): no empty band is left under the list.
+#[gpui::test]
+fn the_graph_fills_the_panel_under_a_short_list(cx: &mut TestAppContext) {
+    let dir = repo("graph-fill");
+    for n in 0..30 {
+        std::fs::write(dir.join(format!("f{n}.txt")), "x").unwrap();
+        git_in(&dir, &["add", "-A"]);
+        git_in(&dir, &["commit", "-q", "-m", &format!("commit {n}")]);
+    }
+    std::fs::write(dir.join("README.md"), "changed\n").unwrap();
+    let (_wb, scm, cx) = open(cx, &dir);
+    cx.simulate_resize(gpui::size(px(1000.), px(900.)));
+    scm.update(cx, |s, cx| {
+        s.sections.set_height("graph", 120.);
+        cx.notify();
+    });
+    wait_ticking(cx, "graph rows", |cx| cx.debug_bounds("scm-graph-body").is_some());
+    let height = f32::from(cx.debug_bounds("scm-graph-body").unwrap().size.height);
+    assert!(height > 300., "the graph fills the panel instead of keeping the dragged 120: {height}");
+    assert!(cx.debug_bounds("sash-graph").is_none(), "no edge to drag while the graph fills");
 }

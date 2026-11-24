@@ -162,6 +162,19 @@ fn a_long_message_body_is_cut_to_what_a_card_holds() {
     assert_eq!(message_body(&format!("S\n\n{wide}"))[0].chars().count(), CARD_LINE_CHARS);
 }
 
+/// A message wrapped at 72 columns reads as paragraphs, not as ragged short lines; lists, quotes, blank lines and short lines stay.
+#[test]
+fn a_hard_wrapped_message_is_joined_into_paragraphs() {
+    let wrapped = "The built-in list is meant to be short and polished: the two\nCodeyard themes, the high-contrast pair and the well-known\npalettes.\n\nSecond paragraph.";
+    assert_eq!(
+        message_body(&format!("Subject\n\n{wrapped}")),
+        vec!["The built-in list is meant to be short and polished: the two Codeyard themes, the high-contrast pair and the well-known palettes.", "", "Second paragraph."]
+    );
+    let listed = "Changes in this commit, all of them listed below for the reader:\n- one thing\n- another thing\n1. numbered\n> quoted";
+    assert_eq!(reflow(listed.lines().map(String::from)).len(), 5, "list items, numbers and quotes start their own line");
+    assert_eq!(message_body("S\n\nshort\nshort too"), vec!["short", "short too"], "short lines are not wrapped lines");
+}
+
 /// The card of a commit in a repository opened over SSH (the throwaway `sshd`): the changes are read through the agent.
 #[gpui::test]
 fn the_card_reads_a_commit_over_ssh(cx: &mut TestAppContext) {

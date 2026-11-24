@@ -53,7 +53,10 @@ fn ordered_refs(commit: &GraphCommit) -> Vec<&RefLabel> {
 
 /// Most lines of the message body a hover card shows, and the longest of those lines in characters.
 const CARD_MESSAGE_LINES: usize = 3;
-const CARD_LINE_CHARS: usize = 160;
+/// A line of the card is a paragraph of the message (hard-wrapped lines are joined), which the card wraps itself.
+const CARD_LINE_CHARS: usize = 280;
+/// A line at least this long that is followed by a plain line is taken as wrapped (git messages wrap at 72).
+const WRAPPED_LINE_CHARS: usize = 50;
 /// Details kept for hovered commits; the oldest are dropped when it is full (a commit's changes never change, so nothing else
 /// invalidates them).
 const CARD_CACHE: usize = 64;
@@ -169,10 +172,43 @@ fn pull_number(subject: &str) -> Option<u64> {
     number.chars().all(|c| c.is_ascii_digit()).then(|| number.parse().ok()).flatten()
 }
 
+/// Whether a message line starts a list item, a quote, a heading or a code fence: such a line is never joined to the one before.
+fn starts_block(line: &str) -> bool {
+    let t = line.trim_start();
+    t.starts_with(['-', '*', '•', '>', '#', '`', '|'])
+        || t.split_once(['.', ')']).is_some_and(|(n, rest)| !n.is_empty() && n.len() <= 3 && n.chars().all(|c| c.is_ascii_digit()) && rest.starts_with(' '))
+}
+
+/// Joins the lines of a message that were hard-wrapped (at 72 columns, by habit) back into paragraphs, so the narrow card does
+/// not show them as ragged short lines. Blank lines, list items, quotes and short lines stay as they are.
+fn reflow(lines: impl Iterator<Item = String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut previous_len = 0;
+    for line in lines {
+        let len = line.chars().count();
+        let continues = !line.is_empty()
+            && !starts_block(&line)
+            && previous_len >= WRAPPED_LINE_CHARS
+            && out.last().is_some_and(|last| !last.is_empty() && !last.starts_with("```"));
+        match out.last_mut() {
+            Some(last) if continues => {
+                last.push(' ');
+                last.push_str(line.trim_start());
+            }
+            _ => out.push(line),
+        }
+        previous_len = len;
+    }
+    out
+}
+
 /// The rest of the message under its subject line, cut to what a card can hold.
 fn message_body(message: &str) -> Vec<String> {
-    let mut lines: Vec<String> =
-        message.lines().skip(1).map(str::trim_end).skip_while(|l| l.is_empty()).map(|l| l.chars().take(CARD_LINE_CHARS).collect()).collect();
+    let body = message.lines().skip(1).map(str::trim_end).skip_while(|l| l.is_empty()).map(str::to_string);
+    let mut lines: Vec<String> = reflow(body)
+        .into_iter()
+        .map(|l| if l.chars().count() > CARD_LINE_CHARS { l.chars().take(CARD_LINE_CHARS - 1).collect::<String>() + "…" } else { l })
+        .collect();
     while lines.last().is_some_and(String::is_empty) {
         lines.pop();
     }
@@ -657,7 +693,8 @@ impl ScmPanel {
             .min_h(px(super::layout::ROW_H + 4.))
             .relative()
             .child(probe(HistoryFrame::Section("graph")))
-            .child(self.top_sash("graph", &p, cx))
+            // Nothing to move while the graph fills the panel under a short list: no edge to grab.
+            .when(!fill, |d| d.child(self.top_sash("graph", &p, cx)))
             .child(header)
             .when(open && filtered, |d| d.child(filters))
             .when(open && self.search_open, |d| {
