@@ -230,3 +230,26 @@ fn the_graph_fills_the_panel_under_a_short_list(cx: &mut TestAppContext) {
     assert!(height > 300., "the graph fills the panel instead of keeping the dragged 120: {height}");
     assert!(cx.debug_bounds("sash-graph").is_none(), "no edge to drag while the graph fills");
 }
+
+/// A commit of very many files lists a bounded number of them in the details (the list is drawn whole every frame) and says how
+/// many more there are.
+#[gpui::test]
+fn the_details_of_a_huge_commit_list_a_bounded_number_of_files(cx: &mut TestAppContext) {
+    let dir = repo("detail-cap");
+    let total = crate::scm::DETAIL_FILE_ROWS + 20;
+    for n in 0..total {
+        std::fs::write(dir.join(format!("bulk-{n:04}.txt")), "x").unwrap();
+    }
+    git_in(&dir, &["add", "-A"]);
+    git_in(&dir, &["commit", "-q", "-m", "a very large commit"]);
+    let (_wb, scm, cx) = open(cx, &dir);
+    cx.simulate_resize(gpui::size(px(1000.), px(900.)));
+    wait_ticking(cx, "graph", |cx| scm.read_with(cx, |s, _| s.graph_subjects().iter().any(|x| x == "a very large commit")));
+    let ix = scm.read_with(cx, |s, _| s.graph_subjects().iter().position(|x| x == "a very large commit")).unwrap();
+    let commit = scm.read_with(cx, |s, _| s.graph_commit(ix)).unwrap();
+    scm.update(cx, |s, cx| s.select_commit(commit, cx));
+    wait_ticking(cx, "details", |cx| scm.read_with(cx, |s, _| s.detail_for_test().is_some()));
+    cx.run_until_parked();
+    assert_eq!(scm.read_with(cx, |s, _| s.detail_for_test()).unwrap().files.len(), total, "the data is whole");
+    assert!(cx.debug_bounds("scm-detail-more").is_some(), "the rest is one line: more files, double-click to see them");
+}

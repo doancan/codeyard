@@ -975,6 +975,9 @@ impl Render for ScmPanel {
     }
 }
 
+/// Files of a commit listed in its details; the rest are behind "+N more" (the commit opens with all of them).
+const DETAIL_FILE_ROWS: usize = 300;
+
 /// Commit button's label and whether it can be pressed: "Commit (n)" if something is staged, otherwise
 /// "Commit All (n)" for tracked changes, a dimmed "Commit" if there are none.
 pub(crate) fn commit_button(staged: usize, changed: usize) -> (String, bool) {
@@ -1435,9 +1438,11 @@ impl ScmPanel {
                             .child(div().text_color(c(p.success)).child(format!("+{added}")))
                             .child(div().text_color(c(p.danger)).child(format!("−{deleted}"))),
                     );
+                    let hidden = d.files.len().saturating_sub(DETAIL_FILE_ROWS);
                     let rows: Vec<_> = d
                         .files
                         .iter()
+                        .take(DETAIL_FILE_ROWS)
                         .enumerate()
                         .map(|(i, f)| {
                             let (entry, file) = (commit.clone(), f.clone());
@@ -1495,7 +1500,14 @@ impl ScmPanel {
                                 .on_click(cx.listener(move |_, _, _, cx| cx.emit(ScmEvent::OpenCommitFile(entry.clone(), file.clone()))))
                         })
                         .collect();
-                    col.children(rows).into_any_element()
+                    // This list is drawn whole on every frame: a commit of tens of thousands of files must not freeze the panel.
+                    let more = (hidden > 0).then(|| {
+                        div().debug_selector(|| "scm-detail-more".into()).px(px(theme::SPACE[4])).py(px(theme::SPACE[2])).text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(crate::i18n::tf(
+                            "{} more files. Double-click the commit to see them all.",
+                            &[&hidden],
+                        ))
+                    });
+                    col.children(rows).children(more).into_any_element()
                 }
             }
         });

@@ -4042,6 +4042,7 @@ your words
 {} minutes ago	
 {} month ago|{} months ago	
 {} more entry that the comparison hides (ignored by .gitignore or the compare settings) goes too.|{} more entries that the comparison hides (ignored by .gitignore or the compare settings) go too.	
+{} more files. Double-click the commit to see them all.	
 {} more ports are not listed here	
 {} needs a file operation that is not selected.	
 {} nested file|{} nested files	

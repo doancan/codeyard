@@ -4362,3 +4362,4 @@ What the log file records: error, warn, info or debug (debug is for bug reports)
 empty	boş
 none	yok
 on or off	açık veya kapalı
+{} more files. Double-click the commit to see them all.	{} dosya daha. Hepsini görmek için commit'e çift tıklayın.
