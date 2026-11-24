@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Explorer: a folder that was closed shows what is in it when it opens again. A closed folder is not watched, so files added or removed meanwhile used to stay unseen until a refresh.
 - Terminal (macOS): with Caps Lock on, letters are typed in capitals. They came out lowercase until Shift was pressed.
 
 ### Changed

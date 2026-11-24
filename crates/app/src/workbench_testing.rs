@@ -286,6 +286,14 @@ impl Workbench {
         self.roots.primary.read(cx).selected_path()
     }
 
+    pub fn tree_row_names_for_test(&self, cx: &App) -> Vec<String> {
+        self.roots.primary.read(cx).row_names()
+    }
+
+    pub fn tree_toggle_for_test(&mut self, path: &str, cx: &mut Context<Self>) {
+        self.roots.primary.update(cx, |t, cx| t.toggle_for_test(path, cx));
+    }
+
     pub fn tree_guide_for_test(&self, cx: &App) -> Option<(usize, usize, usize)> {
         self.roots.primary.read(cx).guide_for_test()
     }
