@@ -273,7 +273,7 @@ mod vscode;
 mod workbench;
 mod workspace_file;
 
-use gpui::{App, Application, Bounds, Focusable, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions, prelude::*, px, size};
+use gpui::{App, Application, Bounds, Focusable, KeyBinding, TitlebarOptions, WindowOptions, prelude::*, px, size};
 
 use crate::ui::{ActiveTheme, Assets};
 use crate::workbench::Workbench;
@@ -1108,10 +1108,12 @@ pub fn open_workbench_window(cx: &mut App) -> Option<gpui::WindowHandle<Workbenc
         .then(workbench::saved_window_bounds)
         .flatten()
         .filter(|b| cx.displays().iter().any(|d| workbench::visible_enough(d.bounds(), b.get_bounds())));
+    // The test platform has no zoom; the real macOS window does.
+    let fill_screen = cfg!(all(target_os = "macos", not(test)));
     let window = cx
         .open_window(
             WindowOptions {
-                window_bounds: Some(saved.unwrap_or(WindowBounds::Windowed(bounds))),
+                window_bounds: Some(workbench::initial_bounds(saved, bounds, fill_screen)),
                 // macOS and Windows use themed title bars; Windows controls keep native hit testing.
                 titlebar: Some(TitlebarOptions {
                     title: Some("Codeyard".into()),

@@ -48,3 +48,45 @@ pub(crate) fn visible_enough(display: gpui::Bounds<gpui::Pixels>, window: gpui::
 pub fn saved_window_bounds() -> Option<gpui::WindowBounds> {
     State::open(&state_path()?).ok()?.get(WINDOW_BOUNDS_KEY).as_deref().and_then(parse_bounds)
 }
+
+/// Where a new window opens. On macOS it fills the screen (zoomed, the menu bar and Dock stay visible; `default` is the size it
+/// returns to), unless the last window was in full screen. Elsewhere the last window's bounds, or `default`, as before.
+pub fn initial_bounds(saved: Option<gpui::WindowBounds>, default: gpui::Bounds<gpui::Pixels>, fill_screen: bool) -> gpui::WindowBounds {
+    match (saved, fill_screen) {
+        (Some(gpui::WindowBounds::Fullscreen(b)), _) => gpui::WindowBounds::Fullscreen(b),
+        (Some(gpui::WindowBounds::Maximized(b)), _) => gpui::WindowBounds::Maximized(b),
+        (Some(gpui::WindowBounds::Windowed(b)), false) => gpui::WindowBounds::Windowed(b),
+        // The size to return to is the one the user last chose, when there is one.
+        (Some(gpui::WindowBounds::Windowed(b)), true) => gpui::WindowBounds::Maximized(b),
+        (None, true) => gpui::WindowBounds::Maximized(default),
+        (None, false) => gpui::WindowBounds::Windowed(default),
+    }
+}
+
+#[cfg(test)]
+mod initial_bounds_tests {
+    use super::*;
+    use gpui::{Bounds, WindowBounds, point, size};
+
+    fn b(w: f32) -> Bounds<gpui::Pixels> {
+        Bounds::new(point(px(10.), px(10.)), size(px(w), px(800.)))
+    }
+
+    #[test]
+    fn on_a_mac_new_windows_fill_the_screen_unless_the_last_one_was_full_screen() {
+        assert_eq!(initial_bounds(None, b(1280.), true), WindowBounds::Maximized(b(1280.)));
+        assert_eq!(
+            initial_bounds(Some(WindowBounds::Windowed(b(900.))), b(1280.), true),
+            WindowBounds::Maximized(b(900.)),
+            "it returns to the size the user chose"
+        );
+        assert_eq!(initial_bounds(Some(WindowBounds::Fullscreen(b(900.))), b(1280.), true), WindowBounds::Fullscreen(b(900.)));
+        assert_eq!(initial_bounds(Some(WindowBounds::Maximized(b(900.))), b(1280.), true), WindowBounds::Maximized(b(900.)));
+    }
+
+    #[test]
+    fn elsewhere_the_saved_bounds_or_the_default_are_used_as_they_are() {
+        assert_eq!(initial_bounds(None, b(1280.), false), WindowBounds::Windowed(b(1280.)));
+        assert_eq!(initial_bounds(Some(WindowBounds::Windowed(b(900.))), b(1280.), false), WindowBounds::Windowed(b(900.)));
+    }
+}

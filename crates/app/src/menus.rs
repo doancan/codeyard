@@ -94,23 +94,17 @@ pub(crate) struct DockWindow {
     pub workspace: Option<(Option<String>, String)>,
 }
 
-/// Rows of the Dock menu, top to bottom: the open windows (front one first), the recent projects that are not open (newest
-/// first), then the shortcuts. Built on every platform for the tests; only macOS has a Dock to show it.
+/// Open windows the Dock menu lists at most: more would push the shortcuts out of reach, and the window menu has the rest.
+#[cfg(any(target_os = "macos", test))]
+const DOCK_WINDOWS_MAX: usize = 6;
+
+/// Rows of the Dock menu, top to bottom: the open windows (front one first), then what opens something new, then the recent
+/// projects that are not open in a submenu (newest first), then the settings. Built on every platform for the tests; only macOS
+/// has a Dock to show it.
 #[cfg(any(target_os = "macos", test))]
 pub(crate) fn dock_items(windows: &[DockWindow], recent: &[state::RecentWorkspace]) -> Vec<MenuItem> {
     use MenuItem as I;
-    let mut items = window_items(windows);
-    // A project open in a window is already listed above; its recent row would only repeat it.
-    let closed: Vec<_> = recent_rows(recent)
-        .filter(|(_, r)| !windows.iter().any(|w| w.workspace.as_ref().is_some_and(|(host, path)| *host == r.host && *path == r.path)))
-        .map(|(ix, r)| recent_item(ix, r))
-        .collect();
-    if !closed.is_empty() {
-        if !items.is_empty() {
-            items.push(I::separator());
-        }
-        items.extend(closed);
-    }
+    let mut items = window_items(&windows[..windows.len().min(DOCK_WINDOWS_MAX)]);
     if !items.is_empty() {
         items.push(I::separator());
     }
@@ -118,11 +112,18 @@ pub(crate) fn dock_items(windows: &[DockWindow], recent: &[state::RecentWorkspac
         I::action(tr("New Window"), wb::NewWindow),
         I::action(tr("Open Folder…"), wb::AddFolderInNewWindow),
         I::action(tr("Connect to SSH Host…"), wb::ShowRemote),
-        I::action(tr("Go to File…"), wb::QuickOpen),
     ]);
+    // A project open in a window is already listed above; its recent row would only repeat it.
+    let closed: Vec<_> = recent_rows(recent)
+        .filter(|(_, r)| !windows.iter().any(|w| w.workspace.as_ref().is_some_and(|(host, path)| *host == r.host && *path == r.path)))
+        .map(|(ix, r)| recent_item(ix, r))
+        .collect();
+    if !closed.is_empty() {
+        items.push(I::separator());
+        items.push(I::submenu(Menu { name: tr("Recent Projects").into(), items: closed }));
+    }
     items.push(I::separator());
     items.push(I::action(tr("Settings…"), wb::OpenSettingsPage));
-    items.push(I::action(tr("Welcome"), wb::ShowWelcome));
     items
 }
 
@@ -149,7 +150,7 @@ pub fn refresh_dock_windows(cx: &mut App) {
     });
 }
 
-/// The open workbench windows (at most 10) in the order the window server stacks them, front one first, so the window used last
+/// The open workbench windows (at most six) in the order the window server stacks them, front one first, so the window used last
 /// leads the list. Windows the stack leaves out (minimized ones) follow in opening order. Remembered for the `ShowWindow` actions.
 #[cfg(target_os = "macos")]
 fn open_windows(cx: &App) -> Vec<DockWindow> {
@@ -171,7 +172,7 @@ fn open_windows(cx: &App) -> Vec<DockWindow> {
         };
         handles.push(w);
         windows.push(row);
-        if windows.len() == 10 {
+        if windows.len() == DOCK_WINDOWS_MAX {
             break;
         }
     }
@@ -552,10 +553,10 @@ pub(crate) mod tests {
         assert_eq!(REBUILDS.with(Cell::get), 1, "rebuilt once, after the update had finished");
     }
 
-    /// Open windows lead, front one first; a recent project already open in one of them is not listed again, and the rest keep
-    /// their newest-first order and their own `OpenRecent` row numbers.
+    /// Open windows lead (front one first, at most six), then the shortcuts, then the projects that are not open in a submenu that
+    /// keeps their newest-first order and their own `OpenRecent` row numbers; one open in a window is not listed again.
     #[test]
-    fn the_dock_lists_open_windows_first_and_skips_their_recent_rows() {
+    fn the_dock_lists_open_windows_first_then_shortcuts_then_recent_projects_in_a_submenu() {
         use super::{DockWindow, dock_items};
         use gpui::MenuItem;
         let recent = |host: Option<&str>, path: &str| state::RecentWorkspace { host: host.map(Into::into), path: path.into(), last_opened_at: 0 };
@@ -565,18 +566,54 @@ pub(crate) mod tests {
             DockWindow { title: "back".into(), workspace: Some((None, "/p/back".into())) },
             DockWindow { title: "Codeyard".into(), workspace: None },
         ];
-        let rows: Vec<(String, Option<String>)> = dock_items(&windows, &recents)
-            .into_iter()
+        let items = dock_items(&windows, &recents);
+        let label = |i: &MenuItem| match i {
+            MenuItem::Action { name, .. } => name.to_string(),
+            MenuItem::Submenu(m) => format!("{} ▸", m.name),
+            _ => "---".into(),
+        };
+        let names: Vec<String> = items.iter().map(label).collect();
+        assert_eq!(
+            names,
+            [
+                "main.rs — front",
+                "back",
+                "Codeyard",
+                "---",
+                "New Window",
+                "Open Folder…",
+                "Connect to SSH Host…",
+                "---",
+                "Recent Projects ▸",
+                "---",
+                "Settings…"
+            ]
+        );
+        let MenuItem::Submenu(recent_menu) = &items[8] else { panic!("the recent projects are a submenu") };
+        let rows: Vec<(String, String)> = recent_menu
+            .items
+            .iter()
             .map(|i| match i {
-                MenuItem::Action { name, action, .. } => (name.to_string(), Some(action.name().to_string())),
-                _ => ("---".into(), None),
+                MenuItem::Action { name, action, .. } => (name.to_string(), action.name().to_string()),
+                _ => panic!("only projects in the submenu"),
             })
             .collect();
-        let names: Vec<&str> = rows.iter().map(|(n, _)| n.as_str()).collect();
-        assert_eq!(names[..7], ["main.rs — front", "back", "Codeyard", "---", "old", "api  (ssh://box)", "---"]);
-        assert_eq!(rows[4].1.as_deref(), Some("app::OpenRecent1"), "a skipped row keeps the others' numbers");
-        assert_eq!(rows[5].1.as_deref(), Some("app::OpenRecent2"));
-        assert_eq!(rows[0].1.as_deref(), Some("app::ShowWindow0"));
-        assert!(!names[3..].iter().any(|n| *n == "front" || *n == "back"), "open projects are not repeated");
+        assert_eq!(
+            rows,
+            [("old".into(), "app::OpenRecent1".into()), ("api  (ssh://box)".into(), "app::OpenRecent2".into())],
+            "a skipped row keeps the others' numbers"
+        );
+        assert!(matches!(&items[0], MenuItem::Action { action, .. } if action.name() == "app::ShowWindow0"));
+    }
+
+    /// Many windows and no recent project: the list stays short and no empty submenu is left behind.
+    #[test]
+    fn the_dock_stays_short_with_many_windows_and_no_recent_projects() {
+        use super::{DOCK_WINDOWS_MAX, DockWindow, dock_items};
+        use gpui::MenuItem;
+        let windows: Vec<DockWindow> = (0..10).map(|n| DockWindow { title: format!("w{n}"), workspace: None }).collect();
+        let items = dock_items(&windows, &[]);
+        assert_eq!(items.len(), DOCK_WINDOWS_MAX + 1 + 3 + 1 + 1, "windows, a separator, three shortcuts, a separator and Settings");
+        assert!(!items.iter().any(|i| matches!(i, MenuItem::Submenu(_))));
     }
 }
