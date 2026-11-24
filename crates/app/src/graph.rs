@@ -220,9 +220,9 @@ pub fn log(host: &dyn Host, root: &str, limit: usize, scope: Scope) -> Result<Ve
     let n = format!("-n{limit}");
     let mut args = vec!["log", "--date-order", "--decorate=full", "--date=format:%Y-%m-%d %H:%M", &n, FORMAT];
     if scope == Scope::All {
-        // A stash is a commit with an "index on …" parent (and one for untracked files): the Stashes section lists them, the
-        // graph is for history. `--exclude` applies to the `--all` that follows.
-        args.splice(1..1, ["--exclude=refs/stash", "--all"]);
+        // The branches, tags and remote branches, and HEAD for a detached one. Not `--all`: that adds stashes (commits with an
+        // "index on …" parent; the Stashes section lists them), notes, replaced and rewritten-away refs to the history.
+        args.splice(1..1, ["--branches", "--tags", "--remotes", "HEAD"]);
     }
     let out = host.exec("git", &args, Some(root), None).map_err(|e| e.to_string())?;
     if !out.ok() {

@@ -296,3 +296,28 @@ fn the_incoming_commits_are_read_over_ssh_too(cx: &mut TestAppContext) {
     let host = wb.read_with(wcx, |wb, _| wb.remote_host_for_test());
     assert_eq!(graph::incoming(host.as_ref(), &ui::local_path(&dir), 1000), std::collections::HashSet::from([theirs]));
 }
+
+/// Search folds case the way a Turkish user types it: "ilhan" finds "İlhan" (İ lowers to i and a combining dot in Rust).
+#[test]
+fn search_finds_a_capital_dotted_i_by_its_lower_case() {
+    let mut commit = GraphCommit { subject: "İstanbul bağlantısı".into(), author: "İlhan Çelik".into(), ..Default::default() };
+    assert!(crate::scm::commit_matches(&commit, "ilhan"));
+    assert!(crate::scm::commit_matches(&commit, "istanbul"));
+    assert!(crate::scm::commit_matches(&commit, "ÇELİK"));
+    commit.subject = "Fix".into();
+    assert!(!crate::scm::commit_matches(&commit, "istanbul"));
+}
+
+/// The graph is branches, tags, remote branches and HEAD: neither a stash nor the commit `git notes add` makes shows in it.
+#[test]
+fn the_graph_leaves_out_stashes_and_notes() {
+    let dir = repo("graph-no-notes");
+    std::fs::write(dir.join("README.md"), "changed\n").unwrap();
+    git_in(&dir, &["stash", "push", "-q", "-m", "parked"]);
+    git_in(&dir, &["notes", "add", "-m", "a note"]);
+    let host = host::local();
+    let log = graph::log(&host, &ui::local_path(&dir), 50, Scope::All).unwrap();
+    let subjects: Vec<&str> = log.iter().map(|c| c.subject.as_str()).collect();
+    assert!(!subjects.iter().any(|s| s.contains("Notes added") || s.contains("parked") || s.contains("index on")), "{subjects:?}");
+    assert!(!log.is_empty(), "the branch's own history is there");
+}

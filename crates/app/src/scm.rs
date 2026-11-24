@@ -411,7 +411,7 @@ impl ScmPanel {
                 commits.iter_mut().for_each(|c| c.incoming = incoming.contains(&c.hash));
                 commits
             });
-            (log, git::identity(host.as_ref(), &dir), git::stash_list(host.as_ref(), &dir).unwrap_or_default(), has_remote)
+            (log, git::identity(host.as_ref(), &dir), git::stash_list(host.as_ref(), &dir).ok(), has_remote)
         });
         let loaded_from = self.host.clone();
         cx.spawn(async move |this, cx| {
@@ -429,7 +429,10 @@ impl ScmPanel {
                 this.identity = Some(identity);
 
                 this.has_remote = has_remote;
-                this.stashes = stashes;
+                // A failed `git stash list` keeps the list as it was: the section does not vanish without a word.
+                if let Some(stashes) = stashes {
+                    this.stashes = stashes;
+                }
                 this.graph_loading = false;
                 match result {
                     Ok(commits) => {
@@ -438,7 +441,11 @@ impl ScmPanel {
                         this.graph = Some(Arc::new(GraphData { commits, rows }));
                         this.graph_error = None;
                     }
-                    Err(e) => this.graph_error = Some(e.lines().next().unwrap_or("git log failed").to_string().into()),
+                    // The old graph goes too: it would stay on screen as if it were current, with the error nowhere to be seen.
+                    Err(e) => {
+                        this.graph = None;
+                        this.graph_error = Some(e.lines().next().unwrap_or("git log failed").to_string().into());
+                    }
                 }
                 // If the state changed during loading (key was reset), load again.
                 let now = this.status.as_deref().map(GraphKey::of);
@@ -1014,12 +1021,17 @@ fn status_color(status: char, p: &ui::Palette) -> u32 {
 
 /// Commit matches on subject, author, short/full hash.
 pub fn commit_matches(c: &GraphCommit, query: &str) -> bool {
-    let q = query.trim().to_lowercase();
+    let q = fold_case(query.trim());
     q.is_empty()
-        || c.subject.to_lowercase().contains(&q)
-        || c.author.to_lowercase().contains(&q)
+        || fold_case(&c.subject).contains(&q)
+        || fold_case(&c.author).contains(&q)
         || c.hash.starts_with(&q)
-        || c.refs.iter().any(|r| r.name.to_lowercase().contains(&q))
+        || c.refs.iter().any(|r| fold_case(&r.name).contains(&q))
+}
+
+/// Lower case for searching. `İ` lowers to `i` plus a combining dot (U+0307), which would keep "ilhan" from finding "İlhan".
+fn fold_case(text: &str) -> String {
+    text.to_lowercase().replace('\u{307}', "")
 }
 
 impl ScmPanel {
