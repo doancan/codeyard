@@ -82,11 +82,10 @@ in that order, and stops at the first failure. `--quick` skips the tests. `cargo
 message when missing (`cargo install cargo-deny cargo-audit --locked`); `--strict` makes that a failure. Details of each
 gate are in [docs/testing.md](docs/testing.md).
 
-CI enforces everything above on pull requests: macOS tests and memory budgets, Windows native tests and
-standalone packaging, Linux library/agent checks, and the full Linux workspace (`linux-app`) are blocking.
-`scripts/memcheck.sh` runs in CI as a blocking step on macOS, but the budgets are set for a Retina display and the runner
-has a 1x display and measures lower, so CI only catches gross regressions. The authoritative numbers come from a Retina
-Mac (`scripts/check.sh --budgets`); if your change could add memory or binary size, run it there if you can and say so.
+CI enforces what it can on pull requests: formatting, clippy, the dependency and licence gates and a Windows build check
+are blocking; the tests run on every push to `develop` (the Linux ones gate a release, the macOS and Windows ones are advisory).
+The memory and size budgets are not run in CI: the numbers come from a Retina Mac (`scripts/check.sh --budgets`); if your change
+could add memory or binary size, run it there if you can and say so.
 Tag releases use Developer ID signing and Apple notarization in CI; see [release evidence](docs/releasing.md).
 
 House rules:

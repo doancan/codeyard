@@ -325,6 +325,7 @@ fn update_footer(
     let draw = |ix: usize, b: &DialogButton| {
         let (action, send) = (b.action, send.clone());
         update_button(ix, b, wb.update.focus.get(ix), p, native, ring)
+            .debug_selector(move || format!("update-button-{ix}"))
             .relative()
             .children(frames.clone().map(|wb| super::a11y::part_frame_for(super::a11y::Part::DialogButton(ix), wb)))
             .on_click(move |_, window, app| {

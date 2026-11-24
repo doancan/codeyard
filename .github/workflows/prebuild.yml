@@ -1,10 +1,14 @@
 name: prebuild
-# Every push to develop builds the release files once, unsigned (release.yml as a dry run), and keeps them as artifacts.
-# A release then finds the run that built the same sources (scripts/find-prebuilt.sh) and only signs, notarizes and publishes
-# them instead of compiling everything again. Without such a run (a commit made straight on main, an expired run) the release
-# builds as before.
+# The release files are built once, unsigned (release.yml as a dry run), and kept as artifacts. A release then finds the run that built
+# the same sources (scripts/find-prebuilt.sh) and only signs, notarizes and publishes them instead of compiling everything again.
+# They are built as early as possible: when a pull request into develop is opened or updated (from this repository, never from a
+# fork), so that most of the build is behind it by the time the change is merged and released, and on every push to develop (the
+# sources of a merge that no pull request built). "The same sources" is the same git tree, whatever the commit or the branch.
+# Without such a run (a commit made straight on main, an expired run) the release builds as before.
 on:
   push:
+    branches: [develop]
+  pull_request:
     branches: [develop]
 
 # release.yml's publish job asks for contents: write (it only uses it for a tag); a called workflow cannot ask for more than
@@ -13,11 +17,13 @@ permissions:
   actions: read
   contents: write
 
-# One at a time; a push that arrives meanwhile waits and a newer one replaces it: only the tip of develop is released.
+# One at a time on develop (a push that arrives meanwhile waits and a newer one replaces it); a new push to a pull request
+# replaces that pull request's own run.
 concurrency:
-  group: prebuild
-  cancel-in-progress: false
+  group: prebuild-${{ github.event_name == 'pull_request' && github.ref || 'develop' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     uses: ./.github/workflows/release.yml

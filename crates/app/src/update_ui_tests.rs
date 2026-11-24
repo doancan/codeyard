@@ -609,7 +609,7 @@ fn the_startup_timers_check_daily_after_fifteen_seconds_and_not_before(cx: &mut 
 }
 
 #[gpui::test]
-fn a_found_release_in_the_background_shows_one_notice_per_version_and_a_status_item_but_no_dialog(cx: &mut TestAppContext) {
+fn a_found_release_in_the_background_shows_only_the_badge_and_no_notice_or_dialog(cx: &mut TestAppContext) {
     let (wb, cx, fake) = rig(cx);
     let background = |wb: &Entity<Workbench>, cx: &mut VisualTestContext, fake: &Fake, version: &str| {
         let calls = fake.count("check");
@@ -618,19 +618,16 @@ fn a_found_release_in_the_background_shows_one_notice_per_version_and_a_status_i
         wait_ticking(cx, "the check ran", |_| fake.count("check") == calls + 1);
         wait_state(wb, cx, &format!("available {version}"));
     };
-    background(&wb, cx, &fake, "0.2.0");
-    assert_eq!(notice(&wb, cx), Some((false, "Codeyard 0.2.0 is available.".into())));
-    assert!(dialog(&wb, cx).is_none(), "a background check never takes over the window");
-    assert!(wb.read_with(cx, |wb, _| wb.update_status_for_test()).is_some());
-    // The same version found again (the next day, the next start): the item stays, the notice does not come back.
     wb.update(cx, |wb, cx| wb.set_notice_for_test("something else", false, cx));
-    wb.update(cx, |wb, _| wb.reset_update_for_test());
     background(&wb, cx, &fake, "0.2.0");
-    assert_eq!(notice(&wb, cx), Some((false, "something else".into())));
-    // A newer version is news again.
+    assert_eq!(notice(&wb, cx), Some((false, "something else".into())), "the status bar says nothing about the update");
+    assert!(dialog(&wb, cx).is_none(), "a background check never takes over the window");
+    assert!(wb.read_with(cx, |wb, _| wb.update_status_for_test()).is_some(), "the gear badge is what tells");
+    // A newer version is found the same way.
     wb.update(cx, |wb, _| wb.reset_update_for_test());
     background(&wb, cx, &fake, "0.3.0");
-    assert_eq!(notice(&wb, cx), Some((false, "Codeyard 0.3.0 is available.".into())));
+    assert_eq!(notice(&wb, cx), Some((false, "something else".into())));
+    assert!(wb.read_with(cx, |wb, _| wb.update_status_for_test()).is_some());
 }
 
 // --- Skipping ---
@@ -660,7 +657,7 @@ fn skipping_a_version_silences_background_paths_but_a_manual_check_still_offers_
     fake.check_returns(Ok(Some(release("0.3.0"))));
     wb.update_in(cx, |wb, window, cx| wb.background_check_for_test(window, cx));
     wait_state(&wb, cx, "available 0.3.0");
-    assert_eq!(notice(&wb, cx), Some((false, "Codeyard 0.3.0 is available.".into())));
+    assert!(wb.read_with(cx, |wb, _| wb.update_status_for_test()).is_some(), "the newer version is on offer");
 }
 
 // --- Later after installing ---
@@ -2052,4 +2049,22 @@ fn hiding_the_dialog_keeps_the_update_waiting_for_the_user(cx: &mut TestAppConte
     cx.run_until_parked();
     assert_eq!(fake.count("quit"), 0, "nobody is watching: the app does not restart unasked");
     assert_eq!(wb.read_with(cx, |wb, _| wb.update_status_for_test()).map(|s| s.0), Some("Restart to update".into()));
+}
+
+/// The whole path with the real pointer: a click on "Install and Restart" downloads, installs and restarts, with no second click.
+#[gpui::test]
+fn one_click_on_install_and_restart_ends_in_the_restart(cx: &mut TestAppContext) {
+    let (wb, cx, fake) = rig(cx);
+    offered(&wb, cx, &fake, "0.2.0");
+    let labels = dialog(&wb, cx).unwrap().buttons;
+    let ix = labels.iter().position(|l| l == "Install and Restart").expect("the button");
+    fake.download_does(Download::Done);
+    fake.install_returns(Ok(mac_plan()));
+    cx.run_until_parked();
+    // `debug_bounds` wants a `'static` name: leaking one short string in a test is harmless.
+    let selector: &'static str = Box::leak(format!("update-button-{ix}").into_boxed_str());
+    let at = cx.debug_bounds(selector).expect("the button is drawn").center();
+    cx.simulate_click(at, gpui::Modifiers::none());
+    wait_ticking(cx, "the restart", |_| fake.count("quit") == 1);
+    assert_eq!(fake.count("relaunch"), 1);
 }

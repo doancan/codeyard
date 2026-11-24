@@ -925,7 +925,7 @@ set it) takes:
 | Value | What happens |
 | --- | --- |
 | `ask` (default) | Nothing is checked. A few seconds after the first window opens, once, Codeyard asks whether to check daily. *Check Daily* and *Only When I Ask* write `daily` or `manual` for you; closing the question with Esc writes nothing and asks again after 30 days. |
-| `daily` | Looks when Codeyard starts and then once in 24 hours while it runs (one successful check a day). If a check fails, for instance offline, it is tried again every three hours while Codeyard runs, but after three failed attempts in a day it waits for the next day. A newer version shows one notice and a badge on the gear button at the bottom of the activity bar; a failed check is only logged to stderr. |
+| `daily` | Looks when Codeyard starts and then once in 24 hours while it runs (one successful check a day). If a check fails, for instance offline, it is tried again every three hours while Codeyard runs, but after three failed attempts in a day it waits for the next day. A newer version shows a badge on the gear button (no notice, no status bar text) at the bottom of the activity bar; a failed check is only logged to stderr. |
 | `manual` | Only **Help ▸ Check for Updates…** (palette: *Help: Check for Updates…*; on macOS also under the *codeyard* menu) looks. |
 
 That command works whatever the setting says, and shows its errors. Debug builds and windows started with `--do` or `--panel` never
