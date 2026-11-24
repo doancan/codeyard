@@ -185,22 +185,29 @@ fn explorer_a_deleted_expanded_folder_leaves_no_not_found_row(cx: &mut gpui::Tes
 fn explorer_right_arrow_enters_only_a_visible_child(cx: &mut gpui::TestAppContext) {
     crate::qa_workbench_tests::globals(cx);
     let entry = |name: &str, kind| proto::DirEntry { name: name.into(), kind, target_kind: None };
-    let (tree, cx) = cx.add_window_view(|_, cx| {
+    // A folder that is closed is read again when it opens, so the one the test opens exists on disk.
+    let base = std::env::temp_dir().join(format!("codeyard-right-arrow-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(base.join("closed")).unwrap();
+    std::fs::write(base.join("closed/inner.txt"), "").unwrap();
+    let root = crate::ui::local_path(&base);
+    let root_in = root.clone();
+    let (tree, cx) = cx.add_window_view(move |_, cx| {
         let mut tree = FileTree::new(Arc::new(host::local()), cx);
         // No compaction, so a folder with a single child stays a row of its own.
         tree.opts.compact = false;
-        tree.root = Some("/right".into());
+        tree.root = Some(root_in.clone());
         let dirs = ["broken", "closed", "empty", "full", "loading"];
         let mut top: Vec<proto::DirEntry> = dirs.iter().map(|d| entry(d, proto::Kind::Dir)).collect();
         top.push(entry("z.txt", proto::Kind::File));
-        tree.children.insert("/right".into(), Load::Loaded(top));
-        tree.children.insert("/right/broken".into(), Load::Failed("permission denied".into()));
-        tree.children.insert("/right/closed".into(), Load::Loaded(vec![entry("inner.txt", proto::Kind::File)]));
-        tree.children.insert("/right/empty".into(), Load::Loaded(Vec::new()));
-        tree.children.insert("/right/full".into(), Load::Loaded(vec![entry("a.txt", proto::Kind::File), entry("b.txt", proto::Kind::File)]));
-        tree.children.insert("/right/loading".into(), Load::Loading);
+        tree.children.insert(root_in.clone(), Load::Loaded(top));
+        tree.children.insert(format!("{root_in}/broken"), Load::Failed("permission denied".into()));
+        tree.children.insert(format!("{root_in}/closed"), Load::Loaded(vec![entry("inner.txt", proto::Kind::File)]));
+        tree.children.insert(format!("{root_in}/empty"), Load::Loaded(Vec::new()));
+        tree.children.insert(format!("{root_in}/full"), Load::Loaded(vec![entry("a.txt", proto::Kind::File), entry("b.txt", proto::Kind::File)]));
+        tree.children.insert(format!("{root_in}/loading"), Load::Loading);
         for d in ["broken", "empty", "full", "loading"] {
-            tree.expanded.insert(format!("/right/{d}"));
+            tree.expanded.insert(format!("{root_in}/{d}"));
         }
         tree.rebuild();
         tree
@@ -216,22 +223,22 @@ fn explorer_right_arrow_enters_only_a_visible_child(cx: &mut gpui::TestAppContex
     };
     assert_eq!(tree.read_with(cx, |t, _| t.row_names()), ["broken", "closed", "empty", "full", "a.txt", "b.txt", "loading", "z.txt"]);
     // Open with children: the first child.
-    assert_eq!(right_on("/right/full", cx).as_deref(), Some("/right/full/a.txt"));
+    assert_eq!(right_on(&format!("{root}/full"), cx).as_deref(), Some(format!("{root}/full/a.txt").as_str()));
     // Open but empty, still loading or unreadable: no child row, so the folder stays selected (not the next sibling).
-    assert_eq!(right_on("/right/empty", cx).as_deref(), Some("/right/empty"));
-    assert_eq!(right_on("/right/loading", cx).as_deref(), Some("/right/loading"));
-    assert_eq!(right_on("/right/broken", cx).as_deref(), Some("/right/broken"));
+    assert_eq!(right_on(&format!("{root}/empty"), cx).as_deref(), Some(format!("{root}/empty").as_str()));
+    assert_eq!(right_on(&format!("{root}/loading"), cx).as_deref(), Some(format!("{root}/loading").as_str()));
+    assert_eq!(right_on(&format!("{root}/broken"), cx).as_deref(), Some(format!("{root}/broken").as_str()));
     // A file: nothing.
-    assert_eq!(right_on("/right/z.txt", cx).as_deref(), Some("/right/z.txt"));
+    assert_eq!(right_on(&format!("{root}/z.txt"), cx).as_deref(), Some(format!("{root}/z.txt").as_str()));
     // Closed: it opens and stays selected; a second Right goes in.
-    assert_eq!(right_on("/right/closed", cx).as_deref(), Some("/right/closed"));
-    assert!(tree.read_with(cx, |t, _| t.expanded.contains("/right/closed")));
+    assert_eq!(right_on(&format!("{root}/closed"), cx).as_deref(), Some(format!("{root}/closed").as_str()));
+    assert!(tree.read_with(cx, |t, _| t.expanded.contains(&format!("{root}/closed"))));
     tree.update_in(cx, |t, window, cx| t.expand(&Expand, window, cx));
-    assert_eq!(tree.read_with(cx, |t, _| t.selected.map(|i| t.rows[i].path.clone())).as_deref(), Some("/right/closed/inner.txt"));
+    assert_eq!(tree.read_with(cx, |t, _| t.selected.map(|i| t.rows[i].path.clone())).as_deref(), Some(format!("{root}/closed/inner.txt").as_str()));
     // The loading folder's children arrive: now Right goes in.
     tree.update(cx, |t, _| {
-        t.children.insert("/right/loading".into(), Load::Loaded(vec![entry("late.txt", proto::Kind::File)]));
+        t.children.insert(format!("{root}/loading"), Load::Loaded(vec![entry("late.txt", proto::Kind::File)]));
         t.rebuild();
     });
-    assert_eq!(right_on("/right/loading", cx).as_deref(), Some("/right/loading/late.txt"));
+    assert_eq!(right_on(&format!("{root}/loading"), cx).as_deref(), Some(format!("{root}/loading/late.txt").as_str()));
 }

@@ -621,6 +621,11 @@ impl FileTree {
     }
 
     #[cfg(test)]
+    pub fn toggle_for_test(&mut self, path: &str, cx: &mut Context<Self>) {
+        self.toggle(path, cx);
+    }
+
+    #[cfg(test)]
     pub fn row_names(&self) -> Vec<String> {
         self.rows.iter().map(|r| r.name.to_string()).collect()
     }
@@ -904,7 +909,12 @@ impl FileTree {
         } else {
             self.expanded.insert(path.to_string());
             match self.children.get(path) {
-                Some(Load::Loaded(_)) => self.rebuild(),
+                // The rows it kept are shown at once and read again: a closed folder is not watched, so what came or went
+                // meanwhile is not known (`load` keeps the loaded rows while it reads).
+                Some(Load::Loaded(_)) => {
+                    self.rebuild();
+                    self.load(path.to_string(), cx);
+                }
                 // If it errored, retry.
                 _ => self.load(path.to_string(), cx),
             }

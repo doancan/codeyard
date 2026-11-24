@@ -563,6 +563,50 @@ fn qa_quick_open_sees_externally_created_file(cx: &mut TestAppContext) {
     assert!(found);
 }
 
+/// A file created outside the app (a screenshot saved, `git checkout`, a build) shows in the explorer by itself, in the
+/// root and in a folder that is open, without a refresh.
+#[gpui::test]
+fn qa_explorer_shows_files_created_outside(cx: &mut TestAppContext) {
+    let dir = project("tree-external");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    let src = format!("{}/src", ui::local_path(&dir));
+    wb.update(cx, |wb, cx| wb.tree_reveal_dir_for_test(&src, cx));
+    assert!(wait_for(cx, "src opens", |cx| wb.read_with(cx, |wb, cx| wb.tree_row_names_for_test(cx)).iter().any(|n| n == "main.rs")));
+    std::fs::write(dir.join("shot.png"), b"png").unwrap();
+    std::fs::write(dir.join("src/inner.png"), b"png").unwrap();
+    let seen = wait_for(cx, "new files listed", |cx| {
+        let names = wb.read_with(cx, |wb, cx| wb.tree_row_names_for_test(cx));
+        names.iter().any(|n| n == "shot.png") && names.iter().any(|n| n == "inner.png")
+    });
+    let names = wb.read_with(cx, |wb, cx| wb.tree_row_names_for_test(cx));
+    assert!(seen, "rows: {names:?}");
+}
+
+/// A folder that was closed while a file came or went outside is read again when it opens: a closed folder is not watched,
+/// so the rows it kept would be old.
+#[gpui::test]
+fn qa_explorer_reads_a_closed_folder_again_when_it_opens(cx: &mut TestAppContext) {
+    let dir = project("tree-reopen");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    let src = format!("{}/src", ui::local_path(&dir));
+    let names = |wb: &Entity<Workbench>, cx: &mut VisualTestContext| wb.read_with(cx, |wb, cx| wb.tree_row_names_for_test(cx));
+    wb.update(cx, |wb, cx| wb.tree_reveal_dir_for_test(&src, cx));
+    assert!(wait_for(cx, "src opens", |cx| names(&wb, cx).iter().any(|n| n == "main.rs")));
+    wb.update(cx, |wb, cx| wb.tree_toggle_for_test(&src, cx));
+    cx.run_until_parked();
+    assert!(!names(&wb, cx).iter().any(|n| n == "main.rs"), "src is closed");
+    std::fs::write(dir.join("src/inner.png"), b"png").unwrap();
+    std::fs::remove_file(dir.join("src/lib.rs")).unwrap();
+    wb.update(cx, |wb, cx| wb.tree_toggle_for_test(&src, cx));
+    let fresh = wait_for(cx, "src read again", |cx| {
+        let n = names(&wb, cx);
+        n.iter().any(|n| n == "inner.png") && !n.iter().any(|n| n == "lib.rs")
+    });
+    assert!(fresh, "rows: {:?}", names(&wb, cx));
+}
+
 /// Closing a dirty tab: VS Code asks "Save / Don't Save / Cancel". Here the dialog
 /// only offers "Close without saving" and "Cancel" (no way to save from it).
 #[gpui::test]
