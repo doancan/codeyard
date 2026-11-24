@@ -356,7 +356,10 @@ jobs:
       # measures ~1.7 MB: not the artifact users get. pip installs cargo-zigbuild together with zig.
       # The agent size gate and the five-minute check are part of the full tier: they take minutes and a pull request rarely
       # touches what they measure.
-      - run: pip3 install --user cargo-zigbuild
+      # --break-system-packages: the runner's Python is managed by apt (PEP 668); this installs into the user's own site only.
+      - run: |
+          command -v cargo-zigbuild >/dev/null || pip3 install --user --break-system-packages cargo-zigbuild
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
         if: github.event_name != 'pull_request'
       - run: cargo zigbuild --locked --profile release-agent -p agent --target x86_64-unknown-linux-musl
         if: github.event_name != 'pull_request'
