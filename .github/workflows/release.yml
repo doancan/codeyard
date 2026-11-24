@@ -184,7 +184,10 @@ jobs:
   macos:
     needs: [verify, prebuilt, agents-linux, agent-macos]
     if: ${{ !cancelled() && needs.verify.result == 'success' && (needs.prebuilt.outputs.run != '' || (needs.agents-linux.result == 'success' && needs.agent-macos.result == 'success')) }}
-    runs-on: macos-latest
+    # The repository variable MACOS_RUNNER, when set, names the runner of this job (a JSON list of labels, for example
+    # ["self-hosted","macOS","ARM64"]): a maintainer's own Mac builds in a fraction of the time a hosted one does (docs/releasing.md).
+    # Without it the job runs on a hosted runner as before.
+    runs-on: ${{ vars.MACOS_RUNNER && fromJSON(vars.MACOS_RUNNER) || 'macos-latest' }}
     timeout-minutes: 90
     permissions:
       actions: read
