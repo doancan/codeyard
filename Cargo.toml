@@ -16,12 +16,9 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 debug = false
 
-# No cross-crate LTO and 16 codegen units: a release build takes about 40% less time (a release is built twice, for macOS and
-# Windows, on every pull request into develop) for a binary 4% larger. Measured on the same sources, 8 interleaved runs each:
-# first frame 230 ms vs 236 ms (p95 241 ms both), keystroke frame 25.3 ms both (p95 32.3 vs 32.2 ms): within the performance gate's noise.
 [profile.release]
-lto = false
-codegen-units = 16
+lto = "thin"
+codegen-units = 4
 strip = true
 
 # Remote agent: this binary is copied to servers, so size matters.
