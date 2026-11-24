@@ -81,10 +81,10 @@ fn switch(wb: &Entity<Workbench>, to: &str, cx: &mut VisualTestContext) {
 #[gpui::test]
 fn the_default_profile_is_the_config_folder_and_nothing_extra_is_created(cx: &mut TestAppContext) {
     let cfg = config("default");
-    write(&cfg.join("settings.jsonc"), "{ \"theme\": \"paper\" }");
+    write(&cfg.join("settings.jsonc"), "{ \"theme\": \"solarized-light\" }");
     let (wb, cx) = setup(cx, &cfg);
     assert_eq!(profile(&wb, cx), None);
-    assert!(theme_of(cx, "paper"));
+    assert!(theme_of(cx, "solarized-light"));
     cx.executor().advance_clock(std::time::Duration::from_secs(3));
     cx.run_until_parked();
     assert!(!cfg.join("profiles").exists() && !cfg.join("active-profile").exists(), "nothing for profiles exists until one is made");
@@ -94,11 +94,11 @@ fn the_default_profile_is_the_config_folder_and_nothing_extra_is_created(cx: &mu
 #[gpui::test]
 fn creating_a_profile_switches_to_its_own_settings_keybindings_and_snippets_at_once(cx: &mut TestAppContext) {
     let cfg = config("switch");
-    write(&cfg.join("settings.jsonc"), "{ \"theme\": \"paper\" }");
+    write(&cfg.join("settings.jsonc"), "{ \"theme\": \"solarized-light\" }");
     write(&cfg.join("keybindings.jsonc"), "[ { \"key\": \"ctrl-alt-shift-1\", \"command\": \"workbench.commandPalette\" } ]");
     write(&cfg.join("snippets/rust.json"), "{ \"d\": { \"prefix\": \"zzdefault\", \"body\": \"x\" } }");
     let (wb, cx) = setup(cx, &cfg);
-    assert!(theme_of(cx, "paper"));
+    assert!(theme_of(cx, "solarized-light"));
     cx.simulate_keystrokes("ctrl-alt-shift-1");
     assert!(wb.read_with(cx, |wb, _| wb.palette_open()), "the default profile's key works");
     cx.simulate_keystrokes("escape");
@@ -107,19 +107,19 @@ fn creating_a_profile_switches_to_its_own_settings_keybindings_and_snippets_at_o
     create(&wb, "Work", cx);
     assert_eq!(profile(&wb, cx).as_deref(), Some("Work"));
     assert!(cfg.join("profiles/Work/settings.jsonc").is_file() && cfg.join("active-profile").is_file());
-    assert_eq!(std::fs::read_to_string(cfg.join("settings.jsonc")).unwrap(), "{ \"theme\": \"paper\" }", "the default files are untouched");
-    assert!(!theme_of(cx, "paper"), "the new profile has the default theme");
+    assert_eq!(std::fs::read_to_string(cfg.join("settings.jsonc")).unwrap(), "{ \"theme\": \"solarized-light\" }", "the default files are untouched");
+    assert!(!theme_of(cx, "solarized-light"), "the new profile has the default theme");
     cx.simulate_keystrokes("ctrl-alt-shift-1");
     assert!(!wb.read_with(cx, |wb, _| wb.palette_open()), "the default profile's key is gone in the new profile");
     assert!(!crate::snippets::for_path("a.rs").iter().any(|s| s.prefix == "zzdefault"));
     assert!(notice(&wb, cx).contains("Work"), "{}", notice(&wb, cx));
 
     // Edit the profile's own files: they apply, and the default ones do not change.
-    write(&cfg.join("profiles/Work/settings.jsonc"), "{ \"theme\": \"ember\" }");
+    write(&cfg.join("profiles/Work/settings.jsonc"), "{ \"theme\": \"dracula\" }");
     write(&cfg.join("profiles/Work/keybindings.jsonc"), "[ { \"key\": \"ctrl-alt-shift-2\", \"command\": \"workbench.commandPalette\" } ]");
     write(&cfg.join("profiles/Work/snippets/rust.json"), "{ \"w\": { \"prefix\": \"zzwork\", \"body\": \"y\" } }");
-    settle(cx, |cx| theme_of(cx, "ember"));
-    assert!(theme_of(cx, "ember"));
+    settle(cx, |cx| theme_of(cx, "dracula"));
+    assert!(theme_of(cx, "dracula"));
     cx.simulate_keystrokes("ctrl-alt-shift-2");
     assert!(wb.read_with(cx, |wb, _| wb.palette_open()));
     cx.simulate_keystrokes("escape");
@@ -128,7 +128,7 @@ fn creating_a_profile_switches_to_its_own_settings_keybindings_and_snippets_at_o
     switch(&wb, "Default", cx);
     assert_eq!(profile(&wb, cx), None);
     assert!(!cfg.join("active-profile").exists());
-    assert!(theme_of(cx, "paper"));
+    assert!(theme_of(cx, "solarized-light"));
     cx.simulate_keystrokes("ctrl-alt-shift-1");
     assert!(wb.read_with(cx, |wb, _| wb.palette_open()));
     cx.simulate_keystrokes("escape");
@@ -140,7 +140,7 @@ fn creating_a_profile_switches_to_its_own_settings_keybindings_and_snippets_at_o
 
     switch(&wb, "Work", cx);
     assert_eq!(profile(&wb, cx).as_deref(), Some("Work"));
-    assert!(theme_of(cx, "ember"));
+    assert!(theme_of(cx, "dracula"));
 }
 
 #[gpui::test]
@@ -160,11 +160,11 @@ fn the_watcher_follows_a_switch_made_by_another_window_or_by_hand(cx: &mut TestA
     let cfg = config("watch");
     let (wb, cx) = setup(cx, &cfg);
     store::create(&cfg, "Other").unwrap();
-    write(&cfg.join("profiles/Other/settings.jsonc"), "{ \"theme\": \"ember\" }");
+    write(&cfg.join("profiles/Other/settings.jsonc"), "{ \"theme\": \"dracula\" }");
     store::set_active(&cfg, Some("Other")).unwrap();
-    settle(cx, |cx| theme_of(cx, "ember"));
+    settle(cx, |cx| theme_of(cx, "dracula"));
     assert_eq!(profile(&wb, cx).as_deref(), Some("Other"));
-    assert!(theme_of(cx, "ember"));
+    assert!(theme_of(cx, "dracula"));
     store::set_active(&cfg, None).unwrap();
     settle(cx, |cx| profile(&wb, cx).is_none());
     assert_eq!(profile(&wb, cx), None);
@@ -226,7 +226,7 @@ fn bad_names_are_refused_with_a_message_and_create_nothing(cx: &mut TestAppConte
 #[gpui::test]
 fn duplicate_copies_what_is_in_use_and_rename_keeps_the_profile_active(cx: &mut TestAppContext) {
     let cfg = config("dup");
-    write(&cfg.join("settings.jsonc"), "{ \"theme\": \"paper\" } // mine\n");
+    write(&cfg.join("settings.jsonc"), "{ \"theme\": \"solarized-light\" } // mine\n");
     write(&cfg.join("snippets/rust.json"), "{}");
     let (wb, cx) = setup(cx, &cfg);
     run(&wb, "Profiles: Duplicate Current…", cx);
@@ -235,9 +235,9 @@ fn duplicate_copies_what_is_in_use_and_rename_keeps_the_profile_active(cx: &mut 
     cx.run_until_parked();
     let name = profile(&wb, cx).expect("the copy is active");
     assert!(name.ends_with("Copy"), "{name}");
-    assert_eq!(std::fs::read_to_string(cfg.join("profiles").join(&name).join("settings.jsonc")).unwrap(), "{ \"theme\": \"paper\" } // mine\n");
+    assert_eq!(std::fs::read_to_string(cfg.join("profiles").join(&name).join("settings.jsonc")).unwrap(), "{ \"theme\": \"solarized-light\" } // mine\n");
     assert!(cfg.join("profiles").join(&name).join("snippets/rust.json").is_file());
-    assert!(theme_of(cx, "paper"));
+    assert!(theme_of(cx, "solarized-light"));
 
     run(&wb, "Profiles: Rename…", cx);
     cx.simulate_keystrokes("enter");
