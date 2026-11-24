@@ -340,10 +340,18 @@ impl ScmSnap {
         GRAPH
     }
 
-    /// The focused node of the history sections: the commit search field while it has the keyboard.
+    /// The focused node of the history sections: the commit search field while it has the keyboard, or the selected commit's row
+    /// while the commit list has it (what the arrow keys move).
     pub(in crate::workbench) fn history_focus(&self) -> Option<NodeId> {
         let g = &self.view.history.graph;
-        (g.search_open && g.query_focused).then_some(GRAPH_QUERY)
+        if g.search_open && g.query_focused {
+            return Some(GRAPH_QUERY);
+        }
+        if g.list_focused {
+            let at = g.rows.iter().position(|r| matches!(r, AccessGraphRow::Commit { selected: true, .. }))?;
+            return Some(NodeId(HISTORY_ROW + 4 * at as u64));
+        }
+        None
     }
 }
 

@@ -325,3 +325,21 @@ fn the_graph_leaves_out_stashes_and_notes() {
     assert!(!subjects.iter().any(|s| s.contains("Notes added") || s.contains("parked") || s.contains("index on")), "{subjects:?}");
     assert!(!log.is_empty(), "the branch's own history is there");
 }
+
+/// A long e-mail address in the card's footer shortens instead of running out of the card.
+#[gpui::test]
+fn a_long_email_stays_inside_the_card(cx: &mut TestAppContext) {
+    let commit = GraphCommit {
+        hash: "a".repeat(40),
+        short: "aaaaaaa".into(),
+        subject: "Subject".into(),
+        author: "Dogan".into(),
+        email: "dogancan.kalipcilar@a-rather-long-machine-name.example.local".into(),
+        date: "2026-11-25 01:00".into(),
+        ..Default::default()
+    };
+    let (_card, cx) = card(cx, commit, None);
+    let card_box = cx.debug_bounds("commit-card").expect("the card is drawn");
+    let email = cx.debug_bounds("commit-card-email").expect("the address is drawn");
+    assert!(email.right() <= card_box.right(), "the address {email:?} runs out of the card {card_box:?}");
+}

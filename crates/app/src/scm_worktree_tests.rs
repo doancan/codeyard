@@ -394,3 +394,23 @@ fn a_history_cut_at_the_limit_offers_to_load_more(cx: &mut TestAppContext) {
     assert!(!scm.read_with(cx, |s, cx| s.graph_truncated(cx)), "the whole history is loaded: nothing more to offer");
     let _ = wb;
 }
+
+/// In a narrow sidebar the Graph header keeps Reload and the "…" menu in reach: the quick buttons before them are what gets cut.
+#[gpui::test]
+fn the_graph_menu_button_stays_inside_a_narrow_sidebar(cx: &mut TestAppContext) {
+    let dir = commit_chain("graph-narrow", 4);
+    git_in(&dir, &["remote", "add", "origin", "https://example.invalid/x.git"]);
+    let (wb, scm, cx) = open(cx, &dir);
+    cx.simulate_resize(gpui::size(px(1000.), px(900.)));
+    wait_ticking(cx, "graph", |cx| scm.read_with(cx, |s, _| s.graph_subjects().len() >= 4));
+    for width in [200., 240., 300.] {
+        wb.update(cx, |wb, _| wb.set_sidebar_width_for_test(width));
+        cx.run_until_parked();
+        cx.simulate_resize(gpui::size(px(1000. + width), px(900.)));
+        cx.run_until_parked();
+        let header = cx.debug_bounds("scm-graph-header").unwrap();
+        let more = cx.debug_bounds("scm-graph-more").unwrap();
+        assert!(more.right() <= header.right() + px(0.5), "sidebar {width}: the menu button {more:?} runs out of the header {header:?}");
+        assert!(more.left() >= header.left(), "sidebar {width}: {more:?} {header:?}");
+    }
+}
