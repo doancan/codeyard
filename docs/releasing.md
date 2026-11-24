@@ -11,6 +11,13 @@ and the Windows files from that run, signs `SHA256SUMS.txt` and creates the rele
 Apple's notarization. If a full CI run (`ci.yml`) of that commit failed, the release stops instead: a build whose tests failed is not
 released; a full run that is still going is not waited for.
 
+**Building on your own Mac.** The `macos` job of `release.yml` (the app build, signature and notarization, about twelve minutes on a hosted
+runner) can run on a Mac of yours, which compiles the same sources in two to three minutes. Install a GitHub Actions runner on it
+(Settings, Actions, Runners, New self-hosted runner; it needs Xcode with its Metal toolchain and `curl`), then set the repository
+variable `MACOS_RUNNER` to a JSON list of its labels, for example `["self-hosted","macOS","ARM64"]`. Unset the variable and the job
+is back on a hosted runner. Mind what it means: the job runs with the Apple signing secrets on a tag, so the Mac must be one you trust
+and keep updated; and the prebuild of a pull request (from this repository only, never a fork) builds on it too, without any secret.
+
 **What holds a release back.** A pull request from `develop` into `main` passes `release-ready` as soon as `clippy-linux`, `fast-checks`
 and `linux-tests` of `develop`'s run for the same commit succeeded. The macOS tests of that run are advisory (they take the longest and
 a macOS failure shows in the run), the memory and size budgets are not run in CI at all (`scripts/check.sh --budgets` on a Retina Mac
