@@ -78,6 +78,8 @@ impl Workbench {
             .flex_none()
             .flex()
             .items_center()
+            // The first and the last entry (Local, the bell) keep a little room from the window's edges.
+            .px(px(theme::SPACE[2]))
             .bg(c(p.surface))
             .border_t_1()
             .border_color(c(p.border))

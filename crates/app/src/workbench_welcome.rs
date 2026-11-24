@@ -50,23 +50,6 @@ pub(crate) fn brand_colors(p: &Palette) -> (u32, u32, u32) {
     if ui::luminance_is_light(p.bg) { (0xe6f6ef, 0xbfe3d4, 0x137e69) } else { (0x182525, 0x2f4543, 0x67eab1) }
 }
 
-/// Brand header: logo on a tile and the name; no tagline.
-fn brand_header(p: &Palette) -> impl IntoElement {
-    let (tile, edge, mark) = brand_colors(p);
-    div()
-        .flex()
-        .items_center()
-        .gap(px(theme::SPACE[6]))
-        .child(
-            div().flex_none().size(px(56.)).flex().items_center().justify_center().rounded(px(14.)).bg(c(tile)).border_1().border_color(c(edge)).child(icon(
-                "codeyard-mark",
-                32.,
-                mark,
-            )),
-        )
-        .child(div().text_size(px(text::DISPLAY.0)).font_weight(gpui::FontWeight::SEMIBOLD).text_color(c(p.text)).child("Codeyard")) // i18n-keep: product name
-}
-
 impl Workbench {
     pub(super) fn manage_language_services(&mut self, _: &super::ManageLanguageServices, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(Page::LanguageServices(view)) = self.tabs.page.clone() {
@@ -382,28 +365,28 @@ impl Workbench {
             ))
             .flex_1()
             .min_w_0()
-            .h(px(56.))
+            .h(px(68.))
             .flex()
             .items_center()
             .gap(px(theme::SPACE[5]))
-            .px(px(theme::SPACE[5]))
+            .px(px(theme::SPACE[6]))
             .rounded(px(theme::radius::LG))
             .bg(c(p.surface))
             .border_1()
             .border_color(c(p.border))
             .cursor_pointer()
             // Hover: `surface_hover` fill as before; the border isn't blue, just the existing border made slightly more visible.
-            .hover(|d| d.bg(c(p.surface_hover)).border_color(c(ui::mix(p.border, p.text, 0.07))))
+            .hover(|d| d.bg(c(p.surface_hover)).border_color(ui::ca(p.accent, 0.55)))
             .child(
                 div()
                     .flex_none()
-                    .size(px(32.))
+                    .size(px(40.))
                     .flex()
                     .items_center()
                     .justify_center()
                     .rounded(px(theme::radius::MD))
                     .bg(ui::ca(p.accent, 0.14))
-                    .child(icon(glyph, 18., p.accent)),
+                    .child(icon(glyph, 20., p.accent)),
             )
             .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().font_weight(gpui::FontWeight::MEDIUM).child(label))
             .when_some(shortcut, |d, k| d.child(kbd(k, p)))
@@ -414,12 +397,16 @@ impl Workbench {
         Command { label: String::new(), run: Run::Action(action) }.shortcut(cx)
     }
 
-    /// Welcome content: faint logo, start cards, recents, customize, learn, tip of the day.
+    /// Welcome content: start cards, recents, customize, learn, tip of the day.
     /// Version info is not here but under "About" in the gear menu.
     pub(super) fn welcome_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         let heading = |h: &'static str| {
             div()
+                .mb(px(theme::SPACE[2]))
                 .pb(px(theme::SPACE[3]))
+                .px(px(theme::SPACE[4]))
+                .border_b_1()
+                .border_color(c(p.border))
                 .text_size(px(text::XS.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
                 .text_color(c(p.text_muted))
@@ -591,8 +578,7 @@ impl Workbench {
                         .gap(px(theme::SPACE[9]))
                         .px(px(theme::SPACE[9]))
                         .py(px(56.))
-                        .child(brand_header(p))
-                        .child(
+                                                .child(
                             div()
                                 .flex()
                                 .flex_col()
@@ -690,6 +676,12 @@ impl Workbench {
                                 .flex()
                                 .items_center()
                                 .gap(px(theme::SPACE[4]))
+                                .px(px(theme::SPACE[6]))
+                                .py(px(theme::SPACE[5]))
+                                .rounded(px(theme::radius::LG))
+                                .bg(c(p.surface))
+                                .border_1()
+                                .border_color(c(p.border))
                                 .text_size(px(text::XS.0))
                                 .text_color(c(p.text_muted))
                                 .child(icon("lightbulb", 14., p.warning))

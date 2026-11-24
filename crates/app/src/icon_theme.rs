@@ -207,12 +207,26 @@ fn spacer(size: f32) -> AnyElement {
     div().flex_none().w(px((size * 0.25).round())).into_any_element()
 }
 
+/// A glyph on a soft tile of its own colour: the file kinds read at a glance and the tree looks like one family.
+fn chip(glyph: &'static str, size: f32, tint: u32) -> AnyElement {
+    div()
+        .flex_none()
+        .size(px(size))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px((size * 0.3).round()))
+        .bg(ui::ca(tint, 0.16))
+        .child(icon(glyph, (size * 0.68).round(), tint))
+        .into_any_element()
+}
+
 /// File icon, according to the active icon theme.
 pub fn file_icon_el(name: &str, size: f32, p: &Palette) -> AnyElement {
     match current() {
         IconTheme::Default | IconTheme::Colorful | IconTheme::Glyphs => {
             let (glyph, tint) = ui::file_icon(name, p);
-            icon(glyph, size, tint).into_any_element()
+            chip(glyph, size, tint)
         }
         IconTheme::Badges => badge(badge_text(name), size, file_tint(name, p), p),
         IconTheme::Minimal => {

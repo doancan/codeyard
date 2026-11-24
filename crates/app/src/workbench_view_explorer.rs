@@ -4,6 +4,9 @@ use super::notifications_glue::failures::Area;
 use super::*;
 
 /// Whether the activity bar's view buttons continue above and below what is visible.
+/// Icons of the activity bar: a little larger than `layout::ICON_LG`, which the rest of the window uses.
+const ACTIVITY_ICON: f32 = 22.;
+
 fn activity_hints(scroll: &gpui::ScrollHandle) -> (bool, bool) {
     let (offset, max) = (scroll.offset().y, scroll.max_offset().height);
     (offset < px(-0.5), max > px(0.5) && offset > -max + px(0.5))
@@ -107,7 +110,7 @@ impl Workbench {
                         // The selected view gets a permanent background (stronger than hover); hover only on unselected ones.
                         .when(selected, |d| d.bg(c(p.surface_active)))
                         .when(!selected, |d| d.group_hover(id, |s| s.bg(c(p.surface_hover))))
-                        .child(icon(name, layout::ICON_LG, if selected { p.accent } else { p.text_muted }).group_hover(id, |s| s.text_color(c(p.text)))),
+                        .child(icon(name, ACTIVITY_ICON, if selected { p.accent } else { p.text_muted }).group_hover(id, |s| s.text_color(c(p.text)))),
                 )
                 .when(badge > 0, |d| {
                     d.child(
@@ -155,7 +158,7 @@ impl Workbench {
                         .justify_center()
                         .rounded(px(theme::radius::MD))
                         .group_hover(id, |s| s.bg(c(p.surface_hover)))
-                        .child(icon(name, layout::ICON_LG - 2., p.text_muted).group_hover(id, |s| s.text_color(c(p.text)))),
+                        .child(icon(name, ACTIVITY_ICON - 2., p.text_muted).group_hover(id, |s| s.text_color(c(p.text)))),
                 )
                 // An update is on offer, on its way or waiting for a restart: a dot in its tone (a spinner while it works).
                 .when_some(badge, |d, (tone, busy)| {

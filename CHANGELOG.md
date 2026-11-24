@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Terminal (macOS): with Caps Lock on, letters are typed in capitals. They came out lowercase until Shift was pressed.
+
+### Changed
+
+- File icons (File Glyphs, Codeyard and Colorful themes): each icon sits on a soft tile of its language colour.
+- The empty editor's logo is a quiet grey instead of mint green. The status bar is 2 px taller, and its first and last entries keep a little room from the window's edges. Activity bar icons are 2 px larger.
+- Codeyard Dark is deeper, Codeyard Light is cleaner (pure white editor, crisper borders and text).
+- Welcome: the logo and the product name at the top are gone, so the start cards come first. The cards are taller with a larger icon and an accent border on hover, the section titles have a line under them and the tip of the day sits in a box.
+
 ## [0.13.2] - 2026-11-24
 
 ### Changed

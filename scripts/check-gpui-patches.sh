@@ -20,6 +20,7 @@ need vendor/gpui/src/elements/text.rs '&& truncate_width == text_layout\.truncat
 need vendor/gpui/src/elements/text.rs 'let mut runs = runs\.clone\(\);' "text cut with an ellipsis starts from the runs of the whole text on every measurement"
 need vendor/gpui/src/platform/windows/clipboard.rs 'format == CF_DIB\.0 as u32 \|\| format == CF_DIBV5\.0 as u32' "Windows DIB clipboard image formats"
 need vendor/gpui/src/platform/windows/clipboard.rs 'fn dib_to_png\(' "bounded Windows DIB to PNG conversion"
+need vendor/gpui/src/platform/mac/events.rs 'mods \|= ALPHA_LOCK_MOD' "key_char follows Caps Lock"
 need vendor/gpui/src/platform/mac/metal_renderer.rs 'set_maximum_drawable_count\(2\)' "drawable count 2"
 absent vendor/gpui/src/platform/mac/metal_renderer.rs 'set_maximum_drawable_count\(3\)' "drawable count 3"
 need vendor/gpui/src/window.rs '^pub struct DispatchEventResult' "pub DispatchEventResult"

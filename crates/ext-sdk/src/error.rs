@@ -261,6 +261,16 @@ mod tests {
         assert!(!d.fix().contains("[permissions]"), "{}", d.fix());
     }
 
+    /// #101 AC3: in an untrusted folder the denial names the reason and the way out.
+    #[test]
+    fn an_untrusted_folder_names_the_fix() {
+        let e = Error::Denied(Denied { permission: r#"write = ["out.txt"]"#.into(), why: Why::UntrustedWorkspace });
+        assert_eq!(
+            e.to_string(),
+            "denied: this folder is not trusted, which rules out write = [\"out.txt\"]\n   = fix: trust the folder, or set `untrusted = false` in the manifest if the extension is useless without trust"
+        );
+    }
+
     #[test]
     fn path_lines() {
         assert_eq!(path_line("read", "file:///work/apps/vercel.json"), r#"read = ["**/vercel.json"]"#);

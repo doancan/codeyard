@@ -1180,8 +1180,8 @@ impl Workbench {
             return self.welcome_view(p, cx);
         }
         if idle {
-            let (_, _, mark) = super::welcome_glue::brand_colors(p);
-            return center(p).child(icon("codeyard-mark", 96., mark).text_color(ui::ca(mark, 0.18))).into_any_element();
+            // A quiet grey of the theme's own muted text, so the mark sits behind the window instead of drawing the eye.
+            return center(p).child(icon("codeyard-mark", 96., p.text_muted).text_color(ui::ca(p.text_muted, 0.2))).into_any_element();
         }
         if has_root {
             let opening = self.tabs.opening.is_some();

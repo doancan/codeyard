@@ -156,6 +156,36 @@ fn three_crashes_turn_an_extension_off(cx: &mut TestAppContext) {
     assert!(wb.read_with(cx, |wb, _| notice_has(wb, "turned off until Codeyard restarts")));
 }
 
+/// #101 AC4: while one extension is turned off after three crashes, another one still answers, and within two seconds.
+#[gpui::test]
+fn another_extension_answers_within_two_seconds_after_a_crash_loop(cx: &mut TestAppContext) {
+    if !crate::ext_runtime::code_runs_for_test() {
+        return;
+    }
+    let cfg = config_dir("crash-neighbour");
+    install(&cfg);
+    let other = MANIFEST.replace("you.probe", "you.other").replace("Probe: ", "Other: ");
+    let entries = vec![
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: other.into_bytes(), executable: false },
+        ext_pkg::Entry { path: "Cargo.toml".into(), data: Vec::new(), executable: false },
+        ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: PROBE.to_vec(), executable: false },
+    ];
+    let (bytes, _) = ext_pkg::write(entries).expect("the probe passes the import check");
+    crate::ext::store(&cfg).install(&bytes, ext_core::Source::File { path: "/downloads/other.cyx".into() }).expect("installs");
+    let (wb, cx) = setup(cx, &cfg);
+    for _ in 0..3 {
+        wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Trap", window, cx));
+        wait_for(cx, &wb, |wb| !wb.extension_running_for_test("you.probe"));
+    }
+    wait_for(cx, &wb, |wb| notice_has(wb, "crashed three times in a minute"));
+    let asked = Instant::now();
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Other: Notice", window, cx));
+    wait_for(cx, &wb, |wb| notice_has(wb, "you.other: Pick"));
+    let took = asked.elapsed();
+    let limit = Duration::from_secs(2 * crate::test_sshd::timeout_scale());
+    assert!(took < limit, "the other extension took {took:?}, limit {limit:?}");
+}
+
 /// A window with the probe installed with `Probe: Every` (a 30 s timer) and `Probe: Events`, and the timer started.
 fn timer_window<'a>(cx: &'a mut TestAppContext, name: &str) -> (Entity<Workbench>, &'a mut VisualTestContext) {
     let cfg = config_dir(name);

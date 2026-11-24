@@ -690,7 +690,7 @@ impl Workbench {
                             .rounded(px(theme::radius::MD))
                             .when(selected, |e| e.bg(c(p.surface_active)))
                             .when(!selected, |e| e.hover(|e| e.bg(c(p.surface_hover))))
-                            .child(icon("plug", layout::ICON_LG, if selected { p.text } else { p.text_muted })),
+                            .child(icon("plug", layout::ICON_LG + 2., if selected { p.text } else { p.text_muted })),
                     )
                     .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone().into())).into())
                     .on_click(cx.listener(move |this, _, window, cx| {

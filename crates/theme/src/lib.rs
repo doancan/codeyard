@@ -8,7 +8,7 @@ mod tests {
 
     #[test]
     fn tokens_are_generated() {
-        assert_eq!(DARK.bg, 0x17191d);
+        assert_eq!(DARK.bg, 0x0e1014);
         assert_ne!(DARK.bg, LIGHT.bg);
         assert_eq!(layout::ROW_H, 28.0);
         assert_eq!((text::CODE_MACOS.0, text::CODE_MACOS.1), (13.0, 20.0), "editor and terminal text on macOS");
