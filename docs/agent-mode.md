@@ -66,7 +66,7 @@ with a bar relative to the busiest account.
   ends it and ignores a message still on screen for ten minutes; *Agents: Mark Account as Limited* sets it by hand.
 - When the project's main terminal shows a limit message, a bar above the status line offers the account that is free and least
   used, and continues the conversation there (*Continue with <account>*, the Agents panel's hand-off: it needs private history
-  and a conversation; otherwise it switches the account).
+  and a conversation the tool has already saved; a new conversation has nothing to copy, so the account is switched instead).
 
 **Attention.** While agent mode is on, a project that starts waiting, hits a limit or finishes while the person is not looking at
 it gets a notice in the window (*Name needs you*, *Name: limit reached*, *Name finished*) whose button, *Open Project*, shows that
@@ -113,10 +113,13 @@ with its tab and status line; the right panel with the project's own Source Cont
 the tabs *Git*, *Diff*, *Pull requests*, *Files*. With a stand-in script for the CLI (started from the Agents panel, printing a limit
 message) the screenshots also show a project with an agent session: its main terminal first among the tabs, the extra-terminal count,
 the account button *Personal* of the tool, its menu with each account's state, the bar *Personal reached its limit; it resets 3pm*
-with its offer of the other account, and the accounts at the foot of the list (*Limit reached · 3pm*, *0 tokens*). **Nobody has
-seen** the usage bars with real token counts, what the offer does when pressed (it asks first, as the Agents panel does), the Dock
-badge and bounce, the banner with its permission prompt and click, a real CLI hitting a real limit, or SSH projects. The limit
-messages are the tools' wording as known today and will need upkeep.
+with its offer of the other account, and the accounts at the foot of the list. With session files written for two accounts in the
+form the tool keeps them, the usage bars read from them: *Work · 120k tokens · 12%* (a blue bar at 12% of a budget of 1,000,000) and
+*Personal* at its limit with a red bar near 41% (410k). Pressing *Continue with Work* asks first (*Switch account?*) and then stops the
+running terminal and switches the account; the project leaves *Attention* and the bar goes. The new account applies to the next
+session, which is started from the Agents panel as before. **Nobody has seen** the Dock badge and bounce, the banner with its
+permission prompt and click, a real CLI hitting a real limit, a hand-over of a saved conversation to another account (the stand-in
+never saves one), or SSH projects. The limit messages are the tools' wording as known today and will need upkeep.
 
 ## Tests
 

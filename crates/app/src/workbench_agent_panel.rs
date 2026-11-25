@@ -59,7 +59,7 @@ pub(super) struct AgentSummary {
     pub(super) profile_count: u32,
     /// Each account keeps a conversation of its own (so continuing on another account copies it first).
     pub(super) private_history: bool,
-    /// The conversation the terminal is on, once it has one.
+    /// The conversation the terminal is on, once the CLI has saved it.
     pub(super) session: Option<String>,
     /// The folder of each account's session files, in profile order.
     pub(super) profile_dirs: Vec<PathBuf>,
@@ -225,7 +225,8 @@ impl Workbench {
             profile: state.profile,
             profile_count: state.profile_count,
             private_history: state.mode == HistoryMode::Private,
-            session: state.selected.clone(),
+            // Only a conversation the CLI has saved can be handed to another account; a new one has nothing to copy yet.
+            session: state.selected.clone().filter(|id| state.sessions.iter().any(|session| session.id == *id)),
             profile_dirs: (0..state.profile_count).map(|profile| project.profile(profile)).collect(),
         })
     }
@@ -1323,4 +1324,24 @@ fn session_menu_offers_only_actions_that_do_something(cx: &mut gpui::TestAppCont
     cx.simulate_keystrokes("escape");
     let shared = wb.update_in(cx, |wb, window, cx| labels(wb, HistoryMode::Shared, window, cx));
     assert!(!shared.iter().any(|label| label.starts_with("Continue with")), "{shared:?}");
+}
+
+#[cfg(test)]
+#[gpui::test]
+fn a_conversation_the_cli_has_not_saved_yet_is_not_offered_for_a_hand_off(cx: &mut gpui::TestAppContext) {
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    let data = crate::qa_workbench_tests::fresh("agent-summary-data");
+    let folder = crate::qa_workbench_tests::fresh("agent-summary-project");
+    wb.update_in(cx, |wb, window, cx| {
+        wb.prepare_agent_project_for_test(data, folder, cx);
+        wb.new_terminal(&crate::workbench::NewTerminal, window, cx);
+        let term = wb.terminals_for_test().remove(0);
+        wb.show_agent_terminal_for_test(term);
+        // A new conversation: the terminal runs, the CLI has saved nothing.
+        wb.chrome.agents.selected = Some("not-saved-yet".into());
+        assert_eq!(wb.agent_summary().expect("a session").session, None, "nothing to hand over: the account is switched instead");
+        // Once it is saved and listed, it can be handed over.
+        wb.chrome.agents.sessions.push(Session { id: "not-saved-yet".into(), title: "t".into(), path: None });
+        assert_eq!(wb.agent_summary().and_then(|a| a.session).as_deref(), Some("not-saved-yet"));
+    });
 }
