@@ -187,12 +187,45 @@ fn guard(alias: &str, reverse: bool) -> Result<(), ForwardError> {
 /// `ssh -O forward|cancel -L|-R spec -- alias` on the shared connection.
 fn mux(alias: &str, flag: &str, spec: &str, cancel: bool, local: u16) -> Result<(), ForwardError> {
     guard(alias, flag == "-R")?;
-    let out = ssh_base(alias)
-        .args(["-o", "BatchMode=yes", "-O", if cancel { "cancel" } else { "forward" }, flag, spec, "--", alias])
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|e| ForwardError { kind: FailKind::Other, message: format!("could not start ssh: {e}") })?;
+    let mut command = ssh_base(alias);
+    command.args(["-o", "BatchMode=yes", "-O", if cancel { "cancel" } else { "forward" }, flag, spec, "--", alias]).stdin(Stdio::null());
+    let out = output_within(&mut command, MUX_TIMEOUT).map_err(|e| ForwardError { kind: FailKind::Other, message: format!("could not run ssh: {e}") })?;
     if out.status.success() { Ok(()) } else { Err(classify(&String::from_utf8_lossy(&out.stderr), out.status.code(), local)) }
+}
+
+/// Longest a request to the shared connection may take. A connection that has stopped answering (its process is blocked) would
+/// otherwise hold the caller, and the forward it was asked to close, for ever.
+const MUX_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// `command.output()`, but the process is killed and an error returned when it has not finished after `limit`.
+fn output_within(command: &mut std::process::Command, limit: std::time::Duration) -> std::io::Result<std::process::Output> {
+    use std::io::Read;
+    let mut child = command.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+    // The output is read on threads: a child that fills a pipe nobody reads would never finish.
+    let drain = |pipe: Option<Box<dyn Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            if let Some(mut pipe) = pipe {
+                let _ = pipe.read_to_end(&mut bytes);
+            }
+            bytes
+        })
+    };
+    let (stdout, stderr) = (drain(child.stdout.take().map(|p| Box::new(p) as _)), drain(child.stderr.take().map(|p| Box::new(p) as _)));
+    let start = std::time::Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if start.elapsed() >= limit {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, format!("ssh did not answer within {} s", limit.as_secs())));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
+    let join = |t: std::thread::JoinHandle<Vec<u8>>| t.join().unwrap_or_default();
+    Ok(std::process::Output { status, stdout: join(stdout), stderr: join(stderr) })
 }
 
 /// Opens `-L spec` (or cancels it).
@@ -334,6 +367,25 @@ pub fn check_master(alias: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_command_that_does_not_finish_is_killed_and_one_that_does_keeps_its_output() {
+        let mut slow = std::process::Command::new("sleep");
+        slow.arg("30");
+        let started = std::time::Instant::now();
+        let err = output_within(&mut slow, std::time::Duration::from_millis(200)).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+        let mut echo = std::process::Command::new("sh");
+        echo.args(["-c", "printf out; printf err >&2; exit 3"]);
+        let out = output_within(&mut echo, std::time::Duration::from_secs(10)).unwrap();
+        assert_eq!((out.status.code(), out.stdout.as_slice(), out.stderr.as_slice()), (Some(3), b"out".as_slice(), b"err".as_slice()));
+        // More output than a pipe holds: the child is not left waiting for a reader.
+        let mut flood = std::process::Command::new("sh");
+        flood.args(["-c", "head -c 300000 /dev/zero"]);
+        assert_eq!(output_within(&mut flood, std::time::Duration::from_secs(10)).unwrap().stdout.len(), 300_000);
+    }
 
     #[test]
     fn a_cancel_that_fails_for_a_reason_that_can_pass_is_tried_again() {

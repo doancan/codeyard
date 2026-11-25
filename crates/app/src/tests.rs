@@ -356,6 +356,12 @@ fn wait_for_diag(
     }
 }
 
+/// The ssh and sshd processes with their state, for a failure message; empty without `ps`.
+fn ssh_processes() -> String {
+    let ps = std::process::Command::new("ps").args(["-eo", "pid,ppid,stat,wchan:16,args"]).output().ok();
+    ps.map(|o| String::from_utf8_lossy(&o.stdout).lines().filter(|l| l.contains("ssh")).collect::<Vec<_>>().join("\n")).unwrap_or_default()
+}
+
 /// The sockets this machine listens on, for a failure message (`ss`, else `/proc/net/tcp`); empty where neither exists.
 fn listening_sockets() -> String {
     let ss = std::process::Command::new("ss").arg("-ltn").output().ok().filter(|o| o.status.success());
@@ -2453,16 +2459,24 @@ fn an_automatic_forward_goes_when_its_server_port_closes(cx: &mut TestAppContext
     let state = |cx: &mut VisualTestContext| {
         let connectable = std::net::TcpStream::connect(("127.0.0.1", local)).is_ok();
         format!(
-            "remote {remote} local {local}: forward {:?}, local port connectable: {connectable}\nlistening:\n{}\nlog:\n{}",
+            "remote {remote} local {local}: forward {:?}, local port connectable: {connectable}\nlistening:\n{}\nssh:\n{}\nlog:\n{}",
             forwarded(cx),
             listening_sockets(),
+            ssh_processes(),
             crate::diagnostics::log::tail(30).join("\n")
         )
     };
+    // Each look at the port is a connection through the forward to a port that is closed: ssh answers every one, so they are
+    // not made faster than the forward can be taken down.
+    let mut last_look = std::time::Instant::now() - std::time::Duration::from_secs(1);
     wait_for_diag(cx, "the forward is given back", state, |cx| {
         tick(cx);
         cx.run_until_parked();
-        forwarded(cx).is_none() && std::net::TcpStream::connect(("127.0.0.1", local)).is_err()
+        if forwarded(cx).is_some() || last_look.elapsed() < std::time::Duration::from_millis(250) {
+            return false;
+        }
+        last_look = std::time::Instant::now();
+        std::net::TcpStream::connect(("127.0.0.1", local)).is_err()
     });
 
     let _again = std::net::TcpListener::bind(("127.0.0.1", remote)).unwrap();
