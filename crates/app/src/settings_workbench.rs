@@ -3,7 +3,7 @@
 use super::{Reader, Settings};
 
 /// Settings read here that are not in the main list of known keys.
-pub(super) const KEYS: &[&str] = &["explorer.fileNesting.enabled", "explorer.fileNesting.patterns", "diagnostics.logLevel"];
+pub(super) const KEYS: &[&str] = &["explorer.fileNesting.enabled", "explorer.fileNesting.patterns", "diagnostics.logLevel", "git.autoPull"];
 
 pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>) {
     if let Some(v) = r.bool("files.trimFinalNewlines") {
@@ -17,6 +17,10 @@ pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>) {
     }
     if let Some(v) = r.choice("workbench.panel.openFromMaximized", &["half", "restore", "tab"]) {
         s.panel_open_from_maximized = v;
+    }
+    // "off", "open" (a repository's first fetch of the session) or "always": fast-forward a branch that is only behind its upstream.
+    if let Some(v) = r.choice("git.autoPull", &["off", "open", "always"]) {
+        s.git_auto_pull = v;
     }
     if let Some(v) = r.choice("diagnostics.logLevel", &crate::diagnostics::log::Level::NAMES) {
         s.log_level = crate::diagnostics::log::Level::parse(&v).unwrap_or(s.log_level);

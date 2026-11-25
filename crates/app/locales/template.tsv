@@ -174,6 +174,8 @@ Auto Save is on.
 Auto-detect project	
 Automatic forwarding is paused after a failure. Forward a port by hand, or reconnect.	
 Automatic forwarding stops at {} forwards: forward other ports by hand.	
+Automatic pull failed: {}	
+Automatic pull is waiting: {}	
 Back	
 Back to SSH workspace and container details	
 Back to the default (removes the value from settings.jsonc)	
@@ -207,6 +209,7 @@ Breakpoints are deactivated: the program runs past them.
 Breaks when the value is written; for this debug session only.	
 Brightness	
 Bring a folder's tabs and unsaved changes back when you open it	
+Bring in what others pushed by itself when the branch has nothing of its own: never, when a folder opens, or after every fetch. Your own settings only; a folder cannot change it	
 Build and Open	
 Build failed: {}	
 Build for target	
@@ -1841,6 +1844,7 @@ Not installed; open setup instructions
 Not now	
 Not paused	
 Not pulled yet. Sync brings it in.	
+Not pushed yet. Sync sends it.	
 Not saved: {0} (U+{1}) cannot be written in {2}. Remove it, or save a copy as UTF-8.	
 Not saved: {0} cannot be written in {1}.	
 Not valid Base64: left unchanged	
@@ -2153,6 +2157,7 @@ Pull request changes
 Pull requests	
 Pull with rebase instead of a merge commit	
 Pulled	
+Pulled {} new commit.|Pulled {} new commits.	
 Pulling, Pushing…	
 Pulling…	
 Push	
@@ -2872,6 +2877,7 @@ The build failed. See Output and Problems for the compiler errors.
 The bundled service catalogue is invalid. Reinstall Codeyard before retrying.	
 The changes are too large for one patch.	
 The changes could not be read.	
+The checked-out commit changed while you were asked. Nothing was pushed: try again.	
 The chosen commits are not one run of this branch.	
 The clipboard has no text.	
 The commit stays on {}: the next Sync brings it back. To remove it there too, push with force after undoing (Git: Push (Force)…).	
@@ -3440,6 +3446,7 @@ Zoom out (-)
 a comment is not closed	
 a field refers to a group the regular expression does not have	
 a key binding condition needs a context, not a constant	
+a merge, rebase, cherry-pick or another git command is running	
 a program	
 a string is not closed	
 a theme must be a JSON object	
@@ -3624,6 +3631,7 @@ not available
 not declared	
 not found on crates.io	
 not pulled yet	
+not pushed yet	
 not run	
 not run: a dependency failed	
 not run: too many tasks in the background	
@@ -3764,12 +3772,14 @@ the {} registry's list is more than 3 days old; install from the Extensions view
 theme {} isn't installed here: copy its .json into ~/.config/codeyard/themes to use it	
 theme “{}” not found (available: auto, {})	
 there is no built-in matcher called “{}”	
+this branch has commits the upstream does not	
 this computer	
 this folder only	
 this value cannot be watched	
 this version was revoked	
 too many copies	
 too many or too large patterns	
+tracked files have changes	
 turned off after three crashes	
 turned off on the extension page	
 type	

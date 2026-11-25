@@ -17,9 +17,10 @@ use crate::sections;
 use crate::ui::{self, Palette, c, icon, palette, text};
 use crate::{git, github};
 
-/// Branch / tag chip: colors from `graph::ref_chip_colors` (AA in every theme).
-fn ref_chip(r: &RefLabel, p: &Palette) -> gpui::Div {
-    let (fg, bg) = graph::ref_chip_colors(r.kind, p);
+/// Branch / tag chip: a branch wears the color of its line in the graph (`lane`), colors from `graph::ref_chip_colors` (AA in every
+/// theme).
+fn ref_chip(r: &RefLabel, lane: u32, p: &Palette) -> gpui::Div {
+    let (fg, bg) = graph::ref_chip_colors(r.kind, lane, p);
     let glyph = if r.kind == RefKind::Tag { "bookmark" } else { "git-branch" };
     div()
         .flex_shrink()
@@ -77,6 +78,8 @@ pub(super) struct CardSource {
 pub(super) struct CardCache {
     details: Rc<RefCell<HashMap<String, Result<Arc<CommitDetail>, ()>>>>,
     repos: Rc<RefCell<HashMap<String, Option<github::Repo>>>>,
+    /// Commits and repositories being read ahead of the card (see `CardSource::warm`), so one is not read twice at once.
+    warming: Rc<RefCell<std::collections::HashSet<String>>>,
 }
 
 impl CardSource {
@@ -86,6 +89,52 @@ impl CardSource {
 
     fn key(&self, hash: &str) -> String {
         format!("{}\n{hash}", self.root)
+    }
+
+    /// Reads a commit's changes (and the repository's GitHub address) while the pointer rests on its row, half a second before the
+    /// card opens: the card then opens complete instead of growing as the answers come in.
+    pub(super) fn warm<T: 'static>(&self, hash: &str, cx: &mut Context<T>) {
+        let key = self.key(hash);
+        let wanted_detail = !self.cache.details.borrow().contains_key(&key) && self.cache.warming.borrow_mut().insert(key.clone());
+        let repo_key = format!("repo\n{}", self.root);
+        let wanted_repo = !self.cache.repos.borrow().contains_key(&self.root) && self.cache.warming.borrow_mut().insert(repo_key.clone());
+        if wanted_detail {
+            let (host, root, hash) = (self.host.clone(), self.root.clone(), hash.to_string());
+            let task = cx.background_executor().spawn(async move { graph::commit_detail(host.as_ref(), &root, &hash) });
+            let cache = self.cache.clone();
+            cx.spawn(async move |_, _| {
+                let result = task.await.map(Arc::new).map_err(|_| ());
+                cache.store(key.clone(), result);
+                cache.warming.borrow_mut().remove(&key);
+            })
+            .detach();
+        }
+        if wanted_repo {
+            let (host, root) = (self.host.clone(), self.root.clone());
+            let task = {
+                let root = root.clone();
+                cx.background_executor()
+                    .spawn(async move { git::resolved_remote_url(host.as_ref(), &root, "origin").ok().and_then(|url| github::parse_remote(&url)) })
+            };
+            let cache = self.cache.clone();
+            cx.spawn(async move |_, _| {
+                let repo = task.await;
+                cache.repos.borrow_mut().insert(root, repo);
+                cache.warming.borrow_mut().remove(&repo_key);
+            })
+            .detach();
+        }
+    }
+}
+
+impl CardCache {
+    /// Keeps a read result; the oldest are dropped when the cache is full.
+    fn store(&self, key: String, result: Result<Arc<CommitDetail>, ()>) {
+        let mut cache = self.details.borrow_mut();
+        if cache.len() >= CARD_CACHE {
+            cache.clear();
+        }
+        cache.insert(key, result);
     }
 }
 
@@ -105,15 +154,20 @@ pub struct CommitCard {
     pub(super) changes: Changes,
     /// The GitHub repository of the remote, once it is known.
     repo: Option<github::Repo>,
+    /// Whether the remote was looked at: until it was, the card keeps room for the links so it does not grow when they come.
+    repo_known: bool,
+    /// The color of the commit's line in the graph: its branch label wears it.
+    lane: u32,
     _reads: Vec<gpui::Task<()>>,
 }
 
 impl CommitCard {
-    pub(super) fn new(commit: GraphCommit, source: Option<CardSource>, cx: &mut Context<Self>) -> Self {
-        let Some(source) = source else { return Self { commit, changes: Changes::Failed, repo: None, _reads: Vec::new() } };
+    pub(super) fn new(commit: GraphCommit, lane: u32, source: Option<CardSource>, cx: &mut Context<Self>) -> Self {
+        let Some(source) = source else { return Self { commit, changes: Changes::Failed, repo: None, repo_known: true, lane, _reads: Vec::new() } };
         let key = source.key(&commit.hash);
         let known_repo = source.cache.repos.borrow().get(&source.root).cloned();
-        let mut card = Self { commit, changes: Changes::Loading, repo: known_repo.clone().flatten(), _reads: Vec::new() };
+        let mut card =
+            Self { commit, changes: Changes::Loading, repo: known_repo.clone().flatten(), repo_known: known_repo.is_some(), lane, _reads: Vec::new() };
         if known_repo.is_none() {
             card.read_repo(&source, cx);
         }
@@ -126,12 +180,7 @@ impl CommitCard {
         let task = cx.background_executor().spawn(async move { graph::commit_detail(host.as_ref(), &root, &hash) });
         let read = cx.spawn(async move |this, cx| {
             let result = task.await.map(Arc::new).map_err(|_| ());
-            let mut cache = source.cache.details.borrow_mut();
-            if cache.len() >= CARD_CACHE {
-                cache.clear();
-            }
-            cache.insert(key, result.clone());
-            drop(cache);
+            source.cache.store(key, result.clone());
             this.update(cx, |this, cx| {
                 this.changes = result.map_or(Changes::Failed, Changes::Ready);
                 cx.notify();
@@ -154,6 +203,7 @@ impl CommitCard {
             cache.borrow_mut().insert(root, repo.clone());
             this.update(cx, |this, cx| {
                 this.repo = repo;
+                this.repo_known = true;
                 cx.notify();
             })
             .ok();
@@ -279,8 +329,12 @@ impl CommitCard {
     }
 }
 
+/// How long the card takes to fade in.
+const CARD_FADE: std::time::Duration = std::time::Duration::from_millis(120);
+
 impl Render for CommitCard {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        use gpui::{Animation, AnimationExt as _};
         let p = *palette(cx);
         let k = &self.commit;
         let refs = ordered_refs(k);
@@ -289,7 +343,7 @@ impl Render for CommitCard {
             _ => Vec::new(),
         };
         let muted = |t: String| div().text_size(px(text::XXS.0)).text_color(c(p.text_muted)).child(t);
-        div()
+        let card = div()
             .debug_selector(|| "commit-card".into())
             .w(px(320.))
             .flex()
@@ -310,10 +364,23 @@ impl Render for CommitCard {
                         .min_w_0()
                         .flex()
                         .flex_col()
-                        .child(div().font_weight(gpui::FontWeight::SEMIBOLD).overflow_hidden().whitespace_nowrap().child(k.author.clone()))
+                        .child(div().font_weight(gpui::FontWeight::SEMIBOLD).overflow_hidden().whitespace_nowrap().text_ellipsis().child(k.author.clone()))
                         .child(muted(format!("{} · {}", k.date, crate::git::short_ago(&k.when)))),
                 ),
             )
+            .when(k.outgoing, |d| {
+                let accent = ui::ensure_contrast(p.accent, p.text, &[p.surface_raised], 4.6);
+                d.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(theme::SPACE[3]))
+                        .text_size(px(text::XS.0))
+                        .text_color(c(accent))
+                        .child(icon("arrow-up", 12., accent))
+                        .child(crate::i18n::t("Not pushed yet. Sync sends it.")),
+                )
+            })
             .when(k.incoming, |d| {
                 let warning = ui::ensure_contrast(p.warning, p.text, &[p.surface_raised], 4.6);
                 d.child(
@@ -336,7 +403,11 @@ impl Render for CommitCard {
                     .text_color(c(p.text_muted))
                     .children(body.iter().map(|l| div().whitespace_normal().child(if l.is_empty() { " ".to_string() } else { l.clone() })))
             }))
-            .when(!refs.is_empty(), |d| d.child(div().flex().flex_wrap().gap(px(theme::SPACE[2])).children(refs.iter().map(|r| ref_chip(r, &p)))))
+            .when(!refs.is_empty(), |d| {
+                d.child(
+                    div().flex().flex_wrap().gap(px(theme::SPACE[2])).children(refs.iter().map(|r| ref_chip(r, graph::lane_color(&p, self.lane as usize), &p))),
+                )
+            })
             .child(
                 div()
                     .flex()
@@ -374,14 +445,24 @@ impl Render for CommitCard {
                 d.child(muted(tf("Parents: {}", &[&parents])))
             })
             .child(self.changes_section(&p))
-            .children(self.repo.as_ref().map(|repo| self.links(repo, &p)))
+            // Until the remote is known the links' row is kept free: the card does not grow when they arrive.
+            .children(match &self.repo {
+                Some(repo) => Some(self.links(repo, &p)),
+                None => (!self.repo_known).then(|| div().h(px(22.))),
+            })
             .child(
                 div()
                     .pt(px(theme::SPACE[2]))
                     .border_t_1()
                     .border_color(c(p.border))
                     .child(muted(crate::i18n::t("Click: details · Double-click: open · Right-click: actions").into())),
-            )
+            );
+        // The card opens with a short fade instead of appearing at once (not with reduced motion).
+        if crate::system_prefs::motion_reduced() {
+            card.into_any_element()
+        } else {
+            card.with_animation("commit-card-in", Animation::new(CARD_FADE), |d, t| d.opacity(t)).into_any_element()
+        }
     }
 }
 
@@ -869,6 +950,7 @@ fn day_header(label: &str, count: usize, h: f32, p: &Palette) -> AnyElement {
 fn row_shell(
     ix: usize,
     k: &GraphCommit,
+    lane: u32,
     h: f32,
     is_sel: bool,
     tooltips: Option<CardSource>,
@@ -877,6 +959,8 @@ fn row_shell(
     cx: &mut Context<ScmPanel>,
 ) -> gpui::Stateful<gpui::Div> {
     let (entry, menu_entry, card) = (k.clone(), k.clone(), k.clone());
+    let warm_source = tooltips.clone();
+    let warm_hash = k.hash.clone();
     let here = k.refs.iter().any(|r| r.kind == RefKind::Head);
     div()
         .id(("scm-graph", ix))
@@ -895,7 +979,13 @@ fn row_shell(
         .border_color(c(if is_sel { p.accent } else { p.surface }))
         .when(is_sel, |d| d.bg(c(p.surface_active)))
         .hover(|d| d.bg(c(p.surface_hover)))
-        .when(show_tooltips, |d| d.hoverable_tooltip(move |_, cx| cx.new(|cx| CommitCard::new(card.clone(), tooltips.clone(), cx)).into()))
+        .when(show_tooltips, |d| d.hoverable_tooltip(move |_, cx| cx.new(|cx| CommitCard::new(card.clone(), lane, tooltips.clone(), cx)).into()))
+        // The card opens half a second after the pointer rests: what it shows is read meanwhile.
+        .on_hover(cx.listener(move |_, hovered: &bool, _, cx| {
+            if let (true, Some(source)) = (*hovered, &warm_source) {
+                source.warm(&warm_hash, cx);
+            }
+        }))
         .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, _, cx| {
             this.pick_commit(entry.clone(), ev.modifiers().shift, cx);
             if ev.click_count() >= 2 {
@@ -927,11 +1017,11 @@ fn graph_row(
     let merge = commit.parents.len() > 1;
     let refs = ordered_refs(commit);
     let more = refs.len().saturating_sub(1);
-    row_shell(ix, commit, graph::ROW_H, is_sel, tooltips, show_tooltips, p, cx)
+    let lane = graph::lane_color(p, row.color);
+    row_shell(ix, commit, row.color as u32, graph::ROW_H, is_sel, tooltips, show_tooltips, p, cx)
         .pr(px(theme::SPACE[3]))
         .child(if flat {
             // Rows are skipped, so lines would break: a dot in the commit's lane color stands in for the graph.
-            let color = graph::lane_color(p, row.color);
             div()
                 .w(px(graph::width_px(1)))
                 .flex_none()
@@ -941,8 +1031,8 @@ fn graph_row(
                     div()
                         .size(px(8.))
                         .rounded_full()
-                        .when(merge || commit.incoming, |d| d.border_2().border_color(c(color)))
-                        .when(!merge && !commit.incoming, |d| d.bg(c(color))),
+                        .when(merge || commit.incoming, |d| d.border_2().border_color(c(lane)))
+                        .when(!merge && !commit.incoming, |d| d.bg(c(lane))),
                 )
                 .into_any_element()
         } else {
@@ -987,15 +1077,28 @@ fn graph_row(
         )
         .children(refs.first().map(|r| {
             // The label gives way before the subject does.
-            let mut shell = div().min_w_0().ml(px(theme::SPACE[2])).child(ref_chip(r, p));
+            let mut shell = div().min_w_0().ml(px(theme::SPACE[2])).child(ref_chip(r, lane, p));
             shell.style().flex_shrink = Some(4.);
             shell
         }))
         .when(more > 0, |d| {
-            d.child(div().flex_none().ml(px(theme::SPACE[1])).text_size(px(text::BADGE.0)).text_color(c(p.text_muted)).child(format!("+{more}")))
+            // The other labels are in the tooltip, in the order they are drawn in the card.
+            let others = refs.iter().skip(1).map(|r| r.name.as_str()).collect::<Vec<_>>().join(", ");
+            d.child(
+                div()
+                    .id(("scm-graph-more-refs", ix))
+                    .flex_none()
+                    .ml(px(theme::SPACE[1]))
+                    .text_size(px(text::BADGE.0))
+                    .text_color(c(p.text_muted))
+                    .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(others.clone().into())).into())
+                    .child(format!("+{more}")),
+            )
         })
         // Not pulled yet: an arrow says where it is going, whatever the row's other columns show.
         .when(commit.incoming, |d| d.child(div().flex_none().ml(px(theme::SPACE[2])).child(icon("arrow-down", 12., p.warning))))
+        // Not pushed yet: the mirror image, so the commits only this computer has are as easy to find as the ones it lacks.
+        .when(commit.outgoing, |d| d.child(div().flex_none().ml(px(theme::SPACE[2])).child(icon("arrow-up", 12., p.accent))))
         .when(show_hash, |d| {
             d.child(
                 div()
@@ -1026,7 +1129,7 @@ fn compact_row(
     let merge = commit.parents.len() > 1;
     let refs = ordered_refs(commit);
     let color = graph::lane_color(p, row.color);
-    row_shell(ix, commit, GraphView::Compact.row_height(), is_sel, tooltips, show_tooltips, p, cx)
+    row_shell(ix, commit, row.color as u32, GraphView::Compact.row_height(), is_sel, tooltips, show_tooltips, p, cx)
         .gap(px(theme::SPACE[3]))
         .pl(px(theme::SPACE[4]))
         .pr(px(theme::SPACE[4]))
@@ -1050,7 +1153,8 @@ fn compact_row(
                 .when(head, |d| d.font_weight(gpui::FontWeight::SEMIBOLD))
                 .child(commit.subject.clone()),
         )
-        .children(refs.first().map(|r| ref_chip(r, p)))
+        .children(refs.first().map(|r| ref_chip(r, color, p)))
+        .when(commit.outgoing, |d| d.child(icon("arrow-up", 12., p.accent)))
         .child(
             div().flex_none().w(px(26.)).flex().justify_end().text_size(px(text::XXS.0)).text_color(c(p.text_muted)).child(crate::git::short_ago(&commit.when)),
         )

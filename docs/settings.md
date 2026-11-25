@@ -117,6 +117,7 @@ status bar reports it.
 
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
+| `git.autoPull` | `off`, `open`, `always` | `off` | Bring in what others pushed by itself when the branch has nothing of its own: never, when a folder opens, or after every fetch. Your own settings only; a folder cannot change it |
 | `git.autofetch` | `true` / `false` | `true` | Fetch from the remote in the background while the window is in front |
 | `git.autofetchPeriod` | number 30–86400 | `180` | Seconds between background fetches |
 | `git.confirmSync` | `true` / `false` | `false` | Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it |

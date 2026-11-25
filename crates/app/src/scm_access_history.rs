@@ -165,6 +165,9 @@ impl ScmPanel {
                                 if k.incoming {
                                     parts.push(crate::i18n::t("not pulled yet").to_string());
                                 }
+                                if k.outgoing {
+                                    parts.push(crate::i18n::t("not pushed yet").to_string());
+                                }
                                 if k.parents.len() > 1 {
                                     parts.push(crate::i18n::t("merge").to_string());
                                 }

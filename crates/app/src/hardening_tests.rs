@@ -335,8 +335,11 @@ fn new_text_and_background_pairs_are_readable_in_every_theme() {
         }
         // Chips (HEAD filled accent; others colored text + a background lightly mixed with that color).
         for (what, kind) in [("HEAD chip", RefKind::Head), ("local chip", RefKind::Local), ("remote chip", RefKind::Remote), ("tag chip", RefKind::Tag)] {
-            let (fg, bg) = crate::graph::ref_chip_colors(kind, p);
-            check(&t.name, what, fg, bg);
+            // A branch chip wears its line's color: every color a line can have must be readable.
+            for lane in 0..=crate::graph::HEAD_COLOR {
+                let (fg, bg) = crate::graph::ref_chip_colors(kind, crate::graph::lane_color(p, lane), p);
+                check(&t.name, &format!("{what} on lane color {lane}"), fg, bg);
+            }
         }
         check(&t.name, "activity badge (on-accent on accent)", p.on_accent, p.accent);
         // Welcome card: text, on the card background and the hover background.

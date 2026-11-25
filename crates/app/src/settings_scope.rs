@@ -50,6 +50,8 @@ pub const USER_ONLY_KEYS: &[&str] = &[
     // A repository must not turn the question before a sync off, or make every commit push by itself.
     "git.confirmSync",
     "git.postCommitCommand",
+    // A repository must not decide that the editor moves its own branch.
+    "git.autoPull",
     // A repository must not make forwarded ports reachable from the network.
     "ports.localBind",
     // A repository must not let programs fill the clipboard, or turn off the checks on what is pasted back: together

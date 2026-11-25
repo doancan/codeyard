@@ -135,7 +135,9 @@ impl ScmPanel {
         let task = cx.background_executor().spawn(async move {
             let mut dirty = Vec::new();
             for path in paths {
-                if git::git_ok(asked.as_ref(), &path, &["status", "--porcelain", "--untracked-files=no"]).is_ok_and(|out| !out.trim().is_empty()) {
+                if git::git_ok(asked.as_ref(), &path, &["--no-optional-locks", "status", "--porcelain", "--untracked-files=no"])
+                    .is_ok_and(|out| !out.trim().is_empty())
+                {
                     dirty.push(path);
                 }
             }

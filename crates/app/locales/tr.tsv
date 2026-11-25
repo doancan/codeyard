@@ -4370,3 +4370,13 @@ Remove Worktree…	Worktree'yi Kaldır…
 Showing the latest {} commits.	Son {} commit gösteriliyor.
 No commit among the latest {} matches.	Yüklenen son {} commit içinde eşleşen yok.
 Uncommitted changes	Kaydedilmemiş değişiklikler
+Bring in what others pushed by itself when the branch has nothing of its own: never, when a folder opens, or after every fetch. Your own settings only; a folder cannot change it	Dalın kendine ait bir şeyi yoksa başkalarının gönderdiklerini kendiliğinden getir: asla, klasör açılınca ya da her fetch'ten sonra. Yalnızca kendi ayarlarınız; bir klasör bunu değiştiremez
+Not pushed yet. Sync sends it.	Henüz gönderilmedi. Sync bunu gönderir.
+Pulled {} new commit.|Pulled {} new commits.	{} yeni commit çekildi.
+Automatic pull is waiting: {}	Otomatik pull bekliyor: {}
+tracked files have changes	izlenen dosyalarda değişiklik var
+this branch has commits the upstream does not	bu dalda upstream'de olmayan commit'ler var
+a merge, rebase, cherry-pick or another git command is running	bir merge, rebase, cherry-pick ya da başka bir git komutu sürüyor
+Automatic pull failed: {}	Otomatik pull başarısız oldu: {}
+The checked-out commit changed while you were asked. Nothing was pushed: try again.	Sorulurken çıkış yapılan commit değişti. Hiçbir şey gönderilmedi: yeniden deneyin.
+not pushed yet	henüz gönderilmedi
