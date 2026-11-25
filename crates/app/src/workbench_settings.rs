@@ -83,11 +83,7 @@ pub const CATALOG: &[Entry] = &[
         Kind::Bool,
     ),
     e("editor.colorDecorators", crate::i18n::tr("Show a color swatch next to #rrggbb values"), Kind::Bool),
-    e(
-        "workbench.iconTheme",
-        crate::i18n::tr("File and folder icons"),
-        Kind::Choice(&["glyphs", "minimal", "codeyard", "badges", "colorful", "apple", "material", "none"]),
-    ),
+    e("workbench.iconTheme", crate::i18n::tr("File and folder icons"), Kind::Choice(&["material", "catppuccin", "vscode", "seti", "none"])),
     e("workbench.fontFamily", crate::i18n::tr("UI font of the whole window (empty: system font)"), Kind::Text),
     e(
         "ui.scale",

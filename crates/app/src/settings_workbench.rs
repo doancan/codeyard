@@ -3,7 +3,8 @@
 use super::{Reader, Settings};
 
 /// Settings read here that are not in the main list of known keys.
-pub(super) const KEYS: &[&str] = &["explorer.fileNesting.enabled", "explorer.fileNesting.patterns", "diagnostics.logLevel", "git.autoPull"];
+pub(super) const KEYS: &[&str] =
+    &["explorer.fileNesting.enabled", "explorer.fileNesting.patterns", "diagnostics.logLevel", "git.autoPull", "workbench.iconTheme"];
 
 pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>) {
     if let Some(v) = r.bool("files.trimFinalNewlines") {
@@ -17,6 +18,10 @@ pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>) {
     }
     if let Some(v) = r.choice("workbench.panel.openFromMaximized", &["half", "restore", "tab"]) {
         s.panel_open_from_maximized = v;
+    }
+    // The values of the icon sets that were replaced are still accepted, and mean the default theme.
+    if let Some(v) = r.choice("workbench.iconTheme", crate::icon_theme::ACCEPTED) {
+        s.icon_theme = crate::icon_theme::IconTheme::from_setting(&v).id().into();
     }
     // "off", "open" (a repository's first fetch of the session) or "always": fast-forward a branch that is only behind its upstream.
     if let Some(v) = r.choice("git.autoPull", &["off", "open", "always"]) {

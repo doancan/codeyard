@@ -546,9 +546,12 @@ Make it yours:
   entry in `[brackets]` applies to that theme only), or "Theme: Save Current Colors as User
   Theme…" to keep your tweaks as a theme file. Color themes from another editor dropped into
   `~/.config/codeyard/themes` are imported.
-- **Icons:** "Theme: Pick File Icon Theme…" previews Minimal (default), Codeyard, Language Badges,
-  Colorful Folders, Apple / GitHub (solid blue folders, outline files with a language dot),
-  Material (folders colored and marked by purpose, solid colored files) and None (`"workbench.iconTheme"`).
+- **Icons:** "Theme: Pick File Icon Theme…" previews Material Icons (default: colored icons by language and tool, folders
+  marked by purpose), Catppuccin Icons (pastel; Mocha on dark color themes, Latte on light ones), VS Code Icons, Seti (small
+  single-color file icons, no folder icons) and None (`"workbench.iconTheme"`). A file is matched by its whole name
+  (`Cargo.toml`), then by its longest known extension (`a.test.ts` tries `test.ts`, then `ts`), and gets the set's plain
+  file icon otherwise. The old values `glyphs`, `minimal`, `codeyard`, `badges`, `colorful` and `apple` still load and mean Material.
+  The icon files and how they are chosen: [file-icons.md](file-icons.md).
 - **Layout:** `workbench.fontFamily` (UI font), `workbench.activityBar.visible`,
   `workbench.statusBar.visible`, `workbench.editor.showTabs`, `workbench.tabs.closeButton`,
   `workbench.tabs.showIcons`, `workbench.breadcrumbs.enabled`, `workbench.tree.indent`.

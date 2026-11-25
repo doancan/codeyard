@@ -119,6 +119,7 @@ mod ext_watch_tests;
 #[cfg(test)]
 mod features_tests;
 mod file_batch;
+mod file_icons_assets;
 mod find;
 mod folder_settings;
 mod fsutil;

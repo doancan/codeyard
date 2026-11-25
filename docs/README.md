@@ -15,6 +15,7 @@ code they describe.
 | [web-preview.md](web-preview.md) | optional HTML/CSS/JavaScript server, browser live refresh, local/SSH/container support and serving boundaries |
 | [editor-services.md](editor-services.md) | schemas, spell check, merge editor, pull requests, `.http`, log follow: how each one works and where it stops |
 | [language-services.md](language-services.md) | explicit local/SSH language-service installation, pinned packages/runtime, cancellation, trust and recovery |
+| [file-icons.md](file-icons.md) | the file icon sets, where they come from, how a name finds its icon and how to rebuild them |
 | [design-tokens.md](design-tokens.md) | colour roles, themes and how tokens become Rust constants |
 | [accessibility.md](accessibility.md) | the AccessKit tree on macOS and Windows, motion and contrast, what is verified, what is missing |
 | [platforms.md](platforms.md) | what runs and what has been verified on macOS, Linux and Windows |

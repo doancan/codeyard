@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- File icons: the seven built-in file icon themes (File Glyphs, Codeyard, Language Badges, Colorful Folders, Minimal, Apple / GitHub and the drawn Material) are replaced by real icon sets, embedded in the app: **Material Icons** (the new default), **Catppuccin Icons** (Mocha on dark color themes, Latte on light ones), **VS Code Icons** and **Seti**, plus *None*. A file is matched by its whole name, then its longest known extension. `"workbench.iconTheme"` values of the old themes still load and mean Material. The sets are MIT-licensed selections of about 300 icons each; their licences ship with the app, and `scripts/icon-sets.py` rebuilds them.
+
 ### Added
 
 - Source Control: *Amend* and *Stash* buttons under Commit. Amend adds the staged changes to the last commit (and gives it the message in the box, if there is one) and asks first when that commit is already pushed, because the branch then needs a force push. Stash puts the changes aside; Shift (or having only new files) takes new files too.

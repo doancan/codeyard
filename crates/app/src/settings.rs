@@ -849,9 +849,6 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.bool("editor.colorDecorators") {
         s.color_decorators = v;
     }
-    if let Some(v) = r.choice("workbench.iconTheme", &["codeyard", "glyphs", "badges", "colorful", "minimal", "apple", "material", "none"]) {
-        s.icon_theme = v;
-    }
     if let Some(v) = r.bool("workbench.statusBar.visible") {
         s.status_bar = v;
     }

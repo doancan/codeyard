@@ -262,13 +262,8 @@ const ICONS: &[(&str, &[u8])] = icons![
     "circle-x",
     "file",
     "file-archive",
-    "file-code",
-    "file-config",
-    "file-data",
     "file-image",
     "file-json",
-    "file-lock",
-    "file-terminal",
     "file-text",
     "folder",
     "gauge",
@@ -333,9 +328,6 @@ const ICONS: &[(&str, &[u8])] = icons![
     "step-into",
     "step-out",
     "rotate-ccw",
-    "folder-solid",
-    "folder-open-solid",
-    "file-solid",
     "codeyard-mark",
     "ellipsis",
     // --- panel toolbar: one optical size for every glyph ---
@@ -375,61 +367,14 @@ pub fn embedded_icon_names() -> Vec<&'static str> {
     ICONS.iter().filter_map(|(p, _)| p.strip_prefix("icons/")?.strip_suffix(".svg")).collect()
 }
 
-/// A file-type colour as the icon shows it: the role's colour drawn toward the muted text colour, so the icons of a
-/// tree read as one family in every theme instead of a row of full-strength hues, and never fall below 3:1 (the
-/// contrast of a UI component) on the editor and sidebar backgrounds.
-fn icon_tint(role: u32, p: &Palette) -> u32 {
-    ensure_contrast(mix(role, p.text_muted, 0.30), p.text, &[p.bg, p.surface], 3.0)
-}
-
-/// (icon, colour) by file name. Colours come from the theme's roles, softened by `icon_tint`: they follow theme changes.
-pub fn file_icon(name: &str, p: &Palette) -> (&'static str, u32) {
-    let (glyph, role) = file_kind(name, p);
-    (glyph, icon_tint(role, p))
-}
-
-/// The glyph and the theme role colour for a file name: by name first (manifests, lock files, READMEs), then by extension.
-fn file_kind(name: &str, p: &Palette) -> (&'static str, u32) {
-    let lower = name.to_ascii_lowercase();
-    match lower.as_str() {
-        "cargo.toml" | "package.json" | "go.mod" | "pyproject.toml" | "gemfile" | "pom.xml" | "build.gradle" | "cmakelists.txt" => {
-            return ("blocks", p.syntax_number);
-        }
-        "dockerfile" | "makefile" | "justfile" => return ("file-terminal", p.info),
-        ".gitignore" | ".gitattributes" | ".gitmodules" => return ("git-branch", p.text_muted),
-        n if n.starts_with("readme") => return ("book-open", p.info),
-        n if n.starts_with("license") || n.starts_with("copying") || n == "notice" => return ("file-text", p.text_muted),
-        _ => {}
-    }
-    let ext = lower.rsplit_once('.').map(|(_, e)| e).unwrap_or_default();
-    match ext {
-        "rs" => ("file-code", p.syntax_tag),
-        "ts" | "tsx" | "mts" | "cts" => ("file-code", p.info),
-        "js" | "jsx" | "mjs" | "cjs" => ("file-code", p.syntax_number),
-        "py" | "pyi" => ("file-code", p.syntax_function),
-        "go" => ("file-code", p.syntax_type),
-        "c" | "h" | "cpp" | "hpp" | "cc" | "java" | "kt" | "swift" | "rb" | "php" | "lua" | "zig" => ("file-code", p.syntax_keyword),
-        "html" | "htm" | "vue" | "svelte" => ("file-code", p.syntax_tag),
-        "css" | "scss" | "sass" | "less" => ("file-code", p.syntax_keyword),
-        "json" | "jsonc" => ("file-json", p.syntax_number),
-        "toml" | "yaml" | "yml" | "ini" | "conf" | "cfg" | "env" => ("file-config", p.warning),
-        "lock" => ("file-lock", p.text_muted),
-        "csv" | "tsv" | "sql" | "db" | "sqlite" => ("file-data", p.success),
-        "zip" | "tar" | "gz" | "tgz" | "xz" | "bz2" | "7z" | "rar" => ("file-archive", p.text_muted),
-        "sh" | "bash" | "zsh" | "fish" => ("file-terminal", p.success),
-        "md" | "mdx" | "txt" | "rst" => ("file-text", p.info),
-        "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "ico" => ("file-image", p.syntax_string),
-        _ => ("file", p.text_muted),
-    }
-}
-
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> gpui::Result<Option<Cow<'static, [u8]>>> {
-        Ok(ICONS.iter().find(|(p, _)| *p == path).map(|(_, b)| Cow::Borrowed(*b)))
+        let found = ICONS.iter().chain(crate::file_icons_assets::FILE_ICONS).find(|(p, _)| *p == path);
+        Ok(found.map(|(_, b)| Cow::Borrowed(*b)))
     }
 
     fn list(&self, path: &str) -> gpui::Result<Vec<SharedString>> {
-        Ok(ICONS.iter().filter(|(p, _)| p.starts_with(path)).map(|(p, _)| SharedString::from(*p)).collect())
+        Ok(ICONS.iter().chain(crate::file_icons_assets::FILE_ICONS).filter(|(p, _)| p.starts_with(path)).map(|(p, _)| SharedString::from(*p)).collect())
     }
 }
 

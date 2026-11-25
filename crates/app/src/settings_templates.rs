@@ -70,8 +70,8 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Extra globs skipped by search (on top of files.exclude).
   // "search.exclude": ["**/dist", "*.min.js"],
 
-  // File and folder icons: "glyphs", "minimal", "codeyard", "badges", "colorful", "apple", "material", "none"
-  "workbench.iconTheme": "glyphs",
+  // File and folder icons: "material", "catppuccin", "vscode", "seti", "none"
+  "workbench.iconTheme": "material",
   "workbench.statusBar.visible": true,
   "workbench.activityBar.visible": true,
   // UI font for the whole window (the editor has its own "editor.fontFamily").

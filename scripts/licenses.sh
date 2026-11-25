@@ -21,6 +21,7 @@ FILES=(
   "vendor/xattr/LICENSE-APACHE xattr-LICENSE-APACHE"
   "crates/spell/dicts/en/license spell-dict-en-license"
   "crates/syntax/LICENSES syntax-LICENSES"
+  "crates/app/assets/file-icons/LICENSES file-icons-LICENSES"
 )
 
 missing=0

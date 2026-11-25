@@ -42,12 +42,26 @@ it is out of date or a licence is not one `deny.toml` allows (plus BlueOak-1.0.0
 
 ## Icons
 
-The 112 interface and file glyphs in `crates/app/assets/icons/*.svg` are adapted from
+The 105 interface glyphs in `crates/app/assets/icons/*.svg` are adapted from
 [Tabler Icons](https://github.com/tabler/tabler-icons), MIT, Copyright (c) 2020–2026 Paweł Kuna.
 Source revision: `85e870dbe8680c2d6deefd062122d30ef1544a41`. Outline glyphs use a normalized 1.65 px stroke on a 24 px grid.
 The upstream licence is preserved in `crates/app/assets/TABLER-LICENSE`.
 `codeyard-mark.svg` is the project's own logo and remains under the project licence.
 The previous Lucide licence remains in `crates/app/assets/icons/LICENSE` for provenance.
+
+### File icon sets
+
+The file and folder icons of the four icon themes (`crates/app/assets/file-icons/`, about 1,300 SVG files) are a selection from
+these open-source projects, all MIT. They are copied unmodified, except that Seti's single-colour icons get their colour
+written into the file. Each project's licence, with its copyright line, is in `crates/app/assets/file-icons/LICENSES/` and
+ships with every release. `scripts/icon-sets.py` makes the selection (docs/file-icons.md).
+
+- [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) 5.40.0 (npm `material-icon-theme`),
+  by Philipp Kief and contributors.
+- [Catppuccin Icons](https://github.com/catppuccin/vscode-icons), Copyright (c) Catppuccin, in the Mocha and Latte palettes.
+- [vscode-icons](https://github.com/vscode-icons/vscode-icons), by Roberto Huertas and contributors. Some icons depict
+  trademarks of their owners (languages, frameworks, products); they are shown only to mark files of that kind.
+- [Seti UI](https://github.com/jesseweed/seti-ui), by Jesse Weed.
 
 ## Themes
 

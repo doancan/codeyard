@@ -416,8 +416,7 @@ Color symbols by their meaning, from the language server
 Color theme	
 Color theme of the whole window and the editor	
 Color theme: {}	
-Colored file glyphs, folders with only their arrow; names line up	
-Colorful Folders	
+Colorful icons by language and tool, folders marked by purpose (the default)	
 Column where lines wrap with wordWrapColumn or bounded	
 Column {0}: {1}	
 Columns	
@@ -1072,12 +1071,10 @@ Fetching in the background: the sync starts when it is done.
 Fetching…	
 Fewer context lines	
 File	
-File Glyphs (Default)	
 File Icon Theme	
 File Icon Theme…	
 File and folder icons	
 File changed since preview: {}	
-File glyphs tinted by language, accent folders	
 File icon theme…	
 File name (a path like src/new.rs works too)	
 File operation: {0} completed, {1} failed, {2} not processed.	
@@ -1158,7 +1155,6 @@ Fold All
 Fold line {}	
 Folder for build output (empty: the project's own target folder)	
 Folder to clone into	
-Folders colored by purpose (src, tests, docs…) and colored file glyphs	
 Follow	
 Follow (Tail)	
 Follow Cursor	
@@ -1479,7 +1475,6 @@ Label
 Labels	
 Language	
 Language & Region	
-Language Badges	
 Language Services	
 Language mode for this file	
 Language of Uppercase / Lowercase / Title Case: auto (Turkish rules when the text has ı İ ş ğ), tr (i ↔ İ, ı ↔ I) or en	
@@ -1620,7 +1615,6 @@ Message of the squashed commit
 Milliseconds between live preview checks	
 Mine	
 Minified	
-Minimal	
 Minimize	
 Minimize window	
 Minutes the terminals keep running for the next start after Codeyard quits, crashes or is killed (0: not kept)	
@@ -1897,7 +1891,6 @@ Oct
 Off	
 On	
 On this computer	
-One quiet color, outline glyphs	
 Only My Commits	
 Only When I Ask	
 Only a published branch can be force-pushed: use Publish Branch first.	
@@ -2654,14 +2647,13 @@ Signature not verified: the token is only decoded, not checked
 Signing the commit failed: gpg could not sign it. Check that the key is available and that gpg-agent can ask for its passphrase, or turn commit.gpgsign off.	
 Skip This Version	
 Skip Those Files	
-Small colored badges with the language's letters	
+Small single-color file icons; folders show only their arrow	
 Snippets	
 Snippets for {}	
 Snippets reloaded	
 Snippets: Insert Snippet…	
+Soft pastel icons that follow the light or dark theme	
 Software Update	
-Solid blue folders like Finder, outline files with a language dot like GitHub	
-Solid folders colored and marked by purpose, solid files colored by language	
 Some bytes are not valid UTF-8 and are shown as replacement characters	
 Something with that name already exists.	
 Sort by {}	
@@ -2886,6 +2878,7 @@ The changes are too large for one patch.
 The changes could not be read.	
 The checked-out commit changed while you were asked. Nothing was pushed: try again.	
 The chosen commits are not one run of this branch.	
+The classic set with the widest coverage of file names	
 The clipboard has no text.	
 The commit stays on {}: the next Sync brings it back. To remove it there too, push with force after undoing (Git: Push (Force)…).	
 The complete file list is available in Output.	

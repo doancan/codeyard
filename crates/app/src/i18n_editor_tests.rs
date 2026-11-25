@@ -216,10 +216,10 @@ fn pickers_markdown_merge_and_spell_texts() {
     assert_eq!(tf("Added “{}” to your dictionary.", &[&"kod"]), "“kod” sözlüğünüze eklendi.");
     assert_eq!(tf("{} is not installed", &[&"de"]), "de kurulu değil");
     assert!(t("Show lines matching (regular expression, case-insensitive), e.g. {}").starts_with("Eşleşen"));
-    assert_eq!(crate::icon_theme::IconTheme::Badges.label(), "Dil Rozetleri");
+    assert_eq!(crate::icon_theme::IconTheme::None.label(), "Yok");
     drop(_g);
     assert_eq!(tf("Go to line {0}, column {1}", &[&3, &4]), "Go to line 3, column 4");
-    assert_eq!(crate::icon_theme::IconTheme::Badges.label(), "Language Badges");
+    assert_eq!(crate::icon_theme::IconTheme::None.label(), "None");
 }
 
 #[test]
