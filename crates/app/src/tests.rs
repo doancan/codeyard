@@ -331,16 +331,35 @@ fn delete_asks_first_and_closes_tab(cx: &mut TestAppContext) {
 }
 
 /// A real shell: output comes from real threads, so loop while waiting.
-fn wait_for(cx: &mut VisualTestContext, what: &str, mut done: impl FnMut(&mut VisualTestContext) -> bool) {
+fn wait_for(cx: &mut VisualTestContext, what: &str, done: impl FnMut(&mut VisualTestContext) -> bool) {
+    wait_for_diag(cx, what, |_| String::new(), done);
+}
+
+/// `wait_for`, and when time runs out `diagnose` says what the state was: a wait on a real server fails for reasons the bare
+/// "timed out" cannot tell apart (nothing happened, or something else held it up).
+fn wait_for_diag(
+    cx: &mut VisualTestContext,
+    what: &str,
+    mut diagnose: impl FnMut(&mut VisualTestContext) -> String,
+    mut done: impl FnMut(&mut VisualTestContext) -> bool,
+) {
     let start = std::time::Instant::now();
     loop {
         cx.run_until_parked();
         if done(cx) {
             return;
         }
-        assert!(start.elapsed() < std::time::Duration::from_secs(10 * crate::test_sshd::timeout_scale()), "timed out: {what}");
+        if start.elapsed() >= std::time::Duration::from_secs(10 * crate::test_sshd::timeout_scale()) {
+            panic!("timed out: {what}\n{}", diagnose(cx));
+        }
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
+}
+
+/// The sockets this machine listens on, for a failure message (`ss`, else `/proc/net/tcp`); empty where neither exists.
+fn listening_sockets() -> String {
+    let ss = std::process::Command::new("ss").arg("-ltn").output().ok().filter(|o| o.status.success());
+    ss.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).or_else(|| std::fs::read_to_string("/proc/net/tcp").ok()).unwrap_or_default()
 }
 
 #[cfg(unix)]
@@ -2431,7 +2450,11 @@ fn an_automatic_forward_goes_when_its_server_port_closes(cx: &mut TestAppContext
     assert_ne!(local, remote, "the server is this machine, so its own port is busy here");
 
     drop(app);
-    wait_for(cx, "the forward is given back", |cx| {
+    let state = |cx: &mut VisualTestContext| {
+        let connectable = std::net::TcpStream::connect(("127.0.0.1", local)).is_ok();
+        format!("remote {remote} local {local}: forward {:?}, local port connectable: {connectable}\nlistening:\n{}", forwarded(cx), listening_sockets())
+    };
+    wait_for_diag(cx, "the forward is given back", state, |cx| {
         tick(cx);
         cx.run_until_parked();
         forwarded(cx).is_none() && std::net::TcpStream::connect(("127.0.0.1", local)).is_err()
