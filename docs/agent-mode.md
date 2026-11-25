@@ -110,10 +110,13 @@ The app was started with agent mode on (two windows) and looked at in screenshot
 filter; the *Attention* group with a project waiting (amber dot on the row and the tab, *Needs you* in the status line) and with a
 project at its limit (red dot, *Limit reached*), each fed by a terminal that rang the bell or printed a limit message; the terminal
 with its tab and status line; the right panel with the project's own Source Control view (commit box, changes, worktrees, graph) and
-the tabs *Git*, *Diff*, *Pull requests*, *Files*. **Nobody has seen** the account button, its menu, the limit bar and the usage bars
-(they need an agent launcher session of a real CLI), the Dock badge and bounce, the banner with its permission prompt and click, a
-real `claude` or `codex` session hitting a real limit, or SSH projects. The limit messages are the tools' wording as known today and
-will need upkeep.
+the tabs *Git*, *Diff*, *Pull requests*, *Files*. With a stand-in script for the CLI (started from the Agents panel, printing a limit
+message) the screenshots also show a project with an agent session: its main terminal first among the tabs, the extra-terminal count,
+the account button *Personal* of the tool, its menu with each account's state, the bar *Personal reached its limit; it resets 3pm*
+with its offer of the other account, and the accounts at the foot of the list (*Limit reached · 3pm*, *0 tokens*). **Nobody has
+seen** the usage bars with real token counts, what the offer does when pressed (it asks first, as the Agents panel does), the Dock
+badge and bounce, the banner with its permission prompt and click, a real CLI hitting a real limit, or SSH projects. The limit
+messages are the tools' wording as known today and will need upkeep.
 
 ## Tests
 
