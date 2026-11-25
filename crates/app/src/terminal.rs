@@ -942,8 +942,10 @@ impl TerminalView {
 
     fn paste(&mut self, _: &TermPaste, _: &mut Window, cx: &mut Context<Self>) {
         let Some(item) = cx.read_from_clipboard() else { return };
-        // Text wins: a spreadsheet or a document puts a picture of the selection on the clipboard beside its text.
-        if self.host.is_remote()
+        // Text wins: a spreadsheet or a document puts a picture of the selection on the clipboard beside its text. A picture alone
+        // (a screenshot) is saved to a private temporary file and its path is pasted, which is how programs such as Claude Code
+        // take an image in a terminal. Locally Ctrl+V is left to the program, which reads the clipboard itself.
+        if (self.host.is_remote() || cfg!(unix))
             && item.text().is_none_or(|t| t.trim().is_empty())
             && let Some(image) = Self::clipboard_image(item.clone())
         {
