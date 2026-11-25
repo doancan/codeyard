@@ -161,6 +161,9 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // in a session) or "always". Never with changes in tracked files, commits of its own, or a merge or rebase half done. Your own
   // settings only: a folder cannot change it.
   "git.autoPull": "off",
+  // Agent mode: the tokens one Claude Code account may spend in five hours, as you know it from your plan or from the
+  // count it showed when the limit hit. The usage bar then shows a share of it; 0 shows use relative to the busiest account.
+  "agents.claudeTokenBudget": 0,
   // Ask before Sync pulls or pushes (your own settings only: a folder cannot change it).
   "git.confirmSync": false,
   // Pull with rebase instead of a merge commit.

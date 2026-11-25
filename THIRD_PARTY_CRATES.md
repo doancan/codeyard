@@ -5,7 +5,7 @@ field of each crate's `Cargo.toml`. `cargo deny check` (see `deny.toml`) enforce
 allowed licence. This list covers all target platforms, including crates that a given build does not compile.
 Crates marked vendored live in `vendor/`.
 
-901 crates.
+902 crates.
 
 | Crate | Version | Licence | |
 | --- | --- | --- | --- |
@@ -435,6 +435,7 @@ Crates marked vendored live in `vendor/`.
 | objc2-quartz-core | 0.2.2 | MIT |  |
 | objc2-quartz-core | 0.3.2 | Zlib OR Apache-2.0 OR MIT |  |
 | objc2-ui-kit | 0.3.2 | Zlib OR Apache-2.0 OR MIT |  |
+| objc2-user-notifications | 0.3.2 | Zlib OR Apache-2.0 OR MIT |  |
 | objc_exception | 0.1.2 | MIT |  |
 | objc_id | 0.1.1 | MIT |  |
 | object | 0.37.3 | Apache-2.0 OR MIT |  |

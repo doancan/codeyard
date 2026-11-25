@@ -59,7 +59,9 @@ with a bar relative to the busiest account.
 
 - There is no percentage of the plan: the tools give no such number, and the session files hold no quota. The token count comes
   from the account's own session files, counts input, output and cache writes, and covers private history only (shared history is one
-  folder for every account and cannot be attributed). Codex and Antigravity show their state but no count.
+  folder for every account and cannot be attributed). Codex and Antigravity show their state but no count. If you know what an
+  account may spend in five hours (your plan, or the count shown when a limit hit), set `agents.claudeTokenBudget`: the bar is then a
+  share of it and the text gives the percentage; at `0` (the default) the bar is relative to the busiest account.
 - A limit is believed for five hours after it was first seen, unless the person ends it. *Agents: Mark Account as Available*
   ends it and ignores a message still on screen for ten minutes; *Agents: Mark Account as Limited* sets it by hand.
 - When the project's main terminal shows a limit message, a bar above the status line offers the account that is free and least
@@ -68,9 +70,10 @@ with a bar relative to the busiest account.
 
 **Attention.** While agent mode is on, a project that starts waiting, hits a limit or finishes while the person is not looking at
 it gets a notice in the window (*Name needs you*, *Name: limit reached*, *Name finished*) whose button, *Open Project*, shows that
-project's terminal. The Dock icon shows how many projects need the person (macOS) and bounces once when one more does while
-Codeyard is in the background. What a project was when agent mode was opened is not news. There is no banner in Notification
-Center: that needs a signed app bundle and a new dependency, and is not part of this change.
+project's terminal. When Codeyard is in the background (macOS, as an application bundle) the same event is also a **banner in
+Notification Center** with the project's last line of output; clicking the banner brings that project up. The Dock icon shows how
+many projects need the person and bounces once when one more does. What a project was when agent mode was opened is not news.
+Banners need the person's permission, which macOS asks for once; run unbundled (`cargo run`) no banner is made.
 
 ## How it works
 
@@ -86,7 +89,10 @@ Center: that needs a signed app bundle and a new dependency, and is not part of 
 - **Accounts and limits** are `agent_accounts.rs` (`Limits`, an app global: who is limited, which account to offer),
   `agent_limits.rs` (the tools' messages) and `agent_usage.rs` (tokens from Claude Code's session files). The list is redrawn
   once a second; usage is read off the UI thread once a minute.
-- **The Dock** is `dock_attention.rs` (`objc2-app-kit`'s `NSApplication` and `NSDockTile`; nothing on other systems).
+- **The Dock** is `dock_attention.rs` (`objc2-app-kit`'s `NSApplication` and `NSDockTile`; nothing on other systems). **Banners**
+  are `system_notifications.rs` (`objc2-user-notifications`, the one dependency this change adds; it is in the stack table of
+  [architecture.md](architecture.md)): the project travels in the request identifier, a click is queued and the next window to
+  draw opens the project. `UNUserNotificationCenter` needs a bundle identifier, so without one nothing is done.
 
 ## Limits of this version
 
@@ -94,14 +100,15 @@ Center: that needs a signed app bundle and a new dependency, and is not part of 
 - A project without a window is not listed: open it first (a project opened from the hub is not offered yet).
 - Existing project windows are not hidden by the mode; minimise them as usual.
 - Pull requests of GitHub only; extension-provided pull request sources stay in the Pull Requests list of the project's window.
-- Notification Center banners are not there (see Attention); the in-window notice with its button and the Dock count are.
+- Banners are written for a signed bundle and **could not be run here** (see below); unbundled runs show the in-window notice and the Dock count only.
 - A terminal drawn by the hub and by its own window at once draws correctly in the leader only; the other shows the same text at
   the leader's width.
 
 ## Not verified
 
-Everything above is covered by the tests listed below; **nobody has looked at it in a running window yet** (layout, colours, the
-Dock badge and bounce, a real `claude` or `codex` session hitting a real limit, SSH projects). The limit messages are the tools'
+Everything above is covered by the tests listed below, and the app was started with agent mode on and two project windows for
+18 seconds without a panic; **nobody has looked at it in a running window** (layout, colours, the Dock badge and bounce, the
+banner and its permission prompt and click, a real `claude` or `codex` session hitting a real limit, SSH projects). The limit messages are the tools'
 wording as known today and will need upkeep.
 
 ## Tests

@@ -210,6 +210,7 @@ impl Render for Workbench {
         self.step_panel_anim(window);
         self.sync_agent_project(cx);
         self.drop_closed_hub(cx);
+        self.open_clicked_banner(window, cx);
         self.ask_trust_on_open(window, cx);
         // The repository search waits until Source Control is on screen (connecting opens a home folder: no scan unasked).
         if self.view_shown(Panel::Scm) {

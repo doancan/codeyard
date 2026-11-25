@@ -34,6 +34,7 @@ mod dap;
 mod debug_model;
 mod diagnostics;
 mod dock_attention;
+mod system_notifications;
 // --- data ---
 mod a11y_controls;
 #[cfg(test)]

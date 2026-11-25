@@ -27,6 +27,10 @@ pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>) {
     if let Some(v) = r.choice("git.autoPull", &["off", "open", "always"]) {
         s.git_auto_pull = v;
     }
+    // The tokens a Claude Code account is expected to spend in five hours: agent mode's usage bars then show a share of it.
+    if let Some(v) = r.number("agents.claudeTokenBudget", 0., 1e10) {
+        s.agents_claude_token_budget = v as u64;
+    }
     if let Some(v) = r.choice("diagnostics.logLevel", &crate::diagnostics::log::Level::NAMES) {
         s.log_level = crate::diagnostics::log::Level::parse(&v).unwrap_or(s.log_level);
     }

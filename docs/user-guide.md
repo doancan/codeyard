@@ -2334,9 +2334,10 @@ right. Choosing another project never stops the first one's terminals.
 
 - *Attention* at the top of the list gathers the projects that wait for an answer or hit an account limit; looking at one clears
   it. A project that starts waiting, hits a limit or finishes out of sight gets a notice with an *Open Project* button. On macOS
-  the Dock icon shows how many there are and bounces once when one more starts waiting in the background.
+  with Codeyard in the background it is also a banner in Notification Center (a click opens the project), and the Dock icon shows how
+  many there are and bounces once when one more starts waiting.
 - The account button at the right of the tabs switches the agent session's account. At the foot of the list each account says
-  *Available* or *Limit reached · <time>*, and Claude Code accounts show the tokens spent in the last five hours. When the agent
+  *Available* or *Limit reached · <time>*, and Claude Code accounts show the tokens spent in the last five hours (as a percentage when `agents.claudeTokenBudget` is set). When the agent
   prints a limit message, a bar offers the account that is free and least used and continues the conversation there.
   *Agents: Mark Account as Limited* and *Agents: Mark Account as Available* correct a wrong guess.
 - Git (with its graph, changes and commit box) and Files are the project's own views; a file picked in Git shows its diff under

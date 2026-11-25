@@ -149,6 +149,11 @@ pub const CATALOG: &[Entry] = &[
         Kind::Choice(&["none", "push", "sync"]),
     ),
     e("git.enableSmartCommit", crate::i18n::tr("Commit all tracked changes when nothing is staged"), Kind::Bool),
+    e(
+        "agents.claudeTokenBudget",
+        crate::i18n::tr("Tokens a Claude Code account may spend in five hours (0: not known); agent mode shows an account's use as a share of it"),
+        Kind::Number { min: 0., max: 10_000_000_000. },
+    ),
     // --- structural ---
     e("search.structural.maxFiles", crate::i18n::tr("Most files a structural search reads and parses"), Kind::Number { min: 1., max: 100_000. }),
     e(
@@ -461,6 +466,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "git.autofetch" => json!(s.git_autofetch),
         "git.autofetchPeriod" => json!(s.git_autofetch_period),
         "git.autoPull" => json!(s.git_auto_pull),
+        "agents.claudeTokenBudget" => json!(s.agents_claude_token_budget),
         "git.confirmSync" => json!(s.git_confirm_sync),
         "git.rebaseWhenSync" => json!(s.git_rebase_when_sync),
         "git.pruneOnFetch" => json!(s.git_prune_on_fetch),

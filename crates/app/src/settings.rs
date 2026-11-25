@@ -71,6 +71,7 @@ pub struct Settings {
     pub git_autofetch: bool,
     pub git_autofetch_period: u32,
     pub git_auto_pull: String,
+    pub agents_claude_token_budget: u64, // tokens an account may spend in five hours; 0: unknown
     /// Ask before a sync that pulls or pushes.
     pub git_confirm_sync: bool,
     /// Pull with `--rebase` instead of merging.
@@ -357,6 +358,7 @@ impl Default for Settings {
             git_autofetch: true,
             git_autofetch_period: 180,
             git_auto_pull: "off".into(),
+            agents_claude_token_budget: 0,
             git_confirm_sync: false,
             git_rebase_when_sync: false,
             git_prune_on_fetch: true,
@@ -1209,6 +1211,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "search.structural.maxFiles",
         "compare.folders.ignore",
         "compare.folders.maxFiles",
+        "agents.claudeTokenBudget",
         "terminal.shell",
         "terminal.fontSize",
         "terminal.lineHeight",

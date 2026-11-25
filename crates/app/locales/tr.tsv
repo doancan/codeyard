@@ -4478,3 +4478,5 @@ There is no agent session in this project to mark.	İşaretlenecek bir ajan otur
 {} finished	{} bitti
 Open Project	Projeyi Aç
 Attention	Dikkat
+{} tokens · {}%	{} token · %{}
+Tokens a Claude Code account may spend in five hours (0: not known); agent mode shows an account's use as a share of it	Bir Claude Code hesabının beş saatte harcayabileceği token (0: bilinmiyor); ajan modu hesabın kullanımını bunun payı olarak gösterir
