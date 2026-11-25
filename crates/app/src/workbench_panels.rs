@@ -53,6 +53,7 @@ fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, glyph_only:
         Bottom::Debug => "debug-tab",
         Bottom::Ports => "ports-tab",
         Bottom::Terminal => "terminal-tab",
+        Bottom::Agents => "agents-tab",
         Bottom::ExtView => "ext-view-tab",
     };
     let glyph = match tab {
@@ -61,6 +62,7 @@ fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, glyph_only:
         Bottom::Debug => "bug-play",
         Bottom::Ports => "plug",
         Bottom::Terminal => "terminal",
+        Bottom::Agents => "activity",
         Bottom::ExtView => "blocks",
     };
     // The glyph of the tab in front carries the accent; the others are quiet.
@@ -170,7 +172,7 @@ impl Workbench {
                 PanelAction::command("terminal-clear", "eraser", t("Clear Terminal"), |this, w, cx| this.dispatch_now(&crate::terminal::TermClear, w, cx))
                     .enabled(!self.terminals.is_empty()),
             ],
-            Bottom::Problems | Bottom::Debug | Bottom::ExtView => Vec::new(),
+            Bottom::Problems | Bottom::Debug | Bottom::ExtView | Bottom::Agents => Vec::new(),
         }
     }
 
@@ -237,6 +239,7 @@ impl Workbench {
         }
         tabs.push((Bottom::Ports, crate::i18n::t("Ports"), self.active_forwards()));
         tabs.push((Bottom::Terminal, crate::i18n::t("Terminal"), self.terminals_asking(cx)));
+        tabs.push((Bottom::Agents, crate::i18n::t("Agents"), 0));
         // The panel's width as last laid out (beside the editor the panel is its own width, below it the whole area).
         let width = self.chrome.panel_area.map(|a| a.size.width / px(1.)).map(|w| if self.chrome.panel_dock.beside() { self.chrome.panel_w.min(w) } else { w });
         let labels: Vec<(Bottom, String, usize)> = tabs.iter().map(|(tab, label, badge)| (*tab, label.to_string(), *badge)).collect();
@@ -245,6 +248,9 @@ impl Workbench {
             .map(|(tab, label, badge)| {
                 let in_front = self.chrome.bottom == tab;
                 panel_tab(tab, label.into(), in_front, badge, compact && !in_front, p, cx)
+                    .when(tab == Bottom::Agents, |d| {
+                        d.tab_index(0).border_1().border_color(ui::ca(p.focus_ring, 0.)).focus(|d| d.border_color(c(p.focus_ring)))
+                    })
                     .on_click(cx.listener(move |this, _, window, cx| {
                         if tab == Bottom::Terminal {
                             if this.terminals.is_empty() {
@@ -252,6 +258,8 @@ impl Workbench {
                             } else {
                                 this.focus_terminal(window, cx);
                             }
+                        } else if tab == Bottom::Agents {
+                            this.open_agents(cx);
                         } else {
                             this.chrome.bottom = tab;
                             cx.notify();

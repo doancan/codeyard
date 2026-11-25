@@ -873,6 +873,7 @@ impl Workbench {
 
     /// Connection changed: the terminals belong to the old machine, close them.
     pub(super) fn close_all_terminals(&mut self, cx: &mut Context<Self>) {
+        self.close_agent_terminal(cx);
         self.stop_all_task_runs(cx);
         self.close_detached_terminals(cx);
         self.close_editor_terminals(cx);

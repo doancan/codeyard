@@ -4370,3 +4370,64 @@ Remove Worktree…	Worktree'yi Kaldır…
 Showing the latest {} commits.	Son {} commit gösteriliyor.
 No commit among the latest {} matches.	Yüklenen son {} commit içinde eşleşen yok.
 Uncommitted changes	Kaydedilmemiş değişiklikler
+Agents	Ajanlar
+Personal	Kişisel
+Work	İş
+New session	Yeni oturum
+Sessions	Oturumlar
+Account {}	Hesap {}
+Private sessions	Hesaba özel oturumlar
+Shared sessions	Ortak oturumlar
+Codeyard local storage is unavailable.	Codeyard’ın yerel depolaması kullanılamıyor.
+Choose project…	Proje seç…
+Could not create a Claude Code session ID.	Claude Code oturum kimliği oluşturulamadı.
+This session is unavailable for the selected account and project.	Bu oturum seçili hesap ve proje için kullanılamıyor.
+Sign in to this account…	Bu hesapta oturum aç…
+Add account	Hesap ekle
+Stop terminal	Terminali durdur
+Select a session to continue, or start a new one.	Devam etmek için bir oturum seç veya yeni bir oturum başlat.
+The running terminal will stop. Shared conversations can continue with the selected account.	Çalışan terminal duracak. Ortak konuşmalar seçilen hesapla sürdürülebilir.
+Switch account	Hesap değiştir
+Could not recover the Claude Code session: {}	Claude Code oturumu kurtarılamadı: {}
+Recover this session into shared history?	Bu oturum ortak geçmişe kurtarılsın mı?
+Other Claude Code accounts will be able to open this conversation for this project.	Diğer Claude Code hesapları bu proje için bu konuşmayı açabilecek.
+Recover session	Oturumu kurtar
+Recoverable sessions	Kurtarılabilir oturumlar
+Could not open the {0} project: {1}	{0} projesi açılamadı: {1}
+Could not read {0} sessions: {1}	{0} oturumları okunamadı: {1}
+Could not save agent settings: {}	Ajan ayarları kaydedilemedi: {}
+{} is not installed or could not be found on this computer.	{} bu bilgisayarda kurulu değil veya bulunamadı.
+Could not open the {0} terminal: {1}	{0} terminali açılamadı: {1}
+Could not prepare agent storage: {}	Ajan depolaması hazırlanamadı: {}
+Switch {} account?	{} hesabı değiştirilsin mi?
+The running terminal will stop. This conversation stays with its current account.	Çalışan terminal duracak. Bu konuşma mevcut hesabında kalacak.
+Stopping {}…	{} durduruluyor…
+Agent profiles are available in local windows.	Ajan profilleri yerel pencerelerde kullanılabilir.
+Choose a project to start an agent.	Bir ajan başlatmak için proje seç.
+User message	Kullanıcı mesajı
+Assistant response	Ajan yanıtı
+Search sessions…	Oturum ara…
+Pinned	Sabitlenenler
+No matching sessions	Eşleşen oturum yok
+Session actions	Oturum işlemleri
+Session actions for {}	{} için oturum işlemleri
+Unpin session	Oturumu sabitlemeyi kaldır
+Pin session	Oturumu sabitle
+Copy recent messages	Son mesajları kopyala
+Transfer context to {}…	Bağlamı {} aracına aktar…
+Continue with {}…	{} ile devam et…
+Context copied. Paste it into a new session when ready.	Bağlam kopyalandı. Hazır olduğunda yeni oturuma yapıştır.
+Recent messages copied.	Son mesajlar kopyalandı.
+Could not copy session context: {}	Oturum bağlamı kopyalanamadı: {}
+The running terminal will stop. The selected account will open the last saved conversation.	Çalışan terminal duracak. Seçilen hesap son kaydedilen konuşmayı açacak.
+Codeyard will open the last saved conversation on the selected account.	Codeyard son kaydedilen konuşmayı seçilen hesapta açacak.
+Continue this session with {}?	Bu oturum {} ile sürdürülsün mü?
+Continue session	Oturumu sürdür
+Could not continue the session on that account: {}	Oturum o hesapta sürdürülemedi: {}
+Preparing the session on the selected account…	Oturum seçilen hesapta hazırlanıyor…
+System account	Sistem hesabı
+Start a session to sign in or open Antigravity.	Antigravity’yi açmak veya giriş yapmak için yeni bir oturum başlat.
+The running terminal will stop. Antigravity will use the selected Google account for its next session.	Çalışan terminal durdurulacak. Antigravity sonraki oturumda seçilen Google hesabını kullanacak.
+Could not open the Antigravity account: {}	Antigravity hesabı açılamadı: {}
+Could not save the Antigravity account: {}	Antigravity hesabı kaydedilemedi: {}
+Could not switch the Antigravity account: {}	Antigravity hesabı değiştirilemedi: {}

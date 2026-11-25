@@ -408,6 +408,15 @@ impl Workbench {
             }
             MenuCmd::OpenTerminal => self.new_terminal_in(Some(dir), window, cx),
             MenuCmd::TerminalLaunch(ix) => self.launch_from_menu(ix, window, cx),
+            MenuCmd::AgentProvider(provider) => self.select_agent_provider(provider, cx),
+            MenuCmd::AgentProfile(profile) => self.select_agent_profile(profile, window, cx),
+            MenuCmd::AgentHistory(mode) => self.select_agent_history(mode, cx),
+            MenuCmd::AgentAddAccount => self.add_agent_account_from_menu(window, cx),
+            MenuCmd::AgentSignIn => self.sign_in_agent(window, cx),
+            MenuCmd::AgentPin => self.toggle_agent_pin(&target.path, cx),
+            MenuCmd::AgentCopyContext => self.copy_agent_context(&target.path, None, window, cx),
+            MenuCmd::AgentContinueIn(provider) => self.copy_agent_context(&target.path, Some(provider), window, cx),
+            MenuCmd::AgentHandoff(profile) => self.request_agent_handoff(&target.path, profile, window, cx),
             MenuCmd::ExtViewChoice(ix) => self.ext_view_choice_from_menu(ix, window, cx),
             MenuCmd::SelectForCompare => {
                 self.notify(

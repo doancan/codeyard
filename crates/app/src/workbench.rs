@@ -138,6 +138,20 @@ pub(crate) mod outline_glue;
 #[path = "workbench_palette.rs"]
 mod palette_glue;
 use outline_glue::OutlineState;
+#[path = "workbench_agent_panel.rs"]
+mod agent_panel;
+#[path = "workbench_agent_rpc.rs"]
+mod agent_rpc;
+#[path = "workbench_agent_transfer.rs"]
+mod agent_transfer;
+#[path = "workbench_antigravity_accounts.rs"]
+mod antigravity_accounts;
+#[path = "workbench_antigravity_store.rs"]
+mod antigravity_store;
+#[path = "workbench_claude_store.rs"]
+mod claude_store;
+#[path = "workbench_codex_store.rs"]
+mod codex_store;
 #[path = "workbench_panels.rs"]
 pub(crate) mod panels_glue;
 pub(crate) use notifications_glue::Notice;
@@ -704,6 +718,7 @@ const MAX_TERMINALS: usize = 8;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Bottom {
     Terminal,
+    Agents,
     Problems,
     Output,
     Ports,
@@ -1167,6 +1182,7 @@ impl Workbench {
             // Terminals in windows of their own or in the editor area belong to this window: they end with it, unless the
             // app is quitting with them kept for the next start (`keep_terminals_for_restart`).
             cx.on_release(|this, cx| {
+                this.close_agent_terminal(cx);
                 if !this.persist.keeping_terminals {
                     this.close_detached_terminals(cx);
                 }
@@ -1336,6 +1352,7 @@ impl Workbench {
                 web_preview: Default::default(),
                 panel: Some(Panel::Explorer),
                 bottom: Bottom::Terminal,
+                agents: Default::default(),
                 problems: Default::default(),
                 sidebar_w,
                 resizing_sidebar: false,
@@ -1445,6 +1462,7 @@ impl Workbench {
         wb.poll_autofetch(window, cx);
         wb.listen_fs(cx);
         wb.warn_interrupted_refactor(cx);
+        wb.detect_agent_clis(cx);
         wb
     }
 
@@ -1760,6 +1778,7 @@ impl Workbench {
                     Bottom::Output => d.child(self.output_view(p)),
                     Bottom::Debug => d.child(self.debug_view(p, cx)),
                     Bottom::Ports => d.child(self.ports_view(p, cx)),
+                    Bottom::Agents => d.child(self.agent_panel_view(p, cx)),
                     Bottom::ExtView => d.child(self.ext_view_in(ext_manifest::ViewLocation::Bottom, p, cx)),
                     Bottom::Terminal => {
                         // Several terminals: their list on the right.

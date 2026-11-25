@@ -527,6 +527,16 @@ impl TerminalView {
         self.exit.is_some()
     }
 
+    /// Exit status reported by the process host, if available.
+    pub(crate) fn exit_code(&self) -> Option<i32> {
+        self.exit.flatten()
+    }
+
+    /// A terminal whose program could not be started.
+    pub(crate) fn launch_failed(&self) -> bool {
+        self.error.is_some()
+    }
+
     fn write(&mut self, data: Vec<u8>) {
         if self.exit.is_some() || self.closed.get() {
             return;
