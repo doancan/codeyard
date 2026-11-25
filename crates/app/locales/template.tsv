@@ -561,6 +561,7 @@ Copy as Expression
 Copy branch name	
 Copy code	
 Copy container ID	
+Copy context and open {}…	
 Copy fix	
 Copy it to the other disk, then delete the original.	
 Copy link	
@@ -3217,7 +3218,6 @@ Too many keys were offered. Give this host an IdentityFile and IdentitiesOnly ye
 Track which remote branch?	
 Trailing whitespace is ignored. Click to ignore all whitespace	
 Transfer cancelled.	
-Transfer context to {}…	
 Transfer failed: {}	
 Trust Folder	
 Trust Folder and Continue	

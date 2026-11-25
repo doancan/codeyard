@@ -34,6 +34,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Pull requests](#pull-requests)
 - [HTTP files](#http-files)
 - [Terminal](#terminal)
+- [Agents](#agents)
 - [Port forwarding](#port-forwarding)
 - [Remote (SSH)](#remote-ssh)
 <!-- /toc -->
@@ -2309,6 +2310,19 @@ the bottom or the right restores its size.
 - With several terminals the list on the right reorders by dragging a row (the line shows where it lands) or with
   **Terminal: Move Terminal Up / Down**; right-clicking a row opens the terminal menu (Split, Move into Editor Area, Rename,
   Change Color, Kill and the rest). The running indicator is a still dot.
+
+## Agents
+
+The **Agents** tab in the bottom panel runs Claude Code, Codex or Antigravity CLI in a terminal of its own, per project. Pick
+the CLI in the first button and the project in the second (by default the folder of the window; a project you pick stays
+until the window opens another workspace). Sessions of that project are listed on the left, searchable and pinnable.
+
+- **Accounts.** Each CLI has accounts of its own (*Personal*, *Work*, …); the account button switches them and adds new ones.
+  Private history keeps a conversation with its account; *Shared sessions* (Claude Code) keeps one history for all accounts.
+- **Session menu (…).** *Continue with <account>…* copies the saved conversation to that account and resumes it there (private
+  history only: shared history is already one folder). *Copy recent messages* puts the last messages on the clipboard.
+  *Copy context and open <CLI>…* does the same and switches to another CLI that is installed; start a new session there and paste.
+- Local windows only; inherited API keys and tokens are cleared so the chosen account is the one that is used.
 
 ## Port forwarding
 

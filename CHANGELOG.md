@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Agents: a project picked with *Choose project…* is dropped when the window opens another workspace, so the tab follows the workspace again. *Continue with <account>…* is no longer offered for shared history (the conversation is already shared), and *Transfer context to…* is now *Copy context and open <CLI>…*, disabled for a CLI that is not installed.
+
 ### Changed
 
 - File icons: the seven built-in file icon themes (File Glyphs, Codeyard, Language Badges, Colorful Folders, Minimal, Apple / GitHub and the drawn Material) are replaced by real icon sets, embedded in the app: **Material Icons** (the new default), **Catppuccin Icons** (Mocha on dark color themes, Latte on light ones), **VS Code Icons** and **Seti**, plus *None*. A file is matched by its whole name, then its longest known extension. `"workbench.iconTheme"` values of the old themes still load and mean Material. The sets are MIT-licensed selections of about 300 icons each; their licences ship with the app, and `scripts/icon-sets.py` rebuilds them.
