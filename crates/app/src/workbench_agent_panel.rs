@@ -27,6 +27,8 @@ const MAX_PROFILES: u32 = 64;
 pub(super) struct AgentPanel {
     requested_folder: Option<PathBuf>,
     chosen_folder: Option<PathBuf>,
+    /// Workspace root that was active when the project was picked; the pick ends when the window moves to another root.
+    chosen_root: Option<String>,
     project: Option<Project>,
     provider: Provider,
     profile: u32,
@@ -159,10 +161,18 @@ impl Workbench {
         if self.remote.host.is_remote() {
             return None;
         }
-        self.chrome.agents.chosen_folder.clone().or_else(|| self.active_root(cx).map(PathBuf::from))
+        let state = &self.chrome.agents;
+        let stale = state.chosen_root.is_some() && state.chosen_root != self.active_root(cx);
+        state.chosen_folder.clone().filter(|_| !stale).or_else(|| self.active_root(cx).map(PathBuf::from))
     }
 
     pub(super) fn sync_agent_project(&mut self, cx: &mut Context<Self>) {
+        let state = &self.chrome.agents;
+        if state.chosen_root.is_some() && state.chosen_root != self.active_root(cx) && state.running.is_none() && !state.transferring {
+            let state = &mut self.chrome.agents;
+            state.chosen_folder = None;
+            state.chosen_root = None;
+        }
         if self.chrome.panel_open
             && self.chrome.bottom == Bottom::Agents
             && self.chrome.agents.running.is_none()
@@ -255,6 +265,7 @@ impl Workbench {
             {
                 this.update(cx, |this, cx| {
                     if this.chrome.agents.running.is_none() && !this.chrome.agents.transferring {
+                        this.chrome.agents.chosen_root = this.active_root(cx);
                         this.chrome.agents.chosen_folder = Some(path);
                         this.load_agent_project(cx);
                     }
@@ -1225,4 +1236,48 @@ fn agent_provider_switch_keeps_separate_profiles(cx: &mut gpui::TestAppContext) 
         assert_eq!(wb.chrome.agents.profile, 2);
         assert_eq!(wb.chrome.agents.profile_count, 3);
     });
+}
+
+#[cfg(test)]
+#[gpui::test]
+fn a_picked_project_ends_when_the_window_moves_to_another_workspace(cx: &mut gpui::TestAppContext) {
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    let data = crate::qa_workbench_tests::fresh("agent-follow-data");
+    let picked = crate::qa_workbench_tests::fresh("agent-follow-picked");
+    wb.update(cx, |wb, cx| {
+        wb.set_data_dir(data);
+        wb.chrome.agents.chosen_folder = Some(picked);
+        wb.chrome.agents.chosen_root = Some("/a/workspace/that/is/no/longer/open".into());
+        wb.sync_agent_project(cx);
+        assert!(wb.chrome.agents.chosen_folder.is_none() && wb.chrome.agents.chosen_root.is_none());
+    });
+}
+
+#[cfg(test)]
+#[gpui::test]
+fn session_menu_offers_only_actions_that_do_something(cx: &mut gpui::TestAppContext) {
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    let data = crate::qa_workbench_tests::fresh("agent-menu-data");
+    let folder = crate::qa_workbench_tests::fresh("agent-menu-project");
+    wb.update(cx, |wb, cx| {
+        wb.set_data_dir(data);
+        wb.chrome.agents.chosen_folder = Some(folder);
+        wb.open_agents(cx);
+    });
+    cx.run_until_parked();
+    let session = Session { id: "a".into(), title: "Fix".into(), path: None };
+    let labels = |wb: &mut Workbench, mode, window: &mut Window, cx: &mut Context<Workbench>| {
+        wb.chrome.agents.installed = Some(vec![Provider::Claude, Provider::Codex]);
+        wb.chrome.agents.mode = mode;
+        wb.chrome.agents.profile_count = 2;
+        wb.chrome.agents.sessions = vec![session.clone()];
+        wb.open_agent_session_menu("a", window, cx);
+        wb.menu_labels(cx).unwrap_or_default()
+    };
+    let private = wb.update_in(cx, |wb, window, cx| labels(wb, HistoryMode::Private, window, cx));
+    assert!(private.iter().any(|label| label == "Continue with Work…"), "{private:?}");
+    assert!(private.iter().any(|label| label == "Copy context and open Codex…"), "{private:?}");
+    cx.simulate_keystrokes("escape");
+    let shared = wb.update_in(cx, |wb, window, cx| labels(wb, HistoryMode::Shared, window, cx));
+    assert!(!shared.iter().any(|label| label.starts_with("Continue with")), "{shared:?}");
 }

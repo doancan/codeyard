@@ -136,7 +136,7 @@ impl Workbench {
         row
     }
 
-    fn open_agent_session_menu(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_agent_session_menu(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         let state = &self.chrome.agents;
         let Some(session) = state.sessions.iter().find(|session| session.id == id) else { return };
         let available = state.provider == Provider::Claude || session.path.is_some();
@@ -146,10 +146,13 @@ impl Workbench {
         ];
         let mut commands = vec![MenuCmd::AgentPin, MenuCmd::AgentCopyContext];
         for other in Provider::ALL.into_iter().filter(|provider| *provider != state.provider) {
-            items.push(MenuItem::new(&tf("Transfer context to {}…", &[&other.label()])).enabled(available && state.running.is_none()));
+            let installed = state.installed.as_ref().is_none_or(|installed| installed.contains(&other));
+            items.push(MenuItem::new(&tf("Copy context and open {}…", &[&other.label()])).enabled(available && installed && state.running.is_none()));
             commands.push(MenuCmd::AgentContinueIn(other));
         }
-        for (index, profile) in (0..state.profile_count).filter(|profile| *profile != state.profile).enumerate() {
+        // Shared history is one folder for every account: there is nothing to copy, the account picker already continues it.
+        let accounts = if state.mode == HistoryMode::Private { state.profile_count } else { 0 };
+        for (index, profile) in (0..accounts).filter(|profile| *profile != state.profile).enumerate() {
             let item = MenuItem::new(&tf("Continue with {}…", &[&profile_label(profile)])).enabled(available);
             items.push(if index == 0 { item.separator() } else { item });
             commands.push(MenuCmd::AgentHandoff(profile));
@@ -203,6 +206,7 @@ impl Workbench {
         let state = &self.chrome.agents;
         if state.stopping
             || state.transferring
+            || state.mode != HistoryMode::Private
             || target == state.profile
             || target >= state.profile_count
             || (state.running.is_some() && state.selected.as_deref() != Some(id))
