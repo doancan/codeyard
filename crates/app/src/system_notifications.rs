@@ -11,17 +11,19 @@ use std::sync::Mutex;
 static OPENED: Mutex<Vec<u64>> = Mutex::new(Vec::new());
 
 /// The identifier of a request for project `project`; `serial` keeps banners of one project apart.
+#[cfg(any(target_os = "macos", test))]
 pub fn request_id(project: u64, serial: u64) -> String {
     format!("codeyard-project-{project}-{serial}")
 }
 
 /// The project a request identifier names.
+#[cfg(any(target_os = "macos", test))]
 pub fn project_of(identifier: &str) -> Option<u64> {
     identifier.strip_prefix("codeyard-project-")?.split('-').next()?.parse().ok()
 }
 
 /// A banner was clicked.
-#[cfg_attr(not(all(target_os = "macos", not(test))), allow(dead_code))]
+#[cfg(any(target_os = "macos", test))]
 fn opened(project: u64) {
     if let Ok(mut list) = OPENED.lock() {
         list.push(project);
