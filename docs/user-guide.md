@@ -2324,6 +2324,26 @@ until the window opens another workspace). Sessions of that project are listed o
   *Copy context and open <CLI>…* does the same and switches to another CLI that is installed; start a new session there and paste.
 - Local windows only; inherited API keys and tokens are cleared so the chosen account is the one that is used.
 
+### Agent mode
+
+With many projects open, **Agent mode** (the terminal button at the top of the activity bar, or *View: Toggle Agent Mode*) shows
+all of them in one window instead of one window each. It replaces the editor area: the **projects** on the left (a dot says whether
+the project is running, waiting for you, or out of quota; *All / Local / SSH* filters them), the selected project's **terminals**
+in the middle (tabs; `+` opens a shell in that project, on its SSH host if it has one), and its **Git, Diff, PRs and Files** on the
+right. Choosing another project never stops the first one's terminals.
+
+- *Attention* at the top of the list gathers the projects that wait for an answer or hit an account limit; looking at one clears
+  it. A project that starts waiting, hits a limit or finishes out of sight gets a notice with an *Open Project* button. On macOS
+  the Dock icon shows how many there are and bounces once when one more starts waiting in the background.
+- The account button at the right of the tabs switches the agent session's account. At the foot of the list each account says
+  *Available* or *Limit reached · <time>*, and Claude Code accounts show the tokens spent in the last five hours. When the agent
+  prints a limit message, a bar offers the account that is free and least used and continues the conversation there.
+  *Agents: Mark Account as Limited* and *Agents: Mark Account as Available* correct a wrong guess.
+- Git (with its graph, changes and commit box) and Files are the project's own views; a file picked in Git shows its diff under
+  **Diff**; **PRs** lists the repository's open GitHub pull requests with their checks.
+
+[agent-mode.md](agent-mode.md) describes how it works and what it does not do yet.
+
 ## Port forwarding
 
 While connected over SSH, the **Ports** tab in the bottom panel (*View: Ports*) lists what is listening on the server, in

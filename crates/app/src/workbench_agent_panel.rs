@@ -52,6 +52,19 @@ pub(super) struct AgentPanel {
     handoff: Option<library::Handoff>,
 }
 
+/// What agent mode needs to know of a project's agent session.
+pub(super) struct AgentSummary {
+    pub(super) provider: Provider,
+    pub(super) profile: u32,
+    pub(super) profile_count: u32,
+    /// Each account keeps a conversation of its own (so continuing on another account copies it first).
+    pub(super) private_history: bool,
+    /// The conversation the terminal is on, once it has one.
+    pub(super) session: Option<String>,
+    /// The folder of each account's session files, in profile order.
+    pub(super) profile_dirs: Vec<PathBuf>,
+}
+
 struct Running {
     _lock: File,
     _observer: Subscription,
@@ -82,7 +95,7 @@ enum Start {
     Recover(String),
 }
 
-fn profile_label(profile: u32) -> String {
+pub(super) fn profile_label(profile: u32) -> String {
     match profile {
         0 => t("Personal").to_owned(),
         1 => t("Work").to_owned(),
@@ -185,6 +198,36 @@ impl Workbench {
 
     pub(super) fn agent_terminal(&self) -> Option<Entity<TerminalView>> {
         self.chrome.agents.terminal.clone()
+    }
+
+    /// A project for the Agents panel and a second account, without the panel on screen (tests of agent mode).
+    #[cfg(test)]
+    pub(super) fn prepare_agent_project_for_test(&mut self, data: PathBuf, folder: PathBuf, cx: &mut Context<Self>) {
+        self.set_data_dir(data);
+        self.chrome.agents.chosen_folder = Some(folder);
+        self.open_agents(cx);
+        self.add_agent_account(cx);
+    }
+
+    /// `terminal` is the agent launcher's terminal (tests of agent mode).
+    #[cfg(test)]
+    pub(super) fn show_agent_terminal_for_test(&mut self, terminal: Entity<TerminalView>) {
+        self.chrome.agents.terminal = Some(terminal);
+    }
+
+    /// The agent session of this window's project, when one has a terminal (agent mode shows its account and limits).
+    pub(super) fn agent_summary(&self) -> Option<AgentSummary> {
+        let state = &self.chrome.agents;
+        state.terminal.as_ref()?;
+        let project = state.project.as_ref()?;
+        Some(AgentSummary {
+            provider: state.provider,
+            profile: state.profile,
+            profile_count: state.profile_count,
+            private_history: state.mode == HistoryMode::Private,
+            session: state.selected.clone(),
+            profile_dirs: (0..state.profile_count).map(|profile| project.profile(profile)).collect(),
+        })
     }
 
     pub(super) fn select_agent_provider(&mut self, provider: Provider, cx: &mut Context<Self>) {

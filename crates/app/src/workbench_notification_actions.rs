@@ -56,6 +56,7 @@ impl Workbench {
                 self.open_location(path.to_string_lossy().into_owned(), line.map_or(0, |l| l.saturating_sub(1)), 0, window, cx);
             }
             NoticeAction::Retry(kind) => self.retry_operation(kind, window, cx),
+            NoticeAction::AgentProject(id) => self.open_agent_project(gpui::WindowId::from(id), window, cx),
         }
     }
 

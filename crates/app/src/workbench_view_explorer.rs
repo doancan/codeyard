@@ -244,7 +244,18 @@ impl Workbench {
             .children({
                 let items = self.activity_items(cx);
                 let (own, containers): (Vec<_>, Vec<_>) = items.into_iter().partition(|i| i.0 != Panel::Containers);
-                let mut out: Vec<gpui::AnyElement> = own.into_iter().map(|i| item(i, cx).into_any_element()).collect();
+                // The mode switch comes first: it changes what the editor area is, the views below change what the side bar is.
+                let agent_mode = bottom("act-agent-mode", "terminal", crate::i18n::t("Agent mode").to_string().into(), None, self.menu.is_none(), cx)
+                    .when(self.chrome.agent_mode.is_some(), |d| d.bg(c(p.surface_active)))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, _: &gpui::MouseDownEvent, window, cx| {
+                            cx.stop_propagation();
+                            this.toggle_agent_mode(&ToggleAgentMode, window, cx);
+                        }),
+                    );
+                let mut out: Vec<gpui::AnyElement> = vec![agent_mode.into_any_element()];
+                out.extend(own.into_iter().map(|i| item(i, cx).into_any_element()));
                 out.extend(self.ext_view_activity_items(p, cx).into_iter().map(|e| e.into_any_element()));
                 out.extend(containers.into_iter().map(|i| item(i, cx).into_any_element()));
                 out

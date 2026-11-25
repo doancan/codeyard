@@ -27,7 +27,7 @@ pub(super) struct PullRemote {
 }
 
 /// GitHub's answer: the remote, the repository, its open requests and where they came from.
-type GitHubListing = Result<(PullRemote, github::Repo, Vec<Pull>, github::Source), String>;
+pub(super) type GitHubListing = Result<(PullRemote, github::Repo, Vec<Pull>, github::Source), String>;
 
 /// What the view says above its rows: one line per list shown, then the lists with nothing open, then failures.
 #[derive(Default)]
@@ -46,6 +46,27 @@ fn token() -> Option<String> {
 pub(super) enum PullRow {
     GitHub { remote: PullRemote, pull: Pull },
     Extension(ext_pulls_glue::ExtPull),
+}
+
+/// GitHub's open requests for the first remote (`origin` first) that resolves to github.com, read where `host` runs; `None` when
+/// no remote is on GitHub. Both the Pull Requests list and agent mode's PR tab read through this.
+pub(super) fn github_listing(host: &dyn Host, root: &str, remotes: &[(String, String)], runner: &dyn github::Runner) -> Option<GitHubListing> {
+    let mut found = None;
+    for (name, stored_url) in remotes.iter().filter(|(name, _)| name == "origin").chain(remotes.iter().filter(|(name, _)| name != "origin")) {
+        if stored_url.is_empty() {
+            continue;
+        }
+        let url = match git::resolved_remote_url(host, root, name) {
+            Ok(url) => url,
+            Err(e) => return Some(Err(e)),
+        };
+        if let Some(repo) = github::parse_remote(&url) {
+            found = Some((PullRemote { name: name.clone(), url }, repo));
+            break;
+        }
+    }
+    let (remote, repo) = found?;
+    Some(github::list_pulls(runner, &repo, token().as_deref()).map(|(pulls, source)| (remote, repo, pulls, source)))
 }
 
 impl Workbench {
@@ -91,24 +112,7 @@ impl Workbench {
         let asked = self.ask_pull_providers(&remotes, window, cx);
         let (task_host, task_root) = (host.clone(), root.clone());
         // The URL each remote resolves to (with `insteadOf`), read off the UI thread; `None` when no remote is on GitHub.
-        let github = cx.background_executor().spawn(async move {
-            let mut found = None;
-            for (name, stored_url) in remotes.iter().filter(|(name, _)| name == "origin").chain(remotes.iter().filter(|(name, _)| name != "origin")) {
-                if stored_url.is_empty() {
-                    continue;
-                }
-                let url = match git::resolved_remote_url(task_host.as_ref(), &task_root, name) {
-                    Ok(url) => url,
-                    Err(e) => return Some(Err(e)),
-                };
-                if let Some(repo) = github::parse_remote(&url) {
-                    found = Some((PullRemote { name: name.clone(), url }, repo));
-                    break;
-                }
-            }
-            let (remote, repo) = found?;
-            Some(github::list_pulls(&github::SystemRunner, &repo, token().as_deref()).map(|(pulls, source)| (remote, repo, pulls, source)))
-        });
+        let github = cx.background_executor().spawn(async move { github_listing(task_host.as_ref(), &task_root, &remotes, &github::SystemRunner) });
         cx.spawn_in(window, async move |this, cx| {
             let github = github.await;
             let listed = ext_pulls_glue::listed(asked).await;

@@ -11,6 +11,9 @@
 #![cfg_attr(test, allow(clippy::single_range_in_vec_init))]
 
 mod access;
+mod agent_accounts;
+mod agent_limits;
+mod agent_usage;
 mod bundled_agents;
 mod cargo_args;
 mod cargo_project;
@@ -30,6 +33,7 @@ mod crash;
 mod dap;
 mod debug_model;
 mod diagnostics;
+mod dock_attention;
 // --- data ---
 mod a11y_controls;
 #[cfg(test)]

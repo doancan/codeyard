@@ -1356,6 +1356,9 @@ mod list_frames_tests;
 mod views_tests;
 
 #[cfg(test)]
+#[path = "a11y_agent_mode_tests.rs"]
+mod agent_mode_tests;
+#[cfg(test)]
 #[path = "a11y_chrome_tests.rs"]
 mod chrome_tests;
 

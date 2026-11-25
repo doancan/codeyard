@@ -243,6 +243,9 @@ pub struct TerminalView {
     exit: Option<Option<i32>>,
     error: Option<SharedString>,
     size: TermSize,
+    /// The window that decides the size when more than one draws the terminal (agent mode shows another window's); it stops
+    /// counting when that window is gone. Without it the windows would resize the terminal in turn, without end.
+    size_lead: Option<gpui::WindowId>,
     /// Grid origin and cell width from the last paint (for mouse → cell).
     grid: (Point<Pixels>, Pixels),
     selecting: bool,
@@ -393,6 +396,7 @@ impl TerminalView {
             osc: Default::default(),
             marks: Default::default(),
             focus_handle: cx.focus_handle(),
+            size_lead: None,
         }
     }
 
@@ -587,6 +591,18 @@ impl TerminalView {
         if let Some(id) = self.pty {
             self.host.pty_resize(id, cols as u16, rows as u16);
         }
+    }
+
+    /// Lets `window` decide the size (`None`: every window that draws the terminal may); the windows then work it out again.
+    pub fn lead_size(&mut self, window: Option<gpui::WindowId>, cx: &mut Context<Self>) {
+        if std::mem::replace(&mut self.size_lead, window) != window {
+            cx.notify();
+        }
+    }
+
+    /// Whether `window` may set the size now: no leader, it is the leader, or the leader's window is gone.
+    fn may_set_size(&self, window: gpui::WindowId, cx: &App) -> bool {
+        self.size_lead.is_none_or(|lead| lead == window || !cx.windows().iter().any(|w| w.window_id() == lead))
     }
 
     /// All text including scrollback. Wrapped lines are joined into one (to extract problems from task
@@ -1121,8 +1137,12 @@ impl Element for TerminalElement {
         let cols = ((bounds.size.width - px(PAD_X * 2.)) / cell_w).floor().max(2.) as usize;
         let rows = ((bounds.size.height - px(PAD_Y * 2.)) / line_h).floor().max(1.) as usize;
         let origin = grid_origin(bounds);
+        let me = window.window_handle().window_id();
+        let may_resize = self.view.read(cx).may_set_size(me, cx);
         self.view.update(cx, |v, cx| {
-            v.set_size(cols, rows);
+            if may_resize {
+                v.set_size(cols, rows);
+            }
             v.grid = (origin, cell_w);
             v.refresh_find_soon(cx);
         });
