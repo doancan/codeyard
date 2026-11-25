@@ -87,8 +87,10 @@ Banners need the person's permission, which macOS asks for once; run unbundled (
 - **Pull requests** are `PullsPanel` (`workbench_pulls_panel.rs`), an entity over `github_listing`, the reading the Pull Requests
   list also uses. A checkout is asked of the project's own workbench.
 - **Accounts and limits** are `agent_accounts.rs` (`Limits`, an app global: who is limited, which account to offer),
-  `agent_limits.rs` (the tools' messages) and `agent_usage.rs` (tokens from Claude Code's session files). The list is redrawn
-  once a second; usage is read off the UI thread once a minute.
+  `agent_limits.rs` (the tools' messages) and `agent_usage.rs` (tokens from Claude Code's session files). Once a second a tick
+  (`agent_mode_tick`) reads the projects, marks limits, says what changed (notices, banners, the Dock count) and redraws; it runs
+  whether or not the window is drawn, because a covered or background window may not be, and that is when a project that starts
+  waiting has to be noticed. Usage is read off the UI thread once a minute.
 - **The Dock** is `dock_attention.rs` (`objc2-app-kit`'s `NSApplication` and `NSDockTile`; nothing on other systems). **Banners**
   are `system_notifications.rs` (`objc2-user-notifications`, the one dependency this change adds; it is in the stack table of
   [architecture.md](architecture.md)): the project travels in the request identifier, a click is queued and the next window to
@@ -117,9 +119,13 @@ with its offer of the other account, and the accounts at the foot of the list. W
 form the tool keeps them, the usage bars read from them: *Work · 120k tokens · 12%* (a blue bar at 12% of a budget of 1,000,000) and
 *Personal* at its limit with a red bar near 41% (410k). Pressing *Continue with Work* asks first (*Switch account?*) and then stops the
 running terminal and switches the account; the project leaves *Attention* and the bar goes. The new account applies to the next
-session, which is started from the Agents panel as before. **Nobody has seen** the Dock badge and bounce, the banner with its
-permission prompt and click, a real CLI hitting a real limit, a hand-over of a saved conversation to another account (the stand-in
-never saves one), or SSH projects. The limit messages are the tools' wording as known today and will need upkeep.
+session, which is started from the Agents panel as before. The banner code was run from an ad-hoc signed application bundle with its
+own disposable identifier (never the real one): the app started, the system's notification service recognised the process and
+registered the click delegate (`handlesResponses: true`), and nothing crashed. The service then refused to validate that bundle
+(`Failed to find or validate client`, as it does for an ad-hoc bundle outside the installed, signed app), so **no permission prompt
+or banner appeared**. **Nobody has seen** the banner, its permission prompt and its click, the Dock badge and bounce, a real CLI
+hitting a real limit, a hand-over of a saved conversation to another account (the stand-in never saves one), or SSH projects. The
+limit messages are the tools' wording as known today and will need upkeep.
 
 ## Tests
 

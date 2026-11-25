@@ -463,3 +463,21 @@ fn a_view_button_in_agent_mode_leaves_it_and_shows_that_view(cx: &mut TestAppCon
         })
         .unwrap();
 }
+
+#[gpui::test]
+fn a_waiting_project_is_noticed_by_the_tick_without_the_window_being_drawn(cx: &mut TestAppContext) {
+    let (first, second) = two_projects(cx);
+    let notices = |cx: &mut TestAppContext| first.read_with(cx, |wb, _| wb.history_for_test()).unwrap();
+    // The first look (nothing is news), then the project starts waiting; only the tick runs, no frame is drawn.
+    first.update(cx, |wb, window, cx| wb.agent_mode_tick(window, cx)).unwrap();
+    assert!(notices(cx).is_empty());
+    let term = second.read_with(cx, |wb, _| wb.terminals_for_test()).unwrap().remove(0);
+    term.update(cx, |t, cx| t.feed_and_report_for_test(b"\x1b]9;Codex needs your approval\x07", cx));
+    first.update(cx, |wb, window, cx| wb.agent_mode_tick(window, cx)).unwrap();
+    let news = notices(cx);
+    assert_eq!(news.len(), 1, "{news:?}");
+    assert!(news[0].message.ends_with(" needs you"), "{}", news[0].message);
+    // Ticking again says nothing new.
+    first.update(cx, |wb, window, cx| wb.agent_mode_tick(window, cx)).unwrap();
+    assert_eq!(notices(cx).len(), 1);
+}
