@@ -124,6 +124,28 @@ fn piped<T>(handle: Option<T>) -> io::Result<T> {
     handle.ok_or_else(|| io::Error::other("child stdio was not piped"))
 }
 
+/// How long a command that ran out of time gets to clean up after a polite stop before it is killed.
+#[cfg(unix)]
+const TERM_GRACE: Duration = Duration::from_secs(3);
+
+/// Stops a command that ran out of time, and everything it started (its process group). It is asked to end first: git then
+/// removes its lock files (`index.lock`, ref locks), which a kill leaves behind to fail every later command; whatever is still
+/// running after `TERM_GRACE`, or ignores the request, is killed.
+#[cfg(unix)]
+fn stop_group(child: &mut std::process::Child) {
+    let group = -(child.id() as i32);
+    // SAFETY: kill has no memory-safety preconditions; a negative pid names the group this child leads.
+    unsafe { libc::kill(group, libc::SIGTERM) };
+    let until = Instant::now() + TERM_GRACE;
+    while Instant::now() < until && child.try_wait().ok().flatten().is_none() {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    // SAFETY: as above. Nothing is left to find when everything ended by itself.
+    unsafe { libc::kill(group, libc::SIGKILL) };
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 pub fn exec_with_timeout(program: &str, args: &[String], cwd: Option<&str>, stdin: Option<Vec<u8>>, timeout: Duration) -> io::Result<Output> {
     let mut cmd = command(program, args, cwd)?;
     // Its own process group, so a timeout can stop what the command started (git's ssh, a hook) and not only the command.
@@ -171,10 +193,7 @@ fn collect(
             return Ok((std::mem::take(&mut bufs[0]), std::mem::take(&mut bufs[1]), status));
         }
         if exited.is_none() && started.elapsed() >= timeout {
-            // SAFETY: kill has no memory-safety preconditions; a negative pid names the group this child leads.
-            unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL) };
-            let _ = child.kill();
-            let _ = child.wait();
+            stop_group(child);
             return Err(io::Error::new(io::ErrorKind::TimedOut, format!("timed out after {} s", timeout.as_secs())));
         }
         let mut pfds: Vec<libc::pollfd> = (0..2).filter(|&i| open[i]).map(|i| libc::pollfd { fd: fds[i], events: libc::POLLIN, revents: 0 }).collect();
