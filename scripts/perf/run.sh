@@ -277,7 +277,15 @@ for i in $(seq 1 "$runs"); do
       echo "perf: the decorations run of ${names[$k]} did not type 40 keys and ask the providers 40 times; is codeyard-exthost built and the window visible?" >&2
       exit 1
     fi
-    grep -e '"typing\.keystroke_frame_decorations_ms"' -e '"extensions\.provider_overhead_ms"' -e '"extensions\.activation_ms"' "$TMP/deco.jsonl" >> "$CODEYARD_PERF" || true
+    grep -e '"typing\.keystroke_frame_decorations_ms"' -e '"extensions\.provider_overhead_ms"' "$TMP/deco.jsonl" >> "$CODEYARD_PERF" || true
+    # The first start of each extension in a profile compiles its component into the cache, which later starts read. Those
+    # compile starts are their own metric: mixed in, they decide the p95 of the start the row is about (0.12.9: 351 ms
+    # against 20 to 60 ms for the rest).
+    if [ "$i" = 1 ]; then
+      grep '"extensions\.activation_ms"' "$TMP/deco.jsonl" | sed 's/extensions\.activation_ms/extensions.activation_compile_ms/' >> "$CODEYARD_PERF" || true
+    else
+      grep '"extensions\.activation_ms"' "$TMP/deco.jsonl" >> "$CODEYARD_PERF" || true
+    fi
     # One extension completes Rust: 40 keys, a new word every third, keystroke to frame.
     cp crates/app/testdata/big.rs "$TMP/big.rs"
     : > "$TMP/comp.jsonl"
