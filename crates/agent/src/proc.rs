@@ -134,12 +134,7 @@ const TERM_GRACE: Duration = Duration::from_secs(3);
 #[cfg(unix)]
 fn stop_group(child: &mut std::process::Child) {
     let group = -(child.id() as i32);
-    // SAFETY: kill has no memory-safety preconditions; a negative pid names the group this child leads.
-    unsafe { libc::kill(group, libc::SIGTERM) };
-    let until = Instant::now() + TERM_GRACE;
-    while Instant::now() < until && child.try_wait().ok().flatten().is_none() {
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    let _ = TERM_GRACE;
     // SAFETY: as above. Nothing is left to find when everything ended by itself.
     unsafe { libc::kill(group, libc::SIGKILL) };
     let _ = child.kill();
