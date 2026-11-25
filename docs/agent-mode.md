@@ -106,12 +106,14 @@ Banners need the person's permission, which macOS asks for once; run unbundled (
 
 ## Not verified
 
-The app was started with agent mode on (two windows) and looked at in a screenshot: the project list with its groups and filter,
-the terminal with its tab and status line, the right panel with the project's own Source Control view (commit box, changes,
-worktrees, graph) and the tabs *Git*, *Diff*, *Pull requests*, *Files* all draw and fit. That is what has been seen. **Nobody has seen**
-the colours of the *Attention* and *Limit reached* states, the account button, menu and bar, the usage bars, the Dock badge and
-bounce, the banner with its permission prompt and click, a real `claude` or `codex` session hitting a real limit, or SSH projects. The
-limit messages are the tools' wording as known today and will need upkeep.
+The app was started with agent mode on (two windows) and looked at in screenshots. **Seen:** the project list with its groups and
+filter; the *Attention* group with a project waiting (amber dot on the row and the tab, *Needs you* in the status line) and with a
+project at its limit (red dot, *Limit reached*), each fed by a terminal that rang the bell or printed a limit message; the terminal
+with its tab and status line; the right panel with the project's own Source Control view (commit box, changes, worktrees, graph) and
+the tabs *Git*, *Diff*, *Pull requests*, *Files*. **Nobody has seen** the account button, its menu, the limit bar and the usage bars
+(they need an agent launcher session of a real CLI), the Dock badge and bounce, the banner with its permission prompt and click, a
+real `claude` or `codex` session hitting a real limit, or SSH projects. The limit messages are the tools' wording as known today and
+will need upkeep.
 
 ## Tests
 
