@@ -2452,7 +2452,12 @@ fn an_automatic_forward_goes_when_its_server_port_closes(cx: &mut TestAppContext
     drop(app);
     let state = |cx: &mut VisualTestContext| {
         let connectable = std::net::TcpStream::connect(("127.0.0.1", local)).is_ok();
-        format!("remote {remote} local {local}: forward {:?}, local port connectable: {connectable}\nlistening:\n{}", forwarded(cx), listening_sockets())
+        format!(
+            "remote {remote} local {local}: forward {:?}, local port connectable: {connectable}\nlistening:\n{}\nlog:\n{}",
+            forwarded(cx),
+            listening_sockets(),
+            crate::diagnostics::log::tail(30).join("\n")
+        )
     };
     wait_for_diag(cx, "the forward is given back", state, |cx| {
         tick(cx);

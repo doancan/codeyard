@@ -294,9 +294,30 @@ pub fn open(req: &OpenRequest) -> Result<Opened, ForwardError> {
     Err(last)
 }
 
-/// Closes a forward opened by [`open`], with the spec it returned.
+/// Tries of `ssh -O cancel` for one forward, and the wait before the second (it doubles for the third).
+const CANCEL_TRIES: u32 = 3;
+const CANCEL_WAIT: std::time::Duration = std::time::Duration::from_millis(150);
+
+/// Closes a forward opened by [`open`], with the spec it returned. A cancel that fails for a reason that can pass (the shared
+/// connection is busy, ssh could not be started for a moment) is tried again: one that is left undone keeps the local port
+/// listening with nothing behind it. A connection that is gone took its forwards with it, so that is not tried again.
 pub fn cancel(alias: &str, spec: &str) -> Result<(), ForwardError> {
-    local_spec(alias, spec, true)
+    cancel_with(CANCEL_WAIT, || local_spec(alias, spec, true))
+}
+
+fn cancel_with(wait: std::time::Duration, mut run: impl FnMut() -> Result<(), ForwardError>) -> Result<(), ForwardError> {
+    let mut result = run();
+    for attempt in 1..CANCEL_TRIES {
+        match &result {
+            Ok(()) => break,
+            Err(e) if matches!(e.kind, FailKind::MasterGone | FailKind::Unsupported) => break,
+            Err(_) => {
+                std::thread::sleep(wait * 2u32.pow(attempt - 1));
+                result = run();
+            }
+        }
+    }
+    result
 }
 
 /// Is the shared connection to `alias` still up (`ssh -O check`)?
@@ -313,6 +334,32 @@ pub fn check_master(alias: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_cancel_that_fails_for_a_reason_that_can_pass_is_tried_again() {
+        let err = |kind| ForwardError { kind, message: "x".into() };
+        let none = std::time::Duration::ZERO;
+        let mut calls = 0;
+        let result = cancel_with(none, || {
+            calls += 1;
+            if calls < 3 { Err(err(FailKind::Other)) } else { Ok(()) }
+        });
+        assert_eq!((result, calls), (Ok(()), 3), "the third try works");
+        let mut calls = 0;
+        let result = cancel_with(none, || {
+            calls += 1;
+            Err(err(FailKind::Rejected))
+        });
+        assert_eq!((result.map_err(|e| e.kind), calls), (Err(FailKind::Rejected), 3), "three tries, then the last error is reported");
+        for kind in [FailKind::MasterGone, FailKind::Unsupported] {
+            let mut calls = 0;
+            let _ = cancel_with(none, || {
+                calls += 1;
+                Err(err(kind))
+            });
+            assert_eq!(calls, 1, "{kind:?}: nothing to cancel, or nothing that trying again would change");
+        }
+    }
 
     #[test]
     fn specs_are_built_from_typed_values() {
