@@ -466,6 +466,42 @@ impl Render for CommitCard {
     }
 }
 
+/// Which quick buttons of the Graph header were painted in the last frame. The header wraps a button that does not fit out of
+/// sight; such a button must not stay in the Tab order, where focus would vanish into a control nobody can see.
+#[derive(Clone, Default)]
+pub(super) struct HeaderSeen(Rc<RefCell<HashMap<&'static str, bool>>>);
+
+impl HeaderSeen {
+    /// Whether the button is (or, before anything was painted, may be) on screen.
+    fn shows(&self, name: &str) -> bool {
+        self.0.borrow().get(name).copied().unwrap_or(true)
+    }
+
+    /// Records each frame whether the button was painted inside the clipped header. A change draws one more frame, so the
+    /// Tab order catches up with a resize at once.
+    fn probe(&self, name: &'static str) -> impl IntoElement + use<> {
+        let seen = self.0.clone();
+        gpui::canvas(
+            |bounds, window, _| bounds.intersect(&window.content_mask().bounds),
+            move |_, bounds, window, _| {
+                let visible = bounds.size.width > px(0.) && bounds.size.height > px(0.);
+                if seen.borrow_mut().insert(name, visible) != Some(visible) {
+                    window.refresh();
+                }
+            },
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+    }
+
+    #[cfg(test)]
+    pub(super) fn shown_for_test(&self, name: &str) -> bool {
+        self.shows(name)
+    }
+}
+
 /// Active filter shown under the GRAPH header; clicking it turns the filter off.
 fn filter_chip(id: &'static str, label: &'static str, p: &Palette) -> gpui::Stateful<gpui::Div> {
     let bg = ui::mix(p.surface, p.accent, 0.18);
@@ -647,6 +683,7 @@ impl ScmPanel {
         };
         // The remote round-trip (fetch, pull, push) first, then refresh and the "…" menu.
         let probe = |part: HistoryFrame| crate::painted::probe(&self.a11y_frames, AccessFrame::History(part));
+        let seen = self.header_seen.clone();
         let header = sections::header("scm-graph-header", crate::i18n::t("Graph"), count, open, &p)
             .debug_selector(|| "scm-graph-header".into())
             .relative()
@@ -665,7 +702,8 @@ impl ScmPanel {
                     .child(
                         ui::icon_button("scm-graph-search", "search", crate::i18n::t("Search commits"), &p)
                             .relative()
-                            .map(|d| sections::tabbable(d, &p))
+                            .map(|d| if seen.shows("search") { sections::tabbable(d, &p) } else { d })
+                            .child(seen.probe("search"))
                             .child(probe(HistoryFrame::Button("search")))
                             .when(self.search_open, |d| d.bg(c(p.surface_active)))
                             .on_click(cx.listener(|this, _, window, cx| {
@@ -677,21 +715,24 @@ impl ScmPanel {
                         d.child(
                             ui::icon_button("scm-graph-fetch", "cloud-download", crate::i18n::t("Fetch from all remotes"), &p)
                                 .relative()
-                                .map(|d| sections::tabbable(d, &p))
+                                .map(|d| if seen.shows("fetch") { sections::tabbable(d, &p) } else { d })
+                                .child(seen.probe("fetch"))
                                 .child(probe(HistoryFrame::Button("fetch")))
                                 .on_click(dispatch(Box::new(crate::workbench::GitFetchAll))),
                         )
                         .child(
                             count_button("scm-graph-pull", "arrow-down", behind, crate::i18n::t("Pull"), &p)
                                 .relative()
-                                .map(|d| sections::tabbable(d, &p))
+                                .map(|d| if seen.shows("pull") { sections::tabbable(d, &p) } else { d })
+                                .child(seen.probe("pull"))
                                 .child(probe(HistoryFrame::Button("pull")))
                                 .on_click(dispatch(Box::new(crate::workbench::GitPull))),
                         )
                         .child(
                             count_button("scm-graph-push", "arrow-up", ahead, crate::i18n::t("Push"), &p)
                                 .relative()
-                                .map(|d| sections::tabbable(d, &p))
+                                .map(|d| if seen.shows("push") { sections::tabbable(d, &p) } else { d })
+                                .child(seen.probe("push"))
                                 .child(probe(HistoryFrame::Button("push")))
                                 .on_click(dispatch(Box::new(crate::workbench::GitPush))),
                         )
@@ -1168,6 +1209,10 @@ mod card_tests;
 /// What tests ask of the graph's selection (kept here so `scm.rs` stays within its line limit).
 #[cfg(test)]
 impl ScmPanel {
+    pub fn header_seen_for_test(&self, name: &str) -> bool {
+        self.header_seen.shown_for_test(name)
+    }
+
     pub fn selected_hash(&self) -> Option<String> {
         self.selected.as_ref().map(|c| c.hash.clone())
     }

@@ -1016,8 +1016,15 @@ impl Workbench {
         f: impl FnOnce(&dyn host::Host) -> Result<String, String> + Send + 'static,
         after: impl FnOnce(&mut Self, &mut Context<Self>) + 'static,
     ) {
+        // A sync rewrites the working tree: a checkout or a stash waits for it instead of racing it.
+        if self.vcs.sync.running == Some(super::sync_glue::Running::Sync) {
+            self.notify(NoticeSource::Git, Notice::Info(crate::i18n::t("A sync is running: try again when it is done.").into()));
+            cx.notify();
+            return;
+        }
         self.notify(NoticeSource::Git, Notice::Info(working.to_string().into()));
         cx.notify();
+        self.vcs.sync.local_ops += 1;
         let host = self.remote.host.clone();
         let source_host = host.clone();
         let source_root = self.git_status().map(|status| status.root.clone());
@@ -1025,6 +1032,7 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
+                this.vcs.sync.local_ops = this.vcs.sync.local_ops.saturating_sub(1);
                 if !std::sync::Arc::ptr_eq(&this.remote.host, &source_host) || this.git_status().map(|status| status.root.clone()) != source_root {
                     return;
                 }

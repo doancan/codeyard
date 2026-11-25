@@ -46,6 +46,7 @@ A refactoring was interrupted; these files may be half-changed: {}
 A request is still being sent; wait for its answer first.	
 A sign-in answer for {0} carried the code of {1}'s sign-in; it was ignored.	
 A sync is already running.	
+A sync is running: try again when it is done.	
 A transfer is already running. Wait for it to finish or click it in the status bar to cancel.	
 A window supports up to {} editor groups.	
 Abort	
@@ -137,6 +138,7 @@ An entry of keybindings.jsonc has no key
 An existing file with the same name is never overwritten.	
 An open folder is never deleted by a refactoring.	
 Anchors and aliases were expanded.	
+Another Git command is still running: try again when it is done.	
 Another debug adapter	
 Another git process is using this repository. If none is running, a crash left {} behind: delete it and try again.	
 Another program is using it.	

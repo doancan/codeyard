@@ -4380,3 +4380,5 @@ a merge, rebase, cherry-pick or another git command is running	bir merge, rebase
 Automatic pull failed: {}	Otomatik pull başarısız oldu: {}
 The checked-out commit changed while you were asked. Nothing was pushed: try again.	Sorulurken çıkış yapılan commit değişti. Hiçbir şey gönderilmedi: yeniden deneyin.
 not pushed yet	henüz gönderilmedi
+Another Git command is still running: try again when it is done.	Başka bir Git komutu hâlâ çalışıyor: bittiğinde yeniden deneyin.
+A sync is running: try again when it is done.	Bir sync çalışıyor: bittiğinde yeniden deneyin.

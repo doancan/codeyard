@@ -142,6 +142,8 @@ thread_local!(pub(crate) static ROWS_BUILT: std::cell::Cell<usize> = const { std
 pub struct ScmPanel {
     /// Where the controls and the change list's lines were painted in the last frame, for the accessibility tree.
     a11y_frames: crate::painted::RowBounds<AccessFrame>,
+    /// Which quick buttons of the Graph header were painted in the last frame (a narrow header wraps the rest out of sight).
+    header_seen: graph_ui::HeaderSeen,
     host: Arc<dyn Host>,
     status: Option<Arc<Status>>,
     /// The change last clicked open (path, staged): its row stays highlighted so the opened diff can be told apart.
@@ -271,6 +273,7 @@ impl ScmPanel {
         subs.push(cx.observe(&query, |_, _, cx| cx.notify()));
         ScmPanel {
             a11y_frames: Default::default(),
+            header_seen: Default::default(),
             host,
             status: None,
             message,

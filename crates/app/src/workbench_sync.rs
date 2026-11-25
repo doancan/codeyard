@@ -27,6 +27,8 @@ pub(super) struct SyncState {
     /// Why the last automatic pull did nothing although the branch is behind; shown as the status bar item's tooltip until it
     /// pulls, or finds nothing to pull. Same lifetime rule as `autofetch_error`.
     auto_pull_note: Option<AutofetchError>,
+    /// Git commands started from the workbench (checkout, stash, discard…) that have not finished: a sync does not start under them.
+    pub(super) local_ops: u32,
     /// Repositories (by root) whose first automatic pull of this session is done: `git.autoPull = "open"` pulls once.
     auto_pulled_on_open: std::collections::HashSet<String>,
 }
@@ -107,6 +109,13 @@ impl Workbench {
     pub(super) fn git_sync(&mut self, ops: Vec<SyncOp>, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
         let target = root.clone();
+        // A pull rewrites the working tree and the index: not while a commit, a stash or a checkout is still at it (the
+        // other one would fail on the lock, or worse, stop half way).
+        if self.vcs.sync.local_ops > 0 || self.scm.read(cx).is_busy_any() {
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Another Git command is still running: try again when it is done.").into()));
+            cx.notify();
+            return;
+        }
         match self.vcs.sync.running {
             Some(Running::Sync) => {
                 self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("A sync is already running.").into()));
@@ -536,6 +545,11 @@ impl Workbench {
             }
         })
         .detach();
+    }
+
+    #[cfg(test)]
+    pub fn git_task_for_test(&mut self, f: impl FnOnce(&dyn host::Host) -> Result<String, String> + Send + 'static, cx: &mut Context<Self>) {
+        self.git_task("Working…", cx, f);
     }
 
     #[cfg(test)]

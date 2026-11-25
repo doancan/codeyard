@@ -675,3 +675,45 @@ fn auto_pull_on_open_pulls_once_and_off_never(cx: &mut TestAppContext) {
     });
     assert!(!f.dir.join("b.txt").exists(), "the session's one automatic pull is spent");
 }
+
+/// A sync rewrites the working tree and a checkout or a stash rewrites the index: neither starts under the other, and the one
+/// that was refused says so.
+#[gpui::test]
+fn a_sync_and_a_local_git_command_never_run_at_once(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let f = Fixture::new("sync-vs-local");
+    let (wb, cx) = opened(cx, &f, quiet());
+    // A local command that is still running: the sync does not start.
+    let (release, held) = std::sync::mpsc::channel::<()>();
+    wb.update(cx, |wb, cx| {
+        wb.git_task_for_test(
+            move |_| {
+                let _ = held.recv_timeout(std::time::Duration::from_secs(20));
+                Ok("done".into())
+            },
+            cx,
+        )
+    });
+    wb.update(cx, |wb, cx| wb.sync_for_test(vec![crate::git::SyncOp::Fetch], cx));
+    assert!(!wb.read_with(cx, |wb, _| wb.sync_running_for_test()), "the sync did not start");
+    assert_eq!(notice(&wb, cx), "Another Git command is still running: try again when it is done.");
+    release.send(()).unwrap();
+    wait_ticking(cx, "the command ends", |cx| notice(&wb, cx) == "done");
+    wb.update(cx, |wb, cx| wb.sync_for_test(vec![crate::git::SyncOp::Fetch], cx));
+    assert!(wb.read_with(cx, |wb, _| wb.sync_running_for_test()), "nothing in the way: it starts");
+    // A sync that is running: the local command does not start, and its closure never runs.
+    let ran = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = ran.clone();
+    wb.update(cx, |wb, cx| {
+        wb.git_task_for_test(
+            move |_| {
+                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok("x".into())
+            },
+            cx,
+        )
+    });
+    assert_eq!(notice(&wb, cx), "A sync is running: try again when it is done.");
+    wait_ticking(cx, "the sync ends", |cx| !wb.read_with(cx, |wb, _| wb.sync_running_for_test()));
+    assert!(!ran.load(std::sync::atomic::Ordering::SeqCst));
+}

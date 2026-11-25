@@ -439,3 +439,54 @@ fn a_worktree_with_uncommitted_changes_is_marked(cx: &mut TestAppContext) {
     scm.update(cx, |s, cx| s.refresh_worktree_dirty(true, cx));
     wait_ticking(cx, "the mark goes", |cx| marked(cx).is_empty());
 }
+
+/// A quick button that the narrow header wraps out of sight leaves the Tab order; with room, all of them are in it.
+#[gpui::test]
+fn graph_header_buttons_that_do_not_fit_are_not_tab_stops(cx: &mut TestAppContext) {
+    let dir = commit_chain("graph-tabs", 4);
+    git_in(&dir, &["remote", "add", "origin", "https://example.invalid/x.git"]);
+    let (wb, scm, cx) = open(cx, &dir);
+    cx.simulate_resize(gpui::size(px(1000.), px(900.)));
+    wait_ticking(cx, "graph", |cx| scm.read_with(cx, |s, _| s.graph_subjects().len() >= 4));
+    let shown =
+        |cx: &mut VisualTestContext| -> Vec<bool> { ["search", "fetch", "pull", "push"].map(|n| scm.read_with(cx, |s, _| s.header_seen_for_test(n))).to_vec() };
+    let settle = |cx: &mut VisualTestContext, width: f32| {
+        wb.update(cx, |wb, _| wb.set_sidebar_width_for_test(width));
+        for _ in 0..3 {
+            cx.run_until_parked();
+            cx.simulate_resize(gpui::size(px(1000. + width), px(900.)));
+        }
+        cx.run_until_parked();
+    };
+    settle(cx, 500.);
+    assert_eq!(shown(cx), [true; 4], "room for every button");
+    settle(cx, 170.);
+    let narrow = shown(cx);
+    let more = cx.debug_bounds("scm-graph-more").is_some();
+    assert!(more && narrow.iter().any(|v| !v), "a narrow sidebar cuts the quick buttons: {narrow:?}");
+    // The cut ones are the last ones: a visible button is never after a hidden one.
+    assert!(narrow.windows(2).all(|w| w[0] || !w[1]), "{narrow:?}");
+    settle(cx, 500.);
+    assert_eq!(shown(cx), [true; 4], "widened again: they are all back");
+}
+
+/// A long path stays inside its row in a narrow sidebar (the path before the folder's name is what gives way).
+#[gpui::test]
+fn a_long_worktree_path_stays_inside_its_row_in_a_narrow_sidebar(cx: &mut TestAppContext) {
+    let dir = repo("worktree-leaf");
+    let linked = dir.parent().unwrap().join(format!("a-rather-long-parent-folder-name-{}", std::process::id())).join("the-distinguishing-leaf");
+    std::fs::create_dir_all(linked.parent().unwrap()).unwrap();
+    git_in(&dir, &["worktree", "add", "-q", "-b", "leafy", linked.to_str().unwrap()]);
+    let (wb, scm, cx) = open(cx, &dir);
+    cx.simulate_resize(gpui::size(px(1000.), px(900.)));
+    wait_ticking(cx, "both worktrees", |cx| scm.read_with(cx, |s, _| s.worktrees.entries.len()) == 2);
+    let index = scm.read_with(cx, |s, _| s.worktrees.entries.iter().position(|e| e.branch.as_deref() == Some("leafy"))).unwrap();
+    wb.update(cx, |wb, _| wb.set_sidebar_width_for_test(180.));
+    cx.run_until_parked();
+    cx.simulate_resize(gpui::size(px(1180.), px(900.)));
+    cx.run_until_parked();
+    let row = cx.debug_bounds(Box::leak(format!("scm-worktree-row-{index}").into_boxed_str())).expect("the row is drawn");
+    let path = cx.debug_bounds(Box::leak(format!("scm-worktree-path-{index}").into_boxed_str())).expect("the path is drawn");
+    assert!(path.right() <= row.right() + px(0.5), "the path {path:?} runs out of the row {row:?}");
+    let _ = std::fs::remove_dir_all(linked.parent().unwrap());
+}

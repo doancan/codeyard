@@ -385,7 +385,21 @@ impl ScmPanel {
                             })
                             .children(badge.map(|b| div().flex_none().text_size(px(text::XXS.0)).text_color(c(p.text_muted)).child(b))),
                     )
-                    .child(div().truncate().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(label)),
+                    // The folder's own name is what tells checkouts apart: it stays whole, and the path before it gives way.
+                    .child({
+                        let (parent, leaf) =
+                            label.rsplit_once('/').map_or((String::new(), label.clone()), |(parent, leaf)| (format!("{parent}/"), leaf.to_string()));
+                        div()
+                            .debug_selector(move || format!("scm-worktree-path-{index}"))
+                            .flex()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_size(px(text::XS.0))
+                            .text_color(c(p.text_muted))
+                            .child(div().min_w_0().flex_shrink().overflow_hidden().text_ellipsis().child(parent))
+                            .child(div().flex_none().child(leaf))
+                    }),
             )
             .when(!self.menu_open, |d| d.tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.clone())).into()))
             .on_mouse_down(
