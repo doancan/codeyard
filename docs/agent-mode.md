@@ -117,14 +117,18 @@ message) the screenshots also show a project with an agent session: its main ter
 the account button *Personal* of the tool, its menu with each account's state, the bar *Personal reached its limit; it resets 3pm*
 with its offer of the other account, and the accounts at the foot of the list. With session files written for two accounts in the
 form the tool keeps them, the usage bars read from them: *Work · 120k tokens · 12%* (a blue bar at 12% of a budget of 1,000,000) and
-*Personal* at its limit with a red bar near 41% (410k). Pressing *Continue with Work* asks first (*Switch account?*) and then stops the
-running terminal and switches the account; the project leaves *Attention* and the bar goes. The new account applies to the next
-session, which is started from the Agents panel as before. The banner code was run from an ad-hoc signed application bundle with its
+*Personal* at its limit with a red bar near 41% (410k). With a conversation the tool had not saved, *Continue with Work* asks first
+(*Switch account?*) and then stops the running terminal and switches the account; the project leaves *Attention* and the bar goes; the
+new account applies to the next session, started from the Agents panel as before. With a saved conversation (a session file written
+for the first account and resumed from the Agents panel) it asks *Continue this session with Work?*, copies the conversation into
+the second account's folder and starts the CLI again on it with `--resume` pointing there; the account button then reads *Work*. When
+the second account is at its limit too, the bar says *No other account is free.*, and the in-window notice *cy-p1: limit reached*
+shows in the status bar. The banner code was run from an ad-hoc signed application bundle with its
 own disposable identifier (never the real one): the app started, the system's notification service recognised the process and
 registered the click delegate (`handlesResponses: true`), and nothing crashed. The service then refused to validate that bundle
 (`Failed to find or validate client`, as it does for an ad-hoc bundle outside the installed, signed app), so **no permission prompt
 or banner appeared**. **Nobody has seen** the banner, its permission prompt and its click, the Dock badge and bounce, a real CLI
-hitting a real limit, a hand-over of a saved conversation to another account (the stand-in never saves one), or SSH projects. The
+hitting a real limit, or SSH projects. The
 limit messages are the tools' wording as known today and will need upkeep.
 
 ## Tests
