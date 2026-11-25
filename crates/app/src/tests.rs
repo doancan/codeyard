@@ -2440,7 +2440,17 @@ fn an_automatic_forward_goes_when_its_server_port_closes(cx: &mut TestAppContext
     let Some(_sshd) = crate::test_sshd::start("ports-closed") else { return };
     let (wb, cx) = setup(cx);
     wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
-    let tick = |cx: &mut VisualTestContext| cx.executor().advance_clock(std::time::Duration::from_secs(5));
+    // The scan runs every 4 s of the app's clock, and each scan is a round trip through the one ssh connection. Moving the clock on
+    // every turn of the wait (every 20 ms) made that 50 scans a second: the connection was kept so busy that it answered the
+    // request that closes the forward only when it was no longer needed. A few moves a second are plenty for the two scans
+    // that take a forward down.
+    let last_move = std::cell::Cell::new(std::time::Instant::now() - std::time::Duration::from_secs(1));
+    let tick = |cx: &mut VisualTestContext| {
+        if last_move.get().elapsed() >= std::time::Duration::from_millis(300) {
+            last_move.set(std::time::Instant::now());
+            cx.executor().advance_clock(std::time::Duration::from_secs(5));
+        }
+    };
     wait_for(cx, "connection and first scan", |cx| {
         tick(cx);
         wb.read_with(cx, |wb, _| wb.ports_ready())
