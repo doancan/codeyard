@@ -6,7 +6,7 @@ once, locally and over SSH, with several agent command-line tools (Claude Code, 
 and who needs to see which project is waiting for them without opening a dozen windows.
 
 Switch to it with the terminal button at the top of the activity bar, or *View: Toggle Agent Mode*. It replaces the editor area
-and the side bars of that window; *Back to editor* (in the list) or the same button returns.
+and the side bars of that window; *Back to editor* (in the list), the same button, or any view's button in the activity bar returns.
 
 ## What it shows
 
@@ -106,10 +106,12 @@ Banners need the person's permission, which macOS asks for once; run unbundled (
 
 ## Not verified
 
-Everything above is covered by the tests listed below, and the app was started with agent mode on and two project windows for
-18 seconds without a panic; **nobody has looked at it in a running window** (layout, colours, the Dock badge and bounce, the
-banner and its permission prompt and click, a real `claude` or `codex` session hitting a real limit, SSH projects). The limit messages are the tools'
-wording as known today and will need upkeep.
+The app was started with agent mode on (two windows) and looked at in a screenshot: the project list with its groups and filter,
+the terminal with its tab and status line, the right panel with the project's own Source Control view (commit box, changes,
+worktrees, graph) and the tabs *Git*, *Diff*, *Pull requests*, *Files* all draw and fit. That is what has been seen. **Nobody has seen**
+the colours of the *Attention* and *Limit reached* states, the account button, menu and bar, the usage bars, the Dock badge and
+bounce, the banner with its permission prompt and click, a real `claude` or `codex` session hitting a real limit, or SSH projects. The
+limit messages are the tools' wording as known today and will need upkeep.
 
 ## Tests
 

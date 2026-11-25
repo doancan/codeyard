@@ -194,14 +194,8 @@ fn last_line(rows: &[String]) -> String {
 
 impl Workbench {
     pub(super) fn toggle_agent_mode(&mut self, _: &ToggleAgentMode, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(mode) = self.chrome.agent_mode.take() {
-            // The terminal that was shown goes back to the size of its own window.
-            if let Some(term) = mode.leading.and_then(|weak| weak.upgrade()) {
-                term.update(cx, |t, cx| t.lead_size(None, cx));
-            }
-            self.agent_mode_release(mode.hosting, cx);
-            crate::dock_attention::set_badge(0);
-            cx.notify();
+        if self.chrome.agent_mode.is_some() {
+            self.leave_agent_mode(cx);
             return;
         }
         let refresh = cx.spawn(async move |this, cx| {
@@ -229,6 +223,17 @@ impl Workbench {
             hosting: None,
             _refresh: refresh,
         });
+        cx.notify();
+    }
+
+    /// Back to the editor: what was shown goes back to its own window (the terminal's size, the project's menus), the Dock badge goes.
+    pub(super) fn leave_agent_mode(&mut self, cx: &mut Context<Self>) {
+        let Some(mode) = self.chrome.agent_mode.take() else { return };
+        if let Some(term) = mode.leading.and_then(|weak| weak.upgrade()) {
+            term.update(cx, |t, cx| t.lead_size(None, cx));
+        }
+        self.agent_mode_release(mode.hosting, cx);
+        crate::dock_attention::set_badge(0);
         cx.notify();
     }
 
@@ -959,10 +964,7 @@ impl Workbench {
             .text_color(c(p.text_muted))
             .hover(|d| d.text_color(c(p.text)))
             .child(t("Back to editor"));
-        let close = self.agent_mode_button(close, "close", t("Back to editor"), None, cx, |this, _, cx| {
-            this.chrome.agent_mode = None;
-            cx.notify();
-        });
+        let close = self.agent_mode_button(close, "close", t("Back to editor"), None, cx, |this, _, cx| this.leave_agent_mode(cx));
         list.child(body).child(self.agent_mode_account_list(accounts, p)).child(close)
     }
 

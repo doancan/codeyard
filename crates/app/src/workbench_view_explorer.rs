@@ -52,7 +52,10 @@ impl Workbench {
             self.show_containers(cx);
             return;
         }
-        self.chrome.panel = if self.chrome.panel == Some(panel) { None } else { Some(panel) };
+        // A view's button in agent mode (where the side bars are away) leaves it and shows that view.
+        let from_agent_mode = self.chrome.agent_mode.is_some();
+        self.leave_agent_mode(cx);
+        self.chrome.panel = if self.chrome.panel == Some(panel) && !from_agent_mode { None } else { Some(panel) };
         if self.view_shown(Panel::Explorer) {
             window.focus(&self.roots.primary.focus_handle(cx));
         }
