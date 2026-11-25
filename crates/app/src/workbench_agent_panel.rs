@@ -1053,7 +1053,7 @@ impl Workbench {
                     .flex()
                     .flex_col()
                     .gap(px(2.))
-                    .child(div().truncate().text_size(px(15.)).font_weight(FontWeight::SEMIBOLD).child(title.to_owned()))
+                    .child(div().truncate().text_size(px(crate::ui::text::LG.0)).font_weight(FontWeight::SEMIBOLD).child(title.to_owned()))
                     .when_some(state.project.as_ref(), |d, project| {
                         let path = ui::local_path(&project.folder);
                         let workspace = self.active_root(cx).is_some_and(|root| root == path) && self.vcs.scm_root.as_ref().is_none_or(|root| root == &path);
