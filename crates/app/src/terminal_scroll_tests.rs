@@ -8,11 +8,16 @@ struct ImagePasteHost {
     uploads: std::sync::Mutex<Vec<Vec<u8>>>,
     killed: std::sync::Mutex<Vec<u32>>,
     fail: bool,
+    remote: bool,
 }
 
 impl ImagePasteHost {
     fn new(fail: bool) -> Arc<Self> {
-        Arc::new(Self { local: Arc::new(host::local()), inputs: Default::default(), uploads: Default::default(), killed: Default::default(), fail })
+        Self::with(fail, true)
+    }
+
+    fn with(fail: bool, remote: bool) -> Arc<Self> {
+        Arc::new(Self { local: Arc::new(host::local()), inputs: Default::default(), uploads: Default::default(), killed: Default::default(), fail, remote })
     }
 }
 
@@ -24,7 +29,7 @@ impl Host for ImagePasteHost {
         "ssh://fixture".into()
     }
     fn is_remote(&self) -> bool {
-        true
+        self.remote
     }
     fn call(&self, request: proto::Request) -> host::Result<proto::Response> {
         self.local.call(request)
@@ -185,6 +190,32 @@ fn ctrl_v_transfers_a_remote_clipboard_image_as_bracketed_path(cx: &mut TestAppC
     cx.run_until_parked();
     assert_eq!(*host.uploads.lock().unwrap(), vec![data]);
     assert_eq!(*host.inputs.lock().unwrap(), vec![b"\x1b[200~/tmp/codeyard-paste-Abc123XY.png\x1b[201~".to_vec()]);
+}
+
+/// A screenshot on the clipboard and nothing else: Paste (⌘V) puts a file's path into a local terminal too, as it does into a remote one.
+#[cfg(unix)]
+#[gpui::test]
+fn paste_saves_a_local_screenshot_and_types_its_path(cx: &mut TestAppContext) {
+    crate::qa_workbench_tests::globals(cx);
+    let host = ImagePasteHost::with(false, false);
+    let (term, cx) = cx.add_window_view(|_, cx| TerminalView::output_only(host.clone(), "test".into(), cx));
+    term.update_in(cx, |t, window, cx| {
+        t.pty = Some(7);
+        t.feed(b"\x1b[?2004h");
+        t.focus_handle.focus(window);
+        cx.notify();
+    });
+    let data = b"\x89PNG\r\n\x1a\nimage".to_vec();
+    cx.write_to_clipboard(ClipboardItem::new_image(&gpui::Image::from_bytes(gpui::ImageFormat::Png, data.clone())));
+    term.update_in(cx, |t, window, cx| t.paste(&TermPaste, window, cx));
+    cx.run_until_parked();
+    assert_eq!(*host.uploads.lock().unwrap(), vec![data]);
+    assert_eq!(*host.inputs.lock().unwrap(), vec![b"\x1b[200~/tmp/codeyard-paste-Abc123XY.png\x1b[201~".to_vec()]);
+    // Text beside the picture wins: nothing more is saved.
+    cx.write_to_clipboard(ClipboardItem::new_string("echo hi".into()));
+    term.update_in(cx, |t, window, cx| t.paste(&TermPaste, window, cx));
+    cx.run_until_parked();
+    assert_eq!(host.uploads.lock().unwrap().len(), 1);
 }
 
 #[cfg(unix)]

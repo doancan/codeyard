@@ -158,7 +158,12 @@ impl Workbench {
                 .into_iter()
                 .filter_map(|e| match e {
                     Effect::Cancel { alias, spec } => {
-                        let _ = host::forward::cancel(&alias, &spec); // already gone is fine
+                        // A connection that is gone took its forwards with it; any other failure leaves the local port listening.
+                        if let Err(e) = host::forward::cancel(&alias, &spec)
+                            && !matches!(e.kind, host::forward::FailKind::MasterGone | host::forward::FailKind::Unsupported)
+                        {
+                            crate::diagnostics::log::warn("ports", format_args!("could not cancel the forward {spec}: {}", e.message));
+                        }
                         None
                     }
                     Effect::Open { id, seq, req } => Some((id, seq, req.alias.clone(), host::forward::open(&req))),

@@ -24,6 +24,13 @@ pub(super) struct SyncState {
     autofetch_error: Option<AutofetchError>,
     /// What the user asked for while a background fetch ran (a sync, or a push after a commit): it starts when the fetch is done.
     queued: Option<Vec<SyncOp>>,
+    /// Why the last automatic pull did nothing although the branch is behind; shown as the status bar item's tooltip until it
+    /// pulls, or finds nothing to pull. Same lifetime rule as `autofetch_error`.
+    auto_pull_note: Option<AutofetchError>,
+    /// Git commands started from the workbench (checkout, stash, discard…) that have not finished: a sync does not start under them.
+    pub(super) local_ops: u32,
+    /// Repositories (by root) whose first automatic pull of this session is done: `git.autoPull = "open"` pulls once.
+    auto_pulled_on_open: std::collections::HashSet<String>,
 }
 
 struct AutofetchError {
@@ -34,8 +41,16 @@ struct AutofetchError {
 
 /// How often the background fetch looks at the clock; the period itself comes from `git.autofetchPeriod`.
 const AUTOFETCH_TICK: std::time::Duration = std::time::Duration::from_secs(5);
+/// How soon it looks again while a fetch is due and only waiting for something (the repository's status to be read, a sync to end):
+/// what others pushed shows up within a second of the window opening, not after a whole tick.
+const AUTOFETCH_EAGER: std::time::Duration = std::time::Duration::from_secs(1);
 /// A count of seconds that is past any period: the next tick fetches.
 const DUE: u64 = 1 << 32;
+
+/// Automatic pull implies fetching: there is nothing to pull until something was fetched.
+fn background_fetch_on(s: &Settings) -> bool {
+    s.git_autofetch || s.git_auto_pull != "off"
+}
 
 fn options(s: &Settings) -> SyncOptions {
     SyncOptions { rebase: s.git_rebase_when_sync, prune: s.git_prune_on_fetch, tags: s.git_pull_tags, fetch_on_pull: s.git_fetch_on_pull }
@@ -94,6 +109,13 @@ impl Workbench {
     pub(super) fn git_sync(&mut self, ops: Vec<SyncOp>, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
         let target = root.clone();
+        // A pull rewrites the working tree and the index: not while a commit, a stash or a checkout is still at it (the
+        // other one would fail on the lock, or worse, stop half way).
+        if self.vcs.sync.local_ops > 0 || self.scm.read(cx).is_busy_any() {
+            self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("Another Git command is still running: try again when it is done.").into()));
+            cx.notify();
+            return;
+        }
         match self.vcs.sync.running {
             Some(Running::Sync) => {
                 self.notify(NoticeSource::App, Notice::Info(crate::i18n::t("A sync is already running.").into()));
@@ -374,6 +396,9 @@ impl Workbench {
         if let Some(e) = self.autofetch_error() {
             tip = format!("{tip}\n{}", crate::i18n::tf("The last background fetch failed: {}", &[e]));
         }
+        if let Some(note) = self.auto_pull_note() {
+            tip = format!("{tip}\n{note}");
+        }
         tip.into()
     }
 
@@ -386,7 +411,7 @@ impl Workbench {
     /// Fetch in the background if `git.autofetch` is on, the window is in front, the folder is trusted and nothing else is
     /// talking to the remote. Failures are kept for the sync item's tooltip, never shown as a notice.
     pub(super) fn autofetch_now(&mut self, window_active: bool, cx: &mut Context<Self>) -> bool {
-        if !cx.global::<Settings>().git_autofetch || !window_active || self.vcs.sync.running.is_some() {
+        if !background_fetch_on(cx.global::<Settings>()) || !window_active || self.vcs.sync.running.is_some() {
             return false;
         }
         let Some(root) = self.git_status().map(|s| s.root.clone()) else { return false };
@@ -398,10 +423,18 @@ impl Workbench {
         let source_host = host.clone();
         let source_root = root.clone();
         let opts = options(cx.global::<Settings>());
+        let pull = match cx.global::<Settings>().git_auto_pull.as_str() {
+            "always" => true,
+            "open" => !self.vcs.sync.auto_pulled_on_open.contains(&root),
+            _ => false,
+        };
+        let pulled_root = root.clone();
         let task = cx.background_executor().spawn(async move {
             // A prompt that arrives during the periodic fetch is declined: nobody asked for it, and the error says why.
             let _quiet = host::askpass::Quiet::begin();
-            git::autofetch(host.as_ref(), &root, opts)
+            let changed = git::autofetch(host.as_ref(), &root, opts)?;
+            // The fetch is done: a fast-forward needs no network. Its own failure is its own result, not the fetch's.
+            Ok::<_, String>((changed, pull.then(|| git::auto_pull(host.as_ref(), &root))))
         });
         cx.spawn(async move |this, cx| {
             let result = task.await;
@@ -413,10 +446,11 @@ impl Workbench {
                     return;
                 }
                 match result {
-                    Ok(changed) => {
+                    Ok((changed, pulled)) => {
                         this.vcs.sync.autofetch_error = None;
+                        let moved = pulled.is_some_and(|r| this.note_auto_pull(&source_host, &pulled_root, r));
                         // Nothing new came: the status and the graph on screen are still right, so they are not read again.
-                        if changed {
+                        if changed || moved {
                             this.refresh_git(0, cx);
                         }
                     }
@@ -439,40 +473,83 @@ impl Workbench {
         true
     }
 
+    /// What an automatic pull did: a notice when it moved the branch, a line in the sync tooltip when it had to wait for the
+    /// user. `true`: the branch moved, so what the window shows is out of date.
+    fn note_auto_pull(&mut self, host: &Arc<dyn host::Host>, root: &str, result: Result<git::AutoPull, String>) -> bool {
+        use crate::i18n::{t, tn};
+        let wait = |why: &str| Some(crate::i18n::tf("Automatic pull is waiting: {}", &[&why]));
+        let (note, moved) = match result {
+            Ok(git::AutoPull::Pulled(n)) => {
+                self.notify(NoticeSource::App, Notice::Info(tn("Pulled {} new commit.", "Pulled {} new commits.", n as usize, &[]).into()));
+                (None, true)
+            }
+            Ok(git::AutoPull::UpToDate) => (None, false),
+            // A branch that is not on a branch or has no upstream is an ordinary state, not something waiting.
+            Ok(git::AutoPull::Skipped(git::Skip::DetachedHead | git::Skip::NoUpstream)) => (None, false),
+            Ok(git::AutoPull::Skipped(git::Skip::Dirty)) => (wait(t("tracked files have changes")), false),
+            Ok(git::AutoPull::Skipped(git::Skip::Diverged)) => (wait(t("this branch has commits the upstream does not")), false),
+            Ok(git::AutoPull::Skipped(git::Skip::Busy)) => (wait(t("a merge, rebase, cherry-pick or another git command is running")), false),
+            Err(e) => (Some(crate::i18n::tf("Automatic pull failed: {}", &[&first_line(&e)])), false),
+        };
+        // "open" pulls once a session: it is done once the branch is up to date, not while something kept it waiting.
+        if note.is_none() {
+            self.vcs.sync.auto_pulled_on_open.insert(root.to_string());
+        }
+        self.vcs.sync.auto_pull_note = note.map(|message| AutofetchError { host: Arc::downgrade(host), root: root.to_string(), message: message.into() });
+        moved
+    }
+
+    fn auto_pull_note(&self) -> Option<&SharedString> {
+        let note = self.vcs.sync.auto_pull_note.as_ref()?;
+        let host = note.host.upgrade()?;
+        self.git_context_matches(&host, &note.root).then_some(&note.message)
+    }
+
     /// Runs `autofetch_now` once the period has passed. Like `poll_git`, it only runs while the window is in front.
     pub(super) fn poll_autofetch(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         cx.spawn_in(window, async move |this, cx| {
-            // Due from the start, and again whenever the window comes back to the front: the first look at a repository
-            // (or the return to it) shows what others pushed meanwhile, as VS Code does, instead of waiting a period.
+            // Due from the start, and again whenever the window comes back to the front or another repository comes on screen:
+            // the first look at a repository (or the return to it) shows what others pushed meanwhile, as VS Code does,
+            // instead of waiting a period.
             let mut waited = DUE;
             let mut was_active = false;
+            let mut last_root: Option<String> = None;
+            let mut delay = AUTOFETCH_EAGER;
             loop {
-                cx.background_executor().timer(AUTOFETCH_TICK).await;
-                waited = waited.saturating_add(AUTOFETCH_TICK.as_secs());
-                let ok = this
-                    .update_in(cx, |this, window, cx| {
-                        let (on, period) = {
-                            let s = cx.global::<Settings>();
-                            (s.git_autofetch, u64::from(s.git_autofetch_period.max(30)))
-                        };
-                        let active = window.is_window_active() || cfg!(test);
-                        if active && !was_active {
-                            waited = waited.max(DUE);
-                        }
-                        was_active = active;
-                        // Off: start counting again from the moment it is turned on. Due but blocked (window in the
-                        // background, a sync running): keep the count, so it fetches as soon as it can.
-                        if !on || (waited >= period && this.autofetch_now(active, cx)) {
-                            waited = 0;
-                        }
-                    })
-                    .is_ok();
-                if !ok {
-                    break;
+                cx.background_executor().timer(delay).await;
+                waited = waited.saturating_add(delay.as_secs());
+                let next = this.update_in(cx, |this, window, cx| {
+                    let (on, period) = {
+                        let s = cx.global::<Settings>();
+                        (background_fetch_on(s), u64::from(s.git_autofetch_period.max(30)))
+                    };
+                    let active = window.is_window_active() || cfg!(test);
+                    let root = this.git_status().map(|s| s.root.clone());
+                    if (active && !was_active) || (root.is_some() && root != last_root) {
+                        waited = waited.max(DUE);
+                    }
+                    was_active = active;
+                    last_root = root;
+                    // Off: start counting again from the moment it is turned on. Due but blocked (window in the
+                    // background, a sync running): keep the count, so it fetches as soon as it can.
+                    if !on || (waited >= period && this.autofetch_now(active, cx)) {
+                        waited = 0;
+                    }
+                    // Due and only waiting (the status is not read yet, a sync is running): look again soon.
+                    if on && active && waited >= period { AUTOFETCH_EAGER } else { AUTOFETCH_TICK }
+                });
+                match next {
+                    Ok(next) => delay = next,
+                    Err(_) => break,
                 }
             }
         })
         .detach();
+    }
+
+    #[cfg(test)]
+    pub fn git_task_for_test(&mut self, f: impl FnOnce(&dyn host::Host) -> Result<String, String> + Send + 'static, cx: &mut Context<Self>) {
+        self.git_task("Working…", cx, f);
     }
 
     #[cfg(test)]

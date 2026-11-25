@@ -46,6 +46,7 @@ A refactoring was interrupted; these files may be half-changed: {}
 A request is still being sent; wait for its answer first.	
 A sign-in answer for {0} carried the code of {1}'s sign-in; it was ignored.	
 A sync is already running.	
+A sync is running: try again when it is done.	
 A transfer is already running. Wait for it to finish or click it in the status bar to cancel.	
 A window supports up to {} editor groups.	
 Abort	
@@ -95,6 +96,7 @@ Add comment
 Add comment…	
 Add dependency	
 Add remote	
+Add the staged changes to the last commit (and give it the message above, if there is one)	
 Add to .gitignore	
 Add to Favorites	
 Add to Watch	
@@ -135,12 +137,16 @@ Also every folder inside “{}”, now and later.
 Also get its pre-releases, at once and before others get them	
 Also used by {}	
 Always open *.{0} as {1}	
+Amend	
+Amend a commit that is already pushed?	
 Amended {}	
+Amending replaces the commit with a new one. The branch then differs from the remote, and updating it takes a force push.	
 An edit ends before it starts.	
 An entry of keybindings.jsonc has no key	
 An existing file with the same name is never overwritten.	
 An open folder is never deleted by a refactoring.	
 Anchors and aliases were expanded.	
+Another Git command is still running: try again when it is done.	
 Another debug adapter	
 Another git process is using this repository. If none is running, a crash left {} behind: delete it and try again.	
 Another program is using it.	
@@ -179,6 +185,8 @@ Auto Save is on.
 Auto-detect project	
 Automatic forwarding is paused after a failure. Forward a port by hand, or reconnect.	
 Automatic forwarding stops at {} forwards: forward other ports by hand.	
+Automatic pull failed: {}	
+Automatic pull is waiting: {}	
 Back	
 Back to SSH workspace and container details	
 Back to the default (removes the value from settings.jsonc)	
@@ -212,6 +220,7 @@ Breakpoints are deactivated: the program runs past them.
 Breaks when the value is written; for this debug session only.	
 Brightness	
 Bring a folder's tabs and unsaved changes back when you open it	
+Bring in what others pushed by itself when the branch has nothing of its own: never, when a folder opens, or after every fetch. Your own settings only; a folder cannot change it	
 Build and Open	
 Build failed: {}	
 Build for target	
@@ -416,8 +425,7 @@ Color symbols by their meaning, from the language server
 Color theme	
 Color theme of the whole window and the editor	
 Color theme: {}	
-Colored file glyphs, folders with only their arrow; names line up	
-Colorful Folders	
+Colorful icons by language and tool, folders marked by purpose (the default)	
 Column where lines wrap with wordWrapColumn or bounded	
 Column {0}: {1}	
 Columns	
@@ -1089,12 +1097,10 @@ Fetching in the background: the sync starts when it is done.
 Fetching…	
 Fewer context lines	
 File	
-File Glyphs (Default)	
 File Icon Theme	
 File Icon Theme…	
 File and folder icons	
 File changed since preview: {}	
-File glyphs tinted by language, accent folders	
 File icon theme…	
 File name (a path like src/new.rs works too)	
 File operation: {0} completed, {1} failed, {2} not processed.	
@@ -1175,7 +1181,6 @@ Fold All
 Fold line {}	
 Folder for build output (empty: the project's own target folder)	
 Folder to clone into	
-Folders colored by purpose (src, tests, docs…) and colored file glyphs	
 Follow	
 Follow (Tail)	
 Follow Cursor	
@@ -1496,7 +1501,6 @@ Label
 Labels	
 Language	
 Language & Region	
-Language Badges	
 Language Services	
 Language mode for this file	
 Language of Uppercase / Lowercase / Title Case: auto (Turkish rules when the text has ı İ ş ğ), tr (i ↔ İ, ı ↔ I) or en	
@@ -1637,7 +1641,6 @@ Message of the squashed commit
 Milliseconds between live preview checks	
 Mine	
 Minified	
-Minimal	
 Minimize	
 Minimize window	
 Minutes the terminals keep running for the next start after Codeyard quits, crashes or is killed (0: not kept)	
@@ -1869,6 +1872,7 @@ Not installed; open setup instructions
 Not now	
 Not paused	
 Not pulled yet. Sync brings it in.	
+Not pushed yet. Sync sends it.	
 Not saved: {0} (U+{1}) cannot be written in {2}. Remove it, or save a copy as UTF-8.	
 Not saved: {0} cannot be written in {1}.	
 Not valid Base64: left unchanged	
@@ -1915,7 +1919,6 @@ Oct
 Off	
 On	
 On this computer	
-One quiet color, outline glyphs	
 Only My Commits	
 Only When I Ask	
 Only a published branch can be force-pushed: use Publish Branch first.	
@@ -2187,6 +2190,7 @@ Pull request changes
 Pull requests	
 Pull with rebase instead of a merge commit	
 Pulled	
+Pulled {} new commit.|Pulled {} new commits.	
 Pulling, Pushing…	
 Pulling…	
 Push	
@@ -2200,6 +2204,7 @@ Pushed tags to {}
 Pushing tags…	
 Pushing {}…	
 Pushing…	
+Put the changes aside. Hold Shift to take new files too	
 Put the cursor inside a merge conflict	
 Put the cursor on a dependency first	
 Put the cursor on a symbol to rename it	
@@ -2687,14 +2692,13 @@ Signature not verified: the token is only decoded, not checked
 Signing the commit failed: gpg could not sign it. Check that the key is available and that gpg-agent can ask for its passphrase, or turn commit.gpgsign off.	
 Skip This Version	
 Skip Those Files	
-Small colored badges with the language's letters	
+Small single-color file icons; folders show only their arrow	
 Snippets	
 Snippets for {}	
 Snippets reloaded	
 Snippets: Insert Snippet…	
+Soft pastel icons that follow the light or dark theme	
 Software Update	
-Solid blue folders like Finder, outline files with a language dot like GitHub	
-Solid folders colored and marked by purpose, solid files colored by language	
 Some bytes are not valid UTF-8 and are shown as replacement characters	
 Something with that name already exists.	
 Sort by {}	
@@ -2814,9 +2818,9 @@ Sync changes?
 Synced	
 Syncing…	
 Syntax tree of {}	
+System account	
 TOML dates were turned into text.	
 TOML needs a table at the top level, but this document is a {}	
-System account	
 Tab Moves Focus	
 Tab actions	
 Tab and Shift+Tab move the focus out of the editor. Click to turn off.	
@@ -2923,7 +2927,9 @@ The build failed. See Output and Problems for the compiler errors.
 The bundled service catalogue is invalid. Reinstall Codeyard before retrying.	
 The changes are too large for one patch.	
 The changes could not be read.	
+The checked-out commit changed while you were asked. Nothing was pushed: try again.	
 The chosen commits are not one run of this branch.	
+The classic set with the widest coverage of file names	
 The clipboard has no text.	
 The commit stays on {}: the next Sync brings it back. To remove it there too, push with force after undoing (Git: Push (Force)…).	
 The complete file list is available in Output.	
@@ -3500,6 +3506,7 @@ Zoom out (-)
 a comment is not closed	
 a field refers to a group the regular expression does not have	
 a key binding condition needs a context, not a constant	
+a merge, rebase, cherry-pick or another git command is running	
 a program	
 a string is not closed	
 a theme must be a JSON object	
@@ -3684,6 +3691,7 @@ not available
 not declared	
 not found on crates.io	
 not pulled yet	
+not pushed yet	
 not run	
 not run: a dependency failed	
 not run: too many tasks in the background	
@@ -3824,12 +3832,14 @@ the {} registry's list is more than 3 days old; install from the Extensions view
 theme {} isn't installed here: copy its .json into ~/.config/codeyard/themes to use it	
 theme “{}” not found (available: auto, {})	
 there is no built-in matcher called “{}”	
+this branch has commits the upstream does not	
 this computer	
 this folder only	
 this value cannot be watched	
 this version was revoked	
 too many copies	
 too many or too large patterns	
+tracked files have changes	
 turned off after three crashes	
 turned off on the extension page	
 type	

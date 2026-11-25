@@ -83,11 +83,7 @@ pub const CATALOG: &[Entry] = &[
         Kind::Bool,
     ),
     e("editor.colorDecorators", crate::i18n::tr("Show a color swatch next to #rrggbb values"), Kind::Bool),
-    e(
-        "workbench.iconTheme",
-        crate::i18n::tr("File and folder icons"),
-        Kind::Choice(&["glyphs", "minimal", "codeyard", "badges", "colorful", "apple", "material", "none"]),
-    ),
+    e("workbench.iconTheme", crate::i18n::tr("File and folder icons"), Kind::Choice(&["material", "catppuccin", "vscode", "seti", "none"])),
     e("workbench.fontFamily", crate::i18n::tr("UI font of the whole window (empty: system font)"), Kind::Text),
     e(
         "ui.scale",
@@ -135,6 +131,13 @@ pub const CATALOG: &[Entry] = &[
     // --- git-sync ---
     e("git.autofetch", crate::i18n::tr("Fetch from the remote in the background while the window is in front"), Kind::Bool),
     e("git.autofetchPeriod", crate::i18n::tr("Seconds between background fetches"), Kind::Number { min: 30., max: 86_400. }),
+    e(
+        "git.autoPull",
+        crate::i18n::tr(
+            "Bring in what others pushed by itself when the branch has nothing of its own: never, when a folder opens, or after every fetch. Your own settings only; a folder cannot change it",
+        ),
+        Kind::Choice(&["off", "open", "always"]),
+    ),
     e("git.confirmSync", crate::i18n::tr("Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it"), Kind::Bool),
     e("git.rebaseWhenSync", crate::i18n::tr("Pull with rebase instead of a merge commit"), Kind::Bool),
     e("git.pruneOnFetch", crate::i18n::tr("Fetch removes remote branches that were deleted on the server"), Kind::Bool),
@@ -457,6 +460,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         // --- git-sync ---
         "git.autofetch" => json!(s.git_autofetch),
         "git.autofetchPeriod" => json!(s.git_autofetch_period),
+        "git.autoPull" => json!(s.git_auto_pull),
         "git.confirmSync" => json!(s.git_confirm_sync),
         "git.rebaseWhenSync" => json!(s.git_rebase_when_sync),
         "git.pruneOnFetch" => json!(s.git_prune_on_fetch),

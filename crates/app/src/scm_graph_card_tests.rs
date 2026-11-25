@@ -20,7 +20,7 @@ fn source(dir: &std::path::Path) -> CardSource {
 
 fn card(cx: &mut TestAppContext, commit: GraphCommit, source: Option<CardSource>) -> (Entity<CommitCard>, &mut VisualTestContext) {
     globals(cx);
-    let (card, cx) = cx.add_window_view(|_, cx| CommitCard::new(commit, source, cx));
+    let (card, cx) = cx.add_window_view(|_, cx| CommitCard::new(commit, 0, source, cx));
     cx.run_until_parked();
     (card, cx)
 }
@@ -126,10 +126,10 @@ fn a_commit_is_read_once_and_a_failure_is_a_failure(cx: &mut TestAppContext) {
     let (first, cx) = card(cx, commit.clone(), Some(src.clone()));
     ready(&first, cx);
     assert_eq!(src.cache.details.borrow().len(), 1);
-    let again = cx.update(|_, cx| cx.new(|cx| CommitCard::new(commit.clone(), Some(src.clone()), cx)));
+    let again = cx.update(|_, cx| cx.new(|cx| CommitCard::new(commit.clone(), 0, Some(src.clone()), cx)));
     assert!(matches!(again.read_with(cx, |c, _| c.changes.clone()), Changes::Ready(_)), "ready the moment it is built: nothing is read again");
     let lost = CardSource::new(Arc::new(host::local()), "/no/such/repository".into(), CardCache::default());
-    let failed = cx.update(|_, cx| cx.new(|cx| CommitCard::new(commit, Some(lost), cx)));
+    let failed = cx.update(|_, cx| cx.new(|cx| CommitCard::new(commit, 0, Some(lost), cx)));
     wait_ticking(cx, "the failure", |cx| failed.read_with(cx, |c, _| !matches!(c.changes, Changes::Loading)));
     assert!(matches!(failed.read_with(cx, |c, _| c.changes.clone()), Changes::Failed), "an unreadable repository is not an empty commit");
 }
@@ -200,7 +200,7 @@ fn the_card_reads_a_commit_over_ssh(cx: &mut TestAppContext) {
     let host = wb.read_with(wcx, |wb, _| wb.remote_host_for_test());
     assert_eq!(wb.read_with(wcx, |wb, _| wb.remote_host_label_for_test()), Some(format!("ssh://{}", crate::test_sshd::ALIAS)));
     let source = CardSource::new(host, ui::local_path(&dir), CardCache::default());
-    let card = wcx.update(|_, cx| cx.new(|cx| CommitCard::new(commit, Some(source), cx)));
+    let card = wcx.update(|_, cx| cx.new(|cx| CommitCard::new(commit, 0, Some(source), cx)));
     let detail = ready(&card, wcx);
     let (files, added, deleted) = git_totals(&dir, "HEAD");
     assert_eq!((detail.files.len(), detail.totals()), (files, (added, deleted)));
@@ -342,4 +342,45 @@ fn a_long_email_stays_inside_the_card(cx: &mut TestAppContext) {
     let card_box = cx.debug_bounds("commit-card").expect("the card is drawn");
     let email = cx.debug_bounds("commit-card-email").expect("the address is drawn");
     assert!(email.right() <= card_box.right(), "the address {email:?} runs out of the card {card_box:?}");
+}
+
+/// The card of a merge commit (the "Merge" badge and the parents line share the footer) with the address GitHub gives to people who
+/// hide their own: it stays inside the card, as does a long author name.
+#[gpui::test]
+fn a_merge_commit_with_a_noreply_address_stays_inside_the_card(cx: &mut TestAppContext) {
+    let commit = GraphCommit {
+        hash: "a".repeat(40),
+        short: "16103c0".into(),
+        parents: vec!["a373983".repeat(5), "fb0935a".repeat(5)],
+        subject: "Merge pull request #427 from doancan/perf/activation-compile-apart".into(),
+        author: "A person with a rather long full name and then some more".into(),
+        email: "37839267+doancan@users.noreply.github.com".into(),
+        date: "2026-11-25 05:51".into(),
+        ..Default::default()
+    };
+    let (_card, cx) = card(cx, commit, None);
+    let card_box = cx.debug_bounds("commit-card").expect("the card is drawn");
+    let email = cx.debug_bounds("commit-card-email").expect("the address is drawn");
+    assert!(email.right() <= card_box.right(), "the address {email:?} runs out of the card {card_box:?}");
+    assert!(email.left() >= card_box.left(), "{email:?} {card_box:?}");
+}
+
+/// Resting on a row reads the commit before the card exists: the card is complete the moment it opens, and a second rest on the same
+/// row reads nothing again.
+#[gpui::test]
+fn resting_on_a_row_reads_the_commit_before_the_card_opens(cx: &mut TestAppContext) {
+    let dir = repo("card-warm");
+    let src = source(&dir);
+    let commit = commit_of(&dir, "HEAD");
+    let (first, cx) = card(cx, commit.clone(), None);
+    first.update(cx, |_, cx| src.warm(&commit.hash, cx));
+    assert_eq!(src.cache.warming.borrow().len(), 2, "the commit and the repository are being read");
+    first.update(cx, |_, cx| src.warm(&commit.hash, cx));
+    assert_eq!(src.cache.warming.borrow().len(), 2, "a second rest does not start the same reads again");
+    wait_ticking(cx, "the reads", |_| src.cache.warming.borrow().is_empty());
+    assert_eq!(src.cache.details.borrow().len(), 1);
+    assert!(src.cache.repos.borrow().contains_key(&src.root), "the remote was looked at, whether or not there is one");
+    let opened = cx.update(|_, cx| cx.new(|cx| CommitCard::new(commit, 0, Some(src.clone()), cx)));
+    assert!(matches!(opened.read_with(cx, |c, _| c.changes.clone()), Changes::Ready(_)), "complete when it opens");
+    assert!(opened.read_with(cx, |c, _| c.repo_known), "no room is kept for links that are already known to be missing");
 }

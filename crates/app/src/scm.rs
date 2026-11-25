@@ -142,6 +142,8 @@ thread_local!(pub(crate) static ROWS_BUILT: std::cell::Cell<usize> = const { std
 pub struct ScmPanel {
     /// Where the controls and the change list's lines were painted in the last frame, for the accessibility tree.
     a11y_frames: crate::painted::RowBounds<AccessFrame>,
+    /// Which quick buttons of the Graph header were painted in the last frame (a narrow header wraps the rest out of sight).
+    header_seen: graph_ui::HeaderSeen,
     host: Arc<dyn Host>,
     status: Option<Arc<Status>>,
     /// The change last clicked open (path, staged): its row stays highlighted so the opened diff can be told apart.
@@ -237,6 +239,8 @@ mod detail_ui;
 mod operation_ui;
 #[path = "scm_ops.rs"]
 mod ops;
+#[path = "scm_quick.rs"]
+mod quick;
 #[path = "scm_repos.rs"]
 mod repos_ui;
 
@@ -271,6 +275,7 @@ impl ScmPanel {
         subs.push(cx.observe(&query, |_, _, cx| cx.notify()));
         ScmPanel {
             a11y_frames: Default::default(),
+            header_seen: Default::default(),
             host,
             status: None,
             message,
@@ -426,14 +431,28 @@ impl ScmPanel {
         let limit = self.graph_limit(cx);
         let dir = root.clone();
         let task = cx.background_executor().spawn(async move {
-            let log = graph::log(host.as_ref(), &dir, limit, scope);
-            let has_remote = git::remotes(host.as_ref(), &dir).is_ok_and(|r| !r.is_empty());
-            let incoming = graph::incoming(host.as_ref(), &dir, limit);
-            let log = log.map(|mut commits| {
-                commits.iter_mut().for_each(|c| c.incoming = incoming.contains(&c.hash));
-                commits
-            });
-            (log, git::identity(host.as_ref(), &dir), git::stash_list(host.as_ref(), &dir).ok(), has_remote)
+            // Six independent git commands: run side by side, the history is as late as the slowest one, not their sum (over SSH
+            // each is a round trip, and the commits this branch is still missing are what the user is waiting to see).
+            let host = host.as_ref();
+            std::thread::scope(|s| {
+                let log = s.spawn(|| graph::log(host, &dir, limit, scope));
+                let incoming = s.spawn(|| graph::incoming(host, &dir, limit));
+                let outgoing = s.spawn(|| graph::outgoing(host, &dir, limit));
+                let remote = s.spawn(|| git::remotes(host, &dir).is_ok_and(|r| !r.is_empty()));
+                let stashes = s.spawn(|| git::stash_list(host, &dir).ok());
+                let identity = git::identity(host, &dir);
+                let join = |what: &str| format!("the {what} read panicked");
+                let log = log.join().unwrap_or_else(|_| Err(join("history")));
+                let (incoming, outgoing) = (incoming.join().unwrap_or_default(), outgoing.join().unwrap_or_default());
+                let log = log.map(|mut commits| {
+                    for c in &mut commits {
+                        c.incoming = incoming.contains(&c.hash);
+                        c.outgoing = outgoing.contains(&c.hash);
+                    }
+                    commits
+                });
+                (log, identity, stashes.join().unwrap_or(None), remote.join().unwrap_or(false))
+            })
         });
         let loaded_from = self.host.clone();
         cx.spawn(async move |this, cx| {
@@ -944,7 +963,7 @@ impl Render for ScmPanel {
                             }),
                     )
                     .children(self.operation_banner(&st, &p))
-                    .when_some(last, |d, lc| {
+                    .when_some(last.clone(), |d, lc| {
                         d.child(
                             div()
                                 .flex()
@@ -979,6 +998,7 @@ impl Render for ScmPanel {
                             .child(commit_label)
                             .on_click(cx.listener(|this, _, _, cx| this.commit(cx))),
                     )
+                    .child(self.quick_actions(&st, last.is_some(), &p, cx))
                     .children(sync_button)
                     .when_some(self.result.clone(), |d, (msg, err)| {
                         d.child(div().text_size(px(text::XS.0)).text_color(c(if err { p.danger } else { p.text_muted })).child(msg))

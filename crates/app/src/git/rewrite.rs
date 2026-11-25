@@ -107,13 +107,12 @@ fn plan(host: &dyn Host, root: &str, expected_tip: &str, what: &Rewrite, limit: 
     if checked_out_elsewhere(host, root, &branch)? {
         return Err(tf("The branch {} is checked out in another worktree, so its commits cannot be rewritten here.", &[&branch]));
     }
-    // The commits that are not on the upstream (or on any remote when there is none), newest first along the branch.
+    // The commits that are not on the upstream and not on any remote branch, newest first along the branch: a commit that went to
+    // a second remote (a fork) is shared too, whatever the upstream says.
     let upstream = git(host, root, &["rev-parse", "--symbolic-full-name", "@{upstream}"])?;
     let upstream = upstream.ok().then(|| upstream.stdout_str().trim().to_string()).filter(|r| !r.is_empty());
-    let exclude: Vec<String> = match &upstream {
-        Some(r) => vec![format!("^{r}")],
-        None => vec!["--not".into(), "--remotes".into()],
-    };
+    let mut exclude: Vec<String> = upstream.iter().map(|r| format!("^{r}")).collect();
+    exclude.extend(["--not".into(), "--remotes".into()]);
     let range = |extra: &[&str]| -> Vec<String> {
         let mut args: Vec<String> = vec!["rev-list".into()];
         args.extend(extra.iter().map(|s| s.to_string()));

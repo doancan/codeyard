@@ -546,9 +546,12 @@ Make it yours:
   entry in `[brackets]` applies to that theme only), or "Theme: Save Current Colors as User
   Theme…" to keep your tweaks as a theme file. Color themes from another editor dropped into
   `~/.config/codeyard/themes` are imported.
-- **Icons:** "Theme: Pick File Icon Theme…" previews Minimal (default), Codeyard, Language Badges,
-  Colorful Folders, Apple / GitHub (solid blue folders, outline files with a language dot),
-  Material (folders colored and marked by purpose, solid colored files) and None (`"workbench.iconTheme"`).
+- **Icons:** "Theme: Pick File Icon Theme…" previews Material Icons (default: colored icons by language and tool, folders
+  marked by purpose), Catppuccin Icons (pastel; Mocha on dark color themes, Latte on light ones), VS Code Icons, Seti (small
+  single-color file icons, no folder icons) and None (`"workbench.iconTheme"`). A file is matched by its whole name
+  (`Cargo.toml`), then by its longest known extension (`a.test.ts` tries `test.ts`, then `ts`), and gets the set's plain
+  file icon otherwise. The old values `glyphs`, `minimal`, `codeyard`, `badges`, `colorful` and `apple` still load and mean Material.
+  The icon files and how they are chosen: [file-icons.md](file-icons.md).
 - **Layout:** `workbench.fontFamily` (UI font), `workbench.activityBar.visible`,
   `workbench.statusBar.visible`, `workbench.editor.showTabs`, `workbench.tabs.closeButton`,
   `workbench.tabs.showIcons`, `workbench.breadcrumbs.enabled`, `workbench.tree.indent`.
@@ -566,9 +569,13 @@ Make it yours:
 
 **Graph.** Source Control shows the history of all branches as colored lanes (at most seven
 columns), one line per commit: message, author and the most important branch/tag chip
-(`"git.graph.showHash"` adds the short hash). Every row is only as wide as the branches running
+(`"git.graph.showHash"` adds the short hash; `+2` after the chip lists the other labels when you hover it).
+A line has the color of its branch, and the branch's label wears the same color, so a label and the line it names read as one: the
+checked-out branch is always the accent color, `main` (or `master`) and `develop` have a color of their own, any other name keeps the color
+it hashes to (and moves to the next free one if a line beside it has it), and a line without a name (a merged, deleted branch) takes the next free
+color. A commit that is only on this computer (not pushed yet) has an up arrow, the mirror image of the down arrow of one that is not pulled yet. Every row is only as wide as the branches running
 next to it, so history reads from the left edge and side branches step to the right. Commits the upstream has and your branch does not (fetched but not pulled yet) are faded, with a hollow node and a small arrow, while the commit you are on is highlighted; Sync pulls them and they become solid. The hover card and a screen reader's description of the row say "not pulled yet" too. Hover a commit
-for a short card with its author, date, the start of its message, labels, hash (and a merge's parents) and how much it
+(the card is read while the pointer rests, so it opens complete and fades in) for a short card with its author, date, the start of its message, labels, hash (and a merge's parents) and how much it
 changed: the number of files and the added and removed lines (a merge shows what it brought in against its first parent).
 The card does not list files, so it stays the same size however big the commit is. When the repository's `origin` is on
 GitHub, the card has links to the commit and, if its subject names one (`Merge pull request #12` or a trailing `(#12)`),
@@ -1340,15 +1347,24 @@ The "…" menu and the palette also have *Pull (Rebase)*, *Pull from…* (pick a
 *Push to…* (pick a remote), *Fetch (All Remotes)* and *Publish Branch*, and the commit variants
 *Commit Signed Off* (`-s`), *Commit (No Verify)* (skips hooks), *Commit & Push* and *Commit & Sync*.
 
+Under the Commit button two quick buttons sit side by side. **Amend** adds the staged changes to the last commit and, when the
+message box has text, gives the commit that message (the same as *Git: Commit (Amend)*); when that commit is already on the
+upstream or a remote branch it asks first, because the branch then differs from the remote and needs a force push. **Stash**
+puts the changes aside (*Git: Stash*): new files stay unless you hold Shift, or they are all there is; the Stashes section
+lists the result. Neither runs while conflicts wait or another operation of the panel is running.
+
 These settings change the behaviour: `"git.confirmSync"` (default false: Sync pulls and pushes at once; on, it asks
 first), `"git.rebaseWhenSync"` (pull with rebase), `"git.pruneOnFetch"` (default true), `"git.pullTags"`
 (default true), `"git.fetchOnPull"` (fetch every remote before pulling), `"git.postCommitCommand"`
 (`none`, `push` or `sync` after each commit), `"git.enableSmartCommit"` (default true: with nothing
 staged the commit button commits all tracked changes; off, it asks you to stage first) and
-`"git.autofetch"` with `"git.autofetchPeriod"` (on by default; fetches in the background shortly after a
-folder opens, whenever the window comes back to the front, and then every 180 s or more while it is in front, never in a folder you have not trusted, and a failure only
-shows in the sync item's tooltip). `git.confirmSync` and `git.postCommitCommand` are read from your
-own settings only: a repository cannot turn the question on or off or make your commits push by themselves.
+`"git.autofetch"` with `"git.autofetchPeriod"` (on by default; fetches in the background within a second of a
+folder opening or a repository coming on screen, whenever the window comes back to the front, and then every 180 s or more while it is in front, never in a folder you have not trusted, and a failure only
+shows in the sync item's tooltip) and `"git.autoPull"` (`off` by default; `open` pulls once per repository and session, `always` after every fetch).
+An automatic pull is only ever a fast-forward and needs no `git.autofetch`: it waits (and the sync item's tooltip says why) while tracked files have
+changes, while the branch has commits the upstream does not, during a merge, rebase, cherry-pick or revert, and does nothing on a detached HEAD or a branch without an
+upstream. It never merges and never rebases; a notice says how many commits came in. `git.confirmSync`, `git.postCommitCommand` and `git.autoPull` are read from your
+own settings only: a repository cannot turn the question on or off, make your commits push by themselves or move your branch.
 
 Four palette commands work with the hosting service and with patches. **Git: Copy Permalink** copies a link to the open
 file at the commit `HEAD` is on, with the selected lines marked, and **Git: Open File on Remote** opens the file on the

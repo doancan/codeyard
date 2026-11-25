@@ -70,8 +70,8 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Extra globs skipped by search (on top of files.exclude).
   // "search.exclude": ["**/dist", "*.min.js"],
 
-  // File and folder icons: "glyphs", "minimal", "codeyard", "badges", "colorful", "apple", "material", "none"
-  "workbench.iconTheme": "glyphs",
+  // File and folder icons: "material", "catppuccin", "vscode", "seti", "none"
+  "workbench.iconTheme": "material",
   "workbench.statusBar.visible": true,
   "workbench.activityBar.visible": true,
   // UI font for the whole window (the editor has its own "editor.fontFamily").
@@ -157,6 +157,10 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Fetch in the background while the window is in front, every this many seconds (30 or more). Not in folders you have not trusted.
   "git.autofetch": true,
   "git.autofetchPeriod": 180,
+  // Fast-forward a branch that is only behind its upstream, by itself, after a fetch: "off", "open" (a repository's first fetch
+  // in a session) or "always". Never with changes in tracked files, commits of its own, or a merge or rebase half done. Your own
+  // settings only: a folder cannot change it.
+  "git.autoPull": "off",
   // Ask before Sync pulls or pushes (your own settings only: a folder cannot change it).
   "git.confirmSync": false,
   // Pull with rebase instead of a merge commit.

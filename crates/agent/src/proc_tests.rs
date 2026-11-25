@@ -276,6 +276,27 @@ fn a_command_that_never_ends_is_killed_at_the_timeout() {
     assert_eq!(err.kind(), io::ErrorKind::TimedOut);
 }
 
+/// A command that ran out of time is asked to end before it is killed: it gets to clean up (git removes its lock files), and one
+/// that ignores the request is still killed.
+#[test]
+#[cfg(unix)]
+fn a_timeout_asks_the_command_to_end_before_it_kills_it() {
+    let marker = std::env::temp_dir().join(format!("codeyard-exec-term-{}", std::process::id()));
+    let _ = std::fs::remove_file(&marker);
+    let script = format!("trap \"echo cleaned up > '{}'; exit 0\" TERM; sleep 30 & wait", marker.display());
+    let err = exec_with_timeout("/bin/sh", &["-c".into(), script], None, None, Duration::from_millis(700)).err().expect("timeout");
+    assert_eq!(err.kind(), io::ErrorKind::TimedOut);
+    assert!(marker.exists(), "the command was killed without the chance to clean up");
+    let _ = std::fs::remove_file(&marker);
+    // One that ignores the request does not hold the caller for longer than the grace period.
+    let started = Instant::now();
+    let err = exec_with_timeout("/bin/sh", &["-c".into(), "trap '' TERM; while :; do sleep 1; done".into()], None, None, Duration::from_millis(300))
+        .err()
+        .expect("timeout");
+    assert_eq!(err.kind(), io::ErrorKind::TimedOut);
+    assert!(started.elapsed() < Duration::from_secs(8), "{:?}", started.elapsed());
+}
+
 /// The timeout stops what the command started too, not only the command itself.
 #[test]
 #[cfg(unix)]

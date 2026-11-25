@@ -153,6 +153,27 @@ fn ac2_a_pushed_commit_in_the_run_refuses_and_changes_nothing() {
     f.assert_untouched(&before, "a commit on a remote without an upstream");
 }
 
+/// The upstream is `origin`, but a commit also went to a second remote: it is shared, and a rewrite would orphan it there.
+#[test]
+fn a_commit_pushed_to_another_remote_than_the_upstream_counts_as_pushed() {
+    let f = fixture("pushed-fork");
+    f.commit("a.txt", "a", "a");
+    f.push_all();
+    let b = f.commit("b.txt", "b", "b");
+    let fork = f.dir.with_extension("fork.git");
+    let _ = std::fs::remove_dir_all(&fork);
+    crate::test_git::git().args(["init", "-q", "--bare"]).arg(&fork).output().unwrap();
+    f.git(&["remote", "add", "fork", &fork.to_string_lossy()]);
+    f.git(&["push", "-q", "fork", "HEAD:refs/heads/work"]);
+    let c = f.commit("c.txt", "c", "c");
+    assert_eq!(f.git(&["rev-list", "--count", "@{upstream}..HEAD"]).trim(), "2", "to origin both are still to push");
+    let before = f.snapshot();
+    let refused = f.rewrite(&c, &squash(&[&b, &c], "bc")).unwrap_err();
+    assert_eq!(refused, "Only commits that are not pushed can be squashed");
+    f.assert_untouched(&before, "a commit on the fork");
+    let _ = std::fs::remove_dir_all(&fork);
+}
+
 #[test]
 fn ac3_two_independent_commits_swap_and_the_tip_tree_is_unchanged() {
     let f = fixture("swap");

@@ -254,7 +254,7 @@ impl Workbench {
                 self.schedule_schema(&ed, Duration::ZERO, cx);
             }
         }
-        crate::icon_theme::set(crate::icon_theme::IconTheme::from_id(&new.icon_theme).unwrap_or(crate::icon_theme::ALL[0]));
+        crate::icon_theme::set(crate::icon_theme::IconTheme::from_setting(&new.icon_theme));
         if kpath.is_some() {
             warnings.extend(crate::apply_keymap(cx, kpath.as_deref()));
         }

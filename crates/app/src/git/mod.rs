@@ -1,10 +1,11 @@
 //! Git: the system `git` runs through the agent, with the same code path
 //! locally and over SSH. Only commands and output parsing live here (independent of the UI): `status` is the
-//! working tree and commits, `branch` branches/remotes/rebase/merge, `sync` pull/push/fetch/publish, `log` history and blame, `diff` the line
+//! working tree and commits, `branch` branches/remotes/rebase/merge, `sync` pull/push/fetch/publish, `autopull` the fast-forward after a background fetch, `log` history and blame, `diff` the line
 //! diff and block staging, `lines` staging and unstaging single lines, `stash` the stash. The runner below is shared; everything else is re-exported.
 
 use host::Host;
 
+mod autopull;
 mod branch;
 mod diff;
 mod explain;
@@ -23,6 +24,7 @@ mod sync;
 mod tag;
 mod worktree;
 
+pub use autopull::{AutoPull, Skip, auto_pull};
 pub use branch::*;
 pub use diff::*;
 pub use explain::{credentials_rejected, explain, is_checkout_blocked, needs_credentials};

@@ -34,6 +34,8 @@ pub struct GraphCommit {
     pub refs: Vec<RefLabel>,
     /// The upstream has this commit and the checked-out branch does not: a pull would bring it in.
     pub incoming: bool,
+    /// The checked-out branch has this commit and its upstream does not: a push would send it.
+    pub outgoing: bool,
 }
 
 /// Whose history is drawn.
@@ -84,18 +86,46 @@ pub struct GraphRow {
     pub width: usize,
 }
 
-const COLORS: usize = 8;
+/// Colors in the rotating palette: one per branch, `lane_color` maps them onto the theme.
+const COLORS: usize = 7;
+
+/// The color of the checked-out branch's line: always the accent color, so the line you are on stands out.
+pub const HEAD_COLOR: usize = COLORS;
+
+/// The name a lane is known by: the first local or remote branch that points at the commit, without its remote (`origin/x` is `x`).
+fn branch_name(c: &GraphCommit) -> Option<&str> {
+    let by = |kind: RefKind| c.refs.iter().find(|r| r.kind == kind);
+    let r = by(RefKind::Local).or_else(|| by(RefKind::Remote))?;
+    Some(if r.kind == RefKind::Remote { r.name.split_once('/').map_or(r.name.as_str(), |(_, n)| n) } else { r.name.as_str() })
+}
+
+/// The color a branch prefers. The same name always gets the same color (the history shown, the limit or a reload change
+/// nothing); the usual trunk names have colors of their own, so `main` is the same color in every repository.
+fn preferred_color(name: &str) -> usize {
+    match name {
+        "main" | "master" | "trunk" => 0,
+        "develop" | "dev" | "development" => 1,
+        _ => {
+            // FNV-1a: fixed by definition, unlike the standard hasher.
+            let hash = name.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3));
+            (hash % COLORS as u64) as usize
+        }
+    }
+}
+
+/// `preferred` if no running lane has it, else the next free color after it; all in use: `preferred` (lanes then share).
+fn free_color(preferred: usize, lanes: &[Option<(String, usize)>]) -> usize {
+    (0..COLORS).map(|i| (preferred + i) % COLORS).find(|c| !lanes.iter().flatten().any(|(_, used)| used == c)).unwrap_or(preferred % COLORS)
+}
 
 /// Drawing row for each commit. Commits must be ordered children-first (`git log --date-order`).
+///
+/// A lane's color belongs to its branch: the checked-out branch is `HEAD_COLOR`, a branch with a name gets the color its name
+/// prefers (and the next free one if a lane on screen has it), a line without a name (a merged, deleted branch) the next free one.
 pub fn layout(commits: &[GraphCommit]) -> Vec<GraphRow> {
     // Lane: summary and color of the commit it's waiting for.
     let mut lanes: Vec<Option<(String, usize)>> = Vec::new();
-    let mut next_color = 0usize;
-    let take_color = |next: &mut usize| {
-        let c = *next % COLORS;
-        *next += 1;
-        c
-    };
+    let mut spare = 0usize;
     let mut rows = Vec::with_capacity(commits.len());
     for c in commits {
         let matching: Vec<usize> = lanes.iter().enumerate().filter(|(_, l)| l.as_ref().is_some_and(|(h, _)| *h == c.hash)).map(|(i, _)| i).collect();
@@ -110,7 +140,14 @@ pub fn layout(commits: &[GraphCommit]) -> Vec<GraphRow> {
                 if i == lanes.len() {
                     lanes.push(None);
                 }
-                (i, take_color(&mut next_color), None)
+                let color = if c.refs.iter().any(|r| r.kind == RefKind::Head) {
+                    HEAD_COLOR
+                } else {
+                    let unnamed = spare;
+                    spare += 1;
+                    free_color(branch_name(c).map_or(unnamed, preferred_color), &lanes)
+                };
+                (i, color, None)
             }
         };
         let merge_in: Vec<Lane> = matching.iter().skip(1).map(|&i| (i, lanes[i].as_ref().map_or(0, |l| l.1))).collect();
@@ -138,7 +175,8 @@ pub fn layout(commits: &[GraphCommit]) -> Vec<GraphRow> {
                         if j == lanes.len() {
                             lanes.push(None);
                         }
-                        let k = take_color(&mut next_color);
+                        let k = free_color(spare, &lanes);
+                        spare += 1;
                         lanes[j] = Some((p.clone(), k));
                         fork_out.push((j, k));
                     }
@@ -210,6 +248,7 @@ pub fn parse_graph_log(out: &str) -> Vec<GraphCommit> {
                 subject: subject.into(),
                 refs: parse_refs(decor),
                 incoming: false,
+                outgoing: false,
             })
         })
         .collect()
@@ -242,6 +281,16 @@ pub fn incoming(host: &dyn Host, root: &str, limit: usize) -> std::collections::
     // The graph shows `limit` commits at most, so a branch far behind its upstream does not read the rest.
     let n = format!("-n{limit}");
     match host.exec("git", &["rev-list", &n, "HEAD..@{upstream}"], Some(root), None) {
+        Ok(out) if out.ok() => out.stdout_str().lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
+        _ => Default::default(),
+    }
+}
+
+/// Commits the checked-out branch has and its upstream does not (`@{upstream}..HEAD`): what a push would send. Empty without an
+/// upstream (every commit would be "unpushed" then, which says nothing), or without a HEAD.
+pub fn outgoing(host: &dyn Host, root: &str, limit: usize) -> std::collections::HashSet<String> {
+    let n = format!("-n{limit}");
+    match host.exec("git", &["rev-list", &n, "@{upstream}..HEAD"], Some(root), None) {
         Ok(out) if out.ok() => out.stdout_str().lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
         _ => Default::default(),
     }
@@ -452,6 +501,49 @@ mod tests {
             subject: hash.into(),
             ..Default::default()
         }
+    }
+
+    fn named(hash: &str, parents: &[&str], refs: &[(&str, RefKind)]) -> GraphCommit {
+        GraphCommit { refs: refs.iter().map(|(n, k)| RefLabel { name: (*n).into(), kind: *k }).collect(), ..c(hash, parents) }
+    }
+
+    #[test]
+    fn a_branch_keeps_its_color_whatever_is_around_it() {
+        // `feature/x` has the same color on its own and in a history with other branches before it.
+        let alone = layout(&[named("f", &["a"], &[("feature/x", RefKind::Local)]), c("a", &[])]);
+        let busy = layout(&[named("o", &["a"], &[("other", RefKind::Local)]), named("f", &["a"], &[("feature/x", RefKind::Local)]), c("a", &[])]);
+        let expected = preferred_color("feature/x");
+        assert_eq!(alone[0].color, expected);
+        // Beside `other` it may only move on if `other` has taken the color.
+        let other = preferred_color("other");
+        assert_eq!(busy[1].color, if other == expected { (expected + 1) % COLORS } else { expected });
+    }
+
+    #[test]
+    fn a_remote_branch_has_the_color_of_the_local_one_with_its_name() {
+        let local = layout(&[named("a", &[], &[("topic", RefKind::Local)])]);
+        let remote = layout(&[named("a", &[], &[("origin/topic", RefKind::Remote)])]);
+        assert_eq!(local[0].color, remote[0].color);
+    }
+
+    #[test]
+    fn the_checked_out_branch_is_the_accent_color_along_its_whole_line() {
+        let rows = layout(&[named("c", &["b"], &[("main", RefKind::Head)]), c("b", &["a"]), c("a", &[])]);
+        assert!(rows.iter().all(|r| r.color == HEAD_COLOR), "{rows:?}");
+        let p = theme::DARK;
+        assert_eq!(lane_color(&p, HEAD_COLOR), p.accent);
+        assert!((0..COLORS).all(|n| lane_color(&p, n) != p.accent), "no other lane may look like the checked-out one");
+    }
+
+    #[test]
+    fn lanes_that_run_side_by_side_get_different_colors() {
+        // Two unnamed tips and a merge's second parent, all alive at once.
+        let rows = layout(&[c("x", &["r"]), c("y", &["r"]), c("m", &["r", "z"]), c("z", &["r"]), c("r", &[])]);
+        let alive: Vec<usize> = rows[2].pass.iter().map(|l| l.1).chain([rows[2].color]).chain(rows[2].fork_out.iter().map(|l| l.1)).collect();
+        let mut sorted = alive.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), alive.len(), "{alive:?}");
     }
 
     #[test]
@@ -707,9 +799,10 @@ const LINE_W: f32 = 1.8;
 /// Height of a graph row: one line, like a tree row.
 pub const ROW_H: f32 = 22.;
 
-/// Lane colors: from the theme colors, in a shuffled order so neighbors are distinguishable.
+/// Lane colors, from the theme colors in an order that keeps neighbors apart. `HEAD_COLOR` (and anything past the palette) is the
+/// accent color, which no other lane uses.
 pub fn lane_color(p: &Palette, n: usize) -> u32 {
-    [p.info, p.success, p.warning, p.syntax_keyword, p.danger, p.syntax_function, p.accent, p.syntax_type][n % COLORS]
+    [p.success, p.syntax_keyword, p.warning, p.syntax_function, p.danger, p.syntax_type, p.info].get(n).copied().unwrap_or(p.accent)
 }
 
 /// Width of the graph (px): `cols` lanes. Each row is only as wide as its own lanes, so text sits right after the
@@ -806,14 +899,14 @@ pub fn lane_element(row: GraphRow, head: bool, merge: bool, incoming: bool, p: P
     .flex_none()
 }
 
-/// (text, background) colors of a branch / tag chip: HEAD is filled with the accent color, the others get colored text and a background
-/// lightly mixed from the color. To hit AA (4.5) for small (10 px) text in every theme, the text darkens/lightens
-/// toward the text color when needed.
-pub fn ref_chip_colors(kind: RefKind, p: &Palette) -> (u32, u32) {
+/// (text, background) colors of a branch / tag chip: HEAD is filled with the accent color, a branch takes the color of its line
+/// in the graph (`lane`, from `lane_color`), so the label and the line it names read as one; a tag is always the warning
+/// color. The others get colored text and a background lightly mixed from the color. To hit AA (4.5) for small (10 px) text in
+/// every theme, the text darkens/lightens toward the text color when needed.
+pub fn ref_chip_colors(kind: RefKind, lane: u32, p: &Palette) -> (u32, u32) {
     let fg = match kind {
         RefKind::Head => return (p.on_accent, p.accent),
-        RefKind::Local => p.info,
-        RefKind::Remote => p.success,
+        RefKind::Local | RefKind::Remote => lane,
         RefKind::Tag => p.warning,
     };
     // Background is 20% of the color; if unreadable (low-contrast themes like Solarized) the mix is reduced and the text is also

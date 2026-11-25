@@ -26,6 +26,6 @@ roles; the build fails when a role is missing.
 - **Spacing, radius, type scale and layout sizes** come from the same JSON (`theme::SPACE`, `theme::radius`, `theme::text`,
   `theme::layout`).
 - Fonts are not bundled: the system UI and monospace fonts are used; the editor font is a setting.
-- The 112 interface and file icons use Tabler (MIT; see `THIRD_PARTY_NOTICES.md`), with a consistent 24 px grid
+- The 105 interface icons use Tabler (MIT; see `THIRD_PARTY_NOTICES.md`), with a consistent 24 px grid
   and 1.65 px outline stroke. SVGs in `crates/app/assets/icons/` are embedded and tinted with the current theme;
   file-type icons come from `icon_theme.rs`. The Codeyard logo is authored by the project.

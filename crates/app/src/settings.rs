@@ -70,6 +70,7 @@ pub struct Settings {
     /// Fetch in the background while the window is in front (`git.autofetch`, every `git.autofetchPeriod` seconds).
     pub git_autofetch: bool,
     pub git_autofetch_period: u32,
+    pub git_auto_pull: String,
     /// Ask before a sync that pulls or pushes.
     pub git_confirm_sync: bool,
     /// Pull with `--rebase` instead of merging.
@@ -355,6 +356,7 @@ impl Default for Settings {
             // --- git-sync ---
             git_autofetch: true,
             git_autofetch_period: 180,
+            git_auto_pull: "off".into(),
             git_confirm_sync: false,
             git_rebase_when_sync: false,
             git_prune_on_fetch: true,
@@ -846,9 +848,6 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.bool("editor.colorDecorators") {
         s.color_decorators = v;
-    }
-    if let Some(v) = r.choice("workbench.iconTheme", &["codeyard", "glyphs", "badges", "colorful", "minimal", "apple", "material", "none"]) {
-        s.icon_theme = v;
     }
     if let Some(v) = r.bool("workbench.statusBar.visible") {
         s.status_bar = v;

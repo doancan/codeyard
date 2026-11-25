@@ -606,3 +606,114 @@ fn a_half_done_merge_blocks_the_commit_until_resolved_and_then_needs_no_message(
     assert_eq!(git_in(&f.dir, &["rev-list", "--parents", "-n1", "HEAD"]).split_whitespace().count(), 3, "a merge commit with two parents");
     wait_ticking(cx, "idle again", |cx| status(&wb, cx).is_some_and(|s| s.op == crate::repos::OpState::Idle));
 }
+
+fn auto_pull(mode: &str) -> Settings {
+    Settings { git_autofetch: false, git_auto_pull: mode.into(), ..quiet() }
+}
+
+/// The automatic pull needs no `git.autofetch`: it fetches by itself, brings in what others pushed when the branch has nothing of
+/// its own, says so once, and leaves everything else alone.
+#[gpui::test]
+fn auto_pull_brings_in_what_others_pushed_and_nothing_else(cx: &mut TestAppContext) {
+    let f = Fixture::new("sync-autopull");
+    let (wb, cx) = opened(cx, &f, auto_pull("always"));
+    let idle = |cx: &mut VisualTestContext| !wb.read_with(cx, |wb, _| wb.sync_running_for_test());
+    tick(cx, 10);
+    wait_ticking(cx, "the first fetch", idle);
+    f.push_elsewhere("r.txt", "r\n");
+    assert!(wb.update(cx, |wb, cx| wb.autofetch_for_test(true, cx)));
+    wait_ticking(cx, "the file arrives", |cx| f.dir.join("r.txt").exists() && idle(cx));
+    assert_eq!(head_subject(&f.dir), "remote r.txt");
+    assert_eq!(git_in(&f.dir, &["rev-list", "--count", "HEAD..origin/main"]).trim(), "0");
+    wait_ticking(cx, "the status follows", |cx| status(&wb, cx).is_some_and(|s| s.behind == 0));
+    assert_eq!(notice(&wb, cx), "Pulled 1 new commit.");
+
+    // Tracked changes: it waits, says why in the tooltip, and does not touch them.
+    f.push_elsewhere("s.txt", "s\n");
+    std::fs::write(f.dir.join("r.txt"), "mine\n").unwrap();
+    assert!(wb.update(cx, |wb, cx| wb.autofetch_for_test(true, cx)));
+    wait_ticking(cx, "the note", |cx| wb.read_with(cx, |wb, _| wb.sync_tooltip_for_test()).contains("Automatic pull is waiting"));
+    assert!(!f.dir.join("s.txt").exists());
+    assert_eq!(std::fs::read_to_string(f.dir.join("r.txt")).unwrap(), "mine\n");
+    // Once the tree is clean it goes on, and the note goes.
+    git_in(&f.dir, &["checkout", "--", "r.txt"]);
+    wait_ticking(cx, "idle", idle);
+    assert!(wb.update(cx, |wb, cx| wb.autofetch_for_test(true, cx)));
+    wait_ticking(cx, "the second file", |cx| f.dir.join("s.txt").exists() && idle(cx));
+    assert!(!wb.read_with(cx, |wb, _| wb.sync_tooltip_for_test()).contains("Automatic pull is waiting"));
+
+    // Commits of its own: never merged behind the user's back.
+    f.commit_here("mine.txt", "m\n");
+    f.push_elsewhere("t.txt", "t\n");
+    let before = git_in(&f.dir, &["rev-parse", "HEAD"]);
+    assert!(wb.update(cx, |wb, cx| wb.autofetch_for_test(true, cx)));
+    wait_ticking(cx, "the note again", |cx| wb.read_with(cx, |wb, _| wb.sync_tooltip_for_test()).contains("has commits the upstream does not"));
+    assert_eq!(git_in(&f.dir, &["rev-parse", "HEAD"]), before);
+}
+
+/// "open" pulls once per repository and session; "off" never does, however many fetches.
+#[gpui::test]
+fn auto_pull_on_open_pulls_once_and_off_never(cx: &mut TestAppContext) {
+    let f = Fixture::new("sync-autopull-open");
+    let (wb, cx) = opened(cx, &f, auto_pull("off"));
+    f.push_elsewhere("a.txt", "a\n");
+    // Fetching on its own (autofetch is off, autopull is off: nothing runs by itself, and a fetch by hand only fetches).
+    wb.update(cx, |wb, cx| wb.sync_for_test(vec![crate::git::SyncOp::Fetch], cx));
+    wait_ticking(cx, "the fetch", |cx| {
+        !wb.read_with(cx, |wb, _| wb.sync_running_for_test()) && git_in(&f.dir, &["rev-list", "--count", "HEAD..origin/main"]).trim() == "1"
+    });
+    assert!(!wb.update(cx, |wb, cx| wb.autofetch_for_test(true, cx)), "nothing is on, nothing runs");
+    assert!(!f.dir.join("a.txt").exists());
+
+    wb.update(cx, |_, cx| cx.set_global(auto_pull("open")));
+    assert!(wb.update(cx, |wb, cx| wb.autofetch_for_test(true, cx)));
+    wait_ticking(cx, "pulled on open", |cx| f.dir.join("a.txt").exists() && !wb.read_with(cx, |wb, _| wb.sync_running_for_test()));
+    f.push_elsewhere("b.txt", "b\n");
+    assert!(wb.update(cx, |wb, cx| wb.autofetch_for_test(true, cx)));
+    wait_ticking(cx, "fetched, not pulled", |cx| {
+        !wb.read_with(cx, |wb, _| wb.sync_running_for_test()) && git_in(&f.dir, &["rev-list", "--count", "HEAD..origin/main"]).trim() == "1"
+    });
+    assert!(!f.dir.join("b.txt").exists(), "the session's one automatic pull is spent");
+}
+
+/// A sync rewrites the working tree and a checkout or a stash rewrites the index: neither starts under the other, and the one
+/// that was refused says so.
+#[gpui::test]
+fn a_sync_and_a_local_git_command_never_run_at_once(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let f = Fixture::new("sync-vs-local");
+    let (wb, cx) = opened(cx, &f, quiet());
+    // A local command that is still running: the sync does not start.
+    let (release, held) = std::sync::mpsc::channel::<()>();
+    wb.update(cx, |wb, cx| {
+        wb.git_task_for_test(
+            move |_| {
+                let _ = held.recv_timeout(std::time::Duration::from_secs(20));
+                Ok("done".into())
+            },
+            cx,
+        )
+    });
+    wb.update(cx, |wb, cx| wb.sync_for_test(vec![crate::git::SyncOp::Fetch], cx));
+    assert!(!wb.read_with(cx, |wb, _| wb.sync_running_for_test()), "the sync did not start");
+    assert_eq!(notice(&wb, cx), "Another Git command is still running: try again when it is done.");
+    release.send(()).unwrap();
+    wait_ticking(cx, "the command ends", |cx| notice(&wb, cx) == "done");
+    wb.update(cx, |wb, cx| wb.sync_for_test(vec![crate::git::SyncOp::Fetch], cx));
+    assert!(wb.read_with(cx, |wb, _| wb.sync_running_for_test()), "nothing in the way: it starts");
+    // A sync that is running: the local command does not start, and its closure never runs.
+    let ran = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = ran.clone();
+    wb.update(cx, |wb, cx| {
+        wb.git_task_for_test(
+            move |_| {
+                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok("x".into())
+            },
+            cx,
+        )
+    });
+    assert_eq!(notice(&wb, cx), "A sync is running: try again when it is done.");
+    wait_ticking(cx, "the sync ends", |cx| !wb.read_with(cx, |wb, _| wb.sync_running_for_test()));
+    assert!(!ran.load(std::sync::atomic::Ordering::SeqCst));
+}

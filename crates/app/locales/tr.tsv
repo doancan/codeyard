@@ -1400,19 +1400,8 @@ Select a file icon theme	Bir dosya simgesi teması seçin
 Open as Hex	Hex Olarak Aç
 Restarting language servers…	Dil sunucuları yeniden başlatılıyor…
 No file “{}” in this project	Bu projede “{}” dosyası yok
-Language Badges	Dil Rozetleri
-Colorful Folders	Renkli Klasörler
-Minimal	Sade
 None	Yok
-File glyphs tinted by language, accent folders	Dile göre renklendirilmiş dosya simgeleri, vurgu renginde klasörler
-Small colored badges with the language's letters	Dilin harflerini taşıyan küçük renkli rozetler
-Folders colored by purpose (src, tests, docs…) and colored file glyphs	Amacına göre renklendirilmiş klasörler (src, tests, docs…) ve renkli dosya simgeleri
-One quiet color, outline glyphs	Tek ve sakin bir renk, çerçeve çizgili simgeler
-Solid blue folders like Finder, outline files with a language dot like GitHub	Finder gibi dolgulu mavi klasörler, GitHub gibi dil noktalı çerçeve çizgili dosyalar
-Solid folders colored and marked by purpose, solid files colored by language	Amacına göre renklendirilmiş ve işaretlenmiş dolgulu klasörler, dile göre renklendirilmiş dolgulu dosyalar
 Names only	Yalnızca adlar
-File Glyphs (Default)	Dosya Simgeleri (Varsayılan)
-Colored file glyphs, folders with only their arrow; names line up	Renkli dosya simgeleri, klasörlerde yalnızca ok; adlar hizalı durur
 
 # ---- File operations leftovers ----
 too many copies	çok fazla kopya
@@ -4370,6 +4359,27 @@ Remove Worktree…	Worktree'yi Kaldır…
 Showing the latest {} commits.	Son {} commit gösteriliyor.
 No commit among the latest {} matches.	Yüklenen son {} commit içinde eşleşen yok.
 Uncommitted changes	Kaydedilmemiş değişiklikler
+Bring in what others pushed by itself when the branch has nothing of its own: never, when a folder opens, or after every fetch. Your own settings only; a folder cannot change it	Dalın kendine ait bir şeyi yoksa başkalarının gönderdiklerini kendiliğinden getir: asla, klasör açılınca ya da her fetch'ten sonra. Yalnızca kendi ayarlarınız; bir klasör bunu değiştiremez
+Not pushed yet. Sync sends it.	Henüz gönderilmedi. Sync bunu gönderir.
+Pulled {} new commit.|Pulled {} new commits.	{} yeni commit çekildi.
+Automatic pull is waiting: {}	Otomatik pull bekliyor: {}
+tracked files have changes	izlenen dosyalarda değişiklik var
+this branch has commits the upstream does not	bu dalda upstream'de olmayan commit'ler var
+a merge, rebase, cherry-pick or another git command is running	bir merge, rebase, cherry-pick ya da başka bir git komutu sürüyor
+Automatic pull failed: {}	Otomatik pull başarısız oldu: {}
+The checked-out commit changed while you were asked. Nothing was pushed: try again.	Sorulurken çıkış yapılan commit değişti. Hiçbir şey gönderilmedi: yeniden deneyin.
+not pushed yet	henüz gönderilmedi
+Another Git command is still running: try again when it is done.	Başka bir Git komutu hâlâ çalışıyor: bittiğinde yeniden deneyin.
+A sync is running: try again when it is done.	Bir sync çalışıyor: bittiğinde yeniden deneyin.
+Amend	Düzelt
+Add the staged changes to the last commit (and give it the message above, if there is one)	Hazırlanan değişiklikleri son commit'e ekle (yukarıda bir mesaj varsa commit'e onu ver)
+Put the changes aside. Hold Shift to take new files too	Değişiklikleri kenara al. Yeni dosyaları da almak için Shift'e basılı tutun
+Amend a commit that is already pushed?	Zaten gönderilmiş bir commit Amend edilsin mi?
+Amending replaces the commit with a new one. The branch then differs from the remote, and updating it takes a force push.	Amend, commit'i yenisiyle değiştirir. Dal bundan sonra uzak dalla ayrışır ve güncellemek için force push gerekir.
+Colorful icons by language and tool, folders marked by purpose (the default)	Dile ve araca göre renkli ikonlar, klasörler amacına göre işaretli (varsayılan)
+Soft pastel icons that follow the light or dark theme	Açık ya da koyu temayı izleyen yumuşak pastel ikonlar
+The classic set with the widest coverage of file names	Dosya adlarını en geniş kapsayan klasik set
+Small single-color file icons; folders show only their arrow	Küçük tek renkli dosya ikonları; klasörlerde yalnızca ok görünür
 Agents	Ajanlar
 Personal	Kişisel
 Work	İş

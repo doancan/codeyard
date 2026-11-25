@@ -55,6 +55,7 @@ Source: "..\..\vendor\xattr\LICENSE-MIT"; DestDir: "{app}\licenses"; DestName: "
 Source: "..\..\vendor\xattr\LICENSE-APACHE"; DestDir: "{app}\licenses"; DestName: "xattr-LICENSE-APACHE"; Flags: ignoreversion
 Source: "..\..\crates\spell\dicts\en\license"; DestDir: "{app}\licenses"; DestName: "spell-dict-en-license"; Flags: ignoreversion
 Source: "..\..\crates\syntax\LICENSES\*"; DestDir: "{app}\licenses\syntax-LICENSES"; Flags: ignoreversion
+Source: "..\..\crates\app\assets\file-icons\LICENSES\*"; DestDir: "{app}\licenses\file-icons-LICENSES"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Codeyard"; Filename: "{app}\Codeyard.exe"; IconFilename: "{app}\codeyard.ico"

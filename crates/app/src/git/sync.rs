@@ -27,7 +27,8 @@ pub enum SyncOp {
     Publish,
 }
 
-/// What a force push is pinned to: the remote, the branch there, and the commit that branch was at when the user was asked.
+/// What a force push is pinned to: the remote, the branch there, the commit that branch was at when the user was asked, and the
+/// commit that would be sent (`HEAD` then: the push goes ahead only while the checkout is still there).
 /// The lease names that commit itself: a background fetch moves the remote-tracking ref, so the bare `--force-with-lease` would
 /// accept whatever had been fetched meanwhile, seen or not.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -35,6 +36,7 @@ pub struct ForceTarget {
     pub remote: String,
     pub branch: String,
     pub seen: String,
+    pub head: String,
 }
 
 /// The upstream of the current branch as a force push target, with the commit it is at now.
@@ -43,7 +45,8 @@ pub fn force_target(host: &dyn Host, root: &str) -> Result<ForceTarget, String> 
     let list = remotes(host, root)?;
     let (remote, branch) = split_remote_branch(&list, &upstream).ok_or_else(|| crate::i18n::tf("Cannot tell which remote {} belongs to", &[&upstream]))?;
     let seen = git_ok(host, root, &["rev-parse", "--verify", &format!("refs/remotes/{upstream}")])?.trim().to_string();
-    Ok(ForceTarget { remote: remote.to_string(), branch: branch.to_string(), seen })
+    let head = git_ok(host, root, &["rev-parse", "--verify", "HEAD"])?.trim().to_string();
+    Ok(ForceTarget { remote: remote.to_string(), branch: branch.to_string(), seen, head })
 }
 
 /// The settings that change what the commands do (`git.rebaseWhenSync`, `git.pruneOnFetch`, `git.pullTags`, `git.fetchOnPull`).
@@ -228,6 +231,10 @@ pub fn sync(host: &dyn Host, root: &str, op: &SyncOp, opts: SyncOptions) -> Resu
         SyncOp::ForcePush(target) => {
             plain_name(&target.remote)?;
             plain_name(&target.branch)?;
+            // The question was open for a while: another checkout (a terminal, another window) would send a different branch.
+            if git_ok(host, root, &["rev-parse", "--verify", "HEAD"])?.trim() != target.head {
+                return Err(crate::i18n::t("The checked-out commit changed while you were asked. Nothing was pushed: try again.").into());
+            }
             let lease = format!("--force-with-lease={}:{}", target.branch, target.seen);
             let refspec = format!("HEAD:refs/heads/{}", target.branch);
             git_ok(host, root, &["push", &lease, "--", &target.remote, &refspec]).map(|_| SyncStep::Done)
@@ -360,6 +367,13 @@ mod tests {
                 .map(|o| String::from_utf8_lossy(&o.stdout).contains("from elsewhere"))
                 .unwrap_or(false)
         );
+        // Another checkout between the question and the push: nothing is sent.
+        let asked = force_target(&host, &root).unwrap();
+        (r.run)(&["checkout", "-q", "-b", "elsewhere"]).unwrap();
+        r.commit("other.txt", "o\n");
+        let err = sync(&host, &root, &SyncOp::ForcePush(asked), SyncOptions::default()).unwrap_err();
+        assert!(err.contains("checked-out commit changed"), "{err}");
+        (r.run)(&["checkout", "-q", "main"]).unwrap();
         // Asked again, with that commit now in view, the push goes through.
         let fresh = force_target(&host, &root).unwrap();
         assert_eq!(sync(&host, &root, &SyncOp::ForcePush(fresh), SyncOptions::default()), Ok(SyncStep::Done));

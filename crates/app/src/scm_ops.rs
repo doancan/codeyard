@@ -5,6 +5,11 @@ use super::*;
 
 impl ScmPanel {
     /// An operation is running in the selected repository.
+    /// Whether any repository has a git operation of the panel running.
+    pub(crate) fn is_busy_any(&self) -> bool {
+        !self.busy.is_empty()
+    }
+
     pub(super) fn busy(&self) -> bool {
         self.status.as_ref().is_some_and(|s| self.busy.contains(&s.root))
     }
@@ -80,6 +85,11 @@ impl ScmPanel {
         on_ok: impl FnOnce(&mut Self, bool, &mut Context<Self>) + 'static,
         cx: &mut Context<Self>,
     ) {
+        if self.syncing {
+            self.result = Some((crate::i18n::t("A sync is running: try again when it is done.").to_string().into(), true));
+            cx.notify();
+            return;
+        }
         if !self.busy.insert(target.root.clone()) {
             return;
         }
