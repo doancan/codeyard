@@ -151,6 +151,7 @@ pub(super) struct ChromeLayout {
     pub(super) panel: Option<Panel>,
     /// The bottom panel shows the Problems list instead of the terminal.
     pub(super) bottom: Bottom,
+    pub(super) agents: super::agent_panel::AgentPanel,
     /// The Problems panel's filter and its text field (workbench_problems.rs).
     pub(super) problems: super::panels_glue::ProblemsView,
     pub(super) sidebar_w: f32,

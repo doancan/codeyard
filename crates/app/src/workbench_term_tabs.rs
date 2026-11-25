@@ -200,10 +200,15 @@ impl Workbench {
             let ix = self.tabs.terminals.iter().position(|x| *x == t).unwrap_or(0);
             (t, ix, self.tabs.terminals.len())
         });
-        let panel = self
-            .active_terminal()
-            .filter(|_| self.chrome.panel_open && self.chrome.bottom == Bottom::Terminal)
-            .map(|t| (t, self.active_terminal, self.terminals.len()));
+        let panel = if self.chrome.panel_open {
+            match self.chrome.bottom {
+                Bottom::Terminal => self.active_terminal().map(|t| (t, self.active_terminal, self.terminals.len())),
+                Bottom::Agents => self.agent_terminal().map(|t| (t, 0, 1)),
+                _ => None,
+            }
+        } else {
+            None
+        };
         match (editor, panel) {
             (Some(e), Some(p)) => Some(if p.0.focus_handle(cx).contains_focused(window, cx) { p } else { e }),
             (e, p) => e.or(p),

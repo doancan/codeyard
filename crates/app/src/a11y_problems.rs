@@ -240,6 +240,7 @@ impl Workbench {
         }
         tabs.push((Bottom::Ports, t("Ports").to_string(), self.active_forwards()));
         tabs.push((Bottom::Terminal, t("Terminal").to_string(), 0));
+        tabs.push((Bottom::Agents, t("Agents").to_string(), 0));
         let output = (self.chrome.bottom == Bottom::Output).then(|| {
             let skip = self.lsp.output.len().saturating_sub(MAX_OUTPUT_LINES);
             self.lsp.output.iter().skip(skip).cloned().collect::<Vec<_>>().join("\n")
@@ -262,8 +263,12 @@ impl Workbench {
             && let Some((tab, ..)) = old.tabs.get(index)
             && current.tabs.iter().any(|(t, ..)| t == tab)
         {
-            self.chrome.bottom = *tab;
-            cx.notify();
+            if *tab == Bottom::Agents {
+                self.open_agents(cx);
+            } else {
+                self.chrome.bottom = *tab;
+                cx.notify();
+            }
         }
         true
     }

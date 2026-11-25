@@ -428,6 +428,15 @@ pub(super) enum InputPurpose {
 
 #[derive(Clone, Copy)]
 pub(super) enum MenuCmd {
+    AgentProvider(super::claude_store::Provider),
+    AgentProfile(u32),
+    AgentHistory(super::claude_store::HistoryMode),
+    AgentAddAccount,
+    AgentSignIn,
+    AgentPin,
+    AgentCopyContext,
+    AgentContinueIn(super::claude_store::Provider),
+    AgentHandoff(u32),
     ContainerTool(usize),
     Container(super::container_overview_glue::ContainerAction),
     NewFile,

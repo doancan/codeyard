@@ -68,6 +68,7 @@ Accept Current
 Accept Current Change	
 Accept Incoming	
 Accept Incoming Change	
+Account {}	
 Accounts	
 Act as your {} account	
 Actions	
@@ -89,6 +90,7 @@ Add SSH Host…
 Add SSH host…	
 Add a debug configuration	
 Add a host	
+Add account	
 Add another key	
 Add comment	
 Add comment…	
@@ -114,6 +116,8 @@ Adding comment…
 Adding remote…	
 Adding worktree…	
 After	
+Agent profiles are available in local windows.	
+Agents	
 All	
 All Branches	
 All conflicts are resolved	
@@ -170,6 +174,7 @@ Ask before pasting several lines into the terminal
 Ask before running tasks, tests or the debugger of an untrusted folder	
 Ask whether to trust a folder when it opens: once, every time, or never	
 Asking the source control provider…	
+Assistant response	
 At most {} extra folders fit in one workspace.	
 Attach to a native process	
 Aug	
@@ -342,11 +347,13 @@ Choose a container (stopped containers can be started)
 Choose a container engine	
 Choose a file instead.	
 Choose a folder on this computer…	
+Choose a project to start an agent.	
 Choose an action	
 Choose an answer (Esc: none)	
 Choose an extension in the Extensions view.	
 Choose another name or remove the existing one first.	
 Choose at least two commits to squash.	
+Choose project…	
 Choose…	
 Clear	
 Clear Output	
@@ -394,8 +401,10 @@ Codeyard couldn't set up a secure connection to the update server. Check that yo
 Codeyard is not signed in to GitHub: run `gh auth login` in a terminal, then try again.	
 Codeyard is still installing an update	
 Codeyard is up to date	
+Codeyard local storage is unavailable.	
 Codeyard quit unexpectedly last time	
 Codeyard signs its requests to {} with this account. The extension never sees your password or token. You can sign out on its page in Extensions.	
+Codeyard will open the last saved conversation on the selected account.	
 Codeyard will reopen your windows.	
 Codeyard {} is available	
 Codeyard {} is available. Click for details.	
@@ -507,10 +516,14 @@ Container port / protocol
 Container setup required	
 Containers	
 Containers and Service Logs…	
+Context copied. Paste it into a new session when ready.	
 Context menu	
 Context: {} line|Context: {} lines	
 Continue	
 Continue (F5)	
+Continue session	
+Continue this session with {}?	
+Continue with {}…	
 Continuing rebase…	
 Continuing…	
 Contributes	
@@ -553,6 +566,7 @@ Copy it to the other disk, then delete the original.
 Copy link	
 Copy notification	
 Copy path	
+Copy recent messages	
 Copy text selected with the mouse: while Claude Code or Codex runs, always, or never	
 Copy the files again on the current host before pasting.	
 Copy the full hash	
@@ -579,6 +593,9 @@ Could not change {}
 Could not compare: {}	
 Could not connect to {}: nothing is listening there, or a firewall blocks it (the request ran on {}).	
 Could not connect to {}: {}	
+Could not continue the session on that account: {}	
+Could not copy session context: {}	
+Could not create a Claude Code session ID.	
 Could not create the extension: {}	
 Could not create the scratch file: {}	
 Could not create {0}: {1}	
@@ -609,9 +626,13 @@ Could not list: {}
 Could not load: {}	
 Could not look for tests: {}	
 Could not minify: {}	
+Could not open the Antigravity account: {}	
 Could not open the debug session: {}	
 Could not open the state database {0}: {1}. Tabs, recent folders and backups will not be remembered this session.	
+Could not open the {0} project: {1}	
+Could not open the {0} terminal: {1}	
 Could not paste: {}	
+Could not prepare agent storage: {}	
 Could not reach {}: check the network connection and try again	
 Could not read Docker environments: {}	
 Could not read containers: {}	
@@ -622,11 +643,13 @@ Could not read the remote URL: {}
 Could not read the saved copy: {}	
 Could not read the stash: {}	
 Could not read {0} at {1}: {2}	
+Could not read {0} sessions: {1}	
 Could not read {0}: {1}	
 Could not read {}	
 Could not read {}.	
 Could not read {}: {}	
 Could not read: {}	
+Could not recover the Claude Code session: {}	
 Could not refresh container data: {}. Check Docker access on the SSH host and retry.	
 Could not remember your update choices; Codeyard may ask or check again.	
 Could not remove the instance: {}	
@@ -638,7 +661,9 @@ Could not reserve a temporary file for comparison.
 Could not resolve “{}”: check the spelling and the network (the request ran on {}).	
 Could not retry: {}	
 Could not run “{}”: {}	
+Could not save agent settings: {}	
 Could not save files before debugging: {}	
+Could not save the Antigravity account: {}	
 Could not save the open folders of the Explorer; they will not be restored next time.	
 Could not save the report: {}	
 Could not save the theme: {}	
@@ -660,6 +685,7 @@ Could not start the debug adapter: {}
 Could not start the debug session: {}	
 Could not start the test runner: {}	
 Could not switch profile: {}	
+Could not switch the Antigravity account: {}	
 Could not switch to {0}: {1}	
 Could not take back the change in {}: it was edited since. Undo it in the editor.	
 Could not take back {0}: {1}. Check it before going on.	
@@ -1683,6 +1709,7 @@ New branch name
 New name	
 New name of the profile	
 New name of the remote	
+New session	
 Newer versions of extensions from a registry: install (by themselves; versions that run code 48 hours after they are published; a version that asks for more permissions waits for your OK), notify (shown in the Extensions view; you install them) or off (nothing is downloaded until you ask). A withdrawn version is still replaced and a revoked one still stopped. Your own settings only; a folder cannot change it	
 Next	
 Next Match	
@@ -1762,6 +1789,7 @@ No macro at the cursor
 No matches	
 No matches in this file any more.	
 No matching folders	
+No matching sessions	
 No merge conflicts in this file	
 No merge conflicts in this file.	
 No merges	
@@ -1988,6 +2016,7 @@ Opening…
 Opens the rust-analyzer status page	
 Order of files and folders in the explorer	
 Origin	
+Other Claude Code accounts will be able to open this conversation for this project.	
 Outline	
 Output	
 Output of {}	
@@ -2033,6 +2062,7 @@ Permission switches
 Permissions	
 Permissions: none.	
 Permissions: {}	
+Personal	
 Pick a file from the tree, or:	
 Pick a stash to apply	
 Pick a stash to drop	
@@ -2041,8 +2071,10 @@ Pick a stash to show
 Pick lines to stage them, or use a change's button	
 Pick lines to unstage them, or use a change's button	
 Pin	
+Pin session	
 Pin the enclosing function or class line while scrolling	
 Pin to the top	
+Pinned	
 Plain Text	
 Platform	
 Play animation (Space)	
@@ -2083,6 +2115,7 @@ Preferences: Open Workspace Settings
 Preferences: Reset Rust Setup…	
 Preferences: Reset Settings to Defaults…	
 Preferences: Settings	
+Preparing the session on the selected account…	
 Preserve case (⌥P)	
 Preserve case when replacing	
 Press Enter to apply	
@@ -2102,6 +2135,7 @@ Previous match (⇧↵)
 Previous result (⇧F4)	
 Primary Side Bar	
 Primary side bar: {}	
+Private sessions	
 Problems	
 Problems: Copy All	
 Problems: Copy Full Diagnostic	
@@ -2216,6 +2250,7 @@ Rebuilding proc macros…
 Recent	
 Recent Projects	
 Recent denials	
+Recent messages copied.	
 Reconnect	
 Reconnect to {}	
 Reconnected to terminal session	
@@ -2223,6 +2258,9 @@ Reconnected, but the server session had expired: terminals were closed.
 Reconnected. Terminals kept running.	
 Reconnecting to {0} (attempt {1})	
 Reconnecting to {}… (attempt {})	
+Recover session	
+Recover this session into shared history?	
+Recoverable sessions	
 Redo	
 Refactor Preview	
 Refresh	
@@ -2512,6 +2550,7 @@ Search is not available for this project's registry
 Search log messages or timestamps…	
 Search results	
 Search results are incomplete; rerun before replacing.	
+Search sessions…	
 Search settings	
 Search the Market	
 Search {}	
@@ -2544,6 +2583,7 @@ Select a debug configuration
 Select a file icon theme	
 Select a repository first	
 Select a row to open its details.	
+Select a session to continue, or start a new one.	
 Select a word and press ⌘D to add the next match as another cursor.	
 Select all matches (⌥↵)	
 Select at most 20 timestamps	
@@ -2569,6 +2609,9 @@ Server report
 Server:	
 Servers	
 Services	
+Session actions	
+Session actions for {}	
+Sessions	
 Set	
 Set Label…	
 Set URL	
@@ -2589,6 +2632,7 @@ Settings reset. The old file is kept as {}
 Settings…	
 Several Rust targets reported this test name. Run it individually to identify the failing target.	
 Shape of the cursor	
+Shared sessions	
 Shell for new terminals (empty: login shell)	
 Show All	
 Show Changed Files…	
@@ -2642,6 +2686,7 @@ Shrink Selection
 Side by side	
 Sign In…	
 Sign Out	
+Sign in to this account…	
 Signature help	
 Signature not verified: the token is only decoded, not checked	
 Signing the commit failed: gpg could not sign it. Check that the key is available and that gpg-agent can ask for its passphrase, or turn commit.gpgsign off.	
@@ -2707,6 +2752,7 @@ Start Debugging
 Start Debugging (F5)	
 Start Web Preview before copying its URL.	
 Start a debug session first (F5): the adapter says which exceptions it can break on.	
+Start a session to sign in or open Antigravity.	
 Start and Connect	
 Start and end of a slice must be numbers	
 Start language servers	
@@ -2743,9 +2789,11 @@ Stop Forwarding
 Stop Pre-releases	
 Stop Web Preview	
 Stop a search after this many matches	
+Stop terminal	
 Stopped	
 Stopped.	
 Stopping installation and cleaning temporary files…	
+Stopping {}…	
 Storage information is unavailable.	
 Store secrets in your keychain	
 String interpolation is not supported	
@@ -2757,8 +2805,10 @@ Suggestions
 Suggestions pop up while typing (off: only Ctrl+Space)	
 Sunday	
 Switch Workspace or Connect to Host…	
+Switch account	
 Switch between 100% and fit	
 Switch to a profile	
+Switch {} account?	
 Switched to {}	
 Switched to {}. Your changes are in the stash: Git: Pop Latest Stash brings them back.	
 Switching to {}…	
@@ -2768,6 +2818,7 @@ Sync changes?
 Synced	
 Syncing…	
 Syntax tree of {}	
+System account	
 TOML dates were turned into text.	
 TOML needs a table at the top level, but this document is a {}	
 Tab Moves Focus	
@@ -2996,6 +3047,10 @@ The response could not be saved (curl write error).
 The response is larger than {} and was not downloaded.	
 The result would not parse in {0} file: {1}|The result would not parse in {0} files: {1}	
 The rewritten commits would end with different files. Nothing was changed.	
+The running terminal will stop. Antigravity will use the selected Google account for its next session.	
+The running terminal will stop. Shared conversations can continue with the selected account.	
+The running terminal will stop. The selected account will open the last saved conversation.	
+The running terminal will stop. This conversation stays with its current account.	
 The runtime checksum did not match. Nothing was activated. Check the connection and retry.	
 The saved editor layout could not be read: the files are shown in one group.	
 The search failed.	
@@ -3138,6 +3193,7 @@ This repository has no remote.
 This repository has no remote. Add one with Git: Add Remote…	
 This repository uses Git LFS, but git-lfs is not installed on this host.	
 This search belongs to {0} on {1}, which this window does not show. Results cannot be opened or replaced here.	
+This session is unavailable for the selected account and project.	
 This tab cannot move to that window: its folder is on another machine.	
 This view is not available.	
 This window is installing an update. You can close it in a few seconds.	
@@ -3161,6 +3217,7 @@ Too many keys were offered. Give this host an IdentityFile and IdentitiesOnly ye
 Track which remote branch?	
 Trailing whitespace is ignored. Click to ignore all whitespace	
 Transfer cancelled.	
+Transfer context to {}…	
 Transfer failed: {}	
 Trust Folder	
 Trust Folder and Continue	
@@ -3220,6 +3277,7 @@ Unknown input “{0}” in “{1}”
 Unknown outcome, check before retrying: {0} ({1})	
 Unknown theme '{0}'. Available: {1}	
 Unpin	
+Unpin session	
 Unsaved changes stay open in their tabs; saving recreates the file.	
 Unstage	
 Unstage Change	
@@ -3272,6 +3330,7 @@ Use a shorter name or a shallower folder.
 Use the name as typed	
 User	
 User Forwarded	
+User message	
 User: {}	
 Username	
 Values: a number from {} to {}	
@@ -3399,6 +3458,7 @@ Windows on a server reconnect, which can ask for a password.
 Without Full Disk Access, Desktop, Documents or external drives may look empty.	
 Without one, F5 finds a configuration from the project (Cargo, Go, or the open Python or JavaScript file).	
 Word Wrap	
+Work	
 Workbench	
 Workspace	
 Workspace Trust	
@@ -4043,6 +4103,7 @@ your words
 {} is not in the package	
 {} is not in the registry	
 {} is not installed	
+{} is not installed or could not be found on this computer.	
 {} is not installed. Open the setup instructions, then try again.	
 {} is not open any more; nothing to save.	
 {} is replaced by the default settings of this version. The current file is kept next to it as a backup.	
