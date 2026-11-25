@@ -431,28 +431,19 @@ impl ScmPanel {
         let limit = self.graph_limit(cx);
         let dir = root.clone();
         let task = cx.background_executor().spawn(async move {
-            // Six independent git commands: run side by side, the history is as late as the slowest one, not their sum (over SSH
-            // each is a round trip, and the commits this branch is still missing are what the user is waiting to see).
             let host = host.as_ref();
-            std::thread::scope(|s| {
-                let log = s.spawn(|| graph::log(host, &dir, limit, scope));
-                let incoming = s.spawn(|| graph::incoming(host, &dir, limit));
-                let outgoing = s.spawn(|| graph::outgoing(host, &dir, limit));
-                let remote = s.spawn(|| git::remotes(host, &dir).is_ok_and(|r| !r.is_empty()));
-                let stashes = s.spawn(|| git::stash_list(host, &dir).ok());
-                let identity = git::identity(host, &dir);
-                let join = |what: &str| format!("the {what} read panicked");
-                let log = log.join().unwrap_or_else(|_| Err(join("history")));
-                let (incoming, outgoing) = (incoming.join().unwrap_or_default(), outgoing.join().unwrap_or_default());
-                let log = log.map(|mut commits| {
-                    for c in &mut commits {
-                        c.incoming = incoming.contains(&c.hash);
-                        c.outgoing = outgoing.contains(&c.hash);
-                    }
-                    commits
-                });
-                (log, identity, stashes.join().unwrap_or(None), remote.join().unwrap_or(false))
-            })
+            let log = graph::log(host, &dir, limit, scope);
+            let has_remote = git::remotes(host, &dir).is_ok_and(|r| !r.is_empty());
+            let incoming = graph::incoming(host, &dir, limit);
+            let outgoing = graph::outgoing(host, &dir, limit);
+            let log = log.map(|mut commits| {
+                for c in &mut commits {
+                    c.incoming = incoming.contains(&c.hash);
+                    c.outgoing = outgoing.contains(&c.hash);
+                }
+                commits
+            });
+            (log, git::identity(host, &dir), git::stash_list(host, &dir).ok(), has_remote)
         });
         let loaded_from = self.host.clone();
         cx.spawn(async move |this, cx| {
