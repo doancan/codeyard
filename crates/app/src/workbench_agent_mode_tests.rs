@@ -423,3 +423,24 @@ fn a_project_that_starts_waiting_out_of_sight_gets_a_notice_that_opens_it(cx: &m
     hub.run_until_parked();
     assert_eq!(notices(&mut hub).len(), 1);
 }
+
+fn account(tokens: Option<u64>, percent: Option<u32>) -> AccountRow {
+    AccountRow { provider: Provider::Claude, profile: 0, limited: None, tokens, share: 0., percent }
+}
+
+#[test]
+fn an_accounts_use_reads_as_tokens_and_with_a_budget_as_their_share() {
+    assert_eq!(usage_text(&account(None, None)), "Available");
+    assert_eq!(usage_text(&account(Some(412_000), None)), "412k tokens");
+    assert_eq!(usage_text(&account(Some(412_000), Some(21))), "412k tokens · 21%");
+}
+
+#[test]
+fn the_token_budget_is_a_setting_that_is_off_by_default() {
+    assert_eq!(crate::settings::parse("{}").0.agents_claude_token_budget, 0);
+    let (s, warnings) = crate::settings::parse(r#"{ "agents.claudeTokenBudget": 2000000 }"#);
+    assert_eq!((s.agents_claude_token_budget, warnings.is_empty()), (2_000_000, true), "{warnings:?}");
+    let (s, warnings) = crate::settings::parse(r#"{ "agents.claudeTokenBudget": -5 }"#);
+    assert_eq!(s.agents_claude_token_budget, 0, "a negative budget is not taken");
+    assert!(warnings.iter().any(|w| w.contains("agents.claudeTokenBudget")), "{warnings:?}");
+}

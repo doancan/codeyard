@@ -3236,6 +3236,7 @@ Toggle Sidebar
 Toggle Terminal	
 Toggle a break-on-exception filter	
 Toggle inline view	
+Tokens a Claude Code account may spend in five hours (0: not known); agent mode shows an account's use as a share of it	
 Too many files to preview ({}). Narrow the search.	
 Too many keys were offered. Give this host an IdentityFile and IdentitiesOnly yes in the SSH config.	
 Track which remote branch?	
@@ -4179,6 +4180,7 @@ your words
 {} terminal|{} terminals	
 {} test|{} tests	
 {} tokens	
+{} tokens · {}%	
 {} type definition|{} type definitions	
 {} unchanged line|{} unchanged lines	
 {} unread notification|{} unread notifications	

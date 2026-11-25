@@ -8,6 +8,12 @@ Settings live in `~/.config/codeyard/settings.jsonc` (comments and trailing comm
 unless it is listed under *File-only settings*. A wrong value never breaks the app: that key keeps its default and the
 status bar reports it.
 
+## `agents`
+
+| Setting | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `agents.claudeTokenBudget` | number 0–10000000000 | `0` | Tokens a Claude Code account may spend in five hours (0: not known); agent mode shows an account's use as a share of it |
+
 ## `compare`
 
 | Setting | Values | Default | What it does |

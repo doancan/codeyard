@@ -90,7 +90,10 @@ raw-window-handle = "0.6"
 # macOS: Dock icon (also when run unbundled: cargo run, bare binary).
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["NSData", "NSString"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["NSBundle", "NSData", "NSError", "NSString"] }
+# Banners in Notification Center for agent mode (docs/agent-mode.md). Only the parts it uses.
+objc2-user-notifications = { version = "0.3", default-features = false, features = ["block2", "std", "UNNotification", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationSound", "UNNotificationTrigger", "UNUserNotificationCenter"] }
+block2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["NSAccessibility", "NSApplication", "NSDockTile", "NSImage", "NSResponder", "NSWorkspace"] }
 
 # macOS accessibility (VoiceOver): AccessKit adapter that dynamically subclasses NSView.

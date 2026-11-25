@@ -153,6 +153,7 @@ kept in `crates/app/testdata/rust-analyzer` and `crates/app/testdata/nextest`.
 | Encodings | small built-in tables (UTF-16 with BOM, Windows-1254, ISO-8859-9/1) | `encoding_rs` would add about 1 MB |
 | Settings | JSONC, comments preserved on write | `~/.config/codeyard/settings.jsonc`, `keybindings.jsonc`, `themes/`, `.codeyard/settings.jsonc` per folder |
 | Local state | SQLite (`rusqlite`, bundled), WAL | atomic and crash safe; see `crates/state/schema.sql` |
+| System banners (macOS) | `objc2-user-notifications` (only the parts used; same `objc2` family as the Dock and accessibility code, MIT / Apache-2.0 / Zlib) | agent mode says when a project needs the person even while Codeyard is in the background, and a click on the banner opens it (`system_notifications.rs`); nothing is done without an application bundle, off macOS or in tests |
 | Allocator | `mimalloc` in the app, system allocator in the agent | lower fragmentation; small agent |
 | Schemas | `jsonschema` (no default features), `yaml-rust2` | validation and hover without Node; alias budget bounds YAML expansion |
 | Data tools | `serde_json` (key order kept), `toml`, `yaml-rust2` through the schema crate | convert and query JSON, YAML, TOML and .env in `datalens*.rs`; pure functions on text, a query language with no I/O |

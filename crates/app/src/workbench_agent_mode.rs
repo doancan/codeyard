@@ -149,6 +149,17 @@ struct AccountRow {
     /// Tokens spent in the last five hours (Claude Code only) and that as a share of the busiest account's.
     tokens: Option<u64>,
     share: f32,
+    /// The share of `agents.claudeTokenBudget`, when one is set.
+    percent: Option<u32>,
+}
+
+/// What an account's use says: "Available" when nothing is known, else its tokens and, with a budget, their share of it.
+fn usage_text(row: &AccountRow) -> SharedString {
+    match (row.tokens, row.percent) {
+        (Some(tokens), Some(percent)) => tf("{} tokens · {}%", &[&short_tokens(tokens), &percent]).into(),
+        (Some(tokens), None) => tf("{} tokens", &[&short_tokens(tokens)]).into(),
+        (None, _) => t("Available").into(),
+    }
 }
 
 /// "950", "12k", "1.3M".
@@ -407,11 +418,22 @@ impl Workbench {
                 },
                 _ => None,
             };
-            news.extend(said.map(|message| (peer.id, message)));
+            news.extend(said.map(|message| (peer.id, message, peer.last_line.clone())));
         }
         mode.seen.retain(|id, _| peers.iter().any(|peer| peer.id == *id));
-        for (id, message) in news {
+        for (id, message, last_line) in news {
+            // Out of sight, the system says it too (Notification Center); its banner brings the project up.
+            if !active {
+                crate::system_notifications::post(&message, &last_line, id.as_u64());
+            }
             self.notify_with(Notification::new(Severity::Info, NoticeSource::Terminal, message).action(NoticeAction::AgentProject(id.as_u64())));
+        }
+    }
+
+    /// A banner of Notification Center was clicked: agent mode, on the project it names.
+    pub(super) fn open_clicked_banner(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        for project in crate::system_notifications::take_opened() {
+            self.open_agent_project(gpui::WindowId::from(project), window, cx);
         }
     }
 
@@ -490,12 +512,15 @@ impl Workbench {
             };
             let tokens = |profile: u32| (provider == Provider::Claude).then(|| usage.and_then(|usage| usage.get(&profile).copied())).flatten();
             let busiest = (0..count).filter_map(tokens).max().unwrap_or(0).max(1);
+            // With a budget the bar is a share of it; without one, of the busiest account's use.
+            let budget = (provider == Provider::Claude).then(|| cx.global::<crate::settings::Settings>().agents_claude_token_budget).filter(|b| *b > 0);
             rows.extend((0..count).map(|profile| AccountRow {
                 provider,
                 profile,
                 limited: limits.and_then(|limits| limits.limited(provider.key(), profile, now)).cloned(),
                 tokens: tokens(profile),
-                share: tokens(profile).map_or(0., |tokens| tokens as f32 / busiest as f32),
+                share: tokens(profile).map_or(0., |tokens| tokens as f32 / budget.unwrap_or(busiest) as f32),
+                percent: budget.and_then(|budget| tokens(profile).map(|tokens| (tokens as f64 / budget as f64 * 100.).round() as u32)),
             }));
         }
         rows
@@ -525,7 +550,7 @@ impl Workbench {
             }
             let (state, color): (SharedString, u32) = match &row.limited {
                 Some(mark) => (mark.resets.clone().map_or_else(|| t("Limit reached").into(), |resets| tf("Limit reached · {}", &[&resets]).into()), p.danger),
-                None => (row.tokens.map_or_else(|| t("Available").into(), |tokens| tf("{} tokens", &[&short_tokens(tokens)]).into()), p.text_muted),
+                None => (usage_text(row), p.text_muted),
             };
             list = list.child(
                 div()
@@ -1064,7 +1089,7 @@ impl Workbench {
                     let row = accounts.iter().find(|row| row.provider == agent.provider && row.profile == profile);
                     let state: SharedString = match row.and_then(|row| row.limited.as_ref()) {
                         Some(mark) => mark.resets.clone().map_or_else(|| t("Limit reached").into(), |resets| tf("Limit reached · {}", &[&resets]).into()),
-                        None => row.and_then(|row| row.tokens).map_or_else(|| t("Available").into(), |tokens| tf("{} tokens", &[&short_tokens(tokens)]).into()),
+                        None => row.map_or_else(|| t("Available").into(), usage_text),
                     };
                     let row_label = format!("{}, {}", profile_label(profile), state);
                     let row = div()
