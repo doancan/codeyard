@@ -444,3 +444,22 @@ fn the_token_budget_is_a_setting_that_is_off_by_default() {
     assert_eq!(s.agents_claude_token_budget, 0, "a negative budget is not taken");
     assert!(warnings.iter().any(|w| w.contains("agents.claudeTokenBudget")), "{warnings:?}");
 }
+
+#[gpui::test]
+fn a_view_button_in_agent_mode_leaves_it_and_shows_that_view(cx: &mut TestAppContext) {
+    crate::qa_workbench_tests::globals(cx);
+    let window = open_window(cx);
+    window
+        .update(cx, |wb, window, cx| {
+            wb.toggle_agent_mode(&ToggleAgentMode, window, cx);
+            // The Explorer was open before: its button must not close it now.
+            wb.chrome.panel = Some(Panel::Explorer);
+            wb.activity_click(Panel::Explorer, window, cx);
+            assert!(wb.chrome.agent_mode.is_none(), "agent mode is left");
+            assert_eq!(wb.chrome.panel, Some(Panel::Explorer), "and the view it asked for is shown");
+            // Outside agent mode the button toggles, as before.
+            wb.activity_click(Panel::Explorer, window, cx);
+            assert_eq!(wb.chrome.panel, None);
+        })
+        .unwrap();
+}
