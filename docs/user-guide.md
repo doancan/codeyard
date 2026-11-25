@@ -1344,6 +1344,12 @@ The "…" menu and the palette also have *Pull (Rebase)*, *Pull from…* (pick a
 *Push to…* (pick a remote), *Fetch (All Remotes)* and *Publish Branch*, and the commit variants
 *Commit Signed Off* (`-s`), *Commit (No Verify)* (skips hooks), *Commit & Push* and *Commit & Sync*.
 
+Under the Commit button two quick buttons sit side by side. **Amend** adds the staged changes to the last commit and, when the
+message box has text, gives the commit that message (the same as *Git: Commit (Amend)*); when that commit is already on the
+upstream or a remote branch it asks first, because the branch then differs from the remote and needs a force push. **Stash**
+puts the changes aside (*Git: Stash*): new files stay unless you hold Shift, or they are all there is; the Stashes section
+lists the result. Neither runs while conflicts wait or another operation of the panel is running.
+
 These settings change the behaviour: `"git.confirmSync"` (default false: Sync pulls and pushes at once; on, it asks
 first), `"git.rebaseWhenSync"` (pull with rebase), `"git.pruneOnFetch"` (default true), `"git.pullTags"`
 (default true), `"git.fetchOnPull"` (fetch every remote before pulling), `"git.postCommitCommand"`

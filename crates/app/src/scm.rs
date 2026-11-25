@@ -239,6 +239,8 @@ mod detail_ui;
 mod operation_ui;
 #[path = "scm_ops.rs"]
 mod ops;
+#[path = "scm_quick.rs"]
+mod quick;
 #[path = "scm_repos.rs"]
 mod repos_ui;
 
@@ -961,7 +963,7 @@ impl Render for ScmPanel {
                             }),
                     )
                     .children(self.operation_banner(&st, &p))
-                    .when_some(last, |d, lc| {
+                    .when_some(last.clone(), |d, lc| {
                         d.child(
                             div()
                                 .flex()
@@ -996,6 +998,7 @@ impl Render for ScmPanel {
                             .child(commit_label)
                             .on_click(cx.listener(|this, _, _, cx| this.commit(cx))),
                     )
+                    .child(self.quick_actions(&st, last.is_some(), &p, cx))
                     .children(sync_button)
                     .when_some(self.result.clone(), |d, (msg, err)| {
                         d.child(div().text_size(px(text::XS.0)).text_color(c(if err { p.danger } else { p.text_muted })).child(msg))

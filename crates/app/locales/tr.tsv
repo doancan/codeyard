@@ -4382,3 +4382,8 @@ The checked-out commit changed while you were asked. Nothing was pushed: try aga
 not pushed yet	henüz gönderilmedi
 Another Git command is still running: try again when it is done.	Başka bir Git komutu hâlâ çalışıyor: bittiğinde yeniden deneyin.
 A sync is running: try again when it is done.	Bir sync çalışıyor: bittiğinde yeniden deneyin.
+Amend	Düzelt
+Add the staged changes to the last commit (and give it the message above, if there is one)	Hazırlanan değişiklikleri son commit'e ekle (yukarıda bir mesaj varsa commit'e onu ver)
+Put the changes aside. Hold Shift to take new files too	Değişiklikleri kenara al. Yeni dosyaları da almak için Shift'e basılı tutun
+Amend a commit that is already pushed?	Zaten gönderilmiş bir commit Amend edilsin mi?
+Amending replaces the commit with a new one. The branch then differs from the remote, and updating it takes a force push.	Amend, commit'i yenisiyle değiştirir. Dal bundan sonra uzak dalla ayrışır ve güncellemek için force push gerekir.

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Source Control: *Amend* and *Stash* buttons under Commit. Amend adds the staged changes to the last commit (and gives it the message in the box, if there is one) and asks first when that commit is already pushed, because the branch then needs a force push. Stash puts the changes aside; Shift (or having only new files) takes new files too.
+
 - Source Control, Graph: a line has the color of its branch and the branch's label wears it; the checked-out branch is always the accent color, `main` and `develop` keep a color of their own, and a branch keeps its color when the history is reloaded. Commits that are not pushed yet have an up arrow, and `+N` after a label lists the other labels on hover.
 - Source Control: `git.autoPull` (`off`, `open` or `always`; your own settings only) fast-forwards a branch that is only behind its upstream after a background fetch. It waits for tracked changes, commits of the branch's own and a merge or rebase in progress (the sync item's tooltip says why), and never merges or rebases.
 

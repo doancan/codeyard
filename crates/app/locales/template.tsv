@@ -94,6 +94,7 @@ Add comment
 Add comment…	
 Add dependency	
 Add remote	
+Add the staged changes to the last commit (and give it the message above, if there is one)	
 Add to .gitignore	
 Add to Favorites	
 Add to Watch	
@@ -132,7 +133,10 @@ Also every folder inside “{}”, now and later.
 Also get its pre-releases, at once and before others get them	
 Also used by {}	
 Always open *.{0} as {1}	
+Amend	
+Amend a commit that is already pushed?	
 Amended {}	
+Amending replaces the commit with a new one. The branch then differs from the remote, and updating it takes a force push.	
 An edit ends before it starts.	
 An entry of keybindings.jsonc has no key	
 An existing file with the same name is never overwritten.	
@@ -2173,6 +2177,7 @@ Pushed tags to {}
 Pushing tags…	
 Pushing {}…	
 Pushing…	
+Put the changes aside. Hold Shift to take new files too	
 Put the cursor inside a merge conflict	
 Put the cursor on a dependency first	
 Put the cursor on a symbol to rename it	
