@@ -536,7 +536,7 @@ impl Workbench {
                         waited = 0;
                     }
                     // Due and only waiting (the status is not read yet, a sync is running): look again soon.
-                    if on && active && waited >= period { AUTOFETCH_EAGER } else { AUTOFETCH_TICK }
+                    if on && active && waited >= period && last_root.is_some() { AUTOFETCH_EAGER } else { AUTOFETCH_TICK }
                 });
                 match next {
                     Ok(next) => delay = next,
