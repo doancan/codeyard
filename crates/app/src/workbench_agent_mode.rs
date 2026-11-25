@@ -193,15 +193,17 @@ fn last_line(rows: &[String]) -> String {
 }
 
 impl Workbench {
-    pub(super) fn toggle_agent_mode(&mut self, _: &ToggleAgentMode, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn toggle_agent_mode(&mut self, _: &ToggleAgentMode, window: &mut Window, cx: &mut Context<Self>) {
         if self.chrome.agent_mode.is_some() {
             self.leave_agent_mode(cx);
             return;
         }
-        let refresh = cx.spawn(async move |this, cx| {
+        // Once a second, drawn or not: a window that is covered or in the background may not be drawn at all, and that is when
+        // a project that starts waiting has to be noticed.
+        let refresh = cx.spawn_in(window, async move |this, cx| {
             loop {
                 cx.background_executor().timer(Duration::from_secs(1)).await;
-                if this.update(cx, |_, cx| cx.notify()).is_err() {
+                if this.update_in(cx, |this, window, cx| this.agent_mode_tick(window, cx)).is_err() {
                     return;
                 }
             }
@@ -223,6 +225,13 @@ impl Workbench {
             hosting: None,
             _refresh: refresh,
         });
+        cx.notify();
+    }
+
+    /// What agent mode notes about the projects without being drawn: limits seen, the Dock count, notices and banners, usage.
+    fn agent_mode_tick(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let peers = self.agent_mode_peers(window, cx);
+        self.agent_mode_account_state(&peers, window, cx);
         cx.notify();
     }
 
