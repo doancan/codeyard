@@ -138,6 +138,8 @@ pub(crate) mod outline_glue;
 #[path = "workbench_palette.rs"]
 mod palette_glue;
 use outline_glue::OutlineState;
+#[path = "workbench_agent_mode.rs"]
+mod agent_mode;
 #[path = "workbench_agent_panel.rs"]
 mod agent_panel;
 #[path = "workbench_agent_rpc.rs"]
@@ -154,6 +156,8 @@ mod claude_store;
 mod codex_store;
 #[path = "workbench_panels.rs"]
 pub(crate) mod panels_glue;
+#[path = "workbench_window_title.rs"]
+mod window_title;
 pub(crate) use notifications_glue::Notice;
 pub(crate) use notifications_glue::model::NoticeSource;
 #[cfg(test)]
@@ -173,6 +177,8 @@ mod ports_glue;
 pub mod projects;
 #[path = "workbench_pulls.rs"]
 mod pulls_glue;
+#[path = "workbench_pulls_panel.rs"]
+mod pulls_panel;
 #[path = "workbench_remote.rs"]
 mod remote_glue;
 #[path = "workbench_row_nav.rs"]
@@ -535,6 +541,9 @@ actions!(
         FindTodos,
         SwitchEditor,
         ToggleZenMode,
+        ToggleAgentMode,
+        MarkAgentAccountLimited,
+        MarkAgentAccountAvailable,
         InstallCyx,
         NewExtension,
         ToggleFullScreen,
@@ -1367,6 +1376,7 @@ impl Workbench {
                 editor_host: None,
                 view_windows: Vec::new(),
                 view_host: None,
+                hub_host: None,
                 panel_dock,
                 view_drag: None,
                 tab_drag: None,
@@ -1381,6 +1391,7 @@ impl Workbench {
                 activity_scroll: gpui::ScrollHandle::new(),
                 activity_hints: Default::default(),
                 zen: None,
+                agent_mode: None,
                 window_bounds: None,
             },
             nav: state_glue::NavState {
@@ -2430,39 +2441,6 @@ impl Workbench {
                 self.connect(alias, window, cx);
             }
         }
-    }
-
-    // --- View parts ---
-
-    /// "● file — folder" (window title and drawn title bar).
-    fn title_text(&self, cx: &App) -> Option<String> {
-        let root = self.roots.primary.read(cx).root().map(|r| ui::file_name(r).to_string());
-        let file = self.tab_editor().map(|e| {
-            let e = e.read(cx);
-            format!("{}{}", if e.is_dirty() { "● " } else { "" }, e.name)
-        });
-        let parts: Vec<String> = [file, root].into_iter().flatten().collect();
-        (!parts.is_empty()).then(|| parts.join(" — "))
-    }
-
-    /// Title layout: `● file — folder — ssh-host` (● unsaved).
-    fn update_title(&mut self, window: &mut Window, cx: &mut App) {
-        let remote = self.remote.host.is_remote().then(|| self.remote.host.label());
-        let parts: Vec<String> = [self.title_text(cx), remote].into_iter().flatten().collect();
-        let title = if parts.is_empty() { "Codeyard".to_string() } else { parts.join(" — ") };
-        if title != self.title {
-            window.set_window_title(&title);
-            self.title = title;
-            // The Dock menu lists the open windows by title.
-            #[cfg(target_os = "macos")]
-            crate::menus::refresh_dock_windows(cx);
-        }
-    }
-
-    /// The window's title as last set (the Dock menu's window rows).
-    #[cfg(target_os = "macos")]
-    pub(crate) fn window_title(&self) -> &str {
-        &self.title
     }
 }
 

@@ -116,8 +116,11 @@ Adding comment…
 Adding remote…	
 Adding worktree…	
 After	
+Agent mode	
 Agent profiles are available in local windows.	
 Agents	
+Agents: Mark Account as Available	
+Agents: Mark Account as Limited	
 All	
 All Branches	
 All conflicts are resolved	
@@ -177,6 +180,7 @@ Asking the source control provider…
 Assistant response	
 At most {} extra folders fit in one workspace.	
 Attach to a native process	
+Attention	
 Aug	
 Auto (follow system)	
 Auto Forwarded	
@@ -187,8 +191,10 @@ Automatic forwarding is paused after a failure. Forward a port by hand, or recon
 Automatic forwarding stops at {} forwards: forward other ports by hand.	
 Automatic pull failed: {}	
 Automatic pull is waiting: {}	
+Available	
 Back	
 Back to SSH workspace and container details	
+Back to editor	
 Back to the default (removes the value from settings.jsonc)	
 Back to this computer; files with unsaved changes must be saved or closed first	
 Bare repository	
@@ -523,6 +529,7 @@ Continue
 Continue (F5)	
 Continue session	
 Continue this session with {}?	
+Continue with {}	
 Continue with {}…	
 Continuing rebase…	
 Continuing…	
@@ -830,6 +837,7 @@ Developer: Restart Language Servers
 Development	
 Diagnostic copied	
 Diagnostics copied. Nothing was sent anywhere: paste them where you want to share them.	
+Diff	
 Diff view side by side (off: inline)	
 Disable	
 Disable All Breakpoints	
@@ -894,6 +902,7 @@ Downloading the pinned Node.js runtime…
 Downloading the {0} dictionary (about {1} MB)…	
 Downloading works with a connected SSH host: connect first (⌃R).	
 Download…	
+Draft	
 Drag the edge of a sidebar section to resize it; click its title to fold it.	
 Draw programming ligatures (=>, !=, …) in the editor font	
 Draw the folder hierarchy lines in the explorer	
@@ -1213,6 +1222,7 @@ From the registry “{}”: not looked up.
 From the {0} registry, published by {1}	
 Get Pre-releases	
 Get only releases of this extension from now on	
+Git	
 Git could not sign in to {}. Set up credentials (credential helper, SSH key or `gh auth login`) and try again	
 Git does not trust this folder because another user owns it. If you trust it, run: git config --global --add safe.directory {}	
 Git doesn't know who you are on this host. Run these in the terminal: {0} and {1}	
@@ -1537,6 +1547,8 @@ Let {} read the clipboard?
 License: {}	
 Lifecycle: {}	
 Lightweight editing, on this machine or over SSH.	
+Limit reached	
+Limit reached · {}	
 Line Numbers	
 Line endings for this file (applied on save)	
 Line height in pixels	
@@ -1692,6 +1704,7 @@ Native program (C, C++, Rust, Swift)
 Native programs	
 Needs Rust {} or newer	
 Needs attention	
+Needs you	
 Network I/O total	
 Network RX / TX rate	
 Network received	
@@ -1711,6 +1724,7 @@ New name
 New name of the profile	
 New name of the remote	
 New session	
+New terminal	
 Newer versions of extensions from a registry: install (by themselves; versions that run code 48 hours after they are published; a version that asks for more permissions waits for your OK), notify (shown in the Extensions view; you install them) or off (nothing is downloaded until you ask). A withdrawn version is still replaced and a revoked one still stopped. Your own settings only; a folder cannot change it	
 Next	
 Next Match	
@@ -1798,6 +1812,7 @@ No misspelled word at the cursor.
 No mounted storage	
 No notifications	
 No open pull requests.	
+No other account is free.	
 No outgoing calls found	
 No outline for this file type.	
 No output yet. Language server logs appear here.	
@@ -1811,6 +1826,7 @@ No problems match the filter.
 No problems.	
 No problems. Language servers start when you open a file.	
 No profiles or shells were found on this machine.	
+No projects are open here.	
 No published ports	
 No published version matches the requirement	
 No quick fixes here	
@@ -1836,6 +1852,7 @@ No task is running.
 No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.	
 No terminal is in front in the editor area.	
 No terminal profiles yet: add them under terminal.profiles in settings.jsonc.	
+No terminal yet. Press + to open one.	
 No test at the cursor: put it inside a test function.	
 No tests found for this file type.	
 No tests found. Tests are read from Rust, Go, Python and JavaScript test files.	
@@ -1951,6 +1968,7 @@ Open Folder
 Open Folder…	
 Open Launch Configuration	
 Open Merge Editor	
+Open Project	
 Open Recent	
 Open SSH Config File	
 Open Settings (JSON)	
@@ -2064,6 +2082,7 @@ Permissions
 Permissions: none.	
 Permissions: {}	
 Personal	
+Pick a changed file in Git to see its diff here.	
 Pick a file from the tree, or:	
 Pick a stash to apply	
 Pick a stash to drop	
@@ -2498,8 +2517,10 @@ Rust: Show rust-analyzer Status
 Rust: View HIR	
 Rust: View MIR	
 Rust: View Syntax Tree	
+SSH	
 SSH Hosts	
 SSH host	
+SSH host {}	
 SSH {0}: {1}. Docker must be installed and accessible to the SSH user on the remote host.	
 Same apart from whitespace	
 Saturation	
@@ -3122,6 +3143,7 @@ There are no profiles yet. Create one with “Profiles: Create…”.
 There are no staged changes to stash	
 There are no stashes.	
 There is already a profile named “{}”. Names differ by more than letter case.	
+There is no agent session in this project to mark.	
 There is no breakpoint on this line (F9 adds one).	
 There is no commit above to swap with	
 There is no commit below to swap with	
@@ -3185,6 +3207,7 @@ This language server does not support outgoing calls
 This language server does not support subtypes	
 This language server does not support supertypes	
 This looks like a binary file, so it was not opened as text.	
+This project has no GitHub remote.	
 This pulls and pushes commits from and to “{}”.	
 This pulls commits from “{}”.	
 This pushes commits to “{}”.	
@@ -3394,6 +3417,7 @@ View: Split Editor Up
 View: Switch Editor…	
 View: Testing	
 View: Toggle Activity Bar Visibility	
+View: Toggle Agent Mode	
 View: Toggle Breadcrumbs	
 View: Toggle Full Screen	
 View: Toggle Indent Guides	
@@ -3870,6 +3894,7 @@ variable
 variable name, e.g. total (the program stops when it is written)	
 via the GitHub API	
 via the gh CLI	
+via the public GitHub API	
 via the public GitHub API (set GITHUB_TOKEN or use gh for private repositories and check results)	
 waiting for the connection to come back	
 when {}	
@@ -4029,6 +4054,7 @@ your words
 {} cannot be rounded	
 {} cannot receive native programs	
 {} cannot run: codeyard-exthost is missing beside Codeyard.	
+{} changed file|{} changed files	
 {} changed no files (merge or empty commit).	
 {} changes	
 {} change|{} changes	
@@ -4065,6 +4091,7 @@ your words
 {} file still has conflicts: resolve it and stage it first|{} files still have conflicts: resolve them and stage them first	
 {} files	
 {} file|{} files	
+{} finished	
 {} forwarded	
 {} gets pre-releases from now on.	
 {} gets releases only; the pre-release you have stays until a release passes it.	
@@ -4093,6 +4120,8 @@ your words
 {} is disabled.	
 {} is enabled.	
 {} is loaded as an extension in development: save a file to reload it	
+{} is marked as available.	
+{} is marked as limited.	
 {} is no longer active.	
 {} is not a setting of an installed extension	
 {} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	
@@ -4123,6 +4152,7 @@ your words
 {} more files. Double-click the commit to see them all.	
 {} more ports are not listed here	
 {} needs a file operation that is not selected.	
+{} needs you	
 {} nested file|{} nested files	
 {} no longer exists, so it was not reopened.	
 {} of them is on no other branch, tag or remote: after the reset only Git's reflog still finds it.|{} of them are on no other branch, tag or remote: after the reset only Git's reflog still finds them.	
@@ -4132,6 +4162,8 @@ your words
 {} parent module|{} parent modules	
 {} ports are forwarded	
 {} problems	
+{} reached its limit.	
+{} reached its limit; it resets {}.	
 {} reference|{} references	
 {} removed	
 {} result in 1 file|{} results in 1 file	
@@ -4144,7 +4176,9 @@ your words
 {} supertype|{} supertypes	
 {} tab with unsaved changes stayed open.|{} tabs with unsaved changes stayed open.	
 {} terminals have programs running. Close them anyway?	
+{} terminal|{} terminals	
 {} test|{} tests	
+{} tokens	
 {} type definition|{} type definitions	
 {} unchanged line|{} unchanged lines	
 {} unread notification|{} unread notifications	
@@ -4178,6 +4212,7 @@ your words
 {}: expected true or false	
 {}: finish or abort it first, then try again.	
 {}: invalid color {}	
+{}: limit reached	
 {}: no answer from the debug adapter	
 {}: no changed files.	
 {}: no crate with this name on crates.io	

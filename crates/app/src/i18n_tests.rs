@@ -276,7 +276,9 @@ fn palette_labels_are_fully_translated(cx: &mut TestAppContext) {
         assert_eq!(pct, 100.0);
     }
     // A translation can't be identical to the English (it would count as untranslated); only known Git and tool terms intentionally stay the same.
-    const KEPT: &[&str] = &["Terminal", "Rebase", "Git: Pull", "Git: Push", "Git: Fetch", "Git: Stash", "Git: Commit (Amend)"];
+    // "SSH" and "Git" are tool names (docs/translating.md: product and tool names stay untouched): agent mode's All / Local / SSH
+    // switch and its Git tab.
+    const KEPT: &[&str] = &["Terminal", "SSH", "Git", "Rebase", "Git: Pull", "Git: Push", "Git: Fetch", "Git: Stash", "Git: Commit (Amend)"];
     let same: Vec<&str> = tr_pairs().into_iter().filter(|(k, v)| k == v && !KEPT.contains(k)).map(|(k, _)| k).collect();
     assert!(same.is_empty(), "entries identical to English (untranslated?): {same:?}");
 }

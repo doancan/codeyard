@@ -250,7 +250,8 @@ impl Workbench {
     /// The window of the view in use, if one is.
     pub(super) fn view_host_window(&self) -> Option<gpui::AnyWindowHandle> {
         let host = self.chrome.view_host?;
-        self.chrome.view_windows.iter().any(|w| gpui::AnyWindowHandle::from(w.window) == host).then_some(host)
+        let known = self.chrome.view_windows.iter().any(|w| gpui::AnyWindowHandle::from(w.window) == host) || self.chrome.hub_host == Some(host);
+        known.then_some(host)
     }
 
     /// The view window `handle` is in use: menus and pickers open there.

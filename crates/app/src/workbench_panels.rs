@@ -594,6 +594,12 @@ impl Workbench {
                 });
                 // A stage or unstage from the diff: Source Control shows the new state.
                 cx.subscribe(&view, |this, _, _: &crate::diff_stage::DiffEvent, cx| this.refresh_git(0, cx)).detach();
+                // Shown by another window's agent mode: the diff goes to its Diff tab, not to this window's tabs.
+                if let Some(hub) = this.agent_mode_host_of_diff(window) {
+                    let owner = window.window_handle().window_id();
+                    hub.update(cx, |hub, hub_window, hub_cx| hub.agent_mode_show_diff(owner, view, hub_window, hub_cx)).ok();
+                    return;
+                }
                 window.focus(&view.focus_handle(cx));
                 this.tabs.diff = Some(view);
                 this.reveal_editor_area(window, cx);

@@ -4441,3 +4441,40 @@ The running terminal will stop. Antigravity will use the selected Google account
 Could not open the Antigravity account: {}	Antigravity hesabı açılamadı: {}
 Could not save the Antigravity account: {}	Antigravity hesabı kaydedilemedi: {}
 Could not switch the Antigravity account: {}	Antigravity hesabı değiştirilemedi: {}
+
+# ---- Agent mode ----
+Agent mode	Ajan modu
+Back to editor	Editöre dön
+Limit reached	Limit doldu
+Needs you	Sizi bekliyor
+New terminal	Yeni terminal
+No projects are open here.	Burada açık proje yok.
+No terminal yet. Press + to open one.	Henüz terminal yok. Açmak için + düğmesine basın.
+SSH	SSH
+SSH host {}	SSH sunucusu {}
+View: Toggle Agent Mode	Görünüm: Ajan Modunu Aç/Kapat
+{} changed file|{} changed files	{} değişen dosya
+{} terminal|{} terminals	{} terminal
+Diff	Fark
+Git	Git
+Pick a changed file in Git to see its diff here.	Farkını burada görmek için Git sekmesinden değişen bir dosya seçin.
+Draft	Taslak
+This project has no GitHub remote.	Bu projenin GitHub uzak deposu yok.
+via the public GitHub API	herkese açık GitHub API ile
+Agents: Mark Account as Limited	Ajanlar: Hesabı Limitli Olarak İşaretle
+Agents: Mark Account as Available	Ajanlar: Hesabı Kullanılabilir Olarak İşaretle
+Available	Kullanılabilir
+Continue with {}	{} ile devam et
+Limit reached · {}	Limit doldu · {}
+No other account is free.	Boşta başka hesap yok.
+There is no agent session in this project to mark.	İşaretlenecek bir ajan oturumu bu projede yok.
+{} is marked as available.	{} kullanılabilir olarak işaretlendi.
+{} is marked as limited.	{} limitli olarak işaretlendi.
+{} reached its limit.	{} hesabının limiti doldu.
+{} reached its limit; it resets {}.	{} hesabının limiti doldu; {} sıfırlanır.
+{} tokens	{} token
+{} needs you	{} sizi bekliyor
+{}: limit reached	{}: limit doldu
+{} finished	{} bitti
+Open Project	Projeyi Aç
+Attention	Dikkat

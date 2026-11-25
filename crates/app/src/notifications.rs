@@ -91,6 +91,8 @@ pub enum NoticeAction {
     OpenFile(PathBuf, Option<u32>),
     /// Run the operation again.
     Retry(RetryKind),
+    /// Show the project of a window (its id) in agent mode.
+    AgentProject(u64),
 }
 
 impl From<Action> for NoticeAction {
@@ -107,6 +109,7 @@ impl NoticeAction {
             NoticeAction::Reveal(_) => crate::i18n::tr("Show in Folder"),
             NoticeAction::OpenFile(..) => crate::i18n::tr("Open File"),
             NoticeAction::Retry(_) => crate::i18n::tr("Retry"),
+            NoticeAction::AgentProject(_) => crate::i18n::tr("Open Project"),
         }
     }
 }

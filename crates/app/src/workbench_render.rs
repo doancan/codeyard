@@ -209,6 +209,7 @@ impl Render for Workbench {
         crate::a11y_controls::Controls::retain(cx, &all);
         self.step_panel_anim(window);
         self.sync_agent_project(cx);
+        self.drop_closed_hub(cx);
         self.ask_trust_on_open(window, cx);
         // The repository search waits until Source Control is on screen (connecting opens a home folder: no scan unasked).
         if self.view_shown(Panel::Scm) {
@@ -276,11 +277,14 @@ impl Render for Workbench {
             (Some(ed), None) => editor::slot_view(ed.clone(), self.focused_slot()).into_any_element(),
             (None, None) => self.empty_state(&p, cx),
         };
+        let agent_mode = self.chrome.agent_mode.is_some();
+        let main = if agent_mode { self.agent_mode_view(window, &p, cx) } else { main };
         // A view asked for in the primary side bar that lives in the secondary one opens there.
         self.place_views();
         self.place_window_views(window, cx);
-        let sidebar = self.chrome.panel.map(|panel| self.side_view(panel, &p, cx));
-        let secondary = self.chrome.secondary.map(|panel| self.side_view(panel, &p, cx));
+        // Agent mode has its own lists: the side bars and the panel (which would draw the same terminals twice) stay away.
+        let sidebar = self.chrome.panel.filter(|_| !agent_mode).map(|panel| self.side_view(panel, &p, cx));
+        let secondary = self.chrome.secondary.filter(|_| !agent_mode).map(|panel| self.side_view(panel, &p, cx));
         // While a view is dragged: drop zones over each side (at least `ZONE_MIN` wide, also where no side bar is open).
         const ZONE_MIN: f32 = 180.;
         let bar = if cx.global::<Settings>().activity_bar { layout::ACTIVITYBAR_W } else { 0. };
@@ -461,9 +465,11 @@ impl Render for Workbench {
                             .when(!self.chrome.panel_dock.beside(), |d| d.flex_col())
                             .child(Self::panel_area_probe(cx))
                             // Docked left, the panel comes before the editor.
-                            .when(self.chrome.panel_open && self.chrome.panel_dock == docks_glue::PanelDock::Left, |d| d.child(self.panel(&p, cx)))
+                            .when(!agent_mode && self.chrome.panel_open && self.chrome.panel_dock == docks_glue::PanelDock::Left, |d| {
+                                d.child(self.panel(&p, cx))
+                            })
                             // A maximized panel takes the editor's place; while it grows or shrinks, the editor gives way.
-                            .when(!(self.chrome.panel_open && self.chrome.panel_max) || self.chrome.panel_anim.is_some(), |d| {
+                            .when(agent_mode || !(self.chrome.panel_open && self.chrome.panel_max) || self.chrome.panel_anim.is_some(), |d| {
                                 d.child(
                                     div()
                                         .debug_selector(|| "editor-area".into())
@@ -478,7 +484,9 @@ impl Render for Workbench {
                                         .children(self.debug_toolbar(&p, cx)),
                                 )
                             })
-                            .when(self.chrome.panel_open && self.chrome.panel_dock != docks_glue::PanelDock::Left, |d| d.child(self.panel(&p, cx))),
+                            .when(!agent_mode && self.chrome.panel_open && self.chrome.panel_dock != docks_glue::PanelDock::Left, |d| {
+                                d.child(self.panel(&p, cx))
+                            }),
                     )
                     // The secondary side bar: views moved to the right of the editor.
                     .when_some(secondary.filter(|_| self.chrome.zen.is_none()), |d, s| {

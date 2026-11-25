@@ -132,7 +132,8 @@ impl Project {
         format!("agents.{}.project.{}", self.provider.key(), self.key)
     }
 
-    fn profile(&self, profile: u32) -> PathBuf {
+    /// The folder that holds one account's sessions and settings.
+    pub(super) fn profile(&self, profile: u32) -> PathBuf {
         self.store.join("profiles").join(profile.to_string())
     }
 

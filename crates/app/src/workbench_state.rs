@@ -173,6 +173,8 @@ pub(super) struct ChromeLayout {
     /// Side views in windows of their own, and the one in use (its menus and pickers are drawn there).
     pub(super) view_windows: Vec<super::view_windows_glue::ViewWindowEntry>,
     pub(super) view_host: Option<gpui::AnyWindowHandle>,
+    /// The window of another project that shows this project's views (agent mode): its menus and pickers open there.
+    pub(super) hub_host: Option<gpui::AnyWindowHandle>,
     /// Panel on the right (next to the editor) and its width; maximized (covers the editor).
     pub(super) panel_dock: super::docks_glue::PanelDock,
     /// A side view being dragged by its activity bar icon (the side bars are drop zones meanwhile).
@@ -196,6 +198,8 @@ pub(super) struct ChromeLayout {
     pub(super) activity_hints: std::cell::Cell<(bool, bool)>,
     /// Zen mode: the previous layout is kept here while it is on.
     pub(super) zen: Option<ZenSaved>,
+    /// SPIKE: agent mode replaces the editor area (workbench_agent_mode.rs).
+    pub(super) agent_mode: Option<super::agent_mode::AgentMode>,
     /// Window bounds at the last draw (saved on exit, used at the next launch).
     pub(super) window_bounds: Option<gpui::WindowBounds>,
 }

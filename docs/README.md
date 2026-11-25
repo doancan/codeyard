@@ -13,6 +13,7 @@ code they describe.
 | [remote.md](remote.md) | SSH, the agent and its protocol, reconnecting, askpass, file transfer, `~/.ssh/config` editing |
 | [containers.md](containers.md) | optional container module, Docker workflows and research on Apple Container, WSL Containers and Windows guests |
 | [web-preview.md](web-preview.md) | optional HTML/CSS/JavaScript server, browser live refresh, local/SSH/container support and serving boundaries |
+| [agent-mode.md](agent-mode.md) | agent mode: one window for every project's terminals, git, diff, pull requests and files; accounts, limits and the Dock count |
 | [editor-services.md](editor-services.md) | schemas, spell check, merge editor, pull requests, `.http`, log follow: how each one works and where it stops |
 | [language-services.md](language-services.md) | explicit local/SSH language-service installation, pinned packages/runtime, cancellation, trust and recovery |
 | [file-icons.md](file-icons.md) | the file icon sets, where they come from, how a name finds its icon and how to rebuild them |
