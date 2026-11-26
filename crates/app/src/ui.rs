@@ -270,6 +270,7 @@ const ICONS: &[(&str, &[u8])] = icons![
     "folder-open",
     "git-branch",
     "git-compare",
+    "git-pull-request",
     "info",
     "loader",
     "lock",

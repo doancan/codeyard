@@ -2341,6 +2341,7 @@ right. Choosing another project never stops the first one's terminals.
   prints a limit message, a bar offers the account that is free and least used and continues the conversation there.
   *Agents: Mark Account as Limited* and *Agents: Mark Account as Available* correct a wrong guess.
 - *Cmd+Alt+Down / Up* show the next / previous project, *Cmd+Alt+A* the next one that needs you; a tab's `×` closes that terminal.
+  The right side is an icon rail (Git, Diff, Pull requests, Files; *Cmd+Alt+G / D / P / F*): the icon of the open tab closes the panel.
   Leaving agent mode and coming back finds the project, filter and right tab as they were.
 - Git (with its graph, changes and commit box) and Files are the project's own views; a file picked in Git shows its diff under
   **Diff**; **PRs** lists the repository's open GitHub pull requests with their checks.

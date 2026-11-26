@@ -55,8 +55,9 @@ pub(super) struct AgentMode {
     scope: Scope,
     /// The terminal this window decides the size of while it is shown (weak: the project owns the terminal).
     leading: Option<WeakEntity<TerminalView>>,
-    /// The tab of the right panel.
+    /// The tab of the right panel, and whether the panel is open (its icon rail is always there).
     right: RightTab,
+    right_open: bool,
     /// The diff last asked for, with the project it belongs to (shown under Diff).
     diff: Option<(gpui::WindowId, Entity<crate::diff::DiffView>)>,
     /// The pull request panel of each project that was looked at (it keeps its list while another project is shown).
@@ -237,13 +238,15 @@ impl Workbench {
             }
         });
         // The way it was left: the project, the filter and the right tab.
-        let (selected, scope, right) = self.chrome.agent_last.take().map_or((None, Scope::All, RightTab::Git), |(id, scope, right)| (Some(id), scope, right));
+        let (selected, scope, right, right_open) =
+            self.chrome.agent_last.take().map_or((None, Scope::All, RightTab::Git, true), |(id, scope, right, open)| (Some(id), scope, right, open));
         self.chrome.agent_mode = Some(AgentMode {
             selected,
             tab: 0,
             scope,
             leading: None,
             right,
+            right_open,
             diff: None,
             pulls: Default::default(),
             usage: Default::default(),
@@ -325,7 +328,7 @@ impl Workbench {
     /// Back to the editor: what was shown goes back to its own window (the terminal's size, the project's menus), the Dock badge goes.
     pub(super) fn leave_agent_mode(&mut self, cx: &mut Context<Self>) {
         let Some(mode) = self.chrome.agent_mode.take() else { return };
-        self.chrome.agent_last = mode.selected.map(|id| (id, mode.scope, mode.right));
+        self.chrome.agent_last = mode.selected.map(|id| (id, mode.scope, mode.right, mode.right_open));
         if let Some(term) = mode.leading.and_then(|weak| weak.upgrade()) {
             term.update(cx, |t, cx| t.lead_size(None, cx));
         }
@@ -465,6 +468,7 @@ impl Workbench {
         let Some(mode) = self.chrome.agent_mode.as_mut() else { return };
         mode.diff = Some((owner, view.clone()));
         mode.right = RightTab::Diff;
+        mode.right_open = true;
         mode.selected = Some(owner);
         window.focus(&view.focus_handle(cx));
         cx.notify();
@@ -919,6 +923,8 @@ impl Workbench {
         let layers = self.agent_mode_layers(window, cx);
         div()
             .id("agent-mode")
+            // The keys of agent mode (next project, the right tabs) work here and leave the editor's own keys alone.
+            .key_context("AgentMode")
             .debug_selector(|| "agent-mode".into())
             .relative()
             .size_full()
@@ -1221,71 +1227,144 @@ impl Workbench {
 
     /// The project's source control, diff and files, drawn by the views of the project's own window.
     fn agent_mode_right(&mut self, peer: Option<&Peer>, window: &Window, p: &Palette, cx: &mut Context<Self>) -> Div {
-        let right = div().w(px(380.)).flex_none().min_h_0().flex().flex_col().border_l_1().border_color(c(p.border));
-        let Some(peer) = peer else { return right };
+        let Some(peer) = peer else { return div() };
         let id = peer.id;
-        let (active, diff) = self
+        let (active, open, diff) = self
             .chrome
             .agent_mode
             .as_ref()
-            .map_or((RightTab::Git, None), |m| (m.right, m.diff.clone().filter(|(owner, _)| *owner == id).map(|(_, view)| view)));
-        let tabs = [(RightTab::Git, t("Git")), (RightTab::Diff, t("Diff")), (RightTab::Pulls, t("Pull requests")), (RightTab::Files, t("Files"))];
-        let header =
-            div().flex_none().flex().items_center().border_b_1().border_color(c(p.border)).children(tabs.into_iter().enumerate().map(|(ix, (tab, label))| {
+            .map_or((RightTab::Git, true, None), |m| (m.right, m.right_open, m.diff.clone().filter(|(owner, _)| *owner == id).map(|(_, view)| view)));
+        let tabs = [
+            (RightTab::Git, t("Git"), "git-branch", peer.changes),
+            (RightTab::Diff, t("Diff"), "git-compare", 0),
+            (RightTab::Pulls, t("Pull requests"), "git-pull-request", 0),
+            (RightTab::Files, t("Files"), "files", 0),
+        ];
+        // The rail at the edge, top to bottom: the icon of the tab shown opens it, and again closes the panel.
+        let rail = div()
+            .id("agent-mode-rail")
+            .debug_selector(|| "agent-mode-rail".into())
+            .w(px(40.))
+            .flex_none()
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(px(4.))
+            .py(px(8.))
+            .border_l_1()
+            .border_color(c(p.border))
+            .children(tabs.iter().enumerate().map(|(ix, (tab, label, glyph, badge))| {
+                let (tab, shown, badge) = (*tab, open && *tab == active, *badge);
+                let tip: SharedString = label.to_string().into();
                 let button = div()
                     .id(("agent-mode-right-tab", ix))
-                    .flex_1()
-                    .min_w_0()
-                    .py(px(8.))
-                    .px(px(4.))
+                    .size(px(32.))
                     .flex()
+                    .items_center()
                     .justify_center()
-                    .truncate()
+                    .rounded(px(theme::radius::MD))
                     .cursor_pointer()
-                    .text_color(c(if tab == active { p.text } else { p.text_muted }))
-                    .when(tab == active, |d| d.border_b_2().border_color(c(p.accent)))
-                    .hover(|d| d.text_color(c(p.text)))
-                    .child(label);
-                self.agent_mode_button(button, format!("right-tab-{ix}"), label, Some(tab == active), cx, move |this, _, cx| {
-                    if let Some(mode) = this.chrome.agent_mode.as_mut() {
-                        mode.right = tab;
-                    }
-                    cx.notify();
-                })
+                    .when(shown, |d| d.bg(c(p.surface_active)))
+                    .hover(|d| d.bg(c(p.surface_hover)))
+                    .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone())).into())
+                    .child(icon(glyph, 18., if shown { p.text } else { p.text_muted }))
+                    .when(badge > 0, |d| {
+                        d.child(
+                            div()
+                                .absolute()
+                                .top(px(1.))
+                                .right(px(0.))
+                                .min_w(px(16.))
+                                .h(px(16.))
+                                .px(px(3.))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded_full()
+                                .bg(c(p.accent))
+                                .text_color(c(p.surface))
+                                .text_size(px(text::XS.0))
+                                .child(badge.min(99).to_string()),
+                        )
+                    });
+                self.agent_mode_button(button, format!("right-tab-{ix}"), *label, Some(shown), cx, move |this, _, cx| this.agent_mode_show_right(tab, cx))
             }));
-        let summary = div()
-            .flex_none()
-            .px(px(12.))
-            .py(px(8.))
-            .flex()
-            .gap(px(8.))
-            .text_size(px(text::XS.0))
-            .text_color(c(p.text_muted))
-            .border_b_1()
-            .border_color(c(p.border))
-            .child(div().font_weight(gpui::FontWeight::SEMIBOLD).text_color(c(p.text)).child(peer.name.clone()))
-            .children(peer.branch.clone())
-            .child(tn("{} changed file", "{} changed files", peer.changes, &[]));
-        let body = match active {
-            RightTab::Git => self.agent_mode_side_view(id, Panel::Scm, window, p, cx),
-            RightTab::Pulls => self.agent_mode_pulls(id, window, cx).map(IntoElement::into_any_element),
-            RightTab::Files => self.agent_mode_side_view(id, Panel::Explorer, window, p, cx),
-            RightTab::Diff => Some(match diff {
-                Some(view) => div().size_full().child(view).into_any_element(),
-                None => div().p(px(16.)).text_color(c(p.text_muted)).child(t("Pick a changed file in Git to see its diff here.")).into_any_element(),
-            }),
-        };
-        let body = div()
-            .id("agent-mode-right-body")
-            .flex_1()
-            .min_h_0()
-            .relative()
-            .overflow_hidden()
-            // Input here makes this window the one the project's menus and pickers open in.
-            .capture_any_mouse_down(cx.listener(|this, _, window, cx| this.agent_mode_use_owner(window, cx)))
-            .capture_key_down(cx.listener(|this, _, window, cx| this.agent_mode_use_owner(window, cx)))
-            .children(body);
-        right.child(header).child(summary).child(body)
+        let panel = open.then(|| {
+            let title = tabs.iter().find(|(tab, ..)| *tab == active).map_or_else(|| SharedString::from(""), |(_, label, ..)| label.to_string().into());
+            let close = div()
+                .id("agent-mode-right-close")
+                .size(px(24.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(theme::radius::MD))
+                .cursor_pointer()
+                .hover(|d| d.bg(c(p.surface_hover)))
+                .child(icon("x", 14., p.text_muted));
+            let close = self.agent_mode_button(close, "right-close", t("Close panel"), None, cx, |this, _, cx| {
+                if let Some(mode) = this.chrome.agent_mode.as_mut() {
+                    mode.right_open = false;
+                }
+                cx.notify();
+            });
+            let header = div()
+                .h(px(34.))
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_between()
+                .px(px(12.))
+                .border_b_1()
+                .border_color(c(p.border))
+                .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(title))
+                .child(close);
+            let body = match active {
+                RightTab::Git => self.agent_mode_side_view(id, Panel::Scm, window, p, cx),
+                RightTab::Pulls => self.agent_mode_pulls(id, window, cx).map(IntoElement::into_any_element),
+                RightTab::Files => self.agent_mode_side_view(id, Panel::Explorer, window, p, cx),
+                RightTab::Diff => Some(match diff {
+                    Some(view) => div().size_full().child(view).into_any_element(),
+                    None => div().p(px(16.)).text_color(c(p.text_muted)).child(t("Pick a changed file in Git to see its diff here.")).into_any_element(),
+                }),
+            };
+            let body = div()
+                .id("agent-mode-right-body")
+                .flex_1()
+                .min_h_0()
+                .relative()
+                .overflow_hidden()
+                // Input here makes this window the one the project's menus and pickers open in.
+                .capture_any_mouse_down(cx.listener(|this, _, window, cx| this.agent_mode_use_owner(window, cx)))
+                .capture_key_down(cx.listener(|this, _, window, cx| this.agent_mode_use_owner(window, cx)))
+                .children(body);
+            div().w(px(420.)).flex_none().min_h_0().flex().flex_col().border_l_1().border_color(c(p.border)).child(header).child(body)
+        });
+        div().flex_none().min_h_0().flex().children(panel).child(rail)
+    }
+
+    /// The tab `tab` of the right panel: shown (the panel opens), or, when it is the one shown, the panel closes.
+    fn agent_mode_show_right(&mut self, tab: RightTab, cx: &mut Context<Self>) {
+        if let Some(mode) = self.chrome.agent_mode.as_mut() {
+            mode.right_open = !(mode.right_open && mode.right == tab);
+            mode.right = tab;
+        }
+        cx.notify();
+    }
+
+    pub(super) fn agent_mode_show_git(&mut self, _: &AgentModeShowGit, _: &mut Window, cx: &mut Context<Self>) {
+        self.agent_mode_show_right(RightTab::Git, cx);
+    }
+
+    pub(super) fn agent_mode_show_diff_tab(&mut self, _: &AgentModeShowDiff, _: &mut Window, cx: &mut Context<Self>) {
+        self.agent_mode_show_right(RightTab::Diff, cx);
+    }
+
+    pub(super) fn agent_mode_show_pulls(&mut self, _: &AgentModeShowPulls, _: &mut Window, cx: &mut Context<Self>) {
+        self.agent_mode_show_right(RightTab::Pulls, cx);
+    }
+
+    pub(super) fn agent_mode_show_files(&mut self, _: &AgentModeShowFiles, _: &mut Window, cx: &mut Context<Self>) {
+        self.agent_mode_show_right(RightTab::Files, cx);
     }
 
     fn agent_mode_use_owner(&mut self, window: &Window, cx: &mut Context<Self>) {

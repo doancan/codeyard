@@ -536,12 +536,14 @@ fn coming_back_to_agent_mode_finds_the_project_the_filter_and_the_tab_it_was_lef
             let mode = wb.chrome.agent_mode.as_mut().expect("on");
             mode.right = RightTab::Files;
             mode.scope = Scope::Local;
+            mode.right_open = false;
             wb.leave_agent_mode(cx);
             wb.toggle_agent_mode(&ToggleAgentMode, window, cx);
         })
         .unwrap();
-    let (selected, right, scope) = first.read_with(cx, |wb, _| wb.chrome.agent_mode.as_ref().map(|m| (m.selected, m.right, m.scope)).expect("on")).unwrap();
-    assert_eq!((selected, right, scope), (Some(second.window_id()), RightTab::Files, Scope::Local));
+    let (selected, right, scope, open) =
+        first.read_with(cx, |wb, _| wb.chrome.agent_mode.as_ref().map(|m| (m.selected, m.right, m.scope, m.right_open)).expect("on")).unwrap();
+    assert_eq!((selected, right, scope, open), (Some(second.window_id()), RightTab::Files, Scope::Local, false));
 }
 
 #[gpui::test]
@@ -557,4 +559,33 @@ fn closing_a_tab_ends_that_terminal_in_its_project_and_leaves_the_others(cx: &mu
     assert_eq!(left.len(), 1, "the closed tab's terminal is gone from its own project");
     assert_eq!(left[0].entity_id(), terms[0].entity_id(), "and the other one is the same live terminal");
     assert_eq!(first.read_with(cx, |wb, _| wb.chrome.agent_mode.as_ref().map(|m| m.tab)).unwrap(), Some(0), "the tab before the closed one is shown");
+}
+
+fn right_of(first: gpui::WindowHandle<Workbench>, cx: &mut TestAppContext) -> (RightTab, bool) {
+    first.read_with(cx, |wb, _| wb.chrome.agent_mode.as_ref().map(|m| (m.right, m.right_open)).expect("on")).unwrap()
+}
+
+#[gpui::test]
+fn a_rail_icon_opens_its_tab_and_the_same_icon_again_closes_the_panel(cx: &mut TestAppContext) {
+    let (first, _second) = two_projects(cx);
+    assert_eq!(right_of(first, cx), (RightTab::Git, true), "the panel is open on Git at the start");
+    first.update(cx, |wb, window, cx| wb.agent_mode_show_pulls(&AgentModeShowPulls, window, cx)).unwrap();
+    assert_eq!(right_of(first, cx), (RightTab::Pulls, true), "another icon switches the tab and keeps the panel open");
+    first.update(cx, |wb, window, cx| wb.agent_mode_show_pulls(&AgentModeShowPulls, window, cx)).unwrap();
+    assert_eq!(right_of(first, cx), (RightTab::Pulls, false), "the icon of the tab shown closes the panel");
+    first.update(cx, |wb, window, cx| wb.agent_mode_show_files(&AgentModeShowFiles, window, cx)).unwrap();
+    assert_eq!(right_of(first, cx), (RightTab::Files, true), "any icon opens it again");
+}
+
+#[gpui::test]
+fn the_rail_is_drawn_with_the_panel_open_or_closed_and_a_diff_opens_a_closed_panel(cx: &mut TestAppContext) {
+    let (first, second) = two_projects(cx);
+    let mut visual = VisualTestContext::from_window(first.into(), cx);
+    visual.run_until_parked();
+    assert!(visual.debug_bounds("agent-mode-rail").is_some(), "the rail is there with the panel open");
+    first.update(&mut visual, |wb, window, cx| wb.agent_mode_show_git(&AgentModeShowGit, window, cx)).unwrap();
+    visual.run_until_parked();
+    assert_eq!(right_of(first, &mut visual), (RightTab::Git, false));
+    assert!(visual.debug_bounds("agent-mode-rail").is_some(), "and with it closed");
+    let _ = second;
 }
