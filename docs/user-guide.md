@@ -2340,6 +2340,8 @@ right. Choosing another project never stops the first one's terminals.
   *Available* or *Limit reached · <time>*, and Claude Code accounts show the tokens spent in the last five hours (as a percentage when `agents.claudeTokenBudget` is set). When the agent
   prints a limit message, a bar offers the account that is free and least used and continues the conversation there.
   *Agents: Mark Account as Limited* and *Agents: Mark Account as Available* correct a wrong guess.
+- *Cmd+Alt+Down / Up* show the next / previous project, *Cmd+Alt+A* the next one that needs you; a tab's `×` closes that terminal.
+  Leaving agent mode and coming back finds the project, filter and right tab as they were.
 - Git (with its graph, changes and commit box) and Files are the project's own views; a file picked in Git shows its diff under
   **Diff**; **PRs** lists the repository's open GitHub pull requests with their checks.
 

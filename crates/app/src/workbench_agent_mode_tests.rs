@@ -481,3 +481,80 @@ fn a_waiting_project_is_noticed_by_the_tick_without_the_window_being_drawn(cx: &
     first.update(cx, |wb, window, cx| wb.agent_mode_tick(window, cx)).unwrap();
     assert_eq!(notices(cx).len(), 1);
 }
+
+fn selected_of(first: gpui::WindowHandle<Workbench>, cx: &mut TestAppContext) -> Option<gpui::WindowId> {
+    first.read_with(cx, |wb, _| wb.chrome.agent_mode.as_ref().and_then(|m| m.selected)).unwrap()
+}
+
+#[gpui::test]
+fn the_next_and_previous_project_walk_the_list_and_wrap(cx: &mut TestAppContext) {
+    let (first, second) = two_projects(cx);
+    let third = open_window(cx);
+    let ids = [first.window_id(), second.window_id(), third.window_id()];
+    first.update(cx, |wb, window, cx| wb.agent_mode_next_project(&AgentModeNextProject, window, cx)).unwrap();
+    assert_eq!(selected_of(first, cx), Some(ids[1]), "the first project is shown at the start, so next is the second");
+    first.update(cx, |wb, window, cx| wb.agent_mode_next_project(&AgentModeNextProject, window, cx)).unwrap();
+    assert_eq!(selected_of(first, cx), Some(ids[2]));
+    first.update(cx, |wb, window, cx| wb.agent_mode_next_project(&AgentModeNextProject, window, cx)).unwrap();
+    assert_eq!(selected_of(first, cx), Some(ids[0]), "after the last comes the first");
+    first.update(cx, |wb, window, cx| wb.agent_mode_previous_project(&AgentModePreviousProject, window, cx)).unwrap();
+    assert_eq!(selected_of(first, cx), Some(ids[2]), "and before the first comes the last");
+}
+
+#[gpui::test]
+fn next_needing_me_skips_the_quiet_projects_and_stays_put_when_none_waits(cx: &mut TestAppContext) {
+    let (first, second) = two_projects(cx);
+    let third = open_window(cx);
+    third.update(cx, |wb, window, cx| wb.new_terminal(&NewTerminal, window, cx)).unwrap();
+    cx.run_until_parked();
+    first.update(cx, |wb, window, cx| wb.agent_mode_next_attention(&AgentModeNextAttention, window, cx)).unwrap();
+    assert_eq!(selected_of(first, cx), Some(first.window_id()), "nothing waits: the choice is left as it was");
+
+    let term = third.read_with(cx, |wb, _| wb.terminals_for_test()).unwrap().remove(0);
+    term.update(cx, |t, cx| t.feed_and_report_for_test(b"\x1b]9;needs you\x07", cx));
+    first.update(cx, |wb, window, cx| wb.agent_mode_next_attention(&AgentModeNextAttention, window, cx)).unwrap();
+    assert_eq!(selected_of(first, cx), Some(third.window_id()), "the project that waits, not the quiet one in between");
+    assert_ne!(selected_of(first, cx), Some(second.window_id()));
+}
+
+#[gpui::test]
+fn the_keys_do_nothing_in_a_window_that_is_not_in_agent_mode(cx: &mut TestAppContext) {
+    crate::qa_workbench_tests::globals(cx);
+    let (first, _second) = (open_window(cx), open_window(cx));
+    first.update(cx, |wb, window, cx| wb.agent_mode_next_project(&AgentModeNextProject, window, cx)).unwrap();
+    assert!(first.read_with(cx, |wb, _| wb.chrome.agent_mode.is_none()).unwrap());
+}
+
+#[gpui::test]
+fn coming_back_to_agent_mode_finds_the_project_the_filter_and_the_tab_it_was_left_on(cx: &mut TestAppContext) {
+    let (first, second) = two_projects(cx);
+    first
+        .update(cx, |wb, window, cx| {
+            let peers = wb.agent_mode_peers(window, cx);
+            let peer = peers.iter().find(|p| p.id == second.window_id()).expect("listed");
+            wb.agent_mode_select(peer, 0, window, cx);
+            let mode = wb.chrome.agent_mode.as_mut().expect("on");
+            mode.right = RightTab::Files;
+            mode.scope = Scope::Local;
+            wb.leave_agent_mode(cx);
+            wb.toggle_agent_mode(&ToggleAgentMode, window, cx);
+        })
+        .unwrap();
+    let (selected, right, scope) = first.read_with(cx, |wb, _| wb.chrome.agent_mode.as_ref().map(|m| (m.selected, m.right, m.scope)).expect("on")).unwrap();
+    assert_eq!((selected, right, scope), (Some(second.window_id()), RightTab::Files, Scope::Local));
+}
+
+#[gpui::test]
+fn closing_a_tab_ends_that_terminal_in_its_project_and_leaves_the_others(cx: &mut TestAppContext) {
+    let (first, second) = two_projects(cx);
+    first.update(cx, |wb, window, cx| wb.agent_mode_new_terminal(second.window_id(), window, cx)).unwrap();
+    cx.run_until_parked();
+    let terms = second.read_with(cx, |wb, _| wb.terminals_for_test()).unwrap();
+    assert_eq!(terms.len(), 2);
+    first.update(cx, |wb, window, cx| wb.agent_mode_close_terminal(second.window_id(), &terms[1], 1, window, cx)).unwrap();
+    cx.run_until_parked();
+    let left = second.read_with(cx, |wb, _| wb.terminals_for_test()).unwrap();
+    assert_eq!(left.len(), 1, "the closed tab's terminal is gone from its own project");
+    assert_eq!(left[0].entity_id(), terms[0].entity_id(), "and the other one is the same live terminal");
+    assert_eq!(first.read_with(cx, |wb, _| wb.chrome.agent_mode.as_ref().map(|m| m.tab)).unwrap(), Some(0), "the tab before the closed one is shown");
+}
