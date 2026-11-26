@@ -4453,7 +4453,6 @@ No terminal yet. Press + to open one.	Henüz terminal yok. Açmak için + düğm
 SSH	SSH
 SSH host {}	SSH sunucusu {}
 View: Toggle Agent Mode	Görünüm: Ajan Modunu Aç/Kapat
-{} changed file|{} changed files	{} değişen dosya
 {} terminal|{} terminals	{} terminal
 Diff	Fark
 Git	Git
@@ -4485,3 +4484,8 @@ Agent Mode: Next Project Needing Me	Ajan Modu: Beni Bekleyen Sonraki Proje
 Agent Mode: Previous Project	Ajan Modu: Önceki Proje
 Close terminal	Terminali kapat
 Close {}	{} sekmesini kapat
+Agent Mode: Show Diff	Ajan Modu: Diff Göster
+Agent Mode: Show Files	Ajan Modu: Dosyaları Göster
+Agent Mode: Show Git	Ajan Modu: Git Göster
+Agent Mode: Show Pull Requests	Ajan Modu: Pull Request Göster
+Close panel	Paneli kapat

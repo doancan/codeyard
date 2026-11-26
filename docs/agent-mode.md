@@ -47,15 +47,18 @@ runs `claude` by hand shows *Idle* while it works; *Needs you* and *Limit reache
 it has one). A tab's `×` closes that terminal in its project (the agent launcher's session is ended from the Agents panel). Switching project never stops anything: the terminal is the project window's own and keeps running. The window that
 shows a terminal decides its size while it does; it goes back to the project's own window when agent mode shows something else.
 
-**Keyboard.** *Cmd+Alt+Down* / *Cmd+Alt+Up* (Ctrl on other systems) show the next / previous project in the order of the list, wrapping
+**Keyboard.** These keys work in agent mode only (they are bound to its own key context, so the editor's keys are untouched). *Cmd+Alt+Down* / *Cmd+Alt+Up* (Ctrl on other systems) show the next / previous project in the order of the list, wrapping
 round; *Cmd+Alt+A* jumps to the next project that needs you (*Agent Mode: Next Project Needing Me*) and stays put when none does.
+*Cmd+Alt+G / D / P / F* show Git, Diff, Pull requests and Files in the right panel (the same key again closes it).
 Opening agent mode puts the keyboard in the terminal shown, and leaving and coming back finds the project, the *All / Local / SSH*
-filter and the right tab as they were. Two projects of one name are told apart by their host and branch.
+filter and the right tab (open or closed) as they were. Two projects of one name are told apart by their host and branch.
 
-**Right panel** (for the selected project): *Git* is the Source Control view with its graph, changes, stashes and commit box;
-*Diff* shows the diff of the file picked in *Git*; *PRs* lists the repository's open pull requests with their check state and
-their actions (open on GitHub, copy link, copy branch, check out); *Files* is the Explorer. They are the project window's own
-views, drawn here; menus and pickers they open appear in this window, and a diff opens under *Diff*, not in the project's window.
+**Right panel** (for the selected project): an icon rail at the right edge, top to bottom, and the panel beside it. *Git* is the
+Source Control view with its graph, changes (a count on the icon), stashes and commit box; *Diff* shows the diff of the file picked
+in *Git* (a picked file opens it by itself); *Pull requests* lists the repository's open pull requests with their check state and
+their actions (open on GitHub, copy link, copy branch, check out); *Files* is the Explorer. The icon of the tab shown closes the
+panel, any icon opens it again, so the terminal can have the room. They are the project window's own views, drawn here; menus and
+pickers they open appear in this window, and a diff opens under *Diff*, not in the project's window.
 
 **Accounts.** The button at the right of the tabs names the account of the project's agent session and lists the others;
 choosing one asks first, as the Agents panel does. At the foot of the list every account of the tools in use is shown: *Available*

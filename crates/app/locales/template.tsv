@@ -119,6 +119,10 @@ After
 Agent Mode: Next Project	
 Agent Mode: Next Project Needing Me	
 Agent Mode: Previous Project	
+Agent Mode: Show Diff	
+Agent Mode: Show Files	
+Agent Mode: Show Git	
+Agent Mode: Show Pull Requests	
 Agent mode	
 Agent profiles are available in local windows.	
 Agents	
@@ -392,6 +396,7 @@ Close Preview
 Close Saved	
 Close a terminal first: at most {} can be open.	
 Close details	
+Close panel	
 Close terminal	
 Close the other program, then try again.	
 Close the terminal?	
@@ -4060,7 +4065,6 @@ your words
 {} cannot be rounded	
 {} cannot receive native programs	
 {} cannot run: codeyard-exthost is missing beside Codeyard.	
-{} changed file|{} changed files	
 {} changed no files (merge or empty commit).	
 {} changes	
 {} change|{} changes	

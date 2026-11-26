@@ -201,7 +201,7 @@ pub(super) struct ChromeLayout {
     /// SPIKE: agent mode replaces the editor area (workbench_agent_mode.rs).
     pub(super) agent_mode: Option<super::agent_mode::AgentMode>,
     /// Where agent mode was left (project, filter, right tab), for the next time it is opened.
-    pub(super) agent_last: Option<(gpui::WindowId, super::agent_mode::Scope, super::agent_mode::RightTab)>,
+    pub(super) agent_last: Option<(gpui::WindowId, super::agent_mode::Scope, super::agent_mode::RightTab, bool)>,
     /// Window bounds at the last draw (saved on exit, used at the next launch).
     pub(super) window_bounds: Option<gpui::WindowBounds>,
 }
