@@ -167,8 +167,11 @@ secondary-[
 secondary-\
 secondary-]
 secondary-a
+secondary-alt-a
+secondary-alt-down
 secondary-alt-r
 secondary-alt-shift-f
+secondary-alt-up
 secondary-b
 secondary-backspace
 secondary-c

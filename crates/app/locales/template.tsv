@@ -116,6 +116,9 @@ Adding comment…
 Adding remote…	
 Adding worktree…	
 After	
+Agent Mode: Next Project	
+Agent Mode: Next Project Needing Me	
+Agent Mode: Previous Project	
 Agent mode	
 Agent profiles are available in local windows.	
 Agents	
@@ -389,11 +392,13 @@ Close Preview
 Close Saved	
 Close a terminal first: at most {} can be open.	
 Close details	
+Close terminal	
 Close the other program, then try again.	
 Close the terminal?	
 Close to the Right	
 Close window	
 Close without saving	
+Close {}	
 Closing a terminal ends the programs running in it.	
 Closing the window loses everything since the last save.	
 Code	

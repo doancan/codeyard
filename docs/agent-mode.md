@@ -44,8 +44,13 @@ Showing a project's terminal answers its request, so *Needs you* clears when you
 runs `claude` by hand shows *Idle* while it works; *Needs you* and *Limit reached* still come through.
 
 **Terminals.** Tabs for the project's terminals, the main one first; `+` opens a plain shell in the project (on its SSH host when
-it has one). Switching project never stops anything: the terminal is the project window's own and keeps running. The window that
+it has one). A tab's `×` closes that terminal in its project (the agent launcher's session is ended from the Agents panel). Switching project never stops anything: the terminal is the project window's own and keeps running. The window that
 shows a terminal decides its size while it does; it goes back to the project's own window when agent mode shows something else.
+
+**Keyboard.** *Cmd+Alt+Down* / *Cmd+Alt+Up* (Ctrl on other systems) show the next / previous project in the order of the list, wrapping
+round; *Cmd+Alt+A* jumps to the next project that needs you (*Agent Mode: Next Project Needing Me*) and stays put when none does.
+Opening agent mode puts the keyboard in the terminal shown, and leaving and coming back finds the project, the *All / Local / SSH*
+filter and the right tab as they were. Two projects of one name are told apart by their host and branch.
 
 **Right panel** (for the selected project): *Git* is the Source Control view with its graph, changes, stashes and commit box;
 *Diff* shows the diff of the file picked in *Git*; *PRs* lists the repository's open pull requests with their check state and

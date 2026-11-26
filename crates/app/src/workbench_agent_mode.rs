@@ -128,6 +128,8 @@ struct Peer {
     changes: usize,
     /// The agent launcher's terminal first, then the panel's terminals.
     terminals: Vec<Entity<TerminalView>>,
+    /// The first terminal is the launcher's session (it is ended from the Agents panel, not closed as a tab).
+    launcher: bool,
     status: Status,
     last_line: String,
     limit: Option<Limit>,
@@ -187,6 +189,32 @@ fn status_of(exited: bool, limit: bool, unseen: Option<Finished>, activity: &Act
     }
 }
 
+/// The list as drawn: *Needs you* first, then this computer, then one group per SSH host (in the order the windows were found).
+fn grouped<'a>(visible: &[&'a Peer]) -> Vec<(SharedString, Vec<&'a Peer>)> {
+    let mut groups: Vec<(SharedString, Vec<&Peer>)> = Vec::new();
+    let urgent: Vec<&Peer> = visible.iter().copied().filter(|peer| peer.status.needs_you()).collect();
+    if !urgent.is_empty() {
+        groups.push((t("Attention").into(), urgent));
+    }
+    let local: Vec<&Peer> = visible.iter().copied().filter(|peer| !peer.status.needs_you() && peer.host.is_none()).collect();
+    if !local.is_empty() {
+        groups.push((t("This computer").into(), local));
+    }
+    let mut hosts: Vec<&str> = Vec::new();
+    for peer in visible.iter().filter(|peer| !peer.status.needs_you()) {
+        if let Some(host) = peer.host.as_deref()
+            && !hosts.contains(&host)
+        {
+            hosts.push(host);
+        }
+    }
+    for host in hosts {
+        let members: Vec<&Peer> = visible.iter().copied().filter(|peer| !peer.status.needs_you() && peer.host.as_deref() == Some(host)).collect();
+        groups.push((tf("SSH host {}", &[&host]).into(), members));
+    }
+    groups
+}
+
 /// The last row with text.
 fn last_line(rows: &[String]) -> String {
     rows.iter().rev().map(|r| r.trim()).find(|r| !r.is_empty()).unwrap_or_default().chars().take(120).collect()
@@ -208,12 +236,14 @@ impl Workbench {
                 }
             }
         });
+        // The way it was left: the project, the filter and the right tab.
+        let (selected, scope, right) = self.chrome.agent_last.take().map_or((None, Scope::All, RightTab::Git), |(id, scope, right)| (Some(id), scope, right));
         self.chrome.agent_mode = Some(AgentMode {
-            selected: None,
+            selected,
             tab: 0,
-            scope: Scope::All,
+            scope,
             leading: None,
-            right: RightTab::Git,
+            right,
             diff: None,
             pulls: Default::default(),
             usage: Default::default(),
@@ -225,7 +255,64 @@ impl Workbench {
             hosting: None,
             _refresh: refresh,
         });
+        // Typing goes to the terminal shown, as soon as the mode opens.
+        let peers = self.agent_mode_peers(window, cx);
+        let shown = peers
+            .iter()
+            .filter(|peer| scope.includes(peer.host.is_some()))
+            .find(|peer| Some(peer.id) == selected)
+            .or_else(|| peers.iter().find(|peer| scope.includes(peer.host.is_some())));
+        if let Some(peer) = shown {
+            self.agent_mode_select(peer, 0, window, cx);
+        }
         cx.notify();
+    }
+
+    /// The project after (`step` 1) or before (`-1`) the one shown, in the order of the list; with `urgent` only a project that
+    /// needs the person counts. Does nothing outside agent mode or when there is no such project.
+    fn agent_mode_step(&mut self, step: isize, urgent: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((selected, scope)) = self.chrome.agent_mode.as_ref().map(|mode| (mode.selected, mode.scope)) else { return };
+        let peers = self.agent_mode_peers(window, cx);
+        let visible: Vec<&Peer> = peers.iter().filter(|peer| scope.includes(peer.host.is_some())).collect();
+        let order: Vec<&Peer> = grouped(&visible).into_iter().flat_map(|(_, members)| members).collect();
+        // The project shown is the selected one, or the first of the list when none was chosen (as the view reads it).
+        let current =
+            visible.iter().find(|peer| Some(peer.id) == selected).or(visible.first()).and_then(|shown| order.iter().position(|peer| peer.id == shown.id));
+        let Some(current) = current else { return };
+        let len = order.len() as isize;
+        let next = (1..len).map(|n| order[(current as isize + step * n).rem_euclid(len) as usize]).find(|peer| !urgent || peer.status.needs_you());
+        if let Some(peer) = next {
+            self.agent_mode_select(peer, 0, window, cx);
+        }
+    }
+
+    pub(super) fn agent_mode_next_project(&mut self, _: &AgentModeNextProject, window: &mut Window, cx: &mut Context<Self>) {
+        self.agent_mode_step(1, false, window, cx);
+    }
+
+    pub(super) fn agent_mode_previous_project(&mut self, _: &AgentModePreviousProject, window: &mut Window, cx: &mut Context<Self>) {
+        self.agent_mode_step(-1, false, window, cx);
+    }
+
+    pub(super) fn agent_mode_next_attention(&mut self, _: &AgentModeNextAttention, window: &mut Window, cx: &mut Context<Self>) {
+        self.agent_mode_step(1, true, window, cx);
+    }
+
+    /// Closes terminal `term` of the project of window `id` (a tab of agent mode) and shows the tab before it.
+    fn agent_mode_close_terminal(&mut self, id: gpui::WindowId, term: &Entity<TerminalView>, tab: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let close = |wb: &mut Workbench, window: &mut Window, cx: &mut Context<Workbench>| {
+            if let Some(ix) = wb.terminals.iter().position(|t| t == term) {
+                wb.close_terminal(ix, window, cx);
+            }
+        };
+        if id == window.window_handle().window_id() {
+            close(self, window, cx);
+        } else if let Some(handle) = self.agent_mode_handle(id, cx) {
+            handle.update(cx, |wb, window, cx| close(wb, window, cx)).ok();
+        }
+        if let Some(peer) = self.agent_mode_peers(window, cx).into_iter().find(|peer| peer.id == id) {
+            self.agent_mode_select(&peer, tab.saturating_sub(1), window, cx);
+        }
     }
 
     /// What agent mode notes about the projects without being drawn: limits seen, the Dock count, notices and banners, usage.
@@ -238,6 +325,7 @@ impl Workbench {
     /// Back to the editor: what was shown goes back to its own window (the terminal's size, the project's menus), the Dock badge goes.
     pub(super) fn leave_agent_mode(&mut self, cx: &mut Context<Self>) {
         let Some(mode) = self.chrome.agent_mode.take() else { return };
+        self.chrome.agent_last = mode.selected.map(|id| (id, mode.scope, mode.right));
         if let Some(term) = mode.leading.and_then(|weak| weak.upgrade()) {
             term.update(cx, |t, cx| t.lead_size(None, cx));
         }
@@ -271,6 +359,7 @@ impl Workbench {
             host: self.remote.host.is_remote().then(|| self.remote.host.label()),
             branch: self.vcs.branch.as_ref().map(ToString::to_string),
             changes: self.vcs.status.as_ref().map_or(0, |s| s.changes.len()),
+            launcher: launcher.is_some(),
             terminals,
             status,
             last_line: last,
@@ -879,28 +968,7 @@ impl Workbench {
         if visible.is_empty() {
             body = body.child(div().p(px(8.)).text_color(c(p.text_muted)).child(t("No projects are open here.")));
         }
-        // Needs you, then this computer, then one group per SSH host (in the order the windows were found).
-        let mut groups: Vec<(SharedString, Vec<&Peer>)> = Vec::new();
-        let urgent: Vec<&Peer> = visible.iter().copied().filter(|peer| peer.status.needs_you()).collect();
-        if !urgent.is_empty() {
-            groups.push((t("Attention").into(), urgent));
-        }
-        let local: Vec<&Peer> = visible.iter().copied().filter(|peer| !peer.status.needs_you() && peer.host.is_none()).collect();
-        if !local.is_empty() {
-            groups.push((t("This computer").into(), local));
-        }
-        let mut hosts: Vec<&str> = Vec::new();
-        for peer in visible.iter().filter(|peer| !peer.status.needs_you()) {
-            if let Some(host) = peer.host.as_deref()
-                && !hosts.contains(&host)
-            {
-                hosts.push(host);
-            }
-        }
-        for host in hosts {
-            let members: Vec<&Peer> = visible.iter().copied().filter(|peer| !peer.status.needs_you() && peer.host.as_deref() == Some(host)).collect();
-            groups.push((tf("SSH host {}", &[&host]).into(), members));
-        }
+        let groups = grouped(visible);
         let mut row_ix = 0usize;
         for (title, members) in groups {
             body = body.child(
@@ -920,7 +988,14 @@ impl Workbench {
                 let id = peer.id;
                 let selected = Some(id) == current;
                 let extra = peer.extra_terminals();
-                let ssh_chip = peer.host.clone().filter(|_| peer.status.needs_you());
+                // A project shown under its host only while it needs the person (the group says it otherwise); two projects of one
+                // name are told apart by their host and branch.
+                let twin = visible.iter().filter(|other| other.name == peer.name).count() > 1;
+                let ssh_chip = if twin {
+                    Some([peer.host.clone(), peer.branch.clone()].into_iter().flatten().collect::<Vec<_>>().join(" · ")).filter(|chip| !chip.is_empty())
+                } else {
+                    peer.host.clone().filter(|_| peer.status.needs_you())
+                };
                 let ix = row_ix;
                 let label = format!("{}, {}", peer.name, peer.status.label());
                 let row = div()
@@ -999,17 +1074,35 @@ impl Workbench {
                 .when(ix == tab, |d| d.border_b_2().border_color(c(p.accent)))
                 .when(ix == 0, |d| d.child(div().size(px(7.)).rounded_full().bg(c(peer.status.color(p)))))
                 .child(title);
-            let term = term.clone();
-            tabs = tabs.child(self.agent_mode_button(button, format!("tab-{ix}"), tab_label, Some(ix == tab), cx, move |this, window, cx| {
+            let shown = term.clone();
+            let tab_button = self.agent_mode_button(button, format!("tab-{ix}"), tab_label.clone(), Some(ix == tab), cx, move |this, window, cx| {
                 if let Some(mode) = this.chrome.agent_mode.as_mut() {
                     mode.tab = ix;
                 }
-                term.update(cx, |t, _| {
+                shown.update(cx, |t, _| {
                     t.mark_seen();
                 });
-                window.focus(&term.focus_handle(cx));
+                window.focus(&shown.focus_handle(cx));
                 cx.notify();
-            }));
+            });
+            // The launcher's session is ended from the Agents panel; every other tab can be closed here.
+            let closable = !(ix == 0 && peer.launcher);
+            let close = closable.then(|| {
+                let cross = div()
+                    .id(("agent-mode-tab-close", ix))
+                    .px(px(4.))
+                    .py(px(6.))
+                    .cursor_pointer()
+                    .text_color(c(p.text_muted))
+                    .hover(|d| d.text_color(c(p.text)))
+                    .tooltip(|_, cx| cx.new(|_| Tooltip(t("Close terminal").into())).into())
+                    .child("×");
+                let term = term.clone();
+                self.agent_mode_button(cross, format!("tab-close-{ix}"), tf("Close {}", &[&tab_label]), None, cx, move |this, window, cx| {
+                    this.agent_mode_close_terminal(id, &term, ix, window, cx)
+                })
+            });
+            tabs = tabs.child(div().flex().items_end().child(tab_button).children(close));
         }
         let plus = div()
             .id("agent-mode-new-terminal")

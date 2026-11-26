@@ -542,6 +542,9 @@ actions!(
         SwitchEditor,
         ToggleZenMode,
         ToggleAgentMode,
+        AgentModeNextProject,
+        AgentModePreviousProject,
+        AgentModeNextAttention,
         MarkAgentAccountLimited,
         MarkAgentAccountAvailable,
         InstallCyx,
@@ -1392,6 +1395,7 @@ impl Workbench {
                 activity_hints: Default::default(),
                 zen: None,
                 agent_mode: None,
+                agent_last: None,
                 window_bounds: None,
             },
             nav: state_glue::NavState {
